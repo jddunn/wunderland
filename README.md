@@ -1,4 +1,4 @@
-# 📡 warelay — Send, receive, and auto-reply on WhatsApp—Twilio-backed or QR-linked.
+# warelay 📡 - Send, receive, and auto-reply on WhatsApp via Twilio or QR-linked WhatsApp Web; webhook setup in one command
 [![CI](https://github.com/steipete/warelay/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/steipete/warelay/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/warelay.svg)](https://www.npmjs.com/package/warelay)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
