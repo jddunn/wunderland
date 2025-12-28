@@ -104,8 +104,8 @@ enum DeviceModelCatalog {
     }
 
     private static func loadMapping(resourceName: String) -> [String: String] {
-        guard let url = Bundle.module.url(
-            forResource: resourceName,
+        guard let url = self.resourceURL(
+            resourceName: resourceName,
             withExtension: "json",
             subdirectory: "DeviceModels")
         else {
@@ -119,6 +119,37 @@ enum DeviceModelCatalog {
         } catch {
             return [:]
         }
+    }
+
+    private static func resourceURL(
+        resourceName: String,
+        withExtension ext: String,
+        subdirectory: String
+    ) -> URL? {
+        let bundledSubdir = "Clawdis_Clawdis.bundle/\(subdirectory)"
+        let mainBundle = Bundle.main
+
+        if let url = mainBundle.url(forResource: resourceName, withExtension: ext, subdirectory: bundledSubdir)
+            ?? mainBundle.url(forResource: resourceName, withExtension: ext, subdirectory: subdirectory)
+        {
+            return url
+        }
+
+        let fallbackBases = [
+            mainBundle.resourceURL,
+            mainBundle.bundleURL.appendingPathComponent("Contents/Resources"),
+            mainBundle.bundleURL.deletingLastPathComponent(),
+        ].compactMap { $0 }
+
+        let fileName = "\(resourceName).\(ext)"
+        for base in fallbackBases {
+            let bundled = base.appendingPathComponent(bundledSubdir).appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: bundled.path) { return bundled }
+            let loose = base.appendingPathComponent(subdirectory).appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: loose.path) { return loose }
+        }
+
+        return nil
     }
 
     private enum NameValue: Decodable {
