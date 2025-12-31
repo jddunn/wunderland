@@ -274,7 +274,7 @@ enum CommandResolver {
             "/bin",
             "/usr/sbin",
             "/sbin",
-            "/Users/steipete/Library/pnpm",
+            "$HOME/Library/pnpm",
             "$PATH",
         ].joined(separator: ":")
         let quotedArgs = ([subcommand] + extraArgs).map(self.shellQuote).joined(separator: " ")
