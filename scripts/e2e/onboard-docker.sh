@@ -12,12 +12,6 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
   set -euo pipefail
   export TERM=xterm-256color
 
-  input_fifo="$(mktemp -u /tmp/clawdis-onboard-input.XXXXXX)"
-  mkfifo "$input_fifo"
-  script -q -c "node dist/index.js onboard" /dev/null < "$input_fifo" &
-  wizard_pid=$!
-  exec 3> "$input_fifo"
-
   send() {
     local payload="$1"
     local delay="${2:-0.4}"
@@ -25,53 +19,136 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
     printf "%b" "$payload" >&3
   }
 
-  # Mode: Local
-  send $'"'"'\r'"'"' 0.8
-  # Workspace dir: default
-  send $'"'"'\r'"'"' 0.6
-  # Auth choice: move to "Skip for now"
-  send $'"'"'\e[B'"'"' 0.3
-  send $'"'"'\e[B'"'"' 0.3
-  send $'"'"'\e[B'"'"' 0.3
-  send $'"'"'\r'"'"' 0.4
-  # Gateway port/bind/auth/tailscale: defaults
-  send $'"'"'\r'"'"' 0.4
-  send $'"'"'\r'"'"' 0.4
-  send $'"'"'\r'"'"' 0.4
-  send $'"'"'\r'"'"' 0.4
-  # Providers: skip
-  send $'"'"'n\r'"'"' 0.4
-  # Skills: skip
-  send $'"'"'n\r'"'"' 0.4
-  # Daemon install: skip (no systemd in container)
-  send $'"'"'n\r'"'"' 0.4
+  run_wizard_cmd() {
+    local case_name="$1"
+    local home_dir="$2"
+    local command="$3"
+    local send_fn="$4"
 
-  exec 3>&-
-  wait "$wizard_pid"
-  rm -f "$input_fifo"
+    echo "== Wizard case: $case_name =="
+    export HOME="$home_dir"
+    mkdir -p "$HOME"
 
-  workspace_dir="$HOME/clawd"
-  config_path="$HOME/.clawdis/clawdis.json"
-  sessions_dir="$HOME/.clawdis/sessions"
+    input_fifo="$(mktemp -u "/tmp/clawdis-onboard-${case_name}.XXXXXX")"
+    mkfifo "$input_fifo"
+    script -q -c "$command" /dev/null < "$input_fifo" &
+    wizard_pid=$!
+    exec 3> "$input_fifo"
 
-  if [ ! -f "$config_path" ]; then
-    echo "Missing config: $config_path"
-    exit 1
-  fi
+    "$send_fn"
 
-  for file in AGENTS.md BOOTSTRAP.md IDENTITY.md SOUL.md TOOLS.md USER.md; do
-    if [ ! -f "$workspace_dir/$file" ]; then
-      echo "Missing workspace file: $workspace_dir/$file"
+    exec 3>&-
+    wait "$wizard_pid"
+    rm -f "$input_fifo"
+  }
+
+  run_wizard() {
+    local case_name="$1"
+    local home_dir="$2"
+    local send_fn="$3"
+
+    run_wizard_cmd "$case_name" "$home_dir" "node dist/index.js onboard" "$send_fn"
+  }
+
+  make_home() {
+    mktemp -d "/tmp/clawdis-e2e-$1.XXXXXX"
+  }
+
+  assert_file() {
+    local file_path="$1"
+    if [ ! -f "$file_path" ]; then
+      echo "Missing file: $file_path"
       exit 1
     fi
-  done
+  }
 
-  if [ ! -d "$sessions_dir" ]; then
-    echo "Missing sessions dir: $sessions_dir"
-    exit 1
-  fi
+  assert_dir() {
+    local dir_path="$1"
+    if [ ! -d "$dir_path" ]; then
+      echo "Missing dir: $dir_path"
+      exit 1
+    fi
+  }
 
-  CONFIG_PATH="$config_path" WORKSPACE_DIR="$workspace_dir" node --input-type=module - <<'"'"'NODE'"'"'
+  send_local_basic() {
+    send $'"'"'\r'"'"' 1.0
+    send $'"'"'\r'"'"' 1.0
+    send "" 1.2
+    send $'"'"'\e[B'"'"' 0.6
+    send $'"'"'\e[B'"'"' 0.6
+    send $'"'"'\e[B'"'"' 0.6
+    send $'"'"'\r'"'"' 0.6
+    send $'"'"'\r'"'"' 0.5
+    send $'"'"'\r'"'"' 0.5
+    send $'"'"'\r'"'"' 0.5
+    send $'"'"'\r'"'"' 0.5
+    send $'"'"'n\r'"'"' 0.5
+    send $'"'"'n\r'"'"' 0.5
+    send $'"'"'n\r'"'"' 0.5
+  }
+
+  send_reset_config_only() {
+    send $'"'"'\e[B'"'"' 0.3
+    send $'"'"'\e[B'"'"' 0.3
+    send $'"'"'\r'"'"' 0.4
+    send $'"'"'\r'"'"' 0.4
+    send "" 1.2
+    send_local_basic
+  }
+
+  send_providers_flow() {
+    send $'"'"'\r'"'"' 0.8
+    send "" 0.6
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"' '"'"' 0.3
+    send $'"'"'\r'"'"' 0.5
+    send $'"'"'\r'"'"' 0.6
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"' '"'"' 0.3
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"' '"'"' 0.3
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"' '"'"' 0.3
+    send $'"'"'\r'"'"' 0.5
+    send $'"'"'tg_token\r'"'"' 0.5
+    send $'"'"'discord_token\r'"'"' 0.5
+    send $'"'"'n\r'"'"' 0.5
+    send $'"'"'+15551234567\r'"'"' 0.5
+  }
+
+  send_skills_flow() {
+    send "" 0.6
+    send $'"'"'\r'"'"' 0.6
+    send "" 1.0
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"'\e[B'"'"' 0.4
+    send $'"'"' '"'"' 0.3
+    send $'"'"'\r'"'"' 0.4
+    send $'"'"'n\r'"'"' 0.4
+  }
+
+  run_case_local_basic() {
+    local home_dir
+    home_dir="$(make_home local-basic)"
+    run_wizard local-basic "$home_dir" send_local_basic
+
+    workspace_dir="$HOME/clawd"
+    config_path="$HOME/.clawdis/clawdis.json"
+    sessions_dir="$HOME/.clawdis/sessions"
+
+    assert_file "$config_path"
+    assert_dir "$sessions_dir"
+    for file in AGENTS.md BOOTSTRAP.md IDENTITY.md SOUL.md TOOLS.md USER.md; do
+      assert_file "$workspace_dir/$file"
+    done
+
+    CONFIG_PATH="$config_path" WORKSPACE_DIR="$workspace_dir" node --input-type=module - <<'"'"'NODE'"'"'
 import fs from "node:fs";
 import JSON5 from "json5";
 
@@ -116,24 +193,198 @@ if (errors.length > 0) {
 }
 NODE
 
-  node dist/index.js gateway-daemon --port 18789 --bind loopback > /tmp/gateway.log 2>&1 &
-  GW_PID=$!
-  for _ in $(seq 1 10); do
-    if grep -q "listening on ws://127.0.0.1:18789" /tmp/gateway.log; then
-      break
+    node dist/index.js gateway-daemon --port 18789 --bind loopback > /tmp/gateway.log 2>&1 &
+    GW_PID=$!
+    for _ in $(seq 1 10); do
+      if grep -q "listening on ws://127.0.0.1:18789" /tmp/gateway.log; then
+        break
+      fi
+      sleep 1
+    done
+
+    if ! grep -q "listening on ws://127.0.0.1:18789" /tmp/gateway.log; then
+      cat /tmp/gateway.log
+      exit 1
     fi
-    sleep 1
-  done
 
-  if ! grep -q "listening on ws://127.0.0.1:18789" /tmp/gateway.log; then
-    cat /tmp/gateway.log
-    exit 1
-  fi
+    node dist/index.js health --timeout 2000 || (cat /tmp/gateway.log && exit 1)
 
-  node dist/index.js health --timeout 2000 || (cat /tmp/gateway.log && exit 1)
+    kill "$GW_PID"
+    wait "$GW_PID" || true
+  }
 
-  kill "$GW_PID"
-  wait "$GW_PID" || true
+  run_case_remote_non_interactive() {
+    local home_dir
+    home_dir="$(make_home remote-non-interactive)"
+    export HOME="$home_dir"
+    mkdir -p "$HOME"
+    node dist/index.js onboard --non-interactive \
+      --mode remote \
+      --remote-url ws://gateway.local:18789 \
+      --remote-token remote-token \
+      --skip-skills \
+      --skip-health
+
+    config_path="$HOME/.clawdis/clawdis.json"
+    assert_file "$config_path"
+
+    CONFIG_PATH="$config_path" node --input-type=module - <<'"'"'NODE'"'"'
+import fs from "node:fs";
+import JSON5 from "json5";
+
+const cfg = JSON5.parse(fs.readFileSync(process.env.CONFIG_PATH, "utf-8"));
+const errors = [];
+
+if (cfg?.gateway?.mode !== "remote") {
+  errors.push(`gateway.mode mismatch (got ${cfg?.gateway?.mode ?? "unset"})`);
+}
+if (cfg?.gateway?.remote?.url !== "ws://gateway.local:18789") {
+  errors.push(`gateway.remote.url mismatch (got ${cfg?.gateway?.remote?.url ?? "unset"})`);
+}
+if (cfg?.gateway?.remote?.token !== "remote-token") {
+  errors.push(`gateway.remote.token mismatch (got ${cfg?.gateway?.remote?.token ?? "unset"})`);
+}
+if (cfg?.wizard?.lastRunMode !== "remote") {
+  errors.push(`wizard.lastRunMode mismatch (got ${cfg?.wizard?.lastRunMode ?? "unset"})`);
+}
+
+if (errors.length > 0) {
+  console.error(errors.join("\n"));
+  process.exit(1);
+}
+NODE
+  }
+
+  run_case_reset() {
+    local home_dir
+    home_dir="$(make_home reset-config)"
+    export HOME="$home_dir"
+    mkdir -p "$HOME/.clawdis"
+    cat > "$HOME/.clawdis/clawdis.json" <<'"'"'JSON'"'"'
+{
+  "agent": { "workspace": "/root/old" },
+  "gateway": {
+    "mode": "remote",
+    "remote": { "url": "ws://old.example:18789", "token": "old-token" }
+  }
+}
+JSON
+
+    run_wizard reset-config "$home_dir" send_reset_config_only
+
+    config_path="$HOME/.clawdis/clawdis.json"
+    assert_file "$config_path"
+
+    CONFIG_PATH="$config_path" node --input-type=module - <<'"'"'NODE'"'"'
+import fs from "node:fs";
+import JSON5 from "json5";
+
+const cfg = JSON5.parse(fs.readFileSync(process.env.CONFIG_PATH, "utf-8"));
+const errors = [];
+
+if (cfg?.gateway?.mode !== "local") {
+  errors.push(`gateway.mode mismatch (got ${cfg?.gateway?.mode ?? "unset"})`);
+}
+if (cfg?.gateway?.remote?.url) {
+  errors.push(`gateway.remote.url should be cleared (got ${cfg?.gateway?.remote?.url})`);
+}
+if (cfg?.wizard?.lastRunMode !== "local") {
+  errors.push(`wizard.lastRunMode mismatch (got ${cfg?.wizard?.lastRunMode ?? "unset"})`);
+}
+
+if (errors.length > 0) {
+  console.error(errors.join("\n"));
+  process.exit(1);
+}
+NODE
+  }
+
+  run_case_providers() {
+    local home_dir
+    home_dir="$(make_home providers)"
+    run_wizard_cmd providers "$home_dir" "node dist/index.js configure" send_providers_flow
+
+    config_path="$HOME/.clawdis/clawdis.json"
+    assert_file "$config_path"
+
+    CONFIG_PATH="$config_path" node --input-type=module - <<'"'"'NODE'"'"'
+import fs from "node:fs";
+import JSON5 from "json5";
+
+const cfg = JSON5.parse(fs.readFileSync(process.env.CONFIG_PATH, "utf-8"));
+const errors = [];
+
+if (cfg?.telegram?.botToken !== "tg_token") {
+  errors.push(`telegram.botToken mismatch (got ${cfg?.telegram?.botToken ?? "unset"})`);
+}
+if (cfg?.discord?.token !== "discord_token") {
+  errors.push(`discord.token mismatch (got ${cfg?.discord?.token ?? "unset"})`);
+}
+if (cfg?.signal?.account !== "+15551234567") {
+  errors.push(`signal.account mismatch (got ${cfg?.signal?.account ?? "unset"})`);
+}
+if (cfg?.signal?.cliPath !== "signal-cli") {
+  errors.push(`signal.cliPath mismatch (got ${cfg?.signal?.cliPath ?? "unset"})`);
+}
+if (cfg?.wizard?.lastRunMode !== "local") {
+  errors.push(`wizard.lastRunMode mismatch (got ${cfg?.wizard?.lastRunMode ?? "unset"})`);
+}
+
+if (errors.length > 0) {
+  console.error(errors.join("\n"));
+  process.exit(1);
+}
+NODE
+  }
+
+  run_case_skills() {
+    local home_dir
+    home_dir="$(make_home skills)"
+    export HOME="$home_dir"
+    mkdir -p "$HOME/.clawdis"
+    cat > "$HOME/.clawdis/clawdis.json" <<'"'"'JSON'"'"'
+{
+  "skills": {
+    "allowBundled": ["__none__"],
+    "install": { "nodeManager": "bun" }
+  }
+}
+JSON
+
+    run_wizard_cmd skills "$home_dir" "node dist/index.js configure" send_skills_flow
+
+    config_path="$HOME/.clawdis/clawdis.json"
+    assert_file "$config_path"
+
+    CONFIG_PATH="$config_path" node --input-type=module - <<'"'"'NODE'"'"'
+import fs from "node:fs";
+import JSON5 from "json5";
+
+const cfg = JSON5.parse(fs.readFileSync(process.env.CONFIG_PATH, "utf-8"));
+const errors = [];
+
+if (cfg?.skills?.install?.nodeManager !== "bun") {
+  errors.push(`skills.install.nodeManager mismatch (got ${cfg?.skills?.install?.nodeManager ?? "unset"})`);
+}
+if (!Array.isArray(cfg?.skills?.allowBundled) || cfg.skills.allowBundled[0] !== "__none__") {
+  errors.push("skills.allowBundled missing");
+}
+if (cfg?.wizard?.lastRunMode !== "local") {
+  errors.push(`wizard.lastRunMode mismatch (got ${cfg?.wizard?.lastRunMode ?? "unset"})`);
+}
+
+if (errors.length > 0) {
+  console.error(errors.join("\n"));
+  process.exit(1);
+}
+NODE
+  }
+
+  run_case_local_basic
+  run_case_remote_non_interactive
+  run_case_reset
+  run_case_providers
+  run_case_skills
 '
 
 echo "E2E complete."
