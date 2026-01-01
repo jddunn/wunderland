@@ -19,6 +19,8 @@ It answers you on the surfaces you already use (WhatsApp, Telegram, Discord, Web
 
 If you want a private, single-user assistant that feels local, fast, and always-on, this is it.
 
+Preferred setup: run the onboarding wizard (`clawdis onboard`). It walks through gateway, workspace, providers, and skills. The CLI wizard is the recommended path and works on **macOS, Windows, and Linux** (see `docs/wizard.md`).
+
 Using Claude Pro/Max subscription? See `docs/onboarding.md` for the Anthropic OAuth setup.
 
 ```

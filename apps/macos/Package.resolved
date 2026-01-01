@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/steipete/ElevenLabsKit",
       "state" : {
-        "branch" : "main",
-        "revision" : "9f2d700a546543391c65da4f79165384dc2e7e3d"
+        "revision" : "c8679fbd37416a8780fe43be88a497ff16209e2d",
+        "version" : "0.1.0"
       }
     },
     {

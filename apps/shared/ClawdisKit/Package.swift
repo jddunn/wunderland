@@ -13,7 +13,7 @@ let package = Package(
         .library(name: "ClawdisChatUI", targets: ["ClawdisChatUI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/steipete/ElevenLabsKit", branch: "main"),
+        .package(url: "https://github.com/steipete/ElevenLabsKit", exact: "0.1.0"),
     ],
     targets: [
         .target(

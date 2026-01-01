@@ -25,15 +25,25 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
     printf "%b" "$payload" >&3
   }
 
+  # Mode: Local
   send $'"'"'\r'"'"' 0.8
+  # Workspace dir: default
   send $'"'"'\r'"'"' 0.6
-  send $'"'"'\e[B\e[B\e[B\r'"'"' 0.6
+  # Auth choice: move to "Skip for now"
+  send $'"'"'\e[B'"'"' 0.3
+  send $'"'"'\e[B'"'"' 0.3
+  send $'"'"'\e[B'"'"' 0.3
+  send $'"'"'\r'"'"' 0.4
+  # Gateway port/bind/auth/tailscale: defaults
   send $'"'"'\r'"'"' 0.4
   send $'"'"'\r'"'"' 0.4
   send $'"'"'\r'"'"' 0.4
   send $'"'"'\r'"'"' 0.4
+  # Providers: skip
   send $'"'"'n\r'"'"' 0.4
+  # Skills: skip
   send $'"'"'n\r'"'"' 0.4
+  # Daemon install: skip (no systemd in container)
   send $'"'"'n\r'"'"' 0.4
 
   exec 3>&-
