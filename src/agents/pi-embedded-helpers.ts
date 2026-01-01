@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import type { AppMessage } from "@mariozechner/pi-agent-core";
-import type { AgentToolResult, AssistantMessage } from "@mariozechner/pi-ai";
+import type { AgentMessage, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AssistantMessage } from "@mariozechner/pi-ai";
 
 import { sanitizeContentBlocksImages } from "./tool-images.js";
 import type { WorkspaceBootstrapFile } from "./workspace.js";
@@ -22,8 +22,10 @@ export async function ensureSessionHeader(params: {
     // create
   }
   await fs.mkdir(path.dirname(file), { recursive: true });
+  const sessionVersion = 2;
   const entry = {
     type: "session",
+    version: sessionVersion,
     id: params.sessionId,
     timestamp: new Date().toISOString(),
     cwd: params.cwd,
@@ -34,12 +36,12 @@ export async function ensureSessionHeader(params: {
 type ContentBlock = AgentToolResult<unknown>["content"][number];
 
 export async function sanitizeSessionMessagesImages(
-  messages: AppMessage[],
+  messages: AgentMessage[],
   label: string,
-): Promise<AppMessage[]> {
+): Promise<AgentMessage[]> {
   // We sanitize historical session messages because Anthropic can reject a request
   // if the transcript contains oversized base64 images (see MAX_IMAGE_DIMENSION_PX).
-  const out: AppMessage[] = [];
+  const out: AgentMessage[] = [];
   for (const msg of messages) {
     if (!msg || typeof msg !== "object") {
       out.push(msg);
@@ -48,7 +50,7 @@ export async function sanitizeSessionMessagesImages(
 
     const role = (msg as { role?: unknown }).role;
     if (role === "toolResult") {
-      const toolMsg = msg as Extract<AppMessage, { role: "toolResult" }>;
+      const toolMsg = msg as Extract<AgentMessage, { role: "toolResult" }>;
       const content = Array.isArray(toolMsg.content) ? toolMsg.content : [];
       const nextContent = (await sanitizeContentBlocksImages(
         content as ContentBlock[],
@@ -59,7 +61,7 @@ export async function sanitizeSessionMessagesImages(
     }
 
     if (role === "user") {
-      const userMsg = msg as Extract<AppMessage, { role: "user" }>;
+      const userMsg = msg as Extract<AgentMessage, { role: "user" }>;
       const content = userMsg.content;
       if (Array.isArray(content)) {
         const nextContent = (await sanitizeContentBlocksImages(
