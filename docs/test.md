@@ -20,3 +20,11 @@ Usage:
 Last run (2025-12-31, 20 runs):
 - minimax median 1279ms (min 1114, max 2431)
 - opus median 2454ms (min 1224, max 3170)
+
+## Onboarding E2E (Docker)
+
+Full cold-start flow in a clean Linux container:
+
+```bash
+scripts/e2e/onboard-docker.sh
+```

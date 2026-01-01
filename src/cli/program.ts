@@ -107,11 +107,17 @@ export function buildProgram() {
       "Agent workspace directory (default: ~/clawd; stored as agent.workspace)",
     )
     .option("--wizard", "Run the interactive onboarding wizard", false)
+    .option("--non-interactive", "Run the wizard without prompts", false)
+    .option("--mode <mode>", "Wizard mode: local|remote")
     .action(async (opts) => {
       try {
         if (opts.wizard) {
           await onboardCommand(
-            { workspace: opts.workspace as string | undefined },
+            {
+              workspace: opts.workspace as string | undefined,
+              nonInteractive: Boolean(opts.nonInteractive),
+              mode: opts.mode as "local" | "remote" | undefined,
+            },
             defaultRuntime,
           );
           return;
@@ -130,10 +136,58 @@ export function buildProgram() {
     .command("onboard")
     .description("Interactive wizard to set up the gateway, workspace, and skills")
     .option("--workspace <dir>", "Agent workspace directory (default: ~/clawd)")
+    .option("--non-interactive", "Run without prompts", false)
+    .option("--mode <mode>", "Wizard mode: local|remote")
+    .option("--auth-choice <choice>", "Auth: oauth|apiKey|minimax|skip")
+    .option("--anthropic-api-key <key>", "Anthropic API key")
+    .option("--gateway-port <port>", "Gateway port", "18789")
+    .option("--gateway-bind <mode>", "Gateway bind: loopback|lan|tailnet|auto")
+    .option("--gateway-auth <mode>", "Gateway auth: off|token|password")
+    .option("--gateway-token <token>", "Gateway token (token auth)")
+    .option("--gateway-password <password>", "Gateway password (password auth)")
+    .option("--tailscale <mode>", "Tailscale: off|serve|funnel")
+    .option("--tailscale-reset-on-exit", "Reset tailscale serve/funnel on exit")
+    .option("--install-daemon", "Install gateway daemon")
+    .option("--skip-skills", "Skip skills setup")
+    .option("--skip-health", "Skip health check")
+    .option("--node-manager <name>", "Node manager for skills: npm|pnpm|bun")
+    .option("--json", "Output JSON summary", false)
     .action(async (opts) => {
       try {
         await onboardCommand(
-          { workspace: opts.workspace as string | undefined },
+          {
+            workspace: opts.workspace as string | undefined,
+            nonInteractive: Boolean(opts.nonInteractive),
+            mode: opts.mode as "local" | "remote" | undefined,
+            authChoice: opts.authChoice as
+              | "oauth"
+              | "apiKey"
+              | "minimax"
+              | "skip"
+              | undefined,
+            anthropicApiKey: opts.anthropicApiKey as string | undefined,
+            gatewayPort: Number.parseInt(String(opts.gatewayPort ?? "18789"), 10),
+            gatewayBind: opts.gatewayBind as
+              | "loopback"
+              | "lan"
+              | "tailnet"
+              | "auto"
+              | undefined,
+            gatewayAuth: opts.gatewayAuth as
+              | "off"
+              | "token"
+              | "password"
+              | undefined,
+            gatewayToken: opts.gatewayToken as string | undefined,
+            gatewayPassword: opts.gatewayPassword as string | undefined,
+            tailscale: opts.tailscale as "off" | "serve" | "funnel" | undefined,
+            tailscaleResetOnExit: Boolean(opts.tailscaleResetOnExit),
+            installDaemon: Boolean(opts.installDaemon),
+            skipSkills: Boolean(opts.skipSkills),
+            skipHealth: Boolean(opts.skipHealth),
+            nodeManager: opts.nodeManager as "npm" | "pnpm" | "bun" | undefined,
+            json: Boolean(opts.json),
+          },
           defaultRuntime,
         );
       } catch (err) {
