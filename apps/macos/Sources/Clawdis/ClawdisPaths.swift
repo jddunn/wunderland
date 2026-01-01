@@ -2,6 +2,7 @@ import Foundation
 
 enum ClawdisEnv {
     static func path(_ key: String) -> String? {
+        // Normalize env overrides once so UI + file IO stay consistent.
         guard let value = ProcessInfo.processInfo.environment[key]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !value.isEmpty

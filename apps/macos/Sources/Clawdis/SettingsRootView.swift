@@ -105,6 +105,7 @@ struct SettingsRootView: View {
     }
 
     private var nixManagedBanner: some View {
+        // Prefer gateway-resolved paths; fall back to local env defaults if disconnected.
         let snapshotPaths = GatewayConnection.shared.snapshotPaths()
         let configPath = snapshotPaths.configPath ?? ClawdisPaths.configURL.path
         let stateDir = snapshotPaths.stateDir ?? ClawdisPaths.stateDirURL.path

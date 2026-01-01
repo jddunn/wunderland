@@ -122,6 +122,7 @@ enum DeviceModelCatalog {
     }
 
     private static func locateResourceBundle() -> Bundle? {
+        // Prefer module bundle (SwiftPM/tests), then main app bundle (packaged app).
         if let bundle = self.bundleIfContainsDeviceModels(Bundle.module) {
             return bundle
         }

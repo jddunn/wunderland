@@ -639,6 +639,7 @@ function buildSnapshot(): Snapshot {
     health: emptyHealth,
     stateVersion: { presence: presenceVersion, health: healthVersion },
     uptimeMs,
+    // Surface resolved paths so UIs can display the true config location.
     configPath: CONFIG_PATH_CLAWDIS,
     stateDir: STATE_DIR_CLAWDIS,
   };
