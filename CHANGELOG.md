@@ -41,7 +41,7 @@
 - Android Chat UI: use `onPrimary` for user bubble text to preserve contrast (thanks @Syhids).
 - Control UI: sync sidebar navigation with the URL for deep-linking, and auto-scroll chat to the latest message.
 - Control UI: disable Web Chat + Talk when no iOS/Android node is connected; refreshed Web Chat styling and keyboard send.
-- macOS Web Chat: fix composer layout so the connection pill and send button stay inside the input field.
+- macOS Web Chat: improve empty/error states, focus message field on open, and keep pill/send inside the input field.
 - macOS: bundle Control UI assets into the app relay so the packaged app can serve them (thanks @mbelinky).
 - Talk Mode: wait for chat history to surface the assistant reply before starting TTS (macOS/iOS/Android).
 - iOS Talk Mode: fix chat completion wait to time out even if no events arrive (prevents “Thinking…” hangs).

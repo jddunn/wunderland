@@ -15,6 +15,8 @@ struct ClawdisChatComposer: View {
     #if !os(macOS)
     @State private var pickerItems: [PhotosPickerItem] = []
     @FocusState private var isFocused: Bool
+    #else
+    @State private var shouldFocusTextView = false
     #endif
 
     var body: some View {
@@ -33,13 +35,6 @@ struct ClawdisChatComposer: View {
             }
 
             self.editor
-
-            if let error = self.viewModel.errorText, !error.isEmpty {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
-            }
         }
         .padding(self.composerPadding)
         .background(
@@ -52,6 +47,9 @@ struct ClawdisChatComposer: View {
         #if os(macOS)
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 self.handleDrop(providers)
+            }
+            .onAppear {
+                self.shouldFocusTextView = true
             }
         #endif
     }
@@ -185,7 +183,7 @@ struct ClawdisChatComposer: View {
             }
 
             #if os(macOS)
-            ChatComposerTextView(text: self.$viewModel.input) {
+            ChatComposerTextView(text: self.$viewModel.input, shouldFocus: self.$shouldFocusTextView) {
                 self.viewModel.send()
             }
             .frame(minHeight: self.textMinHeight, idealHeight: self.textMinHeight, maxHeight: self.textMaxHeight)
@@ -336,6 +334,7 @@ import UniformTypeIdentifiers
 
 private struct ChatComposerTextView: NSViewRepresentable {
     @Binding var text: String
+    @Binding var shouldFocus: Bool
     var onSend: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -382,6 +381,12 @@ private struct ChatComposerTextView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? ChatComposerNSTextView else { return }
+
+        if self.shouldFocus, let window = scrollView.window {
+            window.makeFirstResponder(textView)
+            self.shouldFocus = false
+        }
+
         let isEditing = scrollView.window?.firstResponder == textView
         if isEditing { return }
 
