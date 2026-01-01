@@ -11,7 +11,8 @@ This app is usually built from `scripts/package-mac-app.sh`, which now:
 - writes the Info.plist with that bundle id (override via `BUNDLE_ID=...`)
 - calls `scripts/codesign-mac-app.sh` to sign the main binary, bundled CLI, and app bundle so macOS treats each rebuild as the same signed bundle and keeps TCC permissions (notifications, accessibility, screen recording, mic, speech). Requires a valid signing identity.
 - uses `CODESIGN_TIMESTAMP=auto` by default; it enables trusted timestamps for Developer ID signatures. Set `CODESIGN_TIMESTAMP=off` to skip timestamping (offline debug builds).
-- injects build metadata into Info.plist: `ClawdisBuildTimestamp` (UTC) and `ClawdisGitCommit` (short hash) so the About pane can show build, git, and debug/release channel.
+- inject build metadata into Info.plist: `ClawdisBuildTimestamp` (UTC) and `ClawdisGitCommit` (short hash) so the About pane can show build, git, and debug/release channel.
+- **Packaging requires Bun**: The embedded gateway relay is compiled using `bun`. Ensure it is installed (`curl -fsSL https://bun.sh/install | bash`).
 - reads `SIGN_IDENTITY` from the environment. Add `export SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"` (or your Developer ID Application cert) to your shell rc to always sign with your cert; otherwise signing falls back to ad‑hoc.
 
 ## Usage
@@ -20,20 +21,10 @@ This app is usually built from `scripts/package-mac-app.sh`, which now:
 # from repo root
 scripts/package-mac-app.sh               # ad-hoc signing
 SIGN_IDENTITY="Developer ID Application: Your Name" scripts/package-mac-app.sh   # real cert
-
-# set it once in your shell profile for convenience
-echo 'export SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"' >> ~/.zshrc
 ```
 
-If you need a different bundle id (e.g. release build):
-
-```bash
-BUNDLE_ID=com.steipete.clawdis scripts/package-mac-app.sh
-```
-
-Signing identity selection:
-- If `SIGN_IDENTITY` is unset, the script auto-picks a valid identity (Developer ID → Apple Distribution → Apple Development).
-- If no identities exist, the script fails with an error (no ad‑hoc fallback).
+### Ad-hoc Signing Note
+When signing with `SIGN_IDENTITY="-"` (ad-hoc), the script automatically disables the **Hardened Runtime** (`--options runtime`). This is necessary to prevent crashes when the app attempts to load embedded frameworks (like Sparkle) that do not share the same Team ID.
 
 ## Build metadata for About
 
