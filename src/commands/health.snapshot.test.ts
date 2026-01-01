@@ -109,6 +109,7 @@ describe("getHealthSnapshot", () => {
     fs.writeFileSync(tokenFile, "t-file\n", "utf-8");
     testConfig = { telegram: { tokenFile } };
     testStore = {};
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
 
     const calls: string[] = [];
     vi.stubGlobal(
