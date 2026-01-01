@@ -94,7 +94,10 @@ type PairingList = {
 
 const nodesCallOpts = (cmd: Command, defaults?: { timeoutMs?: number }) =>
   cmd
-    .option("--url <url>", "Gateway WebSocket URL", "ws://127.0.0.1:18789")
+    .option(
+      "--url <url>",
+      "Gateway WebSocket URL (defaults to gateway.remote.url when configured)",
+    )
     .option("--token <token>", "Gateway token (if required)")
     .option(
       "--timeout <ms>",

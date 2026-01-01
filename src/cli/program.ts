@@ -112,6 +112,8 @@ export function buildProgram() {
     .option("--wizard", "Run the interactive onboarding wizard", false)
     .option("--non-interactive", "Run the wizard without prompts", false)
     .option("--mode <mode>", "Wizard mode: local|remote")
+    .option("--remote-url <url>", "Remote Gateway WebSocket URL")
+    .option("--remote-token <token>", "Remote Gateway token (optional)")
     .action(async (opts) => {
       try {
         if (opts.wizard) {
@@ -120,6 +122,8 @@ export function buildProgram() {
               workspace: opts.workspace as string | undefined,
               nonInteractive: Boolean(opts.nonInteractive),
               mode: opts.mode as "local" | "remote" | undefined,
+              remoteUrl: opts.remoteUrl as string | undefined,
+              remoteToken: opts.remoteToken as string | undefined,
             },
             defaultRuntime,
           );
@@ -150,6 +154,8 @@ export function buildProgram() {
     .option("--gateway-auth <mode>", "Gateway auth: off|token|password")
     .option("--gateway-token <token>", "Gateway token (token auth)")
     .option("--gateway-password <password>", "Gateway password (password auth)")
+    .option("--remote-url <url>", "Remote Gateway WebSocket URL")
+    .option("--remote-token <token>", "Remote Gateway token (optional)")
     .option("--tailscale <mode>", "Tailscale: off|serve|funnel")
     .option("--tailscale-reset-on-exit", "Reset tailscale serve/funnel on exit")
     .option("--install-daemon", "Install gateway daemon")
@@ -188,6 +194,8 @@ export function buildProgram() {
               | undefined,
             gatewayToken: opts.gatewayToken as string | undefined,
             gatewayPassword: opts.gatewayPassword as string | undefined,
+            remoteUrl: opts.remoteUrl as string | undefined,
+            remoteToken: opts.remoteToken as string | undefined,
             tailscale: opts.tailscale as "off" | "serve" | "funnel" | undefined,
             tailscaleResetOnExit: Boolean(opts.tailscaleResetOnExit),
             installDaemon: Boolean(opts.installDaemon),

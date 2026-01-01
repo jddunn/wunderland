@@ -32,6 +32,9 @@ export function summarizeExistingConfig(config: ClawdisConfig): string {
   if (config.agent?.model) rows.push(`model: ${config.agent.model}`);
   if (config.gateway?.mode) rows.push(`gateway.mode: ${config.gateway.mode}`);
   if (config.gateway?.bind) rows.push(`gateway.bind: ${config.gateway.bind}`);
+  if (config.gateway?.remote?.url) {
+    rows.push(`gateway.remote.url: ${config.gateway.remote.url}`);
+  }
   if (config.skills?.install?.nodeManager) {
     rows.push(`skills.nodeManager: ${config.skills.install.nodeManager}`);
   }

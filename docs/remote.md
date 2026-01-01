@@ -27,6 +27,24 @@ With the tunnel up:
 - `clawdis health` and `clawdis status --deep` now reach the remote gateway via `ws://127.0.0.1:18789`.
 - `clawdis gateway {status,health,send,agent,call}` can also target the forwarded URL via `--url` when needed.
 
+## CLI remote defaults
+
+You can persist a remote target so CLI commands use it by default:
+
+```json5
+{
+  gateway: {
+    mode: "remote",
+    remote: {
+      url: "ws://127.0.0.1:18789",
+      token: "your-token"
+    }
+  }
+}
+```
+
+When the gateway is loopback-only, keep the URL at `ws://127.0.0.1:18789` and open the SSH tunnel first.
+
 ## Chat UI over SSH
 
 WebChat no longer uses a separate HTTP port. The SwiftUI chat UI connects directly to the Gateway WebSocket.

@@ -21,6 +21,7 @@
 - CLI: add ASCII banner header to wizard entry points.
 - CLI: add `configure`, `doctor`, and `update` wizards for ongoing setup, health checks, and modernization.
 - CLI: add Signal CLI auto-install from GitHub releases in the wizard and persist wizard run metadata in config.
+- CLI: add remote gateway client config (gateway.remote.*) with Bonjour-assisted discovery.
 - Skills: allow `bun` as a node manager for skill installs.
 - Tests: add a Docker-based onboarding E2E harness.
 

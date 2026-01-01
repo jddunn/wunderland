@@ -41,6 +41,7 @@ import {
   summarizeExistingConfig,
 } from "./onboard-helpers.js";
 import { setupProviders } from "./onboard-providers.js";
+import { promptRemoteGatewayConfig } from "./onboard-remote.js";
 import { setupSkills } from "./onboard-skills.js";
 import type {
   AuthChoice,
@@ -126,17 +127,11 @@ export async function runInteractiveOnboarding(
     ) as OnboardMode);
 
   if (mode === "remote") {
-    note(
-      [
-        "Run on the gateway host:",
-        "- clawdis setup",
-        "- clawdis gateway-daemon --port 18789",
-        "- OAuth creds: ~/.clawdis/credentials/oauth.json",
-        "- Workspace: ~/clawd",
-      ].join("\n"),
-      "Remote setup",
-    );
-    outro("Done. Local config unchanged.");
+    let nextConfig = await promptRemoteGatewayConfig(baseConfig, runtime);
+    nextConfig = applyWizardMetadata(nextConfig, { command: "onboard", mode });
+    await writeConfigFile(nextConfig);
+    runtime.log(`Updated ${CONFIG_PATH_CLAWDIS}`);
+    outro("Remote gateway configured.");
     return;
   }
 

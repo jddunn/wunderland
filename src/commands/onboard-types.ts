@@ -24,5 +24,7 @@ export type OnboardOptions = {
   skipSkills?: boolean;
   skipHealth?: boolean;
   nodeManager?: NodeManagerChoice;
+  remoteUrl?: string;
+  remoteToken?: string;
   json?: boolean;
 };

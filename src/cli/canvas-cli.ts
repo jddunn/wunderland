@@ -67,7 +67,10 @@ type A2UIVersion = "v0.8" | "v0.9";
 
 const canvasCallOpts = (cmd: Command) =>
   cmd
-    .option("--url <url>", "Gateway WebSocket URL", "ws://127.0.0.1:18789")
+    .option(
+      "--url <url>",
+      "Gateway WebSocket URL (defaults to gateway.remote.url when configured)",
+    )
     .option("--token <token>", "Gateway token (if required)")
     .option("--timeout <ms>", "Timeout in ms", "10000")
     .option("--json", "Output JSON", false);

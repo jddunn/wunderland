@@ -295,6 +295,13 @@ export type GatewayTailscaleConfig = {
   resetOnExit?: boolean;
 };
 
+export type GatewayRemoteConfig = {
+  /** Remote Gateway WebSocket URL (ws:// or wss://). */
+  url?: string;
+  /** Token for remote auth (when the gateway requires token auth). */
+  token?: string;
+};
+
 export type GatewayConfig = {
   /**
    * Explicit gateway mode. When set to "remote", local gateway start is disabled.
@@ -309,6 +316,7 @@ export type GatewayConfig = {
   controlUi?: GatewayControlUiConfig;
   auth?: GatewayAuthConfig;
   tailscale?: GatewayTailscaleConfig;
+  remote?: GatewayRemoteConfig;
 };
 
 export type SkillConfig = {
@@ -947,6 +955,12 @@ const ClawdisSchema = z.object({
             .union([z.literal("off"), z.literal("serve"), z.literal("funnel")])
             .optional(),
           resetOnExit: z.boolean().optional(),
+        })
+        .optional(),
+      remote: z
+        .object({
+          url: z.string().optional(),
+          token: z.string().optional(),
         })
         .optional(),
     })

@@ -10,7 +10,7 @@ read_when:
 Goal: interactive wizards for first-run onboarding **and** ongoing reconfiguration.
 Uses `@clack/prompts` for arrow-key selection and step UX.
 
-Scope: **Local gateway only**. Remote mode is **info-only** (no config writes).
+Scope: local gateway setup plus **remote gateway client config** (no remote-side installs).
 
 ## Entry points
 
@@ -47,7 +47,7 @@ Reset uses `trash` (never `rm`).
 
 1) **Mode**
    - Local (full wizard)
-   - Remote (info-only; no config writes)
+   - Remote (configure client connection only)
 
 2) **Model/Auth (local only)**
    - Anthropic OAuth (recommended)
@@ -91,15 +91,13 @@ Reset uses `trash` (never `rm`).
    - Summary + next steps
    - Reminder: iOS/Android/macOS node apps add canvas/camera/screen/system features.
 
-## Remote mode (info-only)
+## Remote mode (client config)
 
-- Explain where gateway runs.
-- Show required steps on gateway host:
-  - `clawdis setup`
-  - `clawdis gateway-daemon ...`
-  - OAuth file: `~/.clawdis/credentials/oauth.json`
-  - Workspace: `~/clawd`
-- No local config changes.
+- Optional Bonjour discovery (macOS: `dns-sd`, Linux: `avahi-browse`)
+- Save `gateway.remote.url` (+ optional `gateway.remote.token`)
+- Token optional; omit for no-auth gateways
+- Provide SSH tunnel hint when the gateway is loopback-only
+- No remote installs or daemon changes from this machine
 
 ## Config writes
 
@@ -111,6 +109,7 @@ Wizard writes:
   - `skills.entries.<key>.env` / `.apiKey` (if set in skills step)
   - `telegram.botToken`, `discord.token`, `signal.*` (if set in providers step)
   - `wizard.lastRunAt`, `wizard.lastRunVersion`, `wizard.lastRunCommit`, `wizard.lastRunCommand`, `wizard.lastRunMode`
+  - `gateway.remote.url`, `gateway.remote.token` (remote mode)
 
 WhatsApp login writes credentials to `~/.clawdis/credentials/creds.json`.
 

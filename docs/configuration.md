@@ -524,6 +524,22 @@ Auth and Tailscale:
 - `gateway.tailscale.mode: "funnel"` exposes the dashboard publicly; requires auth.
 - `gateway.tailscale.resetOnExit` resets Serve/Funnel config on shutdown.
 
+Remote client defaults (CLI):
+- `gateway.remote.url` sets the default Gateway WebSocket URL for CLI calls when `gateway.mode = "remote"`.
+- `gateway.remote.token` supplies the token for remote calls (leave unset for no auth).
+
+```json5
+{
+  gateway: {
+    mode: "remote",
+    remote: {
+      url: "ws://gateway.tailnet:18789",
+      token: "your-token"
+    }
+  }
+}
+```
+
 ### `hooks` (Gateway webhooks)
 
 Enable a simple HTTP webhook surface on the Gateway HTTP server.
