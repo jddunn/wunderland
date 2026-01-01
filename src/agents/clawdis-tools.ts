@@ -483,6 +483,7 @@ const BrowserToolSchema = Type.Union([
     action: Type.Literal("upload"),
     controlUrl: Type.Optional(Type.String()),
     paths: Type.Array(Type.String()),
+    ref: Type.Optional(Type.String()),
     targetId: Type.Optional(Type.String()),
     timeoutMs: Type.Optional(Type.Number()),
   }),
@@ -625,6 +626,7 @@ function createBrowserTool(): AnyAgentTool {
             ? params.paths.map((p) => String(p))
             : [];
           if (paths.length === 0) throw new Error("paths required");
+          const ref = readStringParam(params, "ref");
           const targetId =
             typeof params.targetId === "string"
               ? params.targetId.trim()
@@ -637,6 +639,7 @@ function createBrowserTool(): AnyAgentTool {
           return jsonResult(
             await browserArmFileChooser(baseUrl, {
               paths,
+              ref,
               targetId,
               timeoutMs,
             }),

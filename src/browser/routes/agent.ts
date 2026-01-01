@@ -338,6 +338,7 @@ export function registerBrowserAgentRoutes(
   app.post("/hooks/file-chooser", async (req, res) => {
     const body = readBody(req);
     const targetId = toStringOrEmpty(body.targetId) || undefined;
+    const ref = toStringOrEmpty(body.ref) || undefined;
     const paths = toStringArray(body.paths) ?? [];
     const timeoutMs = toNumber(body.timeoutMs);
     if (!paths.length) return jsonError(res, 400, "paths are required");
@@ -351,6 +352,13 @@ export function registerBrowserAgentRoutes(
         paths,
         timeoutMs: timeoutMs ?? undefined,
       });
+      if (ref) {
+        await pw.clickViaPlaywright({
+          cdpPort: ctx.state().cdpPort,
+          targetId: tab.targetId,
+          ref,
+        });
+      }
       res.json({ ok: true });
     } catch (err) {
       handleRouteError(ctx, res, err);

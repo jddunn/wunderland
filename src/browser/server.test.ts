@@ -475,6 +475,24 @@ describe("browser control server", () => {
       timeoutMs: 1234,
     });
 
+    const uploadWithRef = await realFetch(`${base}/hooks/file-chooser`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: ["/tmp/b.txt"], ref: "e12" }),
+    }).then((r) => r.json());
+    expect(uploadWithRef).toMatchObject({ ok: true });
+    expect(pwMocks.armFileUploadViaPlaywright).toHaveBeenCalledWith({
+      cdpPort: testPort + 1,
+      targetId: "abcd1234",
+      paths: ["/tmp/b.txt"],
+      timeoutMs: undefined,
+    });
+    expect(pwMocks.clickViaPlaywright).toHaveBeenCalledWith({
+      cdpPort: testPort + 1,
+      targetId: "abcd1234",
+      ref: "e12",
+    });
+
     const dialog = await realFetch(`${base}/hooks/dialog`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

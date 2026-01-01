@@ -93,6 +93,7 @@ export async function browserArmFileChooser(
   baseUrl: string,
   opts: {
     paths: string[];
+    ref?: string;
     targetId?: string;
     timeoutMs?: number;
   },
@@ -104,6 +105,7 @@ export async function browserArmFileChooser(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         paths: opts.paths,
+        ref: opts.ref,
         targetId: opts.targetId,
         timeoutMs: opts.timeoutMs,
       }),

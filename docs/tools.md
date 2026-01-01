@@ -52,6 +52,7 @@ Notes:
 - `snapshot` defaults to `ai`; use `aria` for the accessibility tree.
 - `act` requires `ref` from `snapshot --format ai`; use `evaluate` for rare CSS selector needs.
 - Avoid `act` → `wait` by default; use it only in exceptional cases (no reliable UI state to wait on).
+- `upload` can optionally pass a `ref` to auto-click after arming.
 
 ### `clawdis_canvas`
 Drive the node Canvas (present, eval, snapshot, A2UI).

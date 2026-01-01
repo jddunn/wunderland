@@ -190,6 +190,7 @@ Actions:
 
 Notes:
 - `upload` and `dialog` are **arming** calls; run them before the click/press that triggers the chooser/dialog.
+- `upload` can take a `ref` to auto-click after arming (useful for single-step file uploads).
 - The arm default timeout is **2 minutes** (clamped to max 2 minutes); pass `timeoutMs` if you need shorter.
 - `snapshot` defaults to `ai`; `aria` returns an accessibility tree for debugging.
 - `click`/`type` require `ref` from `snapshot --format ai`; use `evaluate` for rare CSS selector one-offs.
