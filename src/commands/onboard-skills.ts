@@ -18,7 +18,7 @@ function upsertSkillEntry(
   skillKey: string,
   patch: { apiKey?: string },
 ): ClawdisConfig {
-  const entries = { ...(cfg.skills?.entries ?? {}) };
+  const entries = { ...cfg.skills?.entries };
   const existing = (entries[skillKey] as { apiKey?: string } | undefined) ?? {};
   entries[skillKey] = { ...existing, ...patch };
   return {

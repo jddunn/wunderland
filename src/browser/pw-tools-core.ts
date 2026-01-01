@@ -286,7 +286,7 @@ export async function armFileUploadViaPlaywright(opts: {
       try {
         const input =
           typeof fileChooser.element === "function"
-            ? await fileChooser.element()
+            ? await Promise.resolve(fileChooser.element())
             : null;
         if (input) {
           await input.evaluate((el) => {

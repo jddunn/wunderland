@@ -39,11 +39,11 @@ export function applyMinimaxConfig(cfg: ClawdisConfig): ClawdisConfig {
   allowed.add("anthropic/claude-opus-4-5");
   allowed.add("lmstudio/minimax-m2.1-gs32");
 
-  const aliases = { ...(cfg.agent?.modelAliases ?? {}) };
+  const aliases = { ...cfg.agent?.modelAliases };
   if (!aliases.Opus) aliases.Opus = "anthropic/claude-opus-4-5";
   if (!aliases.Minimax) aliases.Minimax = "lmstudio/minimax-m2.1-gs32";
 
-  const providers = { ...(cfg.models?.providers ?? {}) };
+  const providers = { ...cfg.models?.providers };
   if (!providers.lmstudio) {
     providers.lmstudio = {
       baseUrl: "http://127.0.0.1:1234/v1",

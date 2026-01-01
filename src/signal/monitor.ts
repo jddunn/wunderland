@@ -19,7 +19,7 @@ type SignalEnvelope = {
   timestamp?: number | null;
   dataMessage?: SignalDataMessage | null;
   editMessage?: { dataMessage?: SignalDataMessage | null } | null;
-  syncMessage?: unknown | null;
+  syncMessage?: unknown;
 };
 
 type SignalDataMessage = {

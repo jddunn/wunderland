@@ -5,6 +5,7 @@ import type {
   Page,
 } from "playwright-core";
 import { chromium } from "playwright-core";
+import { formatErrorMessage } from "../infra/errors.js";
 
 export type BrowserConsoleMessage = {
   type: string;
@@ -119,9 +120,13 @@ async function connectBrowser(endpoint: string): Promise<ConnectedBrowser> {
         await new Promise((r) => setTimeout(r, delay));
       }
     }
-    throw lastErr instanceof Error
-      ? lastErr
-      : new Error(String(lastErr ?? "CDP connect failed"));
+    if (lastErr instanceof Error) {
+      throw lastErr;
+    }
+    const message = lastErr
+      ? formatErrorMessage(lastErr)
+      : "CDP connect failed";
+    throw new Error(message);
   };
 
   connecting = connectWithRetry().finally(() => {
