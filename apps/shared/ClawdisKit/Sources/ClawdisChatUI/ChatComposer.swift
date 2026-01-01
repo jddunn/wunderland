@@ -131,28 +131,31 @@ struct ClawdisChatComposer: View {
     }
 
     private var editor: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(ClawdisChatTheme.composerBorder)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(ClawdisChatTheme.composerField))
-            .overlay {
-                VStack(alignment: .leading, spacing: 4) {
-                    self.editorOverlay
-                    HStack(alignment: .bottom, spacing: 6) {
-                        if self.showsConnectionPill {
-                            self.connectionPill
-                        }
-                        Spacer(minLength: 0)
-                        self.sendButton
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            self.editorOverlay
+
+            Rectangle()
+                .fill(ClawdisChatTheme.divider)
+                .frame(height: 1)
+                .padding(.horizontal, 2)
+
+            HStack(alignment: .center, spacing: 8) {
+                if self.showsConnectionPill {
+                    self.connectionPill
                 }
+                Spacer(minLength: 0)
+                self.sendButton
             }
-            .padding(self.editorPadding)
-            .frame(
-                minHeight: self.editorMinHeight,
-                idealHeight: self.editorMinHeight,
-                maxHeight: self.editorMaxHeight)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(ClawdisChatTheme.composerField)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(ClawdisChatTheme.composerBorder)))
+        .padding(self.editorPadding)
     }
 
     private var connectionPill: some View {
@@ -192,6 +195,10 @@ struct ClawdisChatComposer: View {
             TextEditor(text: self.$viewModel.input)
                 .font(.system(size: 15))
                 .scrollContentBackground(.hidden)
+                .frame(
+                    minHeight: self.textMinHeight,
+                    idealHeight: self.textMinHeight,
+                    maxHeight: self.textMaxHeight)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 4)
                 .focused(self.$isFocused)
@@ -266,14 +273,6 @@ struct ClawdisChatComposer: View {
 
     private var editorPadding: CGFloat {
         self.style == .onboarding ? 5 : 6
-    }
-
-    private var editorMinHeight: CGFloat {
-        self.style == .onboarding ? 34 : 40
-    }
-
-    private var editorMaxHeight: CGFloat {
-        self.style == .onboarding ? 60 : 84
     }
 
     private var textMinHeight: CGFloat {
