@@ -24,6 +24,7 @@
 - CLI: add remote gateway client config (gateway.remote.*) with Bonjour-assisted discovery.
 - Skills: allow `bun` as a node manager for skill installs.
 - Tests: add a Docker-based onboarding E2E harness.
+- Tests: harden wizard E2E flows for reset, providers, skills, and remote non-interactive runs.
 
 ### Fixes
 - macOS codesign: skip hardened runtime for ad-hoc signing and avoid empty options args (#70) — thanks @petter-b
@@ -40,6 +41,7 @@
 - Browser CLI: add `clawdis browser reset-profile` to move the clawd profile to Trash when it gets wedged.
 - Signal: fix daemon startup race (wait for `/api/v1/check`) and normalize JSON-RPC `version` probe parsing.
 - Docs/Signal: clarify bot-number vs personal-account setup (self-chat loop protection) and add a quickstart config snippet.
+- Docs: refresh the CLI wizard guide and highlight onboarding in the README.
 - CLI: tighten onboarding prompt typing to keep bun builds green.
 - macOS: Voice Wake now fully tears down the Speech pipeline when disabled (cancel pending restarts, drop stale callbacks) to avoid high CPU in the background.
 - macOS menu: add a Talk Mode action alongside the Open Dashboard/Chat/Canvas entries.
@@ -63,6 +65,8 @@
 - Android Chat UI: use `onPrimary` for user bubble text to preserve contrast (thanks @Syhids).
 - Control UI: sync sidebar navigation with the URL for deep-linking, and auto-scroll chat to the latest message.
 - Control UI: disable Web Chat + Talk when no iOS/Android node is connected; refreshed Web Chat styling and keyboard send.
+- Control UI: keep chat pinned to the latest message while typing/sending and restore drafts on send failures.
+- Control UI: soften chat bubble text opacity for calmer readability.
 - macOS Web Chat: improve empty/error states, focus message field on open, keep pill/send inside the input field, and make the composer pill edge-to-edge with square top corners.
 - macOS: bundle Control UI assets into the app relay so the packaged app can serve them (thanks @mbelinky).
 - Talk Mode: wait for chat history to surface the assistant reply before starting TTS (macOS/iOS/Android).
