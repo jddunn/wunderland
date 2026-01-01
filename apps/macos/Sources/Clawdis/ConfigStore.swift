@@ -1,22 +1,60 @@
 import Foundation
 
 enum ConfigStore {
+    struct Overrides: Sendable {
+        var isRemoteMode: (@Sendable () async -> Bool)?
+        var loadLocal: (@Sendable () -> [String: Any])?
+        var saveLocal: (@Sendable ([String: Any]) -> Void)?
+        var loadRemote: (@Sendable () async -> [String: Any])?
+        var saveRemote: (@Sendable ([String: Any]) async throws -> Void)?
+    }
+
+    private actor OverrideStore {
+        var overrides = Overrides()
+
+        func setOverride(_ overrides: Overrides) {
+            self.overrides = overrides
+        }
+    }
+
+    private static let overrideStore = OverrideStore()
+
     private static func isRemoteMode() async -> Bool {
+        let overrides = await self.overrideStore.overrides
+        if let override = overrides.isRemoteMode {
+            return await override()
+        }
         await MainActor.run { AppStateStore.shared.connectionMode == .remote }
     }
 
     static func load() async -> [String: Any] {
+        let overrides = await self.overrideStore.overrides
         if await self.isRemoteMode() {
+            if let override = overrides.loadRemote {
+                return await override()
+            }
             return await self.loadFromGateway()
+        }
+        if let override = overrides.loadLocal {
+            return override()
         }
         return ClawdisConfigFile.loadDict()
     }
 
     static func save(_ root: [String: Any]) async throws {
+        let overrides = await self.overrideStore.overrides
         if await self.isRemoteMode() {
-            try await self.saveToGateway(root)
+            if let override = overrides.saveRemote {
+                try await override(root)
+            } else {
+                try await self.saveToGateway(root)
+            }
         } else {
-            ClawdisConfigFile.saveDict(root)
+            if let override = overrides.saveLocal {
+                override(root)
+            } else {
+                ClawdisConfigFile.saveDict(root)
+            }
         }
     }
 
@@ -45,4 +83,14 @@ enum ConfigStore {
             params: params,
             timeoutMs: 10000)
     }
+
+#if DEBUG
+    static func _testSetOverrides(_ overrides: Overrides) async {
+        await self.overrideStore.setOverride(overrides)
+    }
+
+    static func _testClearOverrides() async {
+        await self.overrideStore.setOverride(.init())
+    }
+#endif
 }
