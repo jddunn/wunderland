@@ -23,7 +23,7 @@ import {
   DEFAULT_AGENT_WORKSPACE_DIR,
   ensureAgentWorkspace,
 } from "../agents/workspace.js";
-import type { ClawdisConfig } from "../config/config.js";
+import type { BridgeBindMode, ClawdisConfig } from "../config/config.js";
 import {
   CONFIG_PATH_CLAWDIS,
   readConfigFileSnapshot,
@@ -65,12 +65,12 @@ type OnboardOptions = {
   json?: boolean;
 };
 
-function guardCancel<T>(value: T, runtime: RuntimeEnv): T {
+function guardCancel<T>(value: T, runtime: RuntimeEnv): Exclude<T, symbol> {
   if (isCancel(value)) {
     cancel("Setup cancelled.");
     runtime.exit(0);
   }
-  return value;
+  return value as Exclude<T, symbol>;
 }
 
 function summarizeExistingConfig(config: ClawdisConfig): string {
@@ -751,7 +751,7 @@ export async function onboardCommand(
       ],
     }),
     runtime,
-  );
+  ) as BridgeBindMode;
 
   let authMode = guardCancel(
     await select({
@@ -851,7 +851,7 @@ export async function onboardCommand(
     ...nextConfig,
     gateway: {
       ...nextConfig.gateway,
-      bind: String(bind),
+      bind,
       tailscale: {
         ...nextConfig.gateway?.tailscale,
         mode: tailscaleMode,
