@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { type TSchema, Type } from "@sinclair/typebox";
+import { Type } from "@sinclair/typebox";
 import {
   browserCloseTab,
   browserFocusTab,
