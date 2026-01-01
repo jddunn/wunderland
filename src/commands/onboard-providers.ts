@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { confirm, multiselect, note, text } from "@clack/prompts";
+import chalk from "chalk";
 
 import type { ClawdisConfig } from "../config/config.js";
 import { loginWeb } from "../provider-web.js";
@@ -45,11 +46,27 @@ export async function setupProviders(
 
   note(
     [
-      `WhatsApp: ${whatsappLinked ? "linked" : "not linked"}`,
-      `Telegram: ${telegramConfigured ? "configured" : "needs token"}`,
-      `Discord: ${discordConfigured ? "configured" : "needs token"}`,
-      `Signal: ${signalConfigured ? "configured" : "needs setup"}`,
-      `signal-cli: ${signalCliDetected ? "found" : "missing"} (${signalCliPath})`,
+      `WhatsApp: ${
+        whatsappLinked ? chalk.green("linked") : chalk.red("not linked")
+      }`,
+      `Telegram: ${
+        telegramConfigured
+          ? chalk.green("configured")
+          : chalk.yellow("needs token")
+      }`,
+      `Discord: ${
+        discordConfigured
+          ? chalk.green("configured")
+          : chalk.yellow("needs token")
+      }`,
+      `Signal: ${
+        signalConfigured
+          ? chalk.green("configured")
+          : chalk.yellow("needs setup")
+      }`,
+      `signal-cli: ${
+        signalCliDetected ? chalk.green("found") : chalk.red("missing")
+      } (${signalCliPath})`,
     ].join("\n"),
     "Provider status",
   );
