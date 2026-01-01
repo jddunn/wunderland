@@ -122,6 +122,10 @@ enum DeviceModelCatalog {
     }
 
     private static func locateResourceBundle() -> Bundle? {
+        if let bundle = self.bundleIfContainsDeviceModels(Bundle.module) {
+            return bundle
+        }
+
         if let bundle = self.bundleIfContainsDeviceModels(Bundle.main) {
             return bundle
         }
