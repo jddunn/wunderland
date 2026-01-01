@@ -18,6 +18,14 @@ export type SignalDaemonHandle = {
   stop: () => void;
 };
 
+export function classifySignalCliLogLine(line: string): "log" | "error" | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  // signal-cli commonly writes all logs to stderr; treat severity explicitly.
+  if (/\b(ERROR|WARN|WARNING)\b/.test(trimmed)) return "error";
+  return "log";
+}
+
 function buildDaemonArgs(opts: SignalDaemonOpts): string[] {
   const args: string[] = [];
   if (opts.account) {
@@ -46,12 +54,18 @@ export function spawnSignalDaemon(opts: SignalDaemonOpts): SignalDaemonHandle {
   const error = opts.runtime?.error ?? (() => {});
 
   child.stdout?.on("data", (data) => {
-    const text = data.toString().trim();
-    if (text) log(`signal-cli: ${text}`);
+    for (const line of data.toString().split(/\r?\n/)) {
+      const kind = classifySignalCliLogLine(line);
+      if (kind === "log") log(`signal-cli: ${line.trim()}`);
+      else if (kind === "error") error(`signal-cli: ${line.trim()}`);
+    }
   });
   child.stderr?.on("data", (data) => {
-    const text = data.toString().trim();
-    if (text) error(`signal-cli: ${text}`);
+    for (const line of data.toString().split(/\r?\n/)) {
+      const kind = classifySignalCliLogLine(line);
+      if (kind === "log") log(`signal-cli: ${line.trim()}`);
+      else if (kind === "error") error(`signal-cli: ${line.trim()}`);
+    }
   });
   child.on("error", (err) => {
     error(`signal-cli spawn error: ${String(err)}`);
