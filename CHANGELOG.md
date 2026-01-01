@@ -2,8 +2,66 @@
 
 ## 2.0.0-beta5 — Unreleased
 
+### Features
+- Talk mode: continuous speech conversations (macOS/iOS/Android) with ElevenLabs TTS, reply directives, and optional interrupt-on-speech.
+- UI: add optional `ui.seamColor` accent to tint the Talk Mode side bubble (macOS/iOS/Android).
+- Agent runtime: accept legacy `Z_AI_API_KEY` for Z.AI provider auth (maps to `ZAI_API_KEY`).
+- Tests: add a Z.AI live test gate for smoke validation when keys are present.
+- macOS Debug: add app log verbosity and rolling file log toggle for swift-log-backed app logs.
+
 ### Fixes
+- Docs/agent tools: clarify that browser `wait` should be avoided by default and used only in exceptional cases.
 - macOS: Voice Wake now fully tears down the Speech pipeline when disabled (cancel pending restarts, drop stale callbacks) to avoid high CPU in the background.
+- macOS menu: add a Talk Mode action alongside the Open Dashboard/Chat/Canvas entries.
+- macOS Debug: hide “Restart Gateway” when the app won’t start a local gateway (remote mode / attach-only).
+- macOS Talk Mode: orb overlay refresh, ElevenLabs request logging, API key status in settings, and auto-select first voice when none is configured.
+- macOS Talk Mode: add hard timeout around ElevenLabs TTS synthesis to avoid getting stuck “speaking” forever on hung requests.
+- macOS Talk Mode: avoid stuck playback when the audio player never starts (fail-fast + watchdog).
+- macOS Talk Mode: fix audio stop ordering so disabling Talk Mode always stops in-flight playback.
+- macOS Talk Mode: throttle audio-level updates (avoid per-buffer task creation) to reduce CPU/task churn.
+- macOS Talk Mode: increase overlay window size so wave rings don’t clip; close button is hover-only and closer to the orb.
+- Talk Mode: fall back to system TTS when ElevenLabs is unavailable, returns non-audio, or playback fails (macOS/iOS/Android).
+- Talk Mode: stream PCM on macOS/iOS for lower latency (incremental playback); Android continues MP3 streaming.
+- Talk Mode: validate ElevenLabs v3 stability and latency tier directives before sending requests.
+- iOS/Android Talk Mode: auto-select the first ElevenLabs voice when none is configured.
+- ElevenLabs: add retry/backoff for 429/5xx and include content-type in errors for debugging.
+- Talk Mode: align to the gateway’s main session key and fall back to history polling when chat events drop (prevents stuck “thinking” / missing messages).
+- Talk Mode: treat history timestamps as seconds or milliseconds to avoid stale assistant picks (macOS/iOS/Android).
+- Chat UI: clear streaming/tool bubbles when external runs finish, preventing duplicate assistant bubbles.
+- Chat UI: user bubbles use `ui.seamColor` (fallback to a calmer default blue).
+- Android Chat UI: use `onPrimary` for user bubble text to preserve contrast (thanks @Syhids).
+- Control UI: sync sidebar navigation with the URL for deep-linking, and auto-scroll chat to the latest message.
+- Control UI: disable Web Chat + Talk when no iOS/Android node is connected; refreshed Web Chat styling and keyboard send.
+- macOS: bundle Control UI assets into the app relay so the packaged app can serve them (thanks @mbelinky).
+- Talk Mode: wait for chat history to surface the assistant reply before starting TTS (macOS/iOS/Android).
+- iOS Talk Mode: fix chat completion wait to time out even if no events arrive (prevents “Thinking…” hangs).
+- iOS Talk Mode: keep recognition running during playback to support interrupt-on-speech.
+- iOS Talk Mode: preserve directive voice/model overrides across config reloads and add ElevenLabs request timeouts.
+- iOS/Android Talk Mode: explicitly `chat.subscribe` when Talk Mode is active, so completion events arrive even if the Chat UI isn’t open.
+- Chat UI: refresh history when another client finishes a run in the same session, so Talk Mode + Voice Wake transcripts appear consistently.
+- Gateway: `voice.transcript` now also maps agent bus output to `chat` events, ensuring chat UIs refresh for voice-triggered runs.
+- iOS/Android: show a centered Talk Mode orb overlay while Talk Mode is enabled.
+- Gateway config: inject `talk.apiKey` from `ELEVENLABS_API_KEY`/shell profile so nodes can fetch it on demand.
+- Canvas A2UI: tag requests with `platform=android|ios|macos` and boost Android canvas background contrast.
+- iOS/Android nodes: enable scrolling for loaded web pages in the Canvas WebView (default scaffold stays touch-first).
+- macOS menu: device list now uses `node.list` (devices only; no agent/tool presence entries).
+- macOS menu: device list now shows connected nodes only.
+- macOS menu: device rows now pack platform/version on the first line, and command lists wrap in submenus.
+- macOS menu: split device platform/version across first and second rows for better fit.
+- iOS node: fix ReplayKit screen recording crash caused by queue isolation assertions during capture.
+- iOS Talk Mode: avoid audio tap queue assertions when starting recognition.
+- macOS: use $HOME/Library/pnpm for SSH PATH exports (thanks @mbelinky).
+- iOS/Android nodes: bridge auto-connect refreshes stale tokens and settings now show richer bridge/device details.
+- macOS: bundle device model resources to prevent Instances crashes (thanks @mbelinky).
+- iOS/Android nodes: status pill now surfaces camera activity instead of overlay toasts.
+- iOS/Android/macOS nodes: camera snaps recompress to keep base64 payloads under 5 MB.
+- iOS/Android nodes: status pill now surfaces pairing, screen recording, voice wake, and foreground-required states.
+- iOS/Android nodes: avoid duplicating “Gateway reconnecting…” when the bridge is already connecting.
+- iOS/Android nodes: Talk Mode now lives on a side bubble (with an iOS toggle to hide it), and Android settings no longer show the Talk Mode switch.
+- macOS menu: top status line now shows pending node pairing approvals (incl. repairs).
+- CLI: avoid spurious gateway close errors after successful request/response cycles.
+- Agent runtime: clamp tool-result images to the 5MB Anthropic limit to avoid hard request rejections.
+- Tests: add Swift Testing coverage for camera errors and Kotest coverage for Android bridge endpoints.
 
 ## 2.0.0-beta4 — 2025-12-27
 

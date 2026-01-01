@@ -33,6 +33,13 @@ else
   echo "📦 Skipping TS build (SKIP_TSC=1)"
 fi
 
+if [[ "${SKIP_UI_BUILD:-0}" != "1" ]]; then
+  echo "🖥  Building Control UI (pnpm ui:build)"
+  (cd "$ROOT_DIR" && pnpm ui:build)
+else
+  echo "🖥  Skipping Control UI build (SKIP_UI_BUILD=1)"
+fi
+
 cd "$ROOT_DIR/apps/macos"
 
 echo "🔨 Building $PRODUCT ($BUILD_CONFIG)"
@@ -86,6 +93,10 @@ fi
 echo "🖼  Copying app icon"
 cp "$ROOT_DIR/apps/macos/Sources/Clawdis/Resources/Clawdis.icns" "$APP_ROOT/Contents/Resources/Clawdis.icns"
 
+echo "📦 Copying device model resources"
+rm -rf "$APP_ROOT/Contents/Resources/DeviceModels"
+cp -R "$ROOT_DIR/apps/macos/Sources/Clawdis/Resources/DeviceModels" "$APP_ROOT/Contents/Resources/DeviceModels"
+
 RELAY_DIR="$APP_ROOT/Contents/Resources/Relay"
 
 if [[ "${SKIP_GATEWAY_PACKAGE:-0}" != "1" ]]; then
@@ -108,6 +119,10 @@ if [[ "${SKIP_GATEWAY_PACKAGE:-0}" != "1" ]]; then
   echo "🎨 Copying gateway A2UI host assets"
   rm -rf "$RELAY_DIR/a2ui"
   cp -R "$ROOT_DIR/src/canvas-host/a2ui" "$RELAY_DIR/a2ui"
+
+  echo "🎛  Copying Control UI assets"
+  rm -rf "$RELAY_DIR/control-ui"
+  cp -R "$ROOT_DIR/dist/control-ui" "$RELAY_DIR/control-ui"
 
   echo "🧠 Copying bundled skills"
   rm -rf "$RELAY_DIR/skills"

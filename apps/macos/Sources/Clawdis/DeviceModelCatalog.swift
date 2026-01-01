@@ -7,6 +7,8 @@ struct DevicePresentation: Sendable {
 
 enum DeviceModelCatalog {
     private static let modelIdentifierToName: [String: String] = loadModelIdentifierToName()
+    private static let resourceBundle: Bundle? = locateResourceBundle()
+    private static let resourceSubdirectory = "DeviceModels"
 
     static func presentation(deviceFamily: String?, modelIdentifier: String?) -> DevicePresentation? {
         let family = (deviceFamily ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -104,13 +106,11 @@ enum DeviceModelCatalog {
     }
 
     private static func loadMapping(resourceName: String) -> [String: String] {
-        guard let url = self.resourceURL(
-            resourceName: resourceName,
+        guard let url = self.resourceBundle?.url(
+            forResource: resourceName,
             withExtension: "json",
-            subdirectory: "DeviceModels")
-        else {
-            return [:]
-        }
+            subdirectory: self.resourceSubdirectory)
+        else { return [:] }
 
         do {
             let data = try Data(contentsOf: url)
@@ -121,37 +121,48 @@ enum DeviceModelCatalog {
         }
     }
 
-    private static func resourceURL(
-        resourceName: String,
-        withExtension ext: String,
-        subdirectory: String
-    ) -> URL? {
-        let bundledSubdir = "Clawdis_Clawdis.bundle/\(subdirectory)"
-        let mainBundle = Bundle.main
-
-        if let url = mainBundle.url(forResource: resourceName, withExtension: ext, subdirectory: bundledSubdir)
-            ?? mainBundle.url(forResource: resourceName, withExtension: ext, subdirectory: subdirectory)
-        {
-            return url
+    private static func locateResourceBundle() -> Bundle? {
+        if let bundle = self.bundleIfContainsDeviceModels(Bundle.module) {
+            return bundle
         }
 
-        let fallbackBases = [
-            mainBundle.resourceURL,
-            mainBundle.bundleURL.appendingPathComponent("Contents/Resources"),
-            mainBundle.bundleURL.deletingLastPathComponent(),
-        ].compactMap { $0 }
+        if let bundle = self.bundleIfContainsDeviceModels(Bundle.main) {
+            return bundle
+        }
 
-        let fileName = "\(resourceName).\(ext)"
-        for base in fallbackBases {
-            let bundled = base.appendingPathComponent(bundledSubdir).appendingPathComponent(fileName)
-            if FileManager.default.fileExists(atPath: bundled.path) { return bundled }
-            let loose = base.appendingPathComponent(subdirectory).appendingPathComponent(fileName)
-            if FileManager.default.fileExists(atPath: loose.path) { return loose }
+        if let resourceURL = Bundle.main.resourceURL {
+            if let enumerator = FileManager.default.enumerator(
+                at: resourceURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]) {
+                for case let url as URL in enumerator {
+                    guard url.pathExtension == "bundle" else { continue }
+                    if let bundle = Bundle(url: url),
+                       self.bundleIfContainsDeviceModels(bundle) != nil {
+                        return bundle
+                    }
+                }
+            }
         }
 
         return nil
     }
 
+    private static func bundleIfContainsDeviceModels(_ bundle: Bundle) -> Bundle? {
+        if bundle.url(
+            forResource: "ios-device-identifiers",
+            withExtension: "json",
+            subdirectory: self.resourceSubdirectory) != nil {
+            return bundle
+        }
+        if bundle.url(
+            forResource: "mac-device-identifiers",
+            withExtension: "json",
+            subdirectory: self.resourceSubdirectory) != nil {
+            return bundle
+        }
+        return nil
+    }
     private enum NameValue: Decodable {
         case string(String)
         case stringArray([String])

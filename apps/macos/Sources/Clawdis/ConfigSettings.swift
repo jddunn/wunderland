@@ -31,6 +31,12 @@ struct ConfigSettings: View {
     @State private var browserColorHex: String = "#FF4500"
     @State private var browserAttachOnly: Bool = false
 
+    // Talk mode settings (stored in ~/.clawdis/clawdis.json under "talk")
+    @State private var talkVoiceId: String = ""
+    @State private var talkInterruptOnSpeech: Bool = true
+    @State private var talkApiKey: String = ""
+    @State private var gatewayApiKeyFound = false
+
     var body: some View {
         ScrollView { self.content }
             .onChange(of: self.modelCatalogPath) { _, _ in
@@ -45,6 +51,7 @@ struct ConfigSettings: View {
                 self.hasLoaded = true
                 self.loadConfig()
                 await self.loadModels()
+                await self.refreshGatewayTalkApiKey()
                 self.allowAutosave = true
             }
     }
@@ -55,6 +62,8 @@ struct ConfigSettings: View {
             self.agentSection
                 .disabled(self.isNixMode)
             self.heartbeatSection
+                .disabled(self.isNixMode)
+            self.talkSection
                 .disabled(self.isNixMode)
             self.browserSection
                 .disabled(self.isNixMode)
@@ -272,10 +281,92 @@ struct ConfigSettings: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var talkSection: some View {
+        GroupBox("Talk Mode") {
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
+                GridRow {
+                    self.gridLabel("Voice ID")
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            TextField("ElevenLabs voice ID", text: self.$talkVoiceId)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: .infinity)
+                                .onChange(of: self.talkVoiceId) { _, _ in self.autosaveConfig() }
+                            if !self.talkVoiceSuggestions.isEmpty {
+                                Menu {
+                                    ForEach(self.talkVoiceSuggestions, id: \.self) { value in
+                                        Button(value) {
+                                            self.talkVoiceId = value
+                                            self.autosaveConfig()
+                                        }
+                                    }
+                                } label: {
+                                    Label("Suggestions", systemImage: "chevron.up.chevron.down")
+                                }
+                                .fixedSize()
+                            }
+                        }
+                        Text("Defaults to ELEVENLABS_VOICE_ID / SAG_VOICE_ID if unset.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                GridRow {
+                    self.gridLabel("API key")
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            SecureField("ELEVENLABS_API_KEY", text: self.$talkApiKey)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: .infinity)
+                                .disabled(self.hasEnvApiKey)
+                                .onChange(of: self.talkApiKey) { _, _ in self.autosaveConfig() }
+                            if !self.hasEnvApiKey && !self.talkApiKey.isEmpty {
+                                Button("Clear") {
+                                    self.talkApiKey = ""
+                                    self.autosaveConfig()
+                                }
+                            }
+                        }
+                        self.statusLine(label: self.apiKeyStatusLabel, color: self.apiKeyStatusColor)
+                        if self.hasEnvApiKey {
+                            Text("Using ELEVENLABS_API_KEY from the environment.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else if self.gatewayApiKeyFound && self.talkApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("Using API key from the gateway profile.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                GridRow {
+                    self.gridLabel("Interrupt")
+                    Toggle("Stop speaking when you start talking", isOn: self.$talkInterruptOnSpeech)
+                        .labelsHidden()
+                        .toggleStyle(.checkbox)
+                        .onChange(of: self.talkInterruptOnSpeech) { _, _ in self.autosaveConfig() }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func gridLabel(_ text: String) -> some View {
         Text(text)
             .foregroundStyle(.secondary)
             .frame(width: self.labelColumnWidth, alignment: .leading)
+    }
+
+    private func statusLine(label: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(label)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 2)
     }
 
     private func loadConfig() {
@@ -284,6 +375,7 @@ struct ConfigSettings: View {
         let heartbeatMinutes = agent?["heartbeatMinutes"] as? Int
         let heartbeatBody = agent?["heartbeatBody"] as? String
         let browser = parsed["browser"] as? [String: Any]
+        let talk = parsed["talk"] as? [String: Any]
 
         let loadedModel = (agent?["model"] as? String) ?? ""
         if !loadedModel.isEmpty {
@@ -303,6 +395,28 @@ struct ConfigSettings: View {
             if let color = browser["color"] as? String, !color.isEmpty { self.browserColorHex = color }
             if let attachOnly = browser["attachOnly"] as? Bool { self.browserAttachOnly = attachOnly }
         }
+
+        if let talk {
+            if let voice = talk["voiceId"] as? String { self.talkVoiceId = voice }
+            if let apiKey = talk["apiKey"] as? String { self.talkApiKey = apiKey }
+            if let interrupt = talk["interruptOnSpeech"] as? Bool {
+                self.talkInterruptOnSpeech = interrupt
+            }
+        }
+    }
+
+    private func refreshGatewayTalkApiKey() async {
+        do {
+            let snap: ConfigSnapshot = try await GatewayConnection.shared.requestDecoded(
+                method: .configGet,
+                params: nil,
+                timeoutMs: 8000)
+            let talk = snap.config?["talk"]?.dictionaryValue
+            let apiKey = talk?["apiKey"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.gatewayApiKeyFound = !(apiKey ?? "").isEmpty
+        } catch {
+            self.gatewayApiKeyFound = false
+        }
     }
 
     private func autosaveConfig() {
@@ -318,6 +432,7 @@ struct ConfigSettings: View {
         var root = self.loadConfigDict()
         var agent = root["agent"] as? [String: Any] ?? [:]
         var browser = root["browser"] as? [String: Any] ?? [:]
+        var talk = root["talk"] as? [String: Any] ?? [:]
 
         let chosenModel = (self.configModel == "__custom__" ? self.customModel : self.configModel)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -343,6 +458,21 @@ struct ConfigSettings: View {
         browser["attachOnly"] = self.browserAttachOnly
         root["browser"] = browser
 
+        let trimmedVoice = self.talkVoiceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedVoice.isEmpty {
+            talk.removeValue(forKey: "voiceId")
+        } else {
+            talk["voiceId"] = trimmedVoice
+        }
+        let trimmedApiKey = self.talkApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedApiKey.isEmpty {
+            talk.removeValue(forKey: "apiKey")
+        } else {
+            talk["apiKey"] = trimmedApiKey
+        }
+        talk["interruptOnSpeech"] = self.talkInterruptOnSpeech
+        root["talk"] = talk
+
         ClawdisConfigFile.saveDict(root)
     }
 
@@ -358,6 +488,41 @@ struct ConfigSettings: View {
         let g = Double((value >> 8) & 0xFF) / 255.0
         let b = Double(value & 0xFF) / 255.0
         return Color(red: r, green: g, blue: b)
+    }
+
+    private var talkVoiceSuggestions: [String] {
+        let env = ProcessInfo.processInfo.environment
+        let candidates = [
+            self.talkVoiceId,
+            env["ELEVENLABS_VOICE_ID"] ?? "",
+            env["SAG_VOICE_ID"] ?? "",
+        ]
+        var seen = Set<String>()
+        return candidates
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0).inserted }
+    }
+
+    private var hasEnvApiKey: Bool {
+        let raw = ProcessInfo.processInfo.environment["ELEVENLABS_API_KEY"] ?? ""
+        return !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var apiKeyStatusLabel: String {
+        if self.hasEnvApiKey { return "ElevenLabs API key: found (environment)" }
+        if !self.talkApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "ElevenLabs API key: stored in config"
+        }
+        if self.gatewayApiKeyFound { return "ElevenLabs API key: found (gateway)" }
+        return "ElevenLabs API key: missing"
+    }
+
+    private var apiKeyStatusColor: Color {
+        if self.hasEnvApiKey { return .green }
+        if !self.talkApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .green }
+        if self.gatewayApiKeyFound { return .green }
+        return .red
     }
 
     private var browserPathLabel: String? {

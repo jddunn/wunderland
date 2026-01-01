@@ -21,7 +21,6 @@ struct SettingsRootView: View {
             if self.isNixMode {
                 self.nixManagedBanner
             }
-
             TabView(selection: self.$selectedTab) {
                 GeneralSettings(state: self.state)
                     .tabItem { Label("General", systemImage: "gearshape") }
@@ -63,7 +62,7 @@ struct SettingsRootView: View {
                     .tag(SettingsTab.permissions)
 
                 if self.state.debugPaneEnabled {
-                    DebugSettings()
+                    DebugSettings(state: self.state)
                         .tabItem { Label("Debug", systemImage: "ant") }
                         .tag(SettingsTab.debug)
                 }

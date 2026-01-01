@@ -421,6 +421,7 @@ import {
   validateSkillsInstallParams,
   validateSkillsStatusParams,
   validateSkillsUpdateParams,
+  validateTalkModeParams,
   validateWakeParams,
   validateWebLoginStartParams,
   validateWebLoginWaitParams,
@@ -497,6 +498,7 @@ const METHODS = [
   "status",
   "config.get",
   "config.set",
+  "talk.mode",
   "models.list",
   "skills.status",
   "skills.install",
@@ -546,6 +548,7 @@ const EVENTS = [
   "chat",
   "presence",
   "tick",
+  "talk.mode",
   "shutdown",
   "health",
   "heartbeat",
@@ -1673,6 +1676,19 @@ export async function startGatewayServer(
   let bridge: Awaited<ReturnType<typeof startNodeBridgeServer>> | null = null;
   const bridgeNodeSubscriptions = new Map<string, Set<string>>();
   const bridgeSessionSubscribers = new Map<string, Set<string>>();
+
+  const isMobilePlatform = (platform: unknown): boolean => {
+    const p = typeof platform === "string" ? platform.trim().toLowerCase() : "";
+    if (!p) return false;
+    return (
+      p.startsWith("ios") || p.startsWith("ipados") || p.startsWith("android")
+    );
+  };
+
+  const hasConnectedMobileNode = (): boolean => {
+    const connected = bridge?.listConnected?.() ?? [];
+    return connected.some((n) => isMobilePlatform(n.platform));
+  };
   try {
     await new Promise<void>((resolve, reject) => {
       const onError = (err: NodeJS.ErrnoException) => {
@@ -2406,6 +2422,25 @@ export async function startGatewayServer(
             }),
           };
         }
+        case "talk.mode": {
+          const params = parseParams();
+          if (!validateTalkModeParams(params)) {
+            return {
+              ok: false,
+              error: {
+                code: ErrorCodes.INVALID_REQUEST,
+                message: `invalid talk.mode params: ${formatValidationErrors(validateTalkModeParams.errors)}`,
+              },
+            };
+          }
+          const payload = {
+            enabled: (params as { enabled: boolean }).enabled,
+            phase: (params as { phase?: string }).phase ?? null,
+            ts: Date.now(),
+          };
+          broadcast("talk.mode", payload, { dropIfSlow: true });
+          return { ok: true, payloadJSON: JSON.stringify(payload) };
+        }
         case "models.list": {
           const params = parseParams();
           if (!validateModelsListParams(params)) {
@@ -3068,6 +3103,13 @@ export async function startGatewayServer(
         if (storePath) {
           await saveSessionStore(storePath, store);
         }
+
+        // Ensure chat UI clients refresh when this run completes (even though it wasn't started via chat.send).
+        // This maps agent bus events (keyed by sessionId) to chat events (keyed by clientRunId).
+        chatRunSessions.set(sessionId, {
+          sessionKey,
+          clientRunId: `voice-${randomUUID()}`,
+        });
 
         void agentCommand(
           {
@@ -4092,6 +4134,21 @@ export async function startGatewayServer(
               break;
             }
             case "chat.send": {
+              if (
+                client &&
+                isWebchatConnect(client.connect) &&
+                !hasConnectedMobileNode()
+              ) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(
+                    ErrorCodes.UNAVAILABLE,
+                    "web chat disabled: no connected iOS/Android nodes",
+                  ),
+                );
+                break;
+              }
               const params = (req.params ?? {}) as Record<string, unknown>;
               if (!validateChatSendParams(params)) {
                 respond(
@@ -4640,6 +4697,43 @@ export async function startGatewayServer(
                 },
                 undefined,
               );
+              break;
+            }
+            case "talk.mode": {
+              if (
+                client &&
+                isWebchatConnect(client.connect) &&
+                !hasConnectedMobileNode()
+              ) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(
+                    ErrorCodes.UNAVAILABLE,
+                    "talk disabled: no connected iOS/Android nodes",
+                  ),
+                );
+                break;
+              }
+              const params = (req.params ?? {}) as Record<string, unknown>;
+              if (!validateTalkModeParams(params)) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(
+                    ErrorCodes.INVALID_REQUEST,
+                    `invalid talk.mode params: ${formatValidationErrors(validateTalkModeParams.errors)}`,
+                  ),
+                );
+                break;
+              }
+              const payload = {
+                enabled: (params as { enabled: boolean }).enabled,
+                phase: (params as { phase?: string }).phase ?? null,
+                ts: Date.now(),
+              };
+              broadcast("talk.mode", payload, { dropIfSlow: true });
+              respond(true, payload, undefined);
               break;
             }
             case "skills.status": {
