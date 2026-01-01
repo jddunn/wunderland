@@ -3,7 +3,10 @@ import { spawnSync } from "node:child_process";
 const DEFAULT_LAUNCHD_LABEL = "com.steipete.clawdis";
 const DEFAULT_SYSTEMD_UNIT = "clawdis-gateway.service";
 
-export function triggerClawdisRestart(): "launchctl" | "systemd" | "supervisor" {
+export function triggerClawdisRestart():
+  | "launchctl"
+  | "systemd"
+  | "supervisor" {
   if (process.platform !== "darwin") {
     if (process.platform === "linux") {
       const unit = process.env.CLAWDIS_SYSTEMD_UNIT || DEFAULT_SYSTEMD_UNIT;
