@@ -308,6 +308,8 @@ export type GatewayRemoteConfig = {
   url?: string;
   /** Token for remote auth (when the gateway requires token auth). */
   token?: string;
+  /** Password for remote auth (when the gateway requires password auth). */
+  password?: string;
 };
 
 export type GatewayConfig = {
@@ -973,6 +975,7 @@ const ClawdisSchema = z.object({
         .object({
           url: z.string().optional(),
           token: z.string().optional(),
+          password: z.string().optional(),
         })
         .optional(),
     })

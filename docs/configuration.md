@@ -532,6 +532,7 @@ Auth and Tailscale:
 Remote client defaults (CLI):
 - `gateway.remote.url` sets the default Gateway WebSocket URL for CLI calls when `gateway.mode = "remote"`.
 - `gateway.remote.token` supplies the token for remote calls (leave unset for no auth).
+- `gateway.remote.password` supplies the password for remote calls (leave unset for no auth).
 
 ```json5
 {
@@ -539,7 +540,8 @@ Remote client defaults (CLI):
     mode: "remote",
     remote: {
       url: "ws://gateway.tailnet:18789",
-      token: "your-token"
+      token: "your-token",
+      password: "your-password"
     }
   }
 }
