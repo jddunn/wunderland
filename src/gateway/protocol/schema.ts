@@ -37,6 +37,8 @@ export const SnapshotSchema = Type.Object(
     health: HealthSnapshotSchema,
     stateVersion: StateVersionSchema,
     uptimeMs: Type.Integer({ minimum: 0 }),
+    configPath: Type.Optional(NonEmptyString),
+    stateDir: Type.Optional(NonEmptyString),
   },
   { additionalProperties: false },
 );

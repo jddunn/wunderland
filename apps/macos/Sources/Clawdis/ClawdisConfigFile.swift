@@ -2,28 +2,17 @@ import Foundation
 
 enum ClawdisConfigFile {
     private static let logger = Logger(subsystem: "com.steipete.clawdis", category: "config")
-    private static let configPathEnv = "CLAWDIS_CONFIG_PATH"
-    private static let stateDirEnv = "CLAWDIS_STATE_DIR"
 
     static func url() -> URL {
-        if let override = self.envPath(self.configPathEnv) {
-            return URL(fileURLWithPath: override)
-        }
-        return self.stateDirURL()
-            .appendingPathComponent("clawdis.json")
+        ClawdisPaths.configURL
     }
 
     static func stateDirURL() -> URL {
-        if let override = self.envPath(self.stateDirEnv) {
-            return URL(fileURLWithPath: override, isDirectory: true)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".clawdis", isDirectory: true)
+        ClawdisPaths.stateDirURL
     }
 
     static func defaultWorkspaceURL() -> URL {
-        self.stateDirURL()
-            .appendingPathComponent("workspace", isDirectory: true)
+        ClawdisPaths.workspaceURL
     }
 
     static func loadDict() -> [String: Any] {
@@ -108,11 +97,4 @@ enum ClawdisConfigFile {
         self.logger.debug("agent workspace updated set=\(!trimmed.isEmpty)")
     }
 
-    private static func envPath(_ key: String) -> String? {
-        guard let value = ProcessInfo.processInfo.environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !value.isEmpty else {
-            return nil
-        }
-        return value
-    }
 }

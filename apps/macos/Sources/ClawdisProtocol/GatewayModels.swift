@@ -250,23 +250,31 @@ public struct Snapshot: Codable {
     public let health: AnyCodable
     public let stateversion: StateVersion
     public let uptimems: Int
+    public let configpath: String?
+    public let statedir: String?
 
     public init(
         presence: [PresenceEntry],
         health: AnyCodable,
         stateversion: StateVersion,
-        uptimems: Int
+        uptimems: Int,
+        configpath: String?,
+        statedir: String?
     ) {
         self.presence = presence
         self.health = health
         self.stateversion = stateversion
         self.uptimems = uptimems
+        self.configpath = configpath
+        self.statedir = statedir
     }
     private enum CodingKeys: String, CodingKey {
         case presence
         case health
         case stateversion = "stateVersion"
         case uptimems = "uptimeMs"
+        case configpath = "configPath"
+        case statedir = "stateDir"
     }
 }
 

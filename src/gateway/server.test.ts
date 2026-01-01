@@ -6,7 +6,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
 import { agentCommand } from "../commands/agent.js";
-import { readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
+import {
+  CONFIG_PATH_CLAWDIS,
+  STATE_DIR_CLAWDIS,
+  readConfigFileSnapshot,
+  writeConfigFile,
+} from "../config/config.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
 import { GatewayLockError } from "../infra/gateway-lock.js";
 import { emitHeartbeatEvent } from "../infra/heartbeat-events.js";
@@ -190,6 +195,7 @@ vi.mock("../config/config.js", () => {
 
   return {
     CONFIG_PATH_CLAWDIS: resolveConfigPath(),
+    STATE_DIR_CLAWDIS: path.dirname(resolveConfigPath()),
     isNixMode: false,
     loadConfig: () => ({
       agent: {
@@ -2046,9 +2052,12 @@ describe("gateway server", () => {
       (o) => o.type === "res" && o.id === id,
     );
     expect(res.ok).toBe(true);
-    expect((res.payload as { type?: unknown } | undefined)?.type).toBe(
-      "hello-ok",
-    );
+    const payload = res.payload as
+      | { type?: unknown; snapshot?: { configPath?: string; stateDir?: string } }
+      | undefined;
+    expect(payload?.type).toBe("hello-ok");
+    expect(payload?.snapshot?.configPath).toBe(CONFIG_PATH_CLAWDIS);
+    expect(payload?.snapshot?.stateDir).toBe(STATE_DIR_CLAWDIS);
     ws.close();
     await server.close();
   });

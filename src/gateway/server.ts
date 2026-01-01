@@ -46,6 +46,7 @@ import { getStatusSummary } from "../commands/status.js";
 import {
   type ClawdisConfig,
   CONFIG_PATH_CLAWDIS,
+  STATE_DIR_CLAWDIS,
   isNixMode,
   loadConfig,
   parseConfigJson5,
@@ -638,6 +639,8 @@ function buildSnapshot(): Snapshot {
     health: emptyHealth,
     stateVersion: { presence: presenceVersion, health: healthVersion },
     uptimeMs,
+    configPath: CONFIG_PATH_CLAWDIS,
+    stateDir: STATE_DIR_CLAWDIS,
   };
 }
 

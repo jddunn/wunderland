@@ -129,22 +129,6 @@ enum DeviceModelCatalog {
         if let bundle = self.bundleIfContainsDeviceModels(Bundle.main) {
             return bundle
         }
-
-        if let resourceURL = Bundle.main.resourceURL {
-            if let enumerator = FileManager.default.enumerator(
-                at: resourceURL,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]) {
-                for case let url as URL in enumerator {
-                    guard url.pathExtension == "bundle" else { continue }
-                    if let bundle = Bundle(url: url),
-                       self.bundleIfContainsDeviceModels(bundle) != nil {
-                        return bundle
-                    }
-                }
-            }
-        }
-
         return nil
     }
 

@@ -105,8 +105,9 @@ struct SettingsRootView: View {
     }
 
     private var nixManagedBanner: some View {
-        let configPath = ClawdisConfigFile.url().path
-        let stateDir = ClawdisConfigFile.stateDirURL().path
+        let snapshotPaths = GatewayConnection.shared.snapshotPaths()
+        let configPath = snapshotPaths.configPath ?? ClawdisPaths.configURL.path
+        let stateDir = snapshotPaths.stateDir ?? ClawdisPaths.stateDirURL.path
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
