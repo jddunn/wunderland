@@ -32,7 +32,10 @@
 - Skills: switch imsg installer to brew tap formula.
 - Skills: gate macOS-only skills by OS and surface block reasons in the Skills UI.
 - Onboarding: show skill descriptions in the macOS setup flow and surface clearer Gateway/skills error messages.
+- Onboarding: auto-verify Claude OAuth tokens, show “verified” when detected working, and avoid re-auth prompts unless verification fails.
 - CLI onboarding: include exit code + a useful one-line summary when skill dependency installs fail.
+- CLI onboarding: explain Tailscale exposure options (Off/Serve/Funnel) and colorize provider status (linked/configured/needs setup).
+- macOS settings: colorize provider status subtitles to distinguish healthy vs degraded states.
 - macOS codesign: skip hardened runtime for ad-hoc signing and avoid empty options args (#70) — thanks @petter-b
 - macOS packaging: move rpath config into swift build for reliability (#69) — thanks @petter-b
 - macOS: prioritize main bundle for device resources to prevent crash (#73) — thanks @petter-b
