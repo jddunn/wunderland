@@ -43,7 +43,7 @@ fi
 cd "$ROOT_DIR/apps/macos"
 
 echo "🔨 Building $PRODUCT ($BUILD_CONFIG)"
-swift build -c "$BUILD_CONFIG" --product "$PRODUCT" --build-path "$BUILD_PATH"
+swift build -c "$BUILD_CONFIG" --product "$PRODUCT" --build-path "$BUILD_PATH" -Xlinker -rpath -Xlinker @executable_path/../Frameworks
 
 BIN="$BUILD_PATH/$BUILD_CONFIG/$PRODUCT"
 echo "pkg: binary $BIN" >&2
@@ -87,7 +87,6 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
   echo "✨ Embedding Sparkle.framework"
   cp -R "$SPARKLE_FRAMEWORK" "$APP_ROOT/Contents/Frameworks/"
   chmod -R a+rX "$APP_ROOT/Contents/Frameworks/Sparkle.framework"
-  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_ROOT/Contents/MacOS/Clawdis"
 fi
 
 echo "🖼  Copying app icon"
