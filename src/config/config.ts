@@ -390,6 +390,13 @@ export type ClawdisConfig = {
     theme?: string;
     emoji?: string;
   };
+  wizard?: {
+    lastRunAt?: string;
+    lastRunVersion?: string;
+    lastRunCommit?: string;
+    lastRunCommand?: string;
+    lastRunMode?: "local" | "remote";
+  };
   logging?: LoggingConfig;
   browser?: BrowserConfig;
   ui?: {
@@ -697,6 +704,17 @@ const ClawdisSchema = z.object({
       name: z.string().optional(),
       theme: z.string().optional(),
       emoji: z.string().optional(),
+    })
+    .optional(),
+  wizard: z
+    .object({
+      lastRunAt: z.string().optional(),
+      lastRunVersion: z.string().optional(),
+      lastRunCommit: z.string().optional(),
+      lastRunCommand: z.string().optional(),
+      lastRunMode: z
+        .union([z.literal("local"), z.literal("remote")])
+        .optional(),
     })
     .optional(),
   logging: z

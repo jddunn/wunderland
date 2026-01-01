@@ -30,11 +30,13 @@ import {
   writeOAuthCredentials,
 } from "./onboard-auth.js";
 import {
+  applyWizardMetadata,
   DEFAULT_WORKSPACE,
   ensureWorkspaceAndSessions,
   guardCancel,
   handleReset,
   openUrl,
+  printWizardHeader,
   randomToken,
   summarizeExistingConfig,
 } from "./onboard-helpers.js";
@@ -52,14 +54,7 @@ export async function runInteractiveOnboarding(
   opts: OnboardOptions,
   runtime: RuntimeEnv = defaultRuntime,
 ) {
-  const header = [
-    "  _____ _      ___    _    _      ____ ___ ____ ",
-    " / ____| |    / _ \\  | |  | |    |  _ \\_ _/ __|",
-    "| |    | |   | | | | | |  | |    | | | | |\\__ \\",
-    "| |___ | |___| |_| | | |__| |___ | |_| | |___) |",
-    " \\_____|_____|\\___/   \\____/_____|____/___/____/ ",
-  ].join("\n");
-  runtime.log(header);
+  printWizardHeader(runtime);
   intro("Clawdis onboarding");
 
   const snapshot = await readConfigFileSnapshot();
@@ -363,13 +358,16 @@ export async function runInteractiveOnboarding(
     },
   };
 
-  nextConfig = await setupProviders(nextConfig, runtime);
+  nextConfig = await setupProviders(nextConfig, runtime, {
+    allowSignalInstall: true,
+  });
 
   await writeConfigFile(nextConfig);
   runtime.log(`Updated ${CONFIG_PATH_CLAWDIS}`);
   await ensureWorkspaceAndSessions(workspaceDir, runtime);
 
   nextConfig = await setupSkills(nextConfig, workspaceDir, runtime);
+  nextConfig = applyWizardMetadata(nextConfig, { command: "onboard", mode });
   await writeConfigFile(nextConfig);
 
   const installDaemon = guardCancel(

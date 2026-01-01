@@ -1,12 +1,15 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import { agentCommand } from "../commands/agent.js";
+import { configureCommand } from "../commands/configure.js";
+import { doctorCommand } from "../commands/doctor.js";
 import { healthCommand } from "../commands/health.js";
 import { onboardCommand } from "../commands/onboard.js";
 import { sendCommand } from "../commands/send.js";
 import { sessionsCommand } from "../commands/sessions.js";
 import { setupCommand } from "../commands/setup.js";
 import { statusCommand } from "../commands/status.js";
+import { updateCommand } from "../commands/update.js";
 import { danger, setVerbose } from "../globals.js";
 import { loginWeb, logoutWeb } from "../provider-web.js";
 import { defaultRuntime } from "../runtime.js";
@@ -195,6 +198,44 @@ export function buildProgram() {
           },
           defaultRuntime,
         );
+      } catch (err) {
+        defaultRuntime.error(String(err));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  program
+    .command("configure")
+    .description(
+      "Interactive wizard to update models, providers, skills, and gateway",
+    )
+    .action(async () => {
+      try {
+        await configureCommand(defaultRuntime);
+      } catch (err) {
+        defaultRuntime.error(String(err));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  program
+    .command("doctor")
+    .description("Health checks + quick fixes for the gateway and providers")
+    .action(async () => {
+      try {
+        await doctorCommand(defaultRuntime);
+      } catch (err) {
+        defaultRuntime.error(String(err));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  program
+    .command("update")
+    .description("Audit and modernize the local configuration")
+    .action(async () => {
+      try {
+        await updateCommand(defaultRuntime);
       } catch (err) {
         defaultRuntime.error(String(err));
         defaultRuntime.exit(1);

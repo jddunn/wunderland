@@ -7,15 +7,21 @@ read_when:
 
 # Onboarding Wizard (CLI)
 
-Goal: single interactive flow to set up Clawdis Gateway + workspace + skills on a new machine.
+Goal: interactive wizards for first-run onboarding **and** ongoing reconfiguration.
 Uses `@clack/prompts` for arrow-key selection and step UX.
 
 Scope: **Local gateway only**. Remote mode is **info-only** (no config writes).
 
 ## Entry points
 
+First run:
 - `clawdis onboard` (primary)
 - `clawdis setup --wizard` (alias)
+
+Ongoing:
+- `clawdis configure` (models/providers/skills/gateway/workspace)
+- `clawdis doctor` (health + quick fixes)
+- `clawdis update` (audit + modernize config defaults)
 
 ## Non-interactive mode
 
@@ -64,7 +70,7 @@ Reset uses `trash` (never `rm`).
    - WhatsApp: optional `clawdis login` QR flow
    - Telegram: bot token (config or env)
    - Discord: bot token (config or env)
-   - Signal: `signal-cli` detection + account config
+   - Signal: `signal-cli` detection + account config + install option
 
 6) **Daemon install (local only)**
    - macOS: LaunchAgent
@@ -104,8 +110,45 @@ Wizard writes:
   - `skills.install.nodeManager` (npm | pnpm | bun)
   - `skills.entries.<key>.env` / `.apiKey` (if set in skills step)
   - `telegram.botToken`, `discord.token`, `signal.*` (if set in providers step)
+  - `wizard.lastRunAt`, `wizard.lastRunVersion`, `wizard.lastRunCommit`, `wizard.lastRunCommand`, `wizard.lastRunMode`
 
 WhatsApp login writes credentials to `~/.clawdis/credentials/creds.json`.
+
+## Configure / Doctor / Update flows
+
+`clawdis configure` offers a menu of sections:
+- Model/auth
+- Providers (incl Signal install)
+- Gateway + daemon
+- Workspace + bootstrap files
+- Skills
+- Health check (optional at end)
+
+`clawdis doctor`:
+- Gateway reachability
+- Provider probes
+- Skills status
+- Quick fixes (start gateway, relink WhatsApp, prompt missing tokens)
+
+`clawdis update`:
+- Audit config vs defaults
+- Suggest upgrades/changes
+- Re-run key steps as needed
+
+Each wizard run updates `wizard.*` metadata.
+
+## Signal CLI install (wizard)
+
+Wizard can install signal-cli from GitHub releases:
+- Fetch latest release from `https://github.com/AsamK/signal-cli/releases/latest`
+- Download platform asset (Linux native preferred)
+- Extract under `~/.clawdis/tools/signal-cli/<version>/`
+- Set `signal.cliPath` to the detected `signal-cli` binary
+
+Notes:
+- signal-cli requires Java 21 for JVM builds.
+- Native builds are available for some platforms; fallback to JVM build if native not found.
+- Auto-install is not supported on Windows yet.
 
 ## Minimax M2.1 (LM Studio) config snippet
 

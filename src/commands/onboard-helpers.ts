@@ -13,7 +13,8 @@ import { CONFIG_PATH_CLAWDIS } from "../config/config.js";
 import { resolveSessionTranscriptsDir } from "../config/sessions.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import type { RuntimeEnv } from "../runtime.js";
-import { CONFIG_DIR } from "../utils.js";
+import { CONFIG_DIR, resolveUserPath } from "../utils.js";
+import { VERSION } from "../version.js";
 import type { NodeManagerChoice, ResetScope } from "./onboard-types.js";
 
 export function guardCancel<T>(value: T, runtime: RuntimeEnv): T {
@@ -39,6 +40,36 @@ export function summarizeExistingConfig(config: ClawdisConfig): string {
 
 export function randomToken(): string {
   return crypto.randomBytes(24).toString("hex");
+}
+
+export function printWizardHeader(runtime: RuntimeEnv) {
+  const header = [
+    "#####  #       ###   #   #  ####   #####   ####",
+    "#      #      #   #  #   #  #   #    #    #    ",
+    "#      #      #####  # # #  #   #    #     ### ",
+    "#      #      #   #  ## ##  #   #    #        #",
+    "#####  #####  #   #  #   #  ####   #####  #### ",
+  ].join("\n");
+  runtime.log(header);
+}
+
+export function applyWizardMetadata(
+  cfg: ClawdisConfig,
+  params: { command: string; mode: "local" | "remote" },
+): ClawdisConfig {
+  const commit =
+    process.env.GIT_COMMIT?.trim() || process.env.GIT_SHA?.trim() || undefined;
+  return {
+    ...cfg,
+    wizard: {
+      ...cfg.wizard,
+      lastRunAt: new Date().toISOString(),
+      lastRunVersion: VERSION,
+      lastRunCommit: commit,
+      lastRunCommand: params.command,
+      lastRunMode: params.mode,
+    },
+  };
 }
 
 export async function openUrl(url: string): Promise<void> {
@@ -114,6 +145,17 @@ export async function handleReset(
 }
 
 export async function detectBinary(name: string): Promise<boolean> {
+  if (!name?.trim()) return false;
+  const resolved = name.startsWith("~") ? resolveUserPath(name) : name;
+  if (path.isAbsolute(resolved) || resolved.startsWith(".")) {
+    try {
+      await fs.access(resolved);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   const command =
     process.platform === "win32"
       ? ["where", name]

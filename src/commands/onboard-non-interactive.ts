@@ -15,6 +15,7 @@ import { resolveUserPath, sleep } from "../utils.js";
 import { healthCommand } from "./health.js";
 import { applyMinimaxConfig, setAnthropicApiKey } from "./onboard-auth.js";
 import {
+  applyWizardMetadata,
   DEFAULT_WORKSPACE,
   ensureWorkspaceAndSessions,
   randomToken,
@@ -168,6 +169,7 @@ export async function runNonInteractiveOnboarding(
     };
   }
 
+  nextConfig = applyWizardMetadata(nextConfig, { command: "onboard", mode });
   await writeConfigFile(nextConfig);
   runtime.log(`Updated ${CONFIG_PATH_CLAWDIS}`);
   await ensureWorkspaceAndSessions(workspaceDir, runtime);

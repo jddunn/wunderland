@@ -9,6 +9,7 @@ import type { RuntimeEnv } from "../runtime.js";
 import { resolveWebAuthDir } from "../web/session.js";
 import { detectBinary, guardCancel } from "./onboard-helpers.js";
 import type { ProviderChoice } from "./onboard-types.js";
+import { installSignalCli } from "./signal-install.js";
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -27,6 +28,7 @@ async function detectWhatsAppLinked(): Promise<boolean> {
 export async function setupProviders(
   cfg: ClawdisConfig,
   runtime: RuntimeEnv,
+  options?: { allowDisable?: boolean; allowSignalInstall?: boolean },
 ): Promise<ClawdisConfig> {
   const whatsappLinked = await detectWhatsAppLinked();
   const telegramEnv = Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim());
@@ -38,7 +40,8 @@ export async function setupProviders(
   const signalConfigured = Boolean(
     cfg.signal?.account || cfg.signal?.httpUrl || cfg.signal?.httpPort,
   );
-  const signalCliDetected = await detectBinary("signal-cli");
+  const signalCliPath = cfg.signal?.cliPath ?? "signal-cli";
+  const signalCliDetected = await detectBinary(signalCliPath);
 
   note(
     [
@@ -46,7 +49,7 @@ export async function setupProviders(
       `Telegram: ${telegramConfigured ? "configured" : "needs token"}`,
       `Discord: ${discordConfigured ? "configured" : "needs token"}`,
       `Signal: ${signalConfigured ? "configured" : "needs setup"}`,
-      `signal-cli: ${signalCliDetected ? "found" : "missing"}`,
+      `signal-cli: ${signalCliDetected ? "found" : "missing"} (${signalCliPath})`,
     ].join("\n"),
     "Provider status",
   );
@@ -241,7 +244,35 @@ export async function setupProviders(
   }
 
   if (selection.includes("signal")) {
-    if (!signalCliDetected) {
+    let resolvedCliPath = signalCliPath;
+    let cliDetected = signalCliDetected;
+    if (options?.allowSignalInstall) {
+      const wantsInstall = guardCancel(
+        await confirm({
+          message: cliDetected
+            ? "signal-cli detected. Reinstall/update now?"
+            : "signal-cli not found. Install now?",
+          initialValue: !cliDetected,
+        }),
+        runtime,
+      );
+      if (wantsInstall) {
+        try {
+          const result = await installSignalCli(runtime);
+          if (result.ok && result.cliPath) {
+            cliDetected = true;
+            resolvedCliPath = result.cliPath;
+            note(`Installed signal-cli at ${result.cliPath}`, "Signal");
+          } else if (!result.ok) {
+            note(result.error ?? "signal-cli install failed.", "Signal");
+          }
+        } catch (err) {
+          note(`signal-cli install failed: ${String(err)}`, "Signal");
+        }
+      }
+    }
+
+    if (!cliDetected) {
       note(
         "signal-cli not found. Install it, then rerun this step or set signal.cliPath.",
         "Signal",
@@ -279,7 +310,7 @@ export async function setupProviders(
           ...next.signal,
           enabled: true,
           account,
-          cliPath: next.signal?.cliPath ?? "signal-cli",
+          cliPath: resolvedCliPath ?? "signal-cli",
         },
       };
     }
@@ -292,6 +323,56 @@ export async function setupProviders(
       ].join("\n"),
       "Signal next steps",
     );
+  }
+
+  if (options?.allowDisable) {
+    if (!selection.includes("telegram") && telegramConfigured) {
+      const disable = guardCancel(
+        await confirm({
+          message: "Disable Telegram provider?",
+          initialValue: false,
+        }),
+        runtime,
+      );
+      if (disable) {
+        next = {
+          ...next,
+          telegram: { ...next.telegram, enabled: false },
+        };
+      }
+    }
+
+    if (!selection.includes("discord") && discordConfigured) {
+      const disable = guardCancel(
+        await confirm({
+          message: "Disable Discord provider?",
+          initialValue: false,
+        }),
+        runtime,
+      );
+      if (disable) {
+        next = {
+          ...next,
+          discord: { ...next.discord, enabled: false },
+        };
+      }
+    }
+
+    if (!selection.includes("signal") && signalConfigured) {
+      const disable = guardCancel(
+        await confirm({
+          message: "Disable Signal provider?",
+          initialValue: false,
+        }),
+        runtime,
+      );
+      if (disable) {
+        next = {
+          ...next,
+          signal: { ...next.signal, enabled: false },
+        };
+      }
+    }
   }
 
   return next;

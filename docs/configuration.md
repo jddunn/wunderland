@@ -41,6 +41,22 @@ If set, CLAWDIS derives defaults (only when you haven’t set them explicitly):
 }
 ```
 
+### `wizard`
+
+Metadata written by CLI wizards (`onboard`, `configure`, `doctor`, `update`).
+
+```json5
+{
+  wizard: {
+    lastRunAt: "2026-01-01T00:00:00.000Z",
+    lastRunVersion: "2.0.0-beta5",
+    lastRunCommit: "abc1234",
+    lastRunCommand: "configure",
+    lastRunMode: "local"
+  }
+}
+```
+
 ### `logging`
 
 - Default log file: `/tmp/clawdis/clawdis-YYYY-MM-DD.log`

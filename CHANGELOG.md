@@ -18,7 +18,9 @@
 - Tests: add a Z.AI live test gate for smoke validation when keys are present.
 - macOS Debug: add app log verbosity and rolling file log toggle for swift-log-backed app logs.
 - CLI: add onboarding wizard (gateway + workspace + skills) with daemon installers and Anthropic/Minimax setup paths.
-- CLI: add ASCII banner header to onboarding wizard start.
+- CLI: add ASCII banner header to wizard entry points.
+- CLI: add `configure`, `doctor`, and `update` wizards for ongoing setup, health checks, and modernization.
+- CLI: add Signal CLI auto-install from GitHub releases in the wizard and persist wizard run metadata in config.
 - Skills: allow `bun` as a node manager for skill installs.
 - Tests: add a Docker-based onboarding E2E harness.
 
