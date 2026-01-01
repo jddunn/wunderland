@@ -9,7 +9,10 @@ import Testing
             presence: [],
             health: ClawdisProtocol.AnyCodable(["ok": ClawdisProtocol.AnyCodable(false)]),
             stateversion: StateVersion(presence: 1, health: 1),
-            uptimems: 123)
+            uptimems: 123,
+            configpath: nil,
+            statedir: nil)
+
         let hello = HelloOk(
             type: "hello",
             _protocol: 2,
@@ -55,7 +58,7 @@ import Testing
     }
 
     @Test func chatEventMapsToChat() {
-        let payload: ClawdisProtocol.AnyCodable = ClawdisProtocol.AnyCodable([
+        let payload = ClawdisProtocol.AnyCodable([
             "runId": ClawdisProtocol.AnyCodable("run-1"),
             "sessionKey": ClawdisProtocol.AnyCodable("main"),
             "state": ClawdisProtocol.AnyCodable("final"),

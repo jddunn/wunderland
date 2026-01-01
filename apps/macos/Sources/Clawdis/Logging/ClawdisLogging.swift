@@ -1,6 +1,7 @@
 @_exported import Logging
 import Foundation
 import OSLog
+import os
 
 typealias Logger = Logging.Logger
 
@@ -96,7 +97,7 @@ extension Logger.Message.StringInterpolation {
 }
 
 struct ClawdisOSLogHandler: LogHandler {
-    private let osLogger: OSLog.Logger
+    private let osLogger: os.Logger
     var metadata: Logger.Metadata = [:]
 
     var logLevel: Logger.Level {
@@ -105,7 +106,7 @@ struct ClawdisOSLogHandler: LogHandler {
     }
 
     init(subsystem: String, category: String) {
-        self.osLogger = OSLog.Logger(subsystem: subsystem, category: category)
+        self.osLogger = os.Logger(subsystem: subsystem, category: category)
     }
 
     subscript(metadataKey key: String) -> Logger.Metadata.Value? {
