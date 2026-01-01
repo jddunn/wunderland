@@ -26,6 +26,7 @@
 - Skills: add `things-mac` (Things 3 CLI) for read/search plus add/update via URL scheme.
 - Tests: add a Docker-based onboarding E2E harness.
 - Tests: harden wizard E2E flows for reset, providers, skills, and remote non-interactive runs.
+- Browser tools: add remote CDP URL support, Linux launcher options (`executablePath`, `noSandbox`), and surface `cdpUrl` in status.
 
 ### Fixes
 - Skills: switch imsg installer to brew tap formula.

@@ -62,10 +62,16 @@ export type BrowserConfig = {
   enabled?: boolean;
   /** Base URL of the clawd browser control server. Default: http://127.0.0.1:18791 */
   controlUrl?: string;
+  /** Base URL of the CDP endpoint. Default: controlUrl with port + 1. */
+  cdpUrl?: string;
   /** Accent color for the clawd browser profile (hex). Default: #FF4500 */
   color?: string;
+  /** Override the browser executable path (macOS/Linux). */
+  executablePath?: string;
   /** Start Chrome headless (best-effort). Default: false */
   headless?: boolean;
+  /** Pass --no-sandbox to Chrome (Linux containers). Default: false */
+  noSandbox?: boolean;
   /** If true: never launch; only attach to an existing browser. Default: false */
   attachOnly?: boolean;
 };
@@ -759,8 +765,11 @@ const ClawdisSchema = z.object({
     .object({
       enabled: z.boolean().optional(),
       controlUrl: z.string().optional(),
+      cdpUrl: z.string().optional(),
       color: z.string().optional(),
+      executablePath: z.string().optional(),
       headless: z.boolean().optional(),
+      noSandbox: z.boolean().optional(),
       attachOnly: z.boolean().optional(),
     })
     .optional(),

@@ -6,6 +6,7 @@ import type {
 } from "playwright-core";
 import { chromium } from "playwright-core";
 import { formatErrorMessage } from "../infra/errors.js";
+import { getChromeWebSocketUrl } from "./chrome.js";
 
 export type BrowserConsoleMessage = {
   type: string;
@@ -31,7 +32,7 @@ type TargetInfoResponse = {
 
 type ConnectedBrowser = {
   browser: Browser;
-  endpoint: string;
+  cdpUrl: string;
 };
 
 type PageState = {
@@ -49,8 +50,8 @@ const MAX_CONSOLE_MESSAGES = 500;
 let cached: ConnectedBrowser | null = null;
 let connecting: Promise<ConnectedBrowser> | null = null;
 
-function endpointForCdpPort(cdpPort: number) {
-  return `http://127.0.0.1:${cdpPort}`;
+function normalizeCdpUrl(raw: string) {
+  return raw.replace(/\/$/, "");
 }
 
 export function ensurePageState(page: Page): PageState {
@@ -97,8 +98,9 @@ function observeBrowser(browser: Browser) {
   for (const context of browser.contexts()) observeContext(context);
 }
 
-async function connectBrowser(endpoint: string): Promise<ConnectedBrowser> {
-  if (cached?.endpoint === endpoint) return cached;
+async function connectBrowser(cdpUrl: string): Promise<ConnectedBrowser> {
+  const normalized = normalizeCdpUrl(cdpUrl);
+  if (cached?.cdpUrl === normalized) return cached;
   if (connecting) return await connecting;
 
   const connectWithRetry = async (): Promise<ConnectedBrowser> => {
@@ -106,8 +108,12 @@ async function connectBrowser(endpoint: string): Promise<ConnectedBrowser> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const timeout = 5000 + attempt * 2000;
+        const wsUrl = await getChromeWebSocketUrl(normalized, timeout).catch(
+          () => null,
+        );
+        const endpoint = wsUrl ?? normalized;
         const browser = await chromium.connectOverCDP(endpoint, { timeout });
-        const connected: ConnectedBrowser = { browser, endpoint };
+        const connected: ConnectedBrowser = { browser, cdpUrl: normalized };
         cached = connected;
         observeBrowser(browser);
         browser.on("disconnected", () => {
@@ -168,11 +174,10 @@ async function findPageByTargetId(
 }
 
 export async function getPageForTargetId(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
 }): Promise<Page> {
-  const endpoint = endpointForCdpPort(opts.cdpPort);
-  const { browser } = await connectBrowser(endpoint);
+  const { browser } = await connectBrowser(opts.cdpUrl);
   const pages = await getAllPages(browser);
   if (!pages.length)
     throw new Error("No pages available in the connected browser.");

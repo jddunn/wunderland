@@ -27,10 +27,13 @@ export function registerBrowserBasicRoutes(
       cdpHttp,
       pid: current.running?.pid ?? null,
       cdpPort: current.cdpPort,
+      cdpUrl: current.resolved.cdpUrl,
       chosenBrowser: current.running?.exe.kind ?? null,
       userDataDir: current.running?.userDataDir ?? null,
       color: current.resolved.color,
       headless: current.resolved.headless,
+      noSandbox: current.resolved.noSandbox,
+      executablePath: current.resolved.executablePath ?? null,
       attachOnly: current.resolved.attachOnly,
     });
   });

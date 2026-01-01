@@ -3,7 +3,12 @@ import { createServer } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { rawDataToString } from "../infra/ws.js";
-import { createTargetViaCdp, evaluateJavaScript, snapshotAria } from "./cdp.js";
+import {
+  createTargetViaCdp,
+  evaluateJavaScript,
+  normalizeCdpWsUrl,
+  snapshotAria,
+} from "./cdp.js";
 
 describe("cdp", () => {
   let httpServer: ReturnType<typeof createServer> | null = null;
@@ -64,7 +69,7 @@ describe("cdp", () => {
     const httpPort = (httpServer.address() as { port: number }).port;
 
     const created = await createTargetViaCdp({
-      cdpPort: httpPort,
+      cdpUrl: `http://127.0.0.1:${httpPort}`,
       url: "https://example.com",
     });
 
@@ -158,5 +163,13 @@ describe("cdp", () => {
     expect(snap.nodes[1]?.name).toBe("OK");
     expect(snap.nodes[1]?.backendDOMNodeId).toBe(42);
     expect(snap.nodes[1]?.depth).toBe(1);
+  });
+
+  it("normalizes loopback websocket URLs for remote CDP hosts", () => {
+    const normalized = normalizeCdpWsUrl(
+      "ws://127.0.0.1:9222/devtools/browser/ABC",
+      "http://example.com:9222",
+    );
+    expect(normalized).toBe("ws://example.com:9222/devtools/browser/ABC");
   });
 });

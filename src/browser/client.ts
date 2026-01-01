@@ -10,10 +10,13 @@ export type BrowserStatus = {
   cdpHttp?: boolean;
   pid: number | null;
   cdpPort: number;
+  cdpUrl?: string;
   chosenBrowser: string | null;
   userDataDir: string | null;
   color: string;
   headless: boolean;
+  noSandbox?: boolean;
+  executablePath?: string | null;
   attachOnly: boolean;
 };
 

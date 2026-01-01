@@ -28,6 +28,13 @@ Add a dedicated settings section (preferably under **Skills** or its own "Browse
   - Interpreted as the base URL of the local/remote browser-control server.
   - If the URL host is not loopback, Clawdis must **not** attempt to launch a local
     browser; it only connects.
+- **CDP URL** (`default: controlUrl + 1`)
+  - Base URL for Chrome DevTools Protocol (e.g. `http://127.0.0.1:18792`).
+  - Set this to a non-loopback host to attach the local control server to a remote
+    Chrome/Chromium CDP endpoint (SSH/Tailscale tunnel recommended).
+  - If the CDP URL host is non-loopback, clawd does **not** auto-launch a local browser.
+  - If you tunnel a remote CDP to `localhost`, set **Attach to existing only** to
+    avoid accidentally launching a local browser.
 - **Accent color** (`default: #FF4500`, "lobster-orange")
   - Used to theme the clawd browser profile (best-effort) and to tint UI indicators
     in Clawdis.
@@ -36,6 +43,8 @@ Optional (advanced, can be hidden behind Debug initially):
 - **Use headless browser** (`default: off`)
 - **Attach to existing only** (`default: off`) — if on, never launch; only connect if
   already running.
+- **Browser executable path** (override, optional)
+- **No sandbox** (`default: off`) — adds `--no-sandbox` + `--disable-setuid-sandbox`
 
 ### Port convention
 
@@ -68,7 +77,7 @@ internal detail.
    - The agent must be able to enumerate and target tabs deterministically (by
      stable `targetId` or equivalent), not "last tab".
 
-## Browser selection (macOS)
+## Browser selection (macOS + Linux)
 
 On startup (when enabled + local URL), Clawdis chooses the browser executable
 in this order:
@@ -76,9 +85,14 @@ in this order:
 2) **Chromium** (if installed)
 3) **Google Chrome** (fallback)
 
-Implementation detail: detection is by existence of the `.app` bundle under
-`/Applications` (and optionally `~/Applications`), then using the resolved
-executable path.
+Linux:
+- Looks for `google-chrome` / `chromium` in common system paths.
+- Use **Browser executable path** to force a specific binary.
+
+Implementation detail:
+- macOS: detection is by existence of the `.app` bundle under `/Applications`
+  (and optionally `~/Applications`), then using the resolved executable path.
+- Linux: common `/usr/bin`/`/snap/bin` paths.
 
 Rationale:
 - Canary/Chromium are easy to visually distinguish from the user's daily driver.
@@ -205,6 +219,7 @@ Notes:
 - The control server must bind to loopback only by default (`127.0.0.1`) unless the
   user explicitly configures a non-loopback URL.
 - Never reuse or copy the user's default Chrome profile.
+- Remote CDP endpoints should be tunneled or protected; CDP is highly privileged.
 
 ## Non-goals (for the first cut)
 

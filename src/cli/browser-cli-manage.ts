@@ -38,6 +38,7 @@ export function registerBrowserManageCommands(
             `running: ${status.running}`,
             `controlUrl: ${status.controlUrl}`,
             `cdpPort: ${status.cdpPort}`,
+            `cdpUrl: ${status.cdpUrl ?? `http://127.0.0.1:${status.cdpPort}`}`,
             `browser: ${status.chosenBrowser ?? "unknown"}`,
             `profileColor: ${status.color}`,
           ].join("\n"),

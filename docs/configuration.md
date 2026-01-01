@@ -462,6 +462,7 @@ Clawdis can start a **dedicated, isolated** Chrome/Chromium instance for clawd a
 Defaults:
 - enabled: `true`
 - control URL: `http://127.0.0.1:18791` (CDP uses `18792`)
+- CDP URL: `http://127.0.0.1:18792` (control URL + 1)
 - profile color: `#FF4500` (lobster-orange)
 - Note: the control server is started by the running gateway (Clawdis.app menubar, or `clawdis gateway`).
 
@@ -470,10 +471,13 @@ Defaults:
   browser: {
     enabled: true,
     controlUrl: "http://127.0.0.1:18791",
+    // cdpUrl: "http://127.0.0.1:18792", // override for remote CDP
     color: "#FF4500",
     // Advanced:
     // headless: false,
-    // attachOnly: false,
+    // noSandbox: false,
+    // executablePath: "/usr/bin/chromium",
+    // attachOnly: false, // set true when tunneling a remote CDP to localhost
   }
 }
 ```

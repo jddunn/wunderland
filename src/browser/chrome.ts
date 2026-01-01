@@ -7,6 +7,7 @@ import WebSocket from "ws";
 import { ensurePortAvailable } from "../infra/ports.js";
 import { createSubsystemLogger } from "../logging.js";
 import { CONFIG_DIR } from "../utils.js";
+import { normalizeCdpWsUrl } from "./cdp.js";
 import type { ResolvedBrowserConfig } from "./config.js";
 import {
   DEFAULT_CLAWD_BROWSER_COLOR,
@@ -16,7 +17,7 @@ import {
 const log = createSubsystemLogger("browser").child("chrome");
 
 export type BrowserExecutable = {
-  kind: "canary" | "chromium" | "chrome";
+  kind: "canary" | "chromium" | "chrome" | "custom";
   path: string;
 };
 
@@ -81,6 +82,40 @@ export function findChromeExecutableMac(): BrowserExecutable | null {
   return null;
 }
 
+export function findChromeExecutableLinux(): BrowserExecutable | null {
+  const candidates: Array<BrowserExecutable> = [
+    { kind: "chrome", path: "/usr/bin/google-chrome" },
+    { kind: "chrome", path: "/usr/bin/google-chrome-stable" },
+    { kind: "chromium", path: "/usr/bin/chromium" },
+    { kind: "chromium", path: "/usr/bin/chromium-browser" },
+    { kind: "chromium", path: "/snap/bin/chromium" },
+    { kind: "chrome", path: "/usr/bin/chrome" },
+  ];
+
+  for (const candidate of candidates) {
+    if (exists(candidate.path)) return candidate;
+  }
+
+  return null;
+}
+
+function resolveBrowserExecutable(
+  resolved: ResolvedBrowserConfig,
+): BrowserExecutable | null {
+  if (resolved.executablePath) {
+    if (!exists(resolved.executablePath)) {
+      throw new Error(
+        `browser.executablePath not found: ${resolved.executablePath}`,
+      );
+    }
+    return { kind: "custom", path: resolved.executablePath };
+  }
+
+  if (process.platform === "darwin") return findChromeExecutableMac();
+  if (process.platform === "linux") return findChromeExecutableLinux();
+  return null;
+}
+
 export function resolveClawdUserDataDir() {
   return path.join(
     CONFIG_DIR,
@@ -110,6 +145,10 @@ function safeReadJson(filePath: string): Record<string, unknown> | null {
 function safeWriteJson(filePath: string, data: Record<string, unknown>) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+function cdpUrlForPort(cdpPort: number) {
+  return `http://127.0.0.1:${cdpPort}`;
 }
 
 function setDeep(obj: Record<string, unknown>, keys: string[], value: unknown) {
@@ -304,10 +343,10 @@ export function decorateClawdProfile(
 }
 
 export async function isChromeReachable(
-  cdpPort: number,
+  cdpUrl: string,
   timeoutMs = 500,
 ): Promise<boolean> {
-  const version = await fetchChromeVersion(cdpPort, timeoutMs);
+  const version = await fetchChromeVersion(cdpUrl, timeoutMs);
   return Boolean(version);
 }
 
@@ -318,13 +357,14 @@ type ChromeVersion = {
 };
 
 async function fetchChromeVersion(
-  cdpPort: number,
+  cdpUrl: string,
   timeoutMs = 500,
 ): Promise<ChromeVersion | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`http://127.0.0.1:${cdpPort}/json/version`, {
+    const base = cdpUrl.replace(/\/$/, "");
+    const res = await fetch(`${base}/json/version`, {
       signal: ctrl.signal,
     });
     if (!res.ok) return null;
@@ -339,12 +379,13 @@ async function fetchChromeVersion(
 }
 
 export async function getChromeWebSocketUrl(
-  cdpPort: number,
+  cdpUrl: string,
   timeoutMs = 500,
 ): Promise<string | null> {
-  const version = await fetchChromeVersion(cdpPort, timeoutMs);
+  const version = await fetchChromeVersion(cdpUrl, timeoutMs);
   const wsUrl = String(version?.webSocketDebuggerUrl ?? "").trim();
-  return wsUrl ? wsUrl : null;
+  if (!wsUrl) return null;
+  return normalizeCdpWsUrl(wsUrl, cdpUrl);
 }
 
 async function canOpenWebSocket(
@@ -381,11 +422,11 @@ async function canOpenWebSocket(
 }
 
 export async function isChromeCdpReady(
-  cdpPort: number,
+  cdpUrl: string,
   timeoutMs = 500,
   handshakeTimeoutMs = 800,
 ): Promise<boolean> {
-  const wsUrl = await getChromeWebSocketUrl(cdpPort, timeoutMs);
+  const wsUrl = await getChromeWebSocketUrl(cdpUrl, timeoutMs);
   if (!wsUrl) return false;
   return await canOpenWebSocket(wsUrl, handshakeTimeoutMs);
 }
@@ -395,10 +436,10 @@ export async function launchClawdChrome(
 ): Promise<RunningChrome> {
   await ensurePortAvailable(resolved.cdpPort);
 
-  const exe = process.platform === "darwin" ? findChromeExecutableMac() : null;
+  const exe = resolveBrowserExecutable(resolved);
   if (!exe) {
     throw new Error(
-      "No supported browser found (Chrome Canary/Chromium/Chrome on macOS).",
+      "No supported browser found (Chrome/Chromium on macOS or Linux).",
     );
   }
 
@@ -429,6 +470,13 @@ export async function launchClawdChrome(
       // Best-effort; older Chromes may ignore.
       args.push("--headless=new");
       args.push("--disable-gpu");
+    }
+    if (resolved.noSandbox) {
+      args.push("--no-sandbox");
+      args.push("--disable-setuid-sandbox");
+    }
+    if (process.platform === "linux") {
+      args.push("--disable-dev-shm-usage");
     }
 
     // Always open a blank tab to ensure a target exists.
@@ -484,11 +532,11 @@ export async function launchClawdChrome(
   // Wait for CDP to come up.
   const readyDeadline = Date.now() + 15_000;
   while (Date.now() < readyDeadline) {
-    if (await isChromeReachable(resolved.cdpPort, 500)) break;
+    if (await isChromeReachable(resolved.cdpUrl, 500)) break;
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  if (!(await isChromeReachable(resolved.cdpPort, 500))) {
+  if (!(await isChromeReachable(resolved.cdpUrl, 500))) {
     try {
       proc.kill("SIGKILL");
     } catch {
@@ -527,7 +575,7 @@ export async function stopClawdChrome(
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (!proc.exitCode && proc.killed) break;
-    if (!(await isChromeReachable(running.cdpPort, 200))) return;
+    if (!(await isChromeReachable(cdpUrlForPort(running.cdpPort), 200))) return;
     await new Promise((r) => setTimeout(r, 100));
   }
 

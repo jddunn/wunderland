@@ -109,7 +109,7 @@ export function registerBrowserAgentRoutes(
       const pw = await requirePwAi(res, "navigate");
       if (!pw) return;
       const result = await pw.navigateViaPlaywright({
-        cdpPort: ctx.state().cdpPort,
+        cdpUrl: ctx.state().resolved.cdpUrl,
         targetId: tab.targetId,
         url,
       });
@@ -145,7 +145,7 @@ export function registerBrowserAgentRoutes(
 
     try {
       const tab = await ctx.ensureTabAvailable(targetId);
-      const cdpPort = ctx.state().cdpPort;
+      const cdpUrl = ctx.state().resolved.cdpUrl;
       const pw = await requirePwAi(res, `act:${kind}`);
       if (!pw) return;
 
@@ -180,7 +180,7 @@ export function registerBrowserAgentRoutes(
             ? (modifiersRaw as ClickModifier[])
             : undefined;
           const clickRequest: Parameters<typeof pw.clickViaPlaywright>[0] = {
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             ref,
             doubleClick,
@@ -199,7 +199,7 @@ export function registerBrowserAgentRoutes(
           const submit = toBoolean(body.submit) ?? false;
           const slowly = toBoolean(body.slowly) ?? false;
           const typeRequest: Parameters<typeof pw.typeViaPlaywright>[0] = {
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             ref,
             text,
@@ -213,7 +213,7 @@ export function registerBrowserAgentRoutes(
           const key = toStringOrEmpty(body.key);
           if (!key) return jsonError(res, 400, "key is required");
           await pw.pressKeyViaPlaywright({
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             key,
           });
@@ -222,7 +222,7 @@ export function registerBrowserAgentRoutes(
         case "hover": {
           const ref = toStringOrEmpty(body.ref);
           if (!ref) return jsonError(res, 400, "ref is required");
-          await pw.hoverViaPlaywright({ cdpPort, targetId: tab.targetId, ref });
+          await pw.hoverViaPlaywright({ cdpUrl, targetId: tab.targetId, ref });
           return res.json({ ok: true, targetId: tab.targetId });
         }
         case "drag": {
@@ -231,7 +231,7 @@ export function registerBrowserAgentRoutes(
           if (!startRef || !endRef)
             return jsonError(res, 400, "startRef and endRef are required");
           await pw.dragViaPlaywright({
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             startRef,
             endRef,
@@ -244,7 +244,7 @@ export function registerBrowserAgentRoutes(
           if (!ref || !values?.length)
             return jsonError(res, 400, "ref and values are required");
           await pw.selectOptionViaPlaywright({
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             ref,
             values,
@@ -273,7 +273,7 @@ export function registerBrowserAgentRoutes(
             .filter((field): field is BrowserFormField => field !== null);
           if (!fields.length) return jsonError(res, 400, "fields are required");
           await pw.fillFormViaPlaywright({
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             fields,
           });
@@ -285,7 +285,7 @@ export function registerBrowserAgentRoutes(
           if (!width || !height)
             return jsonError(res, 400, "width and height are required");
           await pw.resizeViewportViaPlaywright({
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             width,
             height,
@@ -297,7 +297,7 @@ export function registerBrowserAgentRoutes(
           const text = toStringOrEmpty(body.text) || undefined;
           const textGone = toStringOrEmpty(body.textGone) || undefined;
           await pw.waitForViaPlaywright({
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             timeMs,
             text,
@@ -310,7 +310,7 @@ export function registerBrowserAgentRoutes(
           if (!fn) return jsonError(res, 400, "fn is required");
           const ref = toStringOrEmpty(body.ref) || undefined;
           const result = await pw.evaluateViaPlaywright({
-            cdpPort,
+            cdpUrl,
             targetId: tab.targetId,
             fn,
             ref,
@@ -323,7 +323,7 @@ export function registerBrowserAgentRoutes(
           });
         }
         case "close": {
-          await pw.closePageViaPlaywright({ cdpPort, targetId: tab.targetId });
+          await pw.closePageViaPlaywright({ cdpUrl, targetId: tab.targetId });
           return res.json({ ok: true, targetId: tab.targetId });
         }
         default: {
@@ -357,7 +357,7 @@ export function registerBrowserAgentRoutes(
           );
         }
         await pw.setInputFilesViaPlaywright({
-          cdpPort: ctx.state().cdpPort,
+          cdpUrl: ctx.state().resolved.cdpUrl,
           targetId: tab.targetId,
           inputRef,
           element,
@@ -365,14 +365,14 @@ export function registerBrowserAgentRoutes(
         });
       } else {
         await pw.armFileUploadViaPlaywright({
-          cdpPort: ctx.state().cdpPort,
+          cdpUrl: ctx.state().resolved.cdpUrl,
           targetId: tab.targetId,
           paths,
           timeoutMs: timeoutMs ?? undefined,
         });
         if (ref) {
           await pw.clickViaPlaywright({
-            cdpPort: ctx.state().cdpPort,
+            cdpUrl: ctx.state().resolved.cdpUrl,
             targetId: tab.targetId,
             ref,
           });
@@ -396,7 +396,7 @@ export function registerBrowserAgentRoutes(
       const pw = await requirePwAi(res, "dialog hook");
       if (!pw) return;
       await pw.armDialogViaPlaywright({
-        cdpPort: ctx.state().cdpPort,
+        cdpUrl: ctx.state().resolved.cdpUrl,
         targetId: tab.targetId,
         accept,
         promptText,
@@ -418,7 +418,7 @@ export function registerBrowserAgentRoutes(
       const pw = await requirePwAi(res, "console messages");
       if (!pw) return;
       const messages = await pw.getConsoleMessagesViaPlaywright({
-        cdpPort: ctx.state().cdpPort,
+        cdpUrl: ctx.state().resolved.cdpUrl,
         targetId: tab.targetId,
         level: level.trim() || undefined,
       });
@@ -436,7 +436,7 @@ export function registerBrowserAgentRoutes(
       const pw = await requirePwAi(res, "pdf");
       if (!pw) return;
       const pdf = await pw.pdfViaPlaywright({
-        cdpPort: ctx.state().cdpPort,
+        cdpUrl: ctx.state().resolved.cdpUrl,
         targetId: tab.targetId,
       });
       await ensureMediaDir();
@@ -480,7 +480,7 @@ export function registerBrowserAgentRoutes(
         const pw = await requirePwAi(res, "element/ref screenshot");
         if (!pw) return;
         const snap = await pw.takeScreenshotViaPlaywright({
-          cdpPort: ctx.state().cdpPort,
+          cdpUrl: ctx.state().resolved.cdpUrl,
           targetId: tab.targetId,
           ref,
           element,
@@ -539,7 +539,7 @@ export function registerBrowserAgentRoutes(
         const pw = await requirePwAi(res, "ai snapshot");
         if (!pw) return;
         const snap = await pw.snapshotAiViaPlaywright({
-          cdpPort: ctx.state().cdpPort,
+          cdpUrl: ctx.state().resolved.cdpUrl,
           targetId: tab.targetId,
         });
         return res.json({

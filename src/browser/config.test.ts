@@ -10,6 +10,7 @@ describe("browser config", () => {
     expect(resolved.enabled).toBe(true);
     expect(resolved.controlPort).toBe(18791);
     expect(resolved.cdpPort).toBe(18792);
+    expect(resolved.cdpUrl).toBe("http://127.0.0.1:18792");
     expect(resolved.controlHost).toBe("127.0.0.1");
     expect(resolved.color).toBe("#FF4500");
     expect(shouldStartLocalBrowserServer(resolved)).toBe(true);
@@ -44,6 +45,17 @@ describe("browser config", () => {
     });
     expect(resolved.controlPort).toBe(19000);
     expect(resolved.cdpPort).toBe(19001);
+    expect(resolved.cdpUrl).toBe("http://127.0.0.1:19001");
+  });
+
+  it("supports explicit CDP URLs", () => {
+    const resolved = resolveBrowserConfig({
+      controlUrl: "http://127.0.0.1:18791",
+      cdpUrl: "http://example.com:9222",
+    });
+    expect(resolved.cdpPort).toBe(9222);
+    expect(resolved.cdpUrl).toBe("http://example.com:9222");
+    expect(resolved.cdpIsLoopback).toBe(false);
   });
 
   it("rejects unsupported protocols", () => {

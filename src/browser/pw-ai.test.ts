@@ -83,7 +83,7 @@ describe("pw-ai", () => {
 
     const mod = await importModule();
     const res = await mod.snapshotAiViaPlaywright({
-      cdpPort: 18792,
+      cdpUrl: "http://127.0.0.1:18792",
       targetId: "T2",
     });
 
@@ -102,7 +102,7 @@ describe("pw-ai", () => {
 
     const mod = await importModule();
     await mod.clickViaPlaywright({
-      cdpPort: 18792,
+      cdpUrl: "http://127.0.0.1:18792",
       targetId: "T1",
       ref: "76",
     });
@@ -121,7 +121,10 @@ describe("pw-ai", () => {
 
     const mod = await importModule();
     await expect(
-      mod.snapshotAiViaPlaywright({ cdpPort: 18792, targetId: "T1" }),
+      mod.snapshotAiViaPlaywright({
+        cdpUrl: "http://127.0.0.1:18792",
+        targetId: "T1",
+      }),
     ).rejects.toThrow(/_snapshotForAI/i);
   });
 
@@ -133,9 +136,12 @@ describe("pw-ai", () => {
     connect.mockResolvedValue(browser);
 
     const mod = await importModule();
-    await mod.snapshotAiViaPlaywright({ cdpPort: 18792, targetId: "T1" });
+    await mod.snapshotAiViaPlaywright({
+      cdpUrl: "http://127.0.0.1:18792",
+      targetId: "T1",
+    });
     await mod.clickViaPlaywright({
-      cdpPort: 18792,
+      cdpUrl: "http://127.0.0.1:18792",
       targetId: "T1",
       ref: "1",
     });

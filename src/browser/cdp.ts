@@ -18,6 +18,31 @@ type CdpSendFn = (
   params?: Record<string, unknown>,
 ) => Promise<unknown>;
 
+function isLoopbackHost(host: string) {
+  const h = host.trim().toLowerCase();
+  return (
+    h === "localhost" ||
+    h === "127.0.0.1" ||
+    h === "0.0.0.0" ||
+    h === "[::1]" ||
+    h === "::1" ||
+    h === "[::]" ||
+    h === "::"
+  );
+}
+
+export function normalizeCdpWsUrl(wsUrl: string, cdpUrl: string): string {
+  const ws = new URL(wsUrl);
+  const cdp = new URL(cdpUrl);
+  if (isLoopbackHost(ws.hostname) && !isLoopbackHost(cdp.hostname)) {
+    ws.hostname = cdp.hostname;
+    const cdpPort = cdp.port || (cdp.protocol === "https:" ? "443" : "80");
+    if (cdpPort) ws.port = cdpPort;
+    ws.protocol = cdp.protocol === "https:" ? "wss:" : "ws:";
+  }
+  return ws.toString();
+}
+
 function createCdpSender(ws: WebSocket) {
   let nextId = 1;
   const pending = new Map<number, Pending>();
@@ -165,14 +190,16 @@ export async function captureScreenshot(opts: {
 }
 
 export async function createTargetViaCdp(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   url: string;
 }): Promise<{ targetId: string }> {
+  const base = opts.cdpUrl.replace(/\/$/, "");
   const version = await fetchJson<{ webSocketDebuggerUrl?: string }>(
-    `http://127.0.0.1:${opts.cdpPort}/json/version`,
+    `${base}/json/version`,
     1500,
   );
-  const wsUrl = String(version?.webSocketDebuggerUrl ?? "").trim();
+  const wsUrlRaw = String(version?.webSocketDebuggerUrl ?? "").trim();
+  const wsUrl = wsUrlRaw ? normalizeCdpWsUrl(wsUrlRaw, opts.cdpUrl) : "";
   if (!wsUrl) throw new Error("CDP /json/version missing webSocketDebuggerUrl");
 
   return await withCdpSocket(wsUrl, async (send) => {

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { runExec } from "../process/exec.js";
-import { createTargetViaCdp } from "./cdp.js";
+import { createTargetViaCdp, normalizeCdpWsUrl } from "./cdp.js";
 import {
   isChromeCdpReady,
   isChromeReachable,
@@ -98,6 +98,15 @@ export function createBrowserRouteContext(
 
   const listTabs = async (): Promise<BrowserTab[]> => {
     const current = state();
+    const base = current.resolved.cdpUrl;
+    const normalizeWsUrl = (raw?: string) => {
+      if (!raw) return undefined;
+      try {
+        return normalizeCdpWsUrl(raw, base);
+      } catch {
+        return raw;
+      }
+    };
     const raw = await fetchJson<
       Array<{
         id?: string;
@@ -106,13 +115,13 @@ export function createBrowserRouteContext(
         webSocketDebuggerUrl?: string;
         type?: string;
       }>
-    >(`http://127.0.0.1:${current.cdpPort}/json/list`);
+    >(`${base.replace(/\/$/, "")}/json/list`);
     return raw
       .map((t) => ({
         targetId: t.id ?? "",
         title: t.title ?? "",
         url: t.url ?? "",
-        wsUrl: t.webSocketDebuggerUrl,
+        wsUrl: normalizeWsUrl(t.webSocketDebuggerUrl),
         type: t.type,
       }))
       .filter((t) => Boolean(t.targetId));
@@ -121,7 +130,7 @@ export function createBrowserRouteContext(
   const openTab = async (url: string): Promise<BrowserTab> => {
     const current = state();
     const createdViaCdp = await createTargetViaCdp({
-      cdpPort: current.cdpPort,
+      cdpUrl: current.resolved.cdpUrl,
       url,
     })
       .then((r) => r.targetId)
@@ -148,7 +157,16 @@ export function createBrowserRouteContext(
       type?: string;
     };
 
-    const endpoint = `http://127.0.0.1:${current.cdpPort}/json/new?${encoded}`;
+    const base = current.resolved.cdpUrl.replace(/\/$/, "");
+    const normalizeWsUrl = (raw?: string) => {
+      if (!raw) return undefined;
+      try {
+        return normalizeCdpWsUrl(raw, base);
+      } catch {
+        return raw;
+      }
+    };
+    const endpoint = `${base}/json/new?${encoded}`;
     const created = await fetchJson<CdpTarget>(endpoint, 1500, {
       method: "PUT",
     }).catch(async (err) => {
@@ -163,7 +181,7 @@ export function createBrowserRouteContext(
       targetId: created.id,
       title: created.title ?? "",
       url: created.url ?? url,
-      wsUrl: created.webSocketDebuggerUrl,
+      wsUrl: normalizeWsUrl(created.webSocketDebuggerUrl),
       type: created.type,
     };
   };
@@ -171,12 +189,16 @@ export function createBrowserRouteContext(
   const isReachable = async (timeoutMs = 300) => {
     const current = state();
     const wsTimeout = Math.max(200, Math.min(2000, timeoutMs * 2));
-    return await isChromeCdpReady(current.cdpPort, timeoutMs, wsTimeout);
+    return await isChromeCdpReady(
+      current.resolved.cdpUrl,
+      timeoutMs,
+      wsTimeout,
+    );
   };
 
   const isHttpReachable = async (timeoutMs = 300) => {
     const current = state();
-    return await isChromeReachable(current.cdpPort, timeoutMs);
+    return await isChromeReachable(current.resolved.cdpUrl, timeoutMs);
   };
 
   const attachRunning = (running: RunningChrome) => {
@@ -191,11 +213,14 @@ export function createBrowserRouteContext(
 
   const ensureBrowserAvailable = async (): Promise<void> => {
     const current = state();
+    const remoteCdp = !current.resolved.cdpIsLoopback;
     const httpReachable = await isHttpReachable();
     if (!httpReachable) {
-      if (current.resolved.attachOnly) {
+      if (current.resolved.attachOnly || remoteCdp) {
         throw new Error(
-          "Browser attachOnly is enabled and no browser is running.",
+          remoteCdp
+            ? "Remote CDP is not reachable. Check browser.cdpUrl."
+            : "Browser attachOnly is enabled and no browser is running.",
         );
       }
       const launched = await launchClawdChrome(current.resolved);
@@ -204,9 +229,11 @@ export function createBrowserRouteContext(
 
     if (await isReachable()) return;
 
-    if (current.resolved.attachOnly) {
+    if (current.resolved.attachOnly || remoteCdp) {
       throw new Error(
-        "Browser attachOnly is enabled and CDP websocket is not reachable.",
+        remoteCdp
+          ? "Remote CDP websocket is not reachable. Check browser.cdpUrl."
+          : "Browser attachOnly is enabled and CDP websocket is not reachable.",
       );
     }
 
@@ -255,6 +282,7 @@ export function createBrowserRouteContext(
 
   const focusTab = async (targetId: string): Promise<void> => {
     const current = state();
+    const base = current.resolved.cdpUrl.replace(/\/$/, "");
     const tabs = await listTabs();
     const resolved = resolveTargetIdFromTabs(targetId, tabs);
     if (!resolved.ok) {
@@ -263,13 +291,12 @@ export function createBrowserRouteContext(
       }
       throw new Error("tab not found");
     }
-    await fetchOk(
-      `http://127.0.0.1:${current.cdpPort}/json/activate/${resolved.targetId}`,
-    );
+    await fetchOk(`${base}/json/activate/${resolved.targetId}`);
   };
 
   const closeTab = async (targetId: string): Promise<void> => {
     const current = state();
+    const base = current.resolved.cdpUrl.replace(/\/$/, "");
     const tabs = await listTabs();
     const resolved = resolveTargetIdFromTabs(targetId, tabs);
     if (!resolved.ok) {
@@ -278,9 +305,7 @@ export function createBrowserRouteContext(
       }
       throw new Error("tab not found");
     }
-    await fetchOk(
-      `http://127.0.0.1:${current.cdpPort}/json/close/${resolved.targetId}`,
-    );
+    await fetchOk(`${base}/json/close/${resolved.targetId}`);
   };
 
   const stopRunningBrowser = async (): Promise<{ stopped: boolean }> => {
@@ -293,6 +318,9 @@ export function createBrowserRouteContext(
 
   const resetProfile = async () => {
     const current = state();
+    if (!current.resolved.cdpIsLoopback) {
+      throw new Error("reset-profile is only supported for local browsers.");
+    }
     const userDataDir = resolveClawdUserDataDir();
 
     const httpReachable = await isHttpReachable(300);

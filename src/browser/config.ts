@@ -10,15 +10,28 @@ export type ResolvedBrowserConfig = {
   controlUrl: string;
   controlHost: string;
   controlPort: number;
+  cdpUrl: string;
+  cdpHost: string;
   cdpPort: number;
+  cdpIsLoopback: boolean;
   color: string;
+  executablePath?: string;
   headless: boolean;
+  noSandbox: boolean;
   attachOnly: boolean;
 };
 
 function isLoopbackHost(host: string) {
   const h = host.trim().toLowerCase();
-  return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1";
+  return (
+    h === "localhost" ||
+    h === "127.0.0.1" ||
+    h === "0.0.0.0" ||
+    h === "[::1]" ||
+    h === "::1" ||
+    h === "[::]" ||
+    h === "::"
+  );
 }
 
 function normalizeHexColor(raw: string | undefined) {
@@ -29,17 +42,12 @@ function normalizeHexColor(raw: string | undefined) {
   return normalized.toUpperCase();
 }
 
-export function resolveBrowserConfig(
-  cfg: BrowserConfig | undefined,
-): ResolvedBrowserConfig {
-  const enabled = cfg?.enabled ?? DEFAULT_CLAWD_BROWSER_ENABLED;
-  const controlUrl = (
-    cfg?.controlUrl ?? DEFAULT_CLAWD_BROWSER_CONTROL_URL
-  ).trim();
-  const parsed = new URL(controlUrl);
+function parseHttpUrl(raw: string, label: string) {
+  const trimmed = raw.trim();
+  const parsed = new URL(trimmed);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error(
-      `browser.controlUrl must be http(s), got: ${parsed.protocol.replace(":", "")}`,
+      `${label} must be http(s), got: ${parsed.protocol.replace(":", "")}`,
     );
   }
 
@@ -51,32 +59,71 @@ export function resolveBrowserConfig(
         : 80;
 
   if (Number.isNaN(port) || port <= 0 || port > 65535) {
-    throw new Error(`browser.controlUrl has invalid port: ${parsed.port}`);
+    throw new Error(`${label} has invalid port: ${parsed.port}`);
   }
 
-  const cdpPort = port + 1;
-  if (cdpPort > 65535) {
-    throw new Error(
-      `browser.controlUrl port (${port}) is too high; cannot derive CDP port (${cdpPort})`,
-    );
-  }
-  if (port === cdpPort) {
-    throw new Error(
-      `browser.controlUrl port (${port}) must not equal CDP port (${cdpPort})`,
-    );
+  return {
+    parsed,
+    port,
+    normalized: parsed.toString().replace(/\/$/, ""),
+  };
+}
+
+export function resolveBrowserConfig(
+  cfg: BrowserConfig | undefined,
+): ResolvedBrowserConfig {
+  const enabled = cfg?.enabled ?? DEFAULT_CLAWD_BROWSER_ENABLED;
+  const controlInfo = parseHttpUrl(
+    cfg?.controlUrl ?? DEFAULT_CLAWD_BROWSER_CONTROL_URL,
+    "browser.controlUrl",
+  );
+  const controlPort = controlInfo.port;
+
+  const rawCdpUrl = (cfg?.cdpUrl ?? "").trim();
+  let cdpInfo:
+    | {
+        parsed: URL;
+        port: number;
+        normalized: string;
+      }
+    | undefined;
+  if (rawCdpUrl) {
+    cdpInfo = parseHttpUrl(rawCdpUrl, "browser.cdpUrl");
+  } else {
+    const derivedPort = controlPort + 1;
+    if (derivedPort > 65535) {
+      throw new Error(
+        `browser.controlUrl port (${controlPort}) is too high; cannot derive CDP port (${derivedPort})`,
+      );
+    }
+    const derived = new URL(controlInfo.normalized);
+    derived.port = String(derivedPort);
+    cdpInfo = {
+      parsed: derived,
+      port: derivedPort,
+      normalized: derived.toString().replace(/\/$/, ""),
+    };
   }
 
+  const cdpPort = cdpInfo.port;
   const headless = cfg?.headless === true;
+  const noSandbox = cfg?.noSandbox === true;
   const attachOnly = cfg?.attachOnly === true;
+  const executablePath = cfg?.executablePath?.trim() || undefined;
 
   return {
     enabled,
-    controlUrl: parsed.toString().replace(/\/$/, ""),
-    controlHost: parsed.hostname,
-    controlPort: port,
+    controlUrl: controlInfo.normalized,
+    controlHost: controlInfo.parsed.hostname,
+    controlPort,
+    cdpUrl: cdpInfo.normalized,
+    cdpHost: cdpInfo.parsed.hostname,
     cdpPort,
+    cdpIsLoopback: isLoopbackHost(cdpInfo.parsed.hostname),
     color: normalizeHexColor(cfg?.color),
+    executablePath,
     headless,
+    noSandbox,
     attachOnly,
   };
 }

@@ -41,7 +41,7 @@ describe("pw-tools-core", () => {
 
     const mod = await importModule();
     const res = await mod.takeScreenshotViaPlaywright({
-      cdpPort: 18792,
+      cdpUrl: "http://127.0.0.1:18792",
       targetId: "T1",
       element: "#main",
       type: "png",
@@ -65,7 +65,7 @@ describe("pw-tools-core", () => {
 
     const mod = await importModule();
     const res = await mod.takeScreenshotViaPlaywright({
-      cdpPort: 18792,
+      cdpUrl: "http://127.0.0.1:18792",
       targetId: "T1",
       ref: "76",
       type: "jpeg",
@@ -89,7 +89,7 @@ describe("pw-tools-core", () => {
 
     await expect(
       mod.takeScreenshotViaPlaywright({
-        cdpPort: 18792,
+        cdpUrl: "http://127.0.0.1:18792",
         targetId: "T1",
         element: "#x",
         fullPage: true,
@@ -98,7 +98,7 @@ describe("pw-tools-core", () => {
 
     await expect(
       mod.takeScreenshotViaPlaywright({
-        cdpPort: 18792,
+        cdpUrl: "http://127.0.0.1:18792",
         targetId: "T1",
         ref: "1",
         fullPage: true,
@@ -118,7 +118,7 @@ describe("pw-tools-core", () => {
 
     const mod = await importModule();
     await mod.armFileUploadViaPlaywright({
-      cdpPort: 18792,
+      cdpUrl: "http://127.0.0.1:18792",
       targetId: "T1",
       paths: ["/tmp/a.txt"],
     });
@@ -142,7 +142,10 @@ describe("pw-tools-core", () => {
     };
 
     const mod = await importModule();
-    await mod.armFileUploadViaPlaywright({ cdpPort: 18792, paths: [] });
+    await mod.armFileUploadViaPlaywright({
+      cdpUrl: "http://127.0.0.1:18792",
+      paths: [],
+    });
     await Promise.resolve();
 
     expect(fileChooser.setFiles).not.toHaveBeenCalled();
@@ -177,8 +180,14 @@ describe("pw-tools-core", () => {
     };
 
     const mod = await importModule();
-    await mod.armFileUploadViaPlaywright({ cdpPort: 18792, paths: ["/tmp/1"] });
-    await mod.armFileUploadViaPlaywright({ cdpPort: 18792, paths: ["/tmp/2"] });
+    await mod.armFileUploadViaPlaywright({
+      cdpUrl: "http://127.0.0.1:18792",
+      paths: ["/tmp/1"],
+    });
+    await mod.armFileUploadViaPlaywright({
+      cdpUrl: "http://127.0.0.1:18792",
+      paths: ["/tmp/2"],
+    });
 
     resolve1?.(fc1);
     resolve2?.(fc2);
@@ -199,7 +208,7 @@ describe("pw-tools-core", () => {
 
     const mod = await importModule();
     await mod.armDialogViaPlaywright({
-      cdpPort: 18792,
+      cdpUrl: "http://127.0.0.1:18792",
       accept: true,
       promptText: "x",
     });
@@ -214,7 +223,7 @@ describe("pw-tools-core", () => {
     waitForEvent.mockClear();
 
     await mod.armDialogViaPlaywright({
-      cdpPort: 18792,
+      cdpUrl: "http://127.0.0.1:18792",
       accept: false,
     });
     await Promise.resolve();

@@ -17,12 +17,12 @@ function requireRef(value: unknown): string {
 }
 
 export async function snapshotAiViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   timeoutMs?: number;
 }): Promise<{ snapshot: string }> {
   const page = await getPageForTargetId({
-    cdpPort: opts.cdpPort,
+    cdpUrl: opts.cdpUrl,
     targetId: opts.targetId,
   });
   ensurePageState(page);
@@ -45,7 +45,7 @@ export async function snapshotAiViaPlaywright(opts: {
 }
 
 export async function clickViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   ref: string;
   doubleClick?: boolean;
@@ -54,7 +54,7 @@ export async function clickViaPlaywright(opts: {
   timeoutMs?: number;
 }): Promise<void> {
   const page = await getPageForTargetId({
-    cdpPort: opts.cdpPort,
+    cdpUrl: opts.cdpUrl,
     targetId: opts.targetId,
   });
   ensurePageState(page);
@@ -79,7 +79,7 @@ export async function clickViaPlaywright(opts: {
 }
 
 export async function hoverViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   ref: string;
   timeoutMs?: number;
@@ -94,7 +94,7 @@ export async function hoverViaPlaywright(opts: {
 }
 
 export async function dragViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   startRef: string;
   endRef: string;
@@ -111,7 +111,7 @@ export async function dragViaPlaywright(opts: {
 }
 
 export async function selectOptionViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   ref: string;
   values: string[];
@@ -128,7 +128,7 @@ export async function selectOptionViaPlaywright(opts: {
 }
 
 export async function pressKeyViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   key: string;
   delayMs?: number;
@@ -143,7 +143,7 @@ export async function pressKeyViaPlaywright(opts: {
 }
 
 export async function typeViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   ref: string;
   text: string;
@@ -168,7 +168,7 @@ export async function typeViaPlaywright(opts: {
 }
 
 export async function fillFormViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   fields: BrowserFormField[];
 }): Promise<void> {
@@ -200,7 +200,7 @@ export async function fillFormViaPlaywright(opts: {
 }
 
 export async function evaluateViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   fn: string;
   ref?: string;
@@ -257,7 +257,7 @@ export async function evaluateViaPlaywright(opts: {
 }
 
 export async function armFileUploadViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   paths?: string[];
   timeoutMs?: number;
@@ -304,7 +304,7 @@ export async function armFileUploadViaPlaywright(opts: {
 }
 
 export async function setInputFilesViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   inputRef?: string;
   element?: string;
@@ -342,7 +342,7 @@ export async function setInputFilesViaPlaywright(opts: {
 }
 
 export async function armDialogViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   accept: boolean;
   promptText?: string;
@@ -368,7 +368,7 @@ export async function armDialogViaPlaywright(opts: {
 }
 
 export async function navigateViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   url: string;
   timeoutMs?: number;
@@ -384,7 +384,7 @@ export async function navigateViaPlaywright(opts: {
 }
 
 export async function waitForViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   timeMs?: number;
   text?: string;
@@ -417,7 +417,7 @@ export async function waitForViaPlaywright(opts: {
 }
 
 export async function takeScreenshotViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   ref?: string;
   element?: string;
@@ -449,7 +449,7 @@ export async function takeScreenshotViaPlaywright(opts: {
 }
 
 export async function resizeViewportViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   width: number;
   height: number;
@@ -463,7 +463,7 @@ export async function resizeViewportViaPlaywright(opts: {
 }
 
 export async function closePageViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
 }): Promise<void> {
   const page = await getPageForTargetId(opts);
@@ -472,7 +472,7 @@ export async function closePageViaPlaywright(opts: {
 }
 
 export async function pdfViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
 }): Promise<{ buffer: Buffer }> {
   const page = await getPageForTargetId(opts);
@@ -498,7 +498,7 @@ function consolePriority(level: string) {
 }
 
 export async function getConsoleMessagesViaPlaywright(opts: {
-  cdpPort: number;
+  cdpUrl: string;
   targetId?: string;
   level?: string;
 }): Promise<BrowserConsoleMessage[]> {
