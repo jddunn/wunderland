@@ -21,7 +21,7 @@ public struct ClawdisChatView: View {
         static let outerPaddingHorizontal: CGFloat = 6
         static let outerPaddingVertical: CGFloat = 0
         static let composerPaddingHorizontal: CGFloat = 0
-        static let stackSpacing: CGFloat = 6
+        static let stackSpacing: CGFloat = 0
         static let messageSpacing: CGFloat = 6
         static let messageListPaddingTop: CGFloat = 0
         static let messageListPaddingBottom: CGFloat = 4
@@ -79,13 +79,33 @@ public struct ClawdisChatView: View {
     private var messageList: some View {
         ZStack {
             ScrollView {
-                LazyVStack(spacing: Layout.messageSpacing) {
-                    self.messageListRows
+                #if os(macOS)
+                VStack(spacing: 0) {
+                    LazyVStack(spacing: Layout.messageSpacing) {
+                        self.messageListRows
+                    }
+
+                    Color.clear
+                        .frame(height: 0)
+                        .id(self.scrollerBottomID)
                 }
                 // Use scroll targets for stable auto-scroll without ScrollViewReader relayout glitches.
                 .scrollTargetLayout()
                 .padding(.top, Layout.messageListPaddingTop)
                 .padding(.horizontal, Layout.messageListPaddingHorizontal)
+                #else
+                LazyVStack(spacing: Layout.messageSpacing) {
+                    self.messageListRows
+
+                    Color.clear
+                        .frame(height: Layout.messageListPaddingBottom + 1)
+                        .id(self.scrollerBottomID)
+                }
+                // Use scroll targets for stable auto-scroll without ScrollViewReader relayout glitches.
+                .scrollTargetLayout()
+                .padding(.top, Layout.messageListPaddingTop)
+                .padding(.horizontal, Layout.messageListPaddingHorizontal)
+                #endif
             }
             // Keep the scroll pinned to the bottom for new messages.
             .scrollPosition(id: self.$scrollPosition, anchor: .bottom)
@@ -147,10 +167,6 @@ public struct ClawdisChatView: View {
             ChatStreamingAssistantBubble(text: text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-
-        Color.clear
-            .frame(height: Layout.messageListPaddingBottom + 1)
-            .id(self.scrollerBottomID)
     }
 
     private var visibleMessages: [ClawdisChatMessage] {

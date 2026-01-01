@@ -37,20 +37,44 @@ struct ClawdisChatComposer: View {
             self.editor
         }
         .padding(self.composerPadding)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+        .background {
+            let cornerRadius: CGFloat = 18
+
+            #if os(macOS)
+            if self.style == .standard {
+                let shape = UnevenRoundedRectangle(
+                    cornerRadii: RectangleCornerRadii(
+                        topLeading: 0,
+                        bottomLeading: cornerRadius,
+                        bottomTrailing: cornerRadius,
+                        topTrailing: 0),
+                    style: .continuous)
+                shape
+                    .fill(ClawdisChatTheme.composerBackground)
+                    .overlay(shape.strokeBorder(ClawdisChatTheme.composerBorder, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+            } else {
+                let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                shape
+                    .fill(ClawdisChatTheme.composerBackground)
+                    .overlay(shape.strokeBorder(ClawdisChatTheme.composerBorder, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+            }
+            #else
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            shape
                 .fill(ClawdisChatTheme.composerBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(ClawdisChatTheme.composerBorder, lineWidth: 1))
-                .shadow(color: .black.opacity(0.12), radius: 12, y: 6))
+                .overlay(shape.strokeBorder(ClawdisChatTheme.composerBorder, lineWidth: 1))
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+            #endif
+        }
         #if os(macOS)
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                self.handleDrop(providers)
-            }
-            .onAppear {
-                self.shouldFocusTextView = true
-            }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            self.handleDrop(providers)
+        }
+        .onAppear {
+            self.shouldFocusTextView = true
+        }
         #endif
     }
 
