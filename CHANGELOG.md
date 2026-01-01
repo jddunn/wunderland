@@ -31,6 +31,8 @@
 ### Fixes
 - Skills: switch imsg installer to brew tap formula.
 - Skills: gate macOS-only skills by OS and surface block reasons in the Skills UI.
+- Onboarding: show skill descriptions in the macOS setup flow and surface clearer Gateway/skills error messages.
+- CLI onboarding: include exit code + a useful one-line summary when skill dependency installs fail.
 - macOS codesign: skip hardened runtime for ad-hoc signing and avoid empty options args (#70) — thanks @petter-b
 - macOS packaging: move rpath config into swift build for reliability (#69) — thanks @petter-b
 - macOS: prioritize main bundle for device resources to prevent crash (#73) — thanks @petter-b
