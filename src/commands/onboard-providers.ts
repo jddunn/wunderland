@@ -26,6 +26,42 @@ async function detectWhatsAppLinked(): Promise<boolean> {
   return await pathExists(credsPath);
 }
 
+function noteProviderPrimer(): void {
+  note(
+    [
+      "WhatsApp: links via WhatsApp Web (scan QR), stores creds for future sends.",
+      "Telegram: Bot API (token from @BotFather), replies via your bot.",
+      "Discord: Bot token from Discord Developer Portal; invite bot to your server.",
+      "Signal: signal-cli as a linked device (recommended: separate bot number).",
+    ].join("\n"),
+    "How providers work",
+  );
+}
+
+function noteTelegramTokenHelp(): void {
+  note(
+    [
+      "1) Open Telegram and chat with @BotFather",
+      "2) Run /newbot (or /mybots)",
+      "3) Copy the token (looks like 123456:ABC...)",
+      "Tip: you can also set TELEGRAM_BOT_TOKEN in your env.",
+    ].join("\n"),
+    "Telegram bot token",
+  );
+}
+
+function noteDiscordTokenHelp(): void {
+  note(
+    [
+      "1) Discord Developer Portal → Applications → New Application",
+      "2) Bot → Add Bot → Reset Token → copy token",
+      "3) OAuth2 → URL Generator → scope 'bot' → invite to your server",
+      "Tip: enable Message Content Intent if you need message text.",
+    ].join("\n"),
+    "Discord bot token",
+  );
+}
+
 export async function setupProviders(
   cfg: ClawdisConfig,
   runtime: RuntimeEnv,
@@ -80,6 +116,8 @@ export async function setupProviders(
   );
   if (!shouldConfigure) return cfg;
 
+  noteProviderPrimer();
+
   const selection = guardCancel(
     await multiselect({
       message: "Select providers",
@@ -112,6 +150,15 @@ export async function setupProviders(
   let next = cfg;
 
   if (selection.includes("whatsapp")) {
+    if (!whatsappLinked) {
+      note(
+        [
+          "Scan the QR with WhatsApp on your phone.",
+          "Credentials are stored under ~/.clawdis/credentials/ for future runs.",
+        ].join("\n"),
+        "WhatsApp linking",
+      );
+    }
     const wantsLink = guardCancel(
       await confirm({
         message: whatsappLinked
@@ -134,6 +181,9 @@ export async function setupProviders(
 
   if (selection.includes("telegram")) {
     let token: string | null = null;
+    if (!telegramConfigured) {
+      noteTelegramTokenHelp();
+    }
     if (telegramEnv && !cfg.telegram?.botToken) {
       const keepEnv = guardCancel(
         await confirm({
@@ -198,6 +248,9 @@ export async function setupProviders(
 
   if (selection.includes("discord")) {
     let token: string | null = null;
+    if (!discordConfigured) {
+      noteDiscordTokenHelp();
+    }
     if (discordEnv && !cfg.discord?.token) {
       const keepEnv = guardCancel(
         await confirm({
