@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import type { ClawdisConfig } from "../config/config.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { resolveUserPath } from "../utils.js";
@@ -88,6 +91,29 @@ function buildInstallCommand(
   }
 }
 
+async function resolveBrewBinDir(timeoutMs: number): Promise<string | undefined> {
+  if (!hasBinary("brew")) return undefined;
+  const prefixResult = await runCommandWithTimeout(["brew", "--prefix"], {
+    timeoutMs: Math.min(timeoutMs, 30_000),
+  });
+  if (prefixResult.code === 0) {
+    const prefix = prefixResult.stdout.trim();
+    if (prefix) return path.join(prefix, "bin");
+  }
+
+  const envPrefix = process.env.HOMEBREW_PREFIX?.trim();
+  if (envPrefix) return path.join(envPrefix, "bin");
+
+  for (const candidate of ["/opt/homebrew/bin", "/usr/local/bin"]) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // ignore
+    }
+  }
+  return undefined;
+}
+
 export async function installSkill(
   params: SkillInstallRequest,
 ): Promise<SkillInstallResult> {
@@ -130,6 +156,15 @@ export async function installSkill(
       code: null,
     };
   }
+  if (spec.kind === "brew" && !hasBinary("brew")) {
+    return {
+      ok: false,
+      message: "brew not installed",
+      stdout: "",
+      stderr: "",
+      code: null,
+    };
+  }
   if (spec.kind === "uv" && !hasBinary("uv")) {
     if (hasBinary("brew")) {
       const brewResult = await runCommandWithTimeout(
@@ -167,14 +202,51 @@ export async function installSkill(
     };
   }
 
+  if (spec.kind === "go" && !hasBinary("go")) {
+    if (hasBinary("brew")) {
+      const brewResult = await runCommandWithTimeout(["brew", "install", "go"], {
+        timeoutMs,
+      });
+      if (brewResult.code !== 0) {
+        return {
+          ok: false,
+          message: "Failed to install go (brew)",
+          stdout: brewResult.stdout.trim(),
+          stderr: brewResult.stderr.trim(),
+          code: brewResult.code,
+        };
+      }
+    } else {
+      return {
+        ok: false,
+        message: "go not installed (install via brew)",
+        stdout: "",
+        stderr: "",
+        code: null,
+      };
+    }
+  }
+
+  let env: NodeJS.ProcessEnv | undefined;
+  if (spec.kind === "go" && hasBinary("brew")) {
+    const brewBin = await resolveBrewBinDir(timeoutMs);
+    if (brewBin) env = { GOBIN: brewBin };
+  }
+
   const result = await (async () => {
     const argv = command.argv;
     if (!argv || argv.length === 0) {
       return { code: null, stdout: "", stderr: "invalid install command" };
     }
-    return runCommandWithTimeout(argv, {
-      timeoutMs,
-    });
+    try {
+      return await runCommandWithTimeout(argv, {
+        timeoutMs,
+        env,
+      });
+    } catch (err) {
+      const stderr = err instanceof Error ? err.message : String(err);
+      return { code: null, stdout: "", stderr };
+    }
   })();
 
   const success = result.code === 0;

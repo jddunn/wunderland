@@ -47,11 +47,13 @@ export type SkillStatusEntry = {
     bins: string[];
     env: string[];
     config: string[];
+    os: string[];
   };
   missing: {
     bins: string[];
     env: string[];
     config: string[];
+    os: string[];
   };
   configChecks: SkillStatusConfigCheck[];
   install: SkillInstallOption[];
@@ -149,8 +151,13 @@ function buildSkillStatus(
   const requiredBins = entry.clawdis?.requires?.bins ?? [];
   const requiredEnv = entry.clawdis?.requires?.env ?? [];
   const requiredConfig = entry.clawdis?.requires?.config ?? [];
+  const requiredOs = entry.clawdis?.os ?? [];
 
   const missingBins = requiredBins.filter((bin) => !hasBinary(bin));
+  const missingOs =
+    requiredOs.length > 0 && !requiredOs.includes(process.platform)
+      ? requiredOs
+      : [];
 
   const missingEnv: string[] = [];
   for (const envName of requiredEnv) {
@@ -174,15 +181,21 @@ function buildSkillStatus(
     .map((check) => check.path);
 
   const missing = always
-    ? { bins: [], env: [], config: [] }
-    : { bins: missingBins, env: missingEnv, config: missingConfig };
+    ? { bins: [], env: [], config: [], os: [] }
+    : {
+        bins: missingBins,
+        env: missingEnv,
+        config: missingConfig,
+        os: missingOs,
+      };
   const eligible =
     !disabled &&
     !blockedByAllowlist &&
     (always ||
       (missing.bins.length === 0 &&
         missing.env.length === 0 &&
-        missing.config.length === 0));
+        missing.config.length === 0 &&
+        missing.os.length === 0));
 
   return {
     name: entry.skill.name,
@@ -202,6 +215,7 @@ function buildSkillStatus(
       bins: requiredBins,
       env: requiredEnv,
       config: requiredConfig,
+      os: requiredOs,
     },
     missing,
     configChecks,

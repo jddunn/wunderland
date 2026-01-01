@@ -222,16 +222,19 @@ export type SkillStatusEntry = {
   homepage?: string;
   always: boolean;
   disabled: boolean;
+  blockedByAllowlist: boolean;
   eligible: boolean;
   requirements: {
     bins: string[];
     env: string[];
     config: string[];
+    os: string[];
   };
   missing: {
     bins: string[];
     env: string[];
     config: string[];
+    os: string[];
   };
   configChecks: SkillsStatusConfigCheck[];
   install: SkillInstallOption[];

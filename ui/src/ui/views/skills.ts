@@ -73,6 +73,15 @@ export function renderSkills(props: SkillsProps) {
 function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
   const busy = props.busyKey === skill.skillKey || props.busyKey === skill.name;
   const apiKey = props.edits[skill.skillKey] ?? "";
+  const missing = [
+    ...skill.missing.bins.map((b) => `bin:${b}`),
+    ...skill.missing.env.map((e) => `env:${e}`),
+    ...skill.missing.config.map((c) => `config:${c}`),
+    ...skill.missing.os.map((o) => `os:${o}`),
+  ];
+  const reasons: string[] = [];
+  if (skill.disabled) reasons.push("disabled");
+  if (skill.blockedByAllowlist) reasons.push("blocked by allowlist");
   return html`
     <div class="list-item">
       <div class="list-main">
@@ -87,14 +96,17 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
           </span>
           ${skill.disabled ? html`<span class="chip chip-warn">disabled</span>` : nothing}
         </div>
-        ${skill.missing.bins.length + skill.missing.env.length + skill.missing.config.length > 0
+        ${missing.length > 0
           ? html`
               <div class="muted" style="margin-top: 6px;">
-                Missing: ${[
-                  ...skill.missing.bins.map((b) => `bin:${b}`),
-                  ...skill.missing.env.map((e) => `env:${e}`),
-                  ...skill.missing.config.map((c) => `config:${c}`),
-                ].join(", ")}
+                Missing: ${missing.join(", ")}
+              </div>
+            `
+          : nothing}
+        ${reasons.length > 0
+          ? html`
+              <div class="muted" style="margin-top: 6px;">
+                Reason: ${reasons.join(", ")}
               </div>
             `
           : nothing}
@@ -143,4 +155,3 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
     </div>
   `;
 }
-

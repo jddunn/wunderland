@@ -369,6 +369,32 @@ describe("buildWorkspaceSkillStatus", () => {
     expect(skill?.install[0]?.id).toBe("brew");
   });
 
+  it("respects OS-gated skills", async () => {
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdis-"));
+    const skillDir = path.join(workspaceDir, "skills", "os-skill");
+
+    await writeSkill({
+      dir: skillDir,
+      name: "os-skill",
+      description: "Darwin only",
+      metadata: '{"clawdis":{"os":["darwin"]}}',
+    });
+
+    const report = buildWorkspaceSkillStatus(workspaceDir, {
+      managedSkillsDir: path.join(workspaceDir, ".managed"),
+    });
+    const skill = report.skills.find((entry) => entry.name === "os-skill");
+
+    expect(skill).toBeDefined();
+    if (process.platform === "darwin") {
+      expect(skill?.eligible).toBe(true);
+      expect(skill?.missing.os).toEqual([]);
+    } else {
+      expect(skill?.eligible).toBe(false);
+      expect(skill?.missing.os).toEqual(["darwin"]);
+    }
+  });
+
   it("marks bundled skills blocked by allowlist", async () => {
     const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdis-"));
     const bundledDir = path.join(workspaceDir, ".bundled");

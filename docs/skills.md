@@ -59,6 +59,7 @@ Fields under `metadata.clawdis`:
 - `always: true` — always include the skill (skip other gates).
 - `emoji` — optional emoji used by the macOS Skills UI.
 - `homepage` — optional URL shown as “Website” in the macOS Skills UI.
+- `os` — optional list of platforms (`darwin`, `linux`, `win32`). If set, the skill is only eligible on those OSes.
 - `requires.bins` — list; each must exist on `PATH`.
 - `requires.env` — list; env var must exist **or** be provided in config.
 - `requires.config` — list of `clawdis.json` paths that must be truthy.
@@ -78,6 +79,7 @@ metadata: {"clawdis":{"emoji":"♊️","requires":{"bins":["gemini"]},"install":
 Notes:
 - If multiple installers are listed, the gateway picks a **single** preferred option (brew when available, otherwise node).
 - Node installs honor `skills.install.nodeManager` in `clawdis.json` (default: npm; options: npm/pnpm/yarn/bun).
+- Go installs: if `go` is missing and `brew` is available, the gateway installs Go via Homebrew first and sets `GOBIN` to Homebrew’s `bin` when possible.
 
 If no `metadata.clawdis` is present, the skill is always eligible (unless
 disabled in config or blocked by `skills.allowBundled` for bundled skills).
