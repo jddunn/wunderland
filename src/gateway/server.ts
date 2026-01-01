@@ -46,11 +46,11 @@ import { getStatusSummary } from "../commands/status.js";
 import {
   type ClawdisConfig,
   CONFIG_PATH_CLAWDIS,
-  STATE_DIR_CLAWDIS,
   isNixMode,
   loadConfig,
   parseConfigJson5,
   readConfigFileSnapshot,
+  STATE_DIR_CLAWDIS,
   validateConfigObject,
   writeConfigFile,
 } from "../config/config.js";
