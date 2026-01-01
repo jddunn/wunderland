@@ -163,7 +163,6 @@ enum DeviceModelCatalog {
         }
         return nil
     }
-
     private enum NameValue: Decodable {
         case string(String)
         case stringArray([String])

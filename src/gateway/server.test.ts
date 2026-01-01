@@ -120,6 +120,7 @@ let testCronEnabled: boolean | undefined = false;
 let testGatewayBind: "auto" | "lan" | "tailnet" | "loopback" | undefined;
 let testGatewayAuth: Record<string, unknown> | undefined;
 let testHooksConfig: Record<string, unknown> | undefined;
+let testCanvasHostPort: number | undefined;
 const sessionStoreSaveDelayMs = vi.hoisted(() => ({ value: 0 }));
 vi.mock("../config/sessions.js", async () => {
   const actual = await vi.importActual<typeof import("../config/sessions.js")>(
@@ -189,6 +190,7 @@ vi.mock("../config/config.js", () => {
 
   return {
     CONFIG_PATH_CLAWDIS: resolveConfigPath(),
+    isNixMode: false,
     loadConfig: () => ({
       agent: {
         model: "anthropic/claude-opus-4-5",
@@ -203,6 +205,12 @@ vi.mock("../config/config.js", () => {
         if (testGatewayBind) gateway.bind = testGatewayBind;
         if (testGatewayAuth) gateway.auth = testGatewayAuth;
         return Object.keys(gateway).length > 0 ? gateway : undefined;
+      })(),
+      canvasHost: (() => {
+        const canvasHost: Record<string, unknown> = {};
+        if (typeof testCanvasHostPort === "number")
+          canvasHost.port = testCanvasHostPort;
+        return Object.keys(canvasHost).length > 0 ? canvasHost : undefined;
       })(),
       hooks: testHooksConfig,
       cron: (() => {
@@ -260,6 +268,7 @@ beforeEach(async () => {
   testGatewayBind = undefined;
   testGatewayAuth = undefined;
   testHooksConfig = undefined;
+  testCanvasHostPort = undefined;
   cronIsolatedRun.mockClear();
   drainSystemEvents();
   __resetModelCatalogCacheForTest();
@@ -1914,6 +1923,8 @@ describe("gateway server", () => {
     process.env.CLAWDIS_GATEWAY_TOKEN = "secret";
     testTailnetIPv4.value = "100.64.0.1";
     testGatewayBind = "lan";
+    const canvasPort = await getFreePort();
+    testCanvasHostPort = canvasPort;
 
     const port = await getFreePort();
     const server = await startGatewayServer(port, {
@@ -1926,7 +1937,7 @@ describe("gateway server", () => {
     await new Promise<void>((resolve) => ws.once("open", resolve));
 
     const hello = await connectOk(ws, { token: "secret" });
-    expect(hello.canvasHostUrl).toBe(`http://100.64.0.1:18793`);
+    expect(hello.canvasHostUrl).toBe(`http://100.64.0.1:${canvasPort}`);
 
     ws.close();
     await server.close();

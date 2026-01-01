@@ -51,6 +51,9 @@ let package = Package(
                 .product(name: "PeekabooBridge", package: "PeekabooCore"),
                 .product(name: "PeekabooAutomationKit", package: "PeekabooAutomationKit"),
             ],
+            exclude: [
+                "Resources/Info.plist",
+            ],
             resources: [
                 .copy("Resources/Clawdis.icns"),
                 .copy("Resources/DeviceModels"),
