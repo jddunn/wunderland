@@ -15,6 +15,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
   send() {
     local payload="$1"
     local delay="${2:-0.4}"
+    # Let prompts render before sending keystrokes.
     sleep "$delay"
     printf "%b" "$payload" >&3
   }
@@ -31,6 +32,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
 
     input_fifo="$(mktemp -u "/tmp/clawdis-onboard-${case_name}.XXXXXX")"
     mkfifo "$input_fifo"
+    # Run under script to keep an interactive TTY for clack prompts.
     script -q -c "$command" /dev/null < "$input_fifo" &
     wizard_pid=$!
     exec 3> "$input_fifo"
@@ -47,6 +49,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
     local home_dir="$2"
     local send_fn="$3"
 
+    # Default onboarding command wrapper.
     run_wizard_cmd "$case_name" "$home_dir" "node dist/index.js onboard" "$send_fn"
   }
 
@@ -71,6 +74,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
   }
 
   send_local_basic() {
+    # Choose local gateway, accept defaults, skip provider/skills/daemon, skip UI.
     send $'"'"'\r'"'"' 1.0
     send $'"'"'\r'"'"' 1.0
     send "" 1.2
@@ -89,6 +93,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
   }
 
   send_reset_config_only() {
+    # Reset config + reuse the local defaults flow.
     send $'"'"'\e[B'"'"' 0.3
     send $'"'"'\e[B'"'"' 0.3
     send $'"'"'\r'"'"' 0.4
@@ -98,6 +103,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
   }
 
   send_providers_flow() {
+    # Configure providers via configure wizard.
     send "" 0.6
     send $'"'"'\r'"'"' 0.8
     send "" 1.2
@@ -127,6 +133,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
   }
 
   send_skills_flow() {
+    # Select skills section and skip optional installs.
     send "" 0.6
     send $'"'"'\r'"'"' 0.6
     send "" 1.0
@@ -146,6 +153,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
     home_dir="$(make_home local-basic)"
     run_wizard local-basic "$home_dir" send_local_basic
 
+    # Assert config + workspace scaffolding.
     workspace_dir="$HOME/clawd"
     config_path="$HOME/.clawdis/clawdis.json"
     sessions_dir="$HOME/.clawdis/sessions"
@@ -203,6 +211,7 @@ NODE
 
     node dist/index.js gateway-daemon --port 18789 --bind loopback > /tmp/gateway.log 2>&1 &
     GW_PID=$!
+    # Gate on gateway readiness, then run health.
     for _ in $(seq 1 10); do
       if grep -q "listening on ws://127.0.0.1:18789" /tmp/gateway.log; then
         break
@@ -226,6 +235,7 @@ NODE
     home_dir="$(make_home remote-non-interactive)"
     export HOME="$home_dir"
     mkdir -p "$HOME"
+    # Smoke test non-interactive remote config write.
     node dist/index.js onboard --non-interactive \
       --mode remote \
       --remote-url ws://gateway.local:18789 \
@@ -268,6 +278,7 @@ NODE
     home_dir="$(make_home reset-config)"
     export HOME="$home_dir"
     mkdir -p "$HOME/.clawdis"
+    # Seed a remote config to exercise reset path.
     cat > "$HOME/.clawdis/clawdis.json" <<'"'"'JSON'"'"'
 {
   "agent": { "workspace": "/root/old" },
@@ -310,6 +321,7 @@ NODE
   run_case_providers() {
     local home_dir
     home_dir="$(make_home providers)"
+    # Providers-only configure flow.
     run_wizard_cmd providers "$home_dir" "node dist/index.js configure" send_providers_flow
 
     config_path="$HOME/.clawdis/clawdis.json"
@@ -350,6 +362,7 @@ NODE
     home_dir="$(make_home skills)"
     export HOME="$home_dir"
     mkdir -p "$HOME/.clawdis"
+    # Seed skills config to ensure it survives the wizard.
     cat > "$HOME/.clawdis/clawdis.json" <<'"'"'JSON'"'"'
 {
   "skills": {
