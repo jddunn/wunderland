@@ -172,12 +172,7 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
       const botId = client.user?.id;
       const wasMentioned =
         !isDirectMessage && Boolean(botId && message.mentions.has(botId));
-      const attachment = message.attachments.first();
-      const baseText =
-        message.content?.trim() ||
-        (attachment ? inferPlaceholder(attachment) : "") ||
-        message.embeds[0]?.description ||
-        "";
+      const baseText = resolveDiscordMessageText(message);
       if (isVerbose()) {
         logVerbose(
           `discord: inbound id=${message.id} guild=${message.guild?.id ?? "dm"} channel=${message.channelId} mention=${wasMentioned ? "yes" : "no"} type=${isDirectMessage ? "dm" : isGroupDm ? "group-dm" : "guild"} content=${baseText ? "yes" : "no"}`,
@@ -356,6 +351,10 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         const id = message.author.id;
         combinedBody = `${combinedBody}\n[from: ${name} id:${id}]`;
         shouldClearHistory = true;
+      }
+      const replyContext = await resolveReplyContext(message);
+      if (replyContext) {
+        combinedBody = `[Replied message - for context]\n${replyContext}\n\n${combinedBody}`;
       }
 
       const ctxPayload = {
@@ -657,6 +656,43 @@ function inferPlaceholder(attachment: import("discord.js").Attachment): string {
   if (mime.startsWith("video/")) return "<media:video>";
   if (mime.startsWith("audio/")) return "<media:audio>";
   return "<media:document>";
+}
+
+function resolveDiscordMessageText(message: Message): string {
+  const attachment = message.attachments.first();
+  return (
+    message.content?.trim() ||
+    (attachment ? inferPlaceholder(attachment) : "") ||
+    message.embeds[0]?.description ||
+    ""
+  );
+}
+
+async function resolveReplyContext(message: Message): Promise<string | null> {
+  if (!message.reference?.messageId) return null;
+  try {
+    const referenced = await message.fetchReference();
+    if (!referenced?.author) return null;
+    const referencedText = resolveDiscordMessageText(referenced);
+    if (!referencedText) return null;
+    const channelType = referenced.channel.type as ChannelType;
+    const isDirectMessage = channelType === ChannelType.DM;
+    const fromLabel = isDirectMessage
+      ? buildDirectLabel(referenced)
+      : referenced.member?.displayName ?? referenced.author.tag;
+    const body = `${referencedText}\n[discord message id: ${referenced.id} channel: ${referenced.channelId} from: ${referenced.author.tag} id:${referenced.author.id}]`;
+    return formatAgentEnvelope({
+      surface: "Discord",
+      from: fromLabel,
+      timestamp: referenced.createdTimestamp,
+      body,
+    });
+  } catch (err) {
+    logVerbose(
+      `discord: failed to fetch reply context for ${message.id}: ${String(err)}`,
+    );
+    return null;
+  }
 }
 
 function buildDirectLabel(message: import("discord.js").Message) {
