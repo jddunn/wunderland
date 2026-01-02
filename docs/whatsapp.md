@@ -19,6 +19,20 @@ Status: WhatsApp Web via Baileys only. Gateway owns the single session.
 - **CLI / macOS app** talk to the gateway; no direct Baileys use.
 - **Active listener** is required for outbound sends; otherwise send fails fast.
 
+## Getting a phone number
+
+WhatsApp requires a real mobile number for verification. VoIP and virtual numbers are usually blocked.
+
+**Recommended approaches:**
+- **Local eSIM** from your country's mobile carrier (most reliable)
+  - Austria: [hot.at](https://www.hot.at)
+  - UK: [giffgaff](https://www.giffgaff.com) — free SIM, no contract
+- **Prepaid SIM** — cheap, just needs to receive one SMS for verification
+
+**Avoid:** TextNow, Google Voice, most "free SMS" services — WhatsApp blocks these aggressively.
+
+**Tip:** The number only needs to receive one verification SMS. After that, WhatsApp Web sessions persist via `creds.json`.
+
 ## Login + credentials
 - Login command: `clawdis login` (QR via Linked Devices).
 - Credentials stored in `~/.clawdis/credentials/creds.json`.
