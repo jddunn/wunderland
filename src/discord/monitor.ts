@@ -415,10 +415,39 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         );
       }
 
+      let didSendReply = false;
+      let blockSendChain: Promise<void> = Promise.resolve();
+      const sendBlockReply = (payload: ReplyPayload) => {
+        if (
+          !payload?.text &&
+          !payload?.mediaUrl &&
+          !(payload?.mediaUrls?.length ?? 0)
+        ) {
+          return;
+        }
+        blockSendChain = blockSendChain
+          .then(async () => {
+            await deliverReplies({
+              replies: [payload],
+              target: ctxPayload.To,
+              token,
+              runtime,
+              replyToMode,
+            });
+            didSendReply = true;
+          })
+          .catch((err) => {
+            runtime.error?.(
+              danger(`discord block reply failed: ${String(err)}`),
+            );
+          });
+      };
+
       const replyResult = await getReplyFromConfig(
         ctxPayload,
         {
           onReplyStart: () => sendTyping(message),
+          onBlockReply: sendBlockReply,
         },
         cfg,
       );
@@ -427,7 +456,18 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
           ? replyResult
           : [replyResult]
         : [];
-      if (replies.length === 0) return;
+      await blockSendChain;
+      if (replies.length === 0) {
+        if (
+          isGuildMessage &&
+          shouldClearHistory &&
+          historyLimit > 0 &&
+          didSendReply
+        ) {
+          guildHistories.set(message.channelId, []);
+        }
+        return;
+      }
 
       await deliverReplies({
         replies,
@@ -436,12 +476,18 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         runtime,
         replyToMode,
       });
+      didSendReply = true;
       if (isVerbose()) {
         logVerbose(
           `discord: delivered ${replies.length} reply${replies.length === 1 ? "" : "ies"} to ${ctxPayload.To}`,
         );
       }
-      if (isGuildMessage && shouldClearHistory && historyLimit > 0) {
+      if (
+        isGuildMessage &&
+        shouldClearHistory &&
+        historyLimit > 0 &&
+        didSendReply
+      ) {
         guildHistories.set(message.channelId, []);
       }
     } catch (err) {

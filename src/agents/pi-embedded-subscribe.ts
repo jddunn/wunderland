@@ -57,6 +57,10 @@ export function subscribeEmbeddedPiSession(params: {
     text?: string;
     mediaUrls?: string[];
   }) => void | Promise<void>;
+  onBlockReply?: (payload: {
+    text?: string;
+    mediaUrls?: string[];
+  }) => void | Promise<void>;
   onPartialReply?: (payload: {
     text?: string;
     mediaUrls?: string[];
@@ -314,6 +318,15 @@ export function subscribeEmbeddedPiSession(params: {
               ? (extractFinalText(cleaned)?.trim() ?? cleaned)
               : cleaned;
           if (text) assistantTexts.push(text);
+          if (text && params.onBlockReply) {
+            const { text: cleanedText, mediaUrls } = splitMediaFromOutput(text);
+            if (cleanedText || (mediaUrls && mediaUrls.length > 0)) {
+              void params.onBlockReply({
+                text: cleanedText,
+                mediaUrls: mediaUrls?.length ? mediaUrls : undefined,
+              });
+            }
+          }
           deltaBuffer = "";
         }
       }

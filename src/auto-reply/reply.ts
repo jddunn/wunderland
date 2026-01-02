@@ -599,6 +599,24 @@ export async function getReplyFromConfig(
     inlineVerbose ??
     (sessionEntry?.verboseLevel as VerboseLevel | undefined) ??
     (agentCfg?.verboseDefault as VerboseLevel | undefined);
+  const resolvedBlockStreaming =
+    agentCfg?.blockStreamingDefault === "off" ? "off" : "on";
+  const blockStreamingEnabled = resolvedBlockStreaming === "on";
+  const streamedPayloadKeys = new Set<string>();
+  const pendingBlockTasks = new Set<Promise<void>>();
+  const buildPayloadKey = (payload: ReplyPayload) => {
+    const text = payload.text?.trim() ?? "";
+    const mediaList = payload.mediaUrls?.length
+      ? payload.mediaUrls
+      : payload.mediaUrl
+        ? [payload.mediaUrl]
+        : [];
+    return JSON.stringify({
+      text,
+      mediaList,
+      replyToId: payload.replyToId ?? null,
+    });
+  };
   const shouldEmitToolResult = () => {
     if (!sessionKey || !storePath) {
       return resolvedVerboseLevel === "on";
@@ -1371,6 +1389,48 @@ export async function getReplyFromConfig(
               });
             }
           : undefined,
+        onBlockReply:
+          blockStreamingEnabled && opts?.onBlockReply
+            ? async (payload) => {
+                let text = payload.text;
+                if (!opts?.isHeartbeat && text?.includes("HEARTBEAT_OK")) {
+                  const stripped = stripHeartbeatToken(text, {
+                    mode: "message",
+                  });
+                  if (stripped.didStrip && !didLogHeartbeatStrip) {
+                    didLogHeartbeatStrip = true;
+                    logVerbose("Stripped stray HEARTBEAT_OK token from reply");
+                  }
+                  const hasMedia = (payload.mediaUrls?.length ?? 0) > 0;
+                  if (stripped.shouldSkip && !hasMedia) return;
+                  text = stripped.text;
+                }
+                const tagResult = extractReplyToTag(
+                  text,
+                  sessionCtx.MessageSid,
+                );
+                const cleaned = tagResult.cleaned || undefined;
+                const hasMedia = (payload.mediaUrls?.length ?? 0) > 0;
+                if (!cleaned && !hasMedia) return;
+                if (cleaned?.trim() === SILENT_REPLY_TOKEN && !hasMedia) return;
+                await startTypingOnText(cleaned);
+                const blockPayload: ReplyPayload = {
+                  text: cleaned,
+                  mediaUrls: payload.mediaUrls,
+                  mediaUrl: payload.mediaUrls?.[0],
+                  replyToId: tagResult.replyToId,
+                };
+                const task = Promise.resolve(opts.onBlockReply?.(blockPayload))
+                  .then(() => {
+                    streamedPayloadKeys.add(buildPayloadKey(blockPayload));
+                  })
+                  .catch((err) => {
+                    logVerbose(`block reply delivery failed: ${String(err)}`);
+                  });
+                pendingBlockTasks.add(task);
+                void task.finally(() => pendingBlockTasks.delete(task));
+              }
+            : undefined,
         shouldEmitToolResult,
         onToolResult: opts?.onToolResult
           ? async (payload) => {
@@ -1421,6 +1481,9 @@ export async function getReplyFromConfig(
 
     const payloadArray = runResult.payloads ?? [];
     if (payloadArray.length === 0) return undefined;
+    if (pendingBlockTasks.size > 0) {
+      await Promise.allSettled(pendingBlockTasks);
+    }
 
     const sanitizedPayloads = opts?.isHeartbeat
       ? payloadArray
@@ -1457,9 +1520,15 @@ export async function getReplyFromConfig(
           (payload.mediaUrls && payload.mediaUrls.length > 0),
       );
 
-    if (replyTaggedPayloads.length === 0) return undefined;
+    const filteredPayloads = blockStreamingEnabled
+      ? replyTaggedPayloads.filter(
+          (payload) => !streamedPayloadKeys.has(buildPayloadKey(payload)),
+        )
+      : replyTaggedPayloads;
 
-    const shouldSignalTyping = replyTaggedPayloads.some((payload) => {
+    if (filteredPayloads.length === 0) return undefined;
+
+    const shouldSignalTyping = filteredPayloads.some((payload) => {
       const trimmed = payload.text?.trim();
       if (trimmed && trimmed !== SILENT_REPLY_TOKEN) return true;
       if (payload.mediaUrl) return true;
@@ -1514,7 +1583,7 @@ export async function getReplyFromConfig(
     }
 
     // If verbose is enabled and this is a new session, prepend a session hint.
-    let finalPayloads = replyTaggedPayloads;
+    let finalPayloads = filteredPayloads;
     if (resolvedVerboseLevel === "on" && isNewSession) {
       finalPayloads = [
         { text: `🧭 New session: ${sessionIdFinal}` },

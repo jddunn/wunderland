@@ -330,6 +330,7 @@ Controls the embedded agent runtime (model/thinking/verbose/timeouts).
     },
     thinkingDefault: "low",
     verboseDefault: "off",
+    blockStreamingDefault: "on",
     timeoutSeconds: 600,
     mediaMaxMb: 5,
     heartbeat: {
@@ -353,6 +354,10 @@ If you omit the provider, CLAWDIS currently assumes `anthropic` as a temporary
 deprecation fallback.
 Z.AI models are available as `zai/<model>` (e.g. `zai/glm-4.7`) and require
 `ZAI_API_KEY` (or legacy `Z_AI_API_KEY`) in the environment.
+
+`agent.blockStreamingDefault` controls whether completed assistant blocks
+(`message_end` chunks) are sent immediately (default: `on`). Set to `off` to
+only deliver the final consolidated reply.
 
 `agent.heartbeat` configures periodic heartbeat runs:
 - `every`: duration string (`ms`, `s`, `m`, `h`); default unit minutes. Omit or set

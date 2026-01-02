@@ -50,9 +50,11 @@
 - Tests: add a Docker-based onboarding E2E harness.
 - Tests: harden wizard E2E flows for reset, providers, skills, and remote non-interactive runs.
 - Browser tools: add remote CDP URL support, Linux launcher options (`executablePath`, `noSandbox`), and surface `cdpUrl` in status.
+- Skills: add tmux-first coding-agent skill + `requires.anyBins` gate for multi-CLI setup (thanks @sreekaransrinath).
 
 ### Fixes
 - Chat UI: keep the chat scrolled to the latest message after switching sessions.
+- Auto-reply: stream completed reply blocks as soon as they finish (configurable default); skip empty tool-only blocks unless verbose.
 - CLI onboarding: persist gateway token in config so local CLI auth works; recommend auth Off unless you need multi-machine access.
 - Control UI: accept a `?token=` URL param to auto-fill Gateway auth; onboarding now opens the dashboard with token auth when configured.
 - Agent prompt: remove hardcoded user name in system prompt example.

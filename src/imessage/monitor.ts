@@ -257,12 +257,43 @@ export async function monitorIMessageProvider(
       );
     }
 
-    const replyResult = await getReplyFromConfig(ctxPayload, undefined, cfg);
+    let blockSendChain: Promise<void> = Promise.resolve();
+    const sendBlockReply = (payload: ReplyPayload) => {
+      if (
+        !payload?.text &&
+        !payload?.mediaUrl &&
+        !(payload?.mediaUrls?.length ?? 0)
+      ) {
+        return;
+      }
+      blockSendChain = blockSendChain
+        .then(async () => {
+          await deliverReplies({
+            replies: [payload],
+            target: ctxPayload.To,
+            client,
+            runtime,
+            maxBytes: mediaMaxBytes,
+          });
+        })
+        .catch((err) => {
+          runtime.error?.(
+            danger(`imessage block reply failed: ${String(err)}`),
+          );
+        });
+    };
+
+    const replyResult = await getReplyFromConfig(
+      ctxPayload,
+      { onBlockReply: sendBlockReply },
+      cfg,
+    );
     const replies = replyResult
       ? Array.isArray(replyResult)
         ? replyResult
         : [replyResult]
       : [];
+    await blockSendChain;
     if (replies.length === 0) return;
 
     await deliverReplies({

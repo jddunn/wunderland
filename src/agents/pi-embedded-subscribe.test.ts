@@ -97,6 +97,37 @@ describe("subscribeEmbeddedPiSession", () => {
     expect(payload.text).toBe("Hello world");
   });
 
+  it("emits block replies on message_end", () => {
+    let handler: ((evt: unknown) => void) | undefined;
+    const session: StubSession = {
+      subscribe: (fn) => {
+        handler = fn;
+        return () => {};
+      },
+    };
+
+    const onBlockReply = vi.fn();
+
+    subscribeEmbeddedPiSession({
+      session: session as unknown as Parameters<
+        typeof subscribeEmbeddedPiSession
+      >[0]["session"],
+      runId: "run",
+      onBlockReply,
+    });
+
+    const assistantMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: "Hello block" }],
+    } as AssistantMessage;
+
+    handler?.({ type: "message_end", message: assistantMessage });
+
+    expect(onBlockReply).toHaveBeenCalled();
+    const payload = onBlockReply.mock.calls[0][0];
+    expect(payload.text).toBe("Hello block");
+  });
+
   it("waits for auto-compaction retry and clears buffered text", async () => {
     const listeners: SessionEventHandler[] = [];
     const session = {

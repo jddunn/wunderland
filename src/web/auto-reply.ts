@@ -1110,6 +1110,50 @@ export async function monitorWebProvider(
             );
           });
       };
+      const sendBlockReply = (payload: ReplyPayload) => {
+        if (
+          !payload?.text &&
+          !payload?.mediaUrl &&
+          !(payload?.mediaUrls?.length ?? 0)
+        ) {
+          return;
+        }
+        if (isSilentReply(payload)) return;
+        const blockPayload: ReplyPayload = { ...payload };
+        if (
+          responsePrefix &&
+          blockPayload.text &&
+          blockPayload.text.trim() !== HEARTBEAT_TOKEN &&
+          !blockPayload.text.startsWith(responsePrefix)
+        ) {
+          blockPayload.text = `${responsePrefix} ${blockPayload.text}`;
+        }
+        toolSendChain = toolSendChain
+          .then(async () => {
+            await deliverWebReply({
+              replyResult: blockPayload,
+              msg,
+              maxMediaBytes,
+              replyLogger,
+              connectionId,
+              skipLog: true,
+            });
+            didSendReply = true;
+            if (blockPayload.text) {
+              recentlySent.add(blockPayload.text);
+              recentlySent.add(combinedBody);
+              if (recentlySent.size > MAX_RECENT_MESSAGES) {
+                const firstKey = recentlySent.values().next().value;
+                if (firstKey) recentlySent.delete(firstKey);
+              }
+            }
+          })
+          .catch((err) => {
+            whatsappOutboundLog.error(
+              `Failed sending web block update to ${msg.from ?? conversationId}: ${formatError(err)}`,
+            );
+          });
+      };
 
       const replyResult = await (replyResolver ?? getReplyFromConfig)(
         {
@@ -1138,6 +1182,7 @@ export async function monitorWebProvider(
         {
           onReplyStart: msg.sendComposing,
           onToolResult: sendToolResult,
+          onBlockReply: sendBlockReply,
         },
       );
 

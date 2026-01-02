@@ -524,6 +524,8 @@ export type ClawdisConfig = {
     thinkingDefault?: "off" | "minimal" | "low" | "medium" | "high";
     /** Default verbose level when no /verbose directive is present. */
     verboseDefault?: "off" | "on";
+    /** Default block streaming level when no override is present. */
+    blockStreamingDefault?: "off" | "on";
     timeoutSeconds?: number;
     /** Max inbound media size in MB for agent-visible attachments (text note or future image attach). */
     mediaMaxMb?: number;
@@ -901,6 +903,9 @@ const ClawdisSchema = z.object({
         ])
         .optional(),
       verboseDefault: z.union([z.literal("off"), z.literal("on")]).optional(),
+      blockStreamingDefault: z
+        .union([z.literal("off"), z.literal("on")])
+        .optional(),
       timeoutSeconds: z.number().int().positive().optional(),
       mediaMaxMb: z.number().positive().optional(),
       typingIntervalSeconds: z.number().int().positive().optional(),

@@ -327,6 +327,10 @@ export async function runEmbeddedPiAgent(params: {
     text?: string;
     mediaUrls?: string[];
   }) => void | Promise<void>;
+  onBlockReply?: (payload: {
+    text?: string;
+    mediaUrls?: string[];
+  }) => void | Promise<void>;
   onToolResult?: (payload: {
     text?: string;
     mediaUrls?: string[];
@@ -489,6 +493,7 @@ export async function runEmbeddedPiAgent(params: {
           verboseLevel: params.verboseLevel,
           shouldEmitToolResult: params.shouldEmitToolResult,
           onToolResult: params.onToolResult,
+          onBlockReply: params.onBlockReply,
           onPartialReply: params.onPartialReply,
           onAgentEvent: params.onAgentEvent,
           enforceFinalTag: params.enforceFinalTag,

@@ -198,9 +198,36 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         );
       }
 
+      let blockSendChain: Promise<void> = Promise.resolve();
+      const sendBlockReply = (payload: ReplyPayload) => {
+        if (
+          !payload?.text &&
+          !payload?.mediaUrl &&
+          !(payload?.mediaUrls?.length ?? 0)
+        ) {
+          return;
+        }
+        blockSendChain = blockSendChain
+          .then(async () => {
+            await deliverReplies({
+              replies: [payload],
+              chatId: String(chatId),
+              token: opts.token,
+              runtime,
+              bot,
+              replyToMode,
+            });
+          })
+          .catch((err) => {
+            runtime.error?.(
+              danger(`telegram block reply failed: ${String(err)}`),
+            );
+          });
+      };
+
       const replyResult = await getReplyFromConfig(
         ctxPayload,
-        { onReplyStart: sendTyping },
+        { onReplyStart: sendTyping, onBlockReply: sendBlockReply },
         cfg,
       );
       const replies = replyResult
@@ -208,6 +235,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
           ? replyResult
           : [replyResult]
         : [];
+      await blockSendChain;
       if (replies.length === 0) return;
 
       await deliverReplies({
