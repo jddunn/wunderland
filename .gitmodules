@@ -2,3 +2,6 @@
 	path = Peekaboo
 	url = https://github.com/steipete/Peekaboo.git
 	branch = main
+[submodule "skills/local-places/server"]
+	path = skills/local-places/server
+	url = https://github.com/Hyaxia/local_places.git
