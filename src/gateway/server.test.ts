@@ -134,7 +134,7 @@ let testLegacyIssues: Array<{ path: string; message: string }> = [];
 let testLegacyParsed: Record<string, unknown> = {};
 let testMigrationConfig: Record<string, unknown> | null = null;
 let testMigrationChanges: string[] = [];
-let testIsNixMode = false;
+const testIsNixMode = vi.hoisted(() => ({ value: false }));
 const sessionStoreSaveDelayMs = vi.hoisted(() => ({ value: 0 }));
 vi.mock("../config/sessions.js", async () => {
   const actual = await vi.importActual<typeof import("../config/sessions.js")>(
@@ -223,7 +223,9 @@ vi.mock("../config/config.js", () => {
   return {
     CONFIG_PATH_CLAWDIS: resolveConfigPath(),
     STATE_DIR_CLAWDIS: path.dirname(resolveConfigPath()),
-    isNixMode: testIsNixMode,
+    get isNixMode() {
+      return testIsNixMode.value;
+    },
     migrateLegacyConfig: (raw: unknown) => ({
       config: testMigrationConfig ?? (raw as Record<string, unknown>),
       changes: testMigrationChanges,
@@ -310,7 +312,7 @@ beforeEach(async () => {
   testLegacyParsed = {};
   testMigrationConfig = null;
   testMigrationChanges = [];
-  testIsNixMode = false;
+  testIsNixMode.value = false;
   cronIsolatedRun.mockClear();
   drainSystemEvents();
   resetAgentRunContextForTest();
@@ -574,7 +576,7 @@ describe("gateway server", () => {
       },
     ];
     testLegacyParsed = { routing: { allowFrom: ["+15555550123"] } };
-    testIsNixMode = true;
+    testIsNixMode.value = true;
 
     const port = await getFreePort();
     await expect(startGatewayServer(port)).rejects.toThrow(
