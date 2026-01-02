@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-ai";
+import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 
 import { getImageMetadata, resizeToJpeg } from "../media/image-ops.js";
 

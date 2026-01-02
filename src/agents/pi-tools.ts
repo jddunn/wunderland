@@ -1,4 +1,4 @@
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-ai";
+import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { codingTools, readTool } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
@@ -13,8 +13,8 @@ import {
 import { createClawdisTools } from "./clawdis-tools.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
 
-// TODO(steipete): Remove this wrapper once pi-mono ships file-magic MIME detection
-// for `read` image payloads in `@mariozechner/pi-coding-agent` (then switch back to `codingTools` directly).
+// NOTE(steipete): Upstream read now does file-magic MIME detection; we keep the wrapper
+// to normalize payloads and sanitize oversized images before they hit providers.
 type ToolContentBlock = AgentToolResult<unknown>["content"][number];
 type ImageContentBlock = Extract<ToolContentBlock, { type: "image" }>;
 type TextContentBlock = Extract<ToolContentBlock, { type: "text" }>;
@@ -103,7 +103,7 @@ async function normalizeReadImageResult(
   return { ...result, content: nextContent };
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-ai uses a different module instance.
+// biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-agent-core uses a different module instance.
 type AnyAgentTool = AgentTool<any, unknown>;
 
 function extractEnumValues(schema: unknown): unknown[] | undefined {

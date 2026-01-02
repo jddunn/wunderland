@@ -4,6 +4,7 @@
 
 ### Fixed
 - Media: preserve GIF animation when uploading to Discord/other providers (skip JPEG optimization for image/gif).
+- Agent runtime: update pi-mono dependencies to 0.31.1 (agent-core split).
 
 ### Breaking
 - Skills config schema moved under `skills.*`:

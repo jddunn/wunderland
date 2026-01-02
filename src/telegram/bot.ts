@@ -249,7 +249,9 @@ async function deliverReplies(params: {
       continue;
     }
     const replyToId =
-      replyToMode === "off" ? undefined : resolveTelegramReplyId(reply.replyToId);
+      replyToMode === "off"
+        ? undefined
+        : resolveTelegramReplyId(reply.replyToId);
     const mediaList = reply.mediaUrls?.length
       ? reply.mediaUrls
       : reply.mediaUrl

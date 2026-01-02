@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-ai";
+import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 import {
   browserCloseTab,
@@ -46,7 +46,7 @@ import { callGateway } from "../gateway/call.js";
 import { detectMime, imageMimeFromFormat } from "../media/mime.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
 
-// biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-ai uses a different module instance.
+// biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-agent-core uses a different module instance.
 type AnyAgentTool = AgentTool<any, unknown>;
 
 const DEFAULT_GATEWAY_URL = "ws://127.0.0.1:18789";

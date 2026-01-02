@@ -6,8 +6,8 @@ import {
   normalizeDiscordSlug,
   resolveDiscordChannelConfig,
   resolveDiscordGuildEntry,
-  resolveGroupDmAllow,
   resolveDiscordReplyTarget,
+  resolveGroupDmAllow,
 } from "./monitor.js";
 
 const fakeGuild = (id: string, name: string) =>

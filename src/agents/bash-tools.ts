@@ -1,6 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-ai";
+import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 
 import {
@@ -94,7 +94,7 @@ export type BashToolDetails =
 
 export function createBashTool(
   defaults?: BashToolDefaults,
-  // biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-ai uses a different module instance.
+  // biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-agent-core uses a different module instance.
 ): AgentTool<any, BashToolDetails> {
   const defaultBackgroundMs = clampNumber(
     defaults?.backgroundMs ?? readEnvInt("PI_BASH_YIELD_MS"),
@@ -358,7 +358,7 @@ const processSchema = Type.Object({
 
 export function createProcessTool(
   defaults?: ProcessToolDefaults,
-  // biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-ai uses a different module instance.
+  // biome-ignore lint/suspicious/noExplicitAny: TypeBox schema type from pi-agent-core uses a different module instance.
 ): AgentTool<any> {
   if (defaults?.cleanupMs !== undefined) {
     setJobTtlMs(defaults.cleanupMs);

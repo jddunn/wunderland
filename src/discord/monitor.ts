@@ -14,7 +14,10 @@ import { formatAgentEnvelope } from "../auto-reply/envelope.js";
 import { getReplyFromConfig } from "../auto-reply/reply.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
-import type { DiscordSlashCommandConfig, ReplyToMode } from "../config/config.js";
+import type {
+  DiscordSlashCommandConfig,
+  ReplyToMode,
+} from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import { resolveStorePath, updateLastRoute } from "../config/sessions.js";
 import { danger, isVerbose, logVerbose, warn } from "../globals.js";
