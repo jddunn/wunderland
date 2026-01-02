@@ -54,6 +54,7 @@
 - CLI onboarding: explain Tailscale exposure options (Off/Serve/Funnel) and colorize provider status (linked/configured/needs setup).
 - CLI onboarding: add provider primers (WhatsApp/Telegram/Discord/Signal) incl. Discord bot token setup steps.
 - CLI onboarding: allow skipping the “install missing skill dependencies” selection without canceling the wizard.
+- CLI onboarding: always prompt for WhatsApp `routing.allowFrom` and print (optionally open) the Control UI URL when done.
 - CLI onboarding: detect gateway reachability and annotate Local/Remote choices (helps pick the right mode).
 - macOS settings: colorize provider status subtitles to distinguish healthy vs degraded states.
 - macOS codesign: skip hardened runtime for ad-hoc signing and avoid empty options args (#70) — thanks @petter-b
