@@ -53,7 +53,9 @@ function normalizeReactionEmoji(raw: string) {
     throw new Error("emoji required");
   }
   const customMatch = trimmed.match(/^<a?:([^:>]+):(\d+)>$/);
-  const identifier = customMatch ? `${customMatch[1]}:${customMatch[2]}` : trimmed;
+  const identifier = customMatch
+    ? `${customMatch[1]}:${customMatch[2]}`
+    : trimmed;
   return encodeURIComponent(identifier);
 }
 

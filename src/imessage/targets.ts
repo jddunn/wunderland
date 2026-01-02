@@ -35,9 +35,12 @@ export function normalizeIMessageHandle(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
   const lowered = trimmed.toLowerCase();
-  if (lowered.startsWith("imessage:")) return normalizeIMessageHandle(trimmed.slice(9));
-  if (lowered.startsWith("sms:")) return normalizeIMessageHandle(trimmed.slice(4));
-  if (lowered.startsWith("auto:")) return normalizeIMessageHandle(trimmed.slice(5));
+  if (lowered.startsWith("imessage:"))
+    return normalizeIMessageHandle(trimmed.slice(9));
+  if (lowered.startsWith("sms:"))
+    return normalizeIMessageHandle(trimmed.slice(4));
+  if (lowered.startsWith("auto:"))
+    return normalizeIMessageHandle(trimmed.slice(5));
   if (trimmed.includes("@")) return trimmed.toLowerCase();
   const normalized = normalizeE164(trimmed);
   if (normalized) return normalized;

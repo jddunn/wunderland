@@ -438,11 +438,11 @@ export async function agentCommand(
           ? whatsappTarget
           : deliveryProvider === "discord"
             ? discordTarget
-          : deliveryProvider === "signal"
-            ? signalTarget
-            : deliveryProvider === "imessage"
-              ? imessageTarget
-              : undefined;
+            : deliveryProvider === "signal"
+              ? signalTarget
+              : deliveryProvider === "imessage"
+                ? imessageTarget
+                : undefined;
     const message = `Delivery failed (${deliveryProvider}${deliveryTarget ? ` to ${deliveryTarget}` : ""}): ${String(err)}`;
     runtime.error?.(message);
     if (!runtime.error) runtime.log(message);

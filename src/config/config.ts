@@ -102,7 +102,13 @@ export type HookMappingConfig = {
   messageTemplate?: string;
   textTemplate?: string;
   deliver?: boolean;
-  channel?: "last" | "whatsapp" | "telegram" | "discord" | "signal" | "imessage";
+  channel?:
+    | "last"
+    | "whatsapp"
+    | "telegram"
+    | "discord"
+    | "signal"
+    | "imessage";
   to?: string;
   thinking?: string;
   timeoutSeconds?: number;
@@ -940,11 +946,7 @@ const ClawdisSchema = z.object({
       cliPath: z.string().optional(),
       dbPath: z.string().optional(),
       service: z
-        .union([
-          z.literal("imessage"),
-          z.literal("sms"),
-          z.literal("auto"),
-        ])
+        .union([z.literal("imessage"), z.literal("sms"), z.literal("auto")])
         .optional(),
       region: z.string().optional(),
       allowFrom: z.array(z.union([z.string(), z.number()])).optional(),

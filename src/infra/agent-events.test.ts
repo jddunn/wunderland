@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
+  clearAgentRunContext,
   emitAgentEvent,
+  getAgentRunContext,
   onAgentEvent,
   registerAgentRunContext,
-  getAgentRunContext,
-  clearAgentRunContext,
   resetAgentRunContextForTest,
 } from "./agent-events.js";
 

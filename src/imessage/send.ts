@@ -5,8 +5,8 @@ import { loadWebMedia } from "../web/media.js";
 import { createIMessageRpcClient, type IMessageRpcClient } from "./client.js";
 import {
   formatIMessageChatTarget,
-  parseIMessageTarget,
   type IMessageService,
+  parseIMessageTarget,
 } from "./targets.js";
 
 export type IMessageSendOpts = {
@@ -38,9 +38,7 @@ function resolveDbPath(explicit?: string): string | undefined {
 function resolveService(explicit?: IMessageService): IMessageService {
   const cfg = loadConfig();
   return (
-    explicit ||
-    (cfg.imessage?.service as IMessageService | undefined) ||
-    "auto"
+    explicit || (cfg.imessage?.service as IMessageService | undefined) || "auto"
   );
 }
 
@@ -85,7 +83,8 @@ export async function sendMessageIMessage(
     filePath = resolved.path;
     if (!message.trim()) {
       const kind = mediaKindFromMime(resolved.contentType ?? undefined);
-      if (kind) message = kind === "image" ? "<media:image>" : `<media:${kind}>`;
+      if (kind)
+        message = kind === "image" ? "<media:image>" : `<media:${kind}>`;
     }
   }
 
@@ -110,7 +109,8 @@ export async function sendMessageIMessage(
     params.to = target.to;
   }
 
-  const client = opts.client ?? (await createIMessageRpcClient({ cliPath, dbPath }));
+  const client =
+    opts.client ?? (await createIMessageRpcClient({ cliPath, dbPath }));
   const shouldClose = !opts.client;
   try {
     const result = await client.request<{ ok?: boolean }>("send", params, {

@@ -9,7 +9,9 @@ const replyMock = vi.fn();
 const updateLastRouteMock = vi.fn();
 
 let config: Record<string, unknown> = {};
-let notificationHandler: ((msg: { method: string; params?: unknown }) => void) | undefined;
+let notificationHandler:
+  | ((msg: { method: string; params?: unknown }) => void)
+  | undefined;
 let closeResolve: (() => void) | undefined;
 
 vi.mock("../config/config.js", () => ({
@@ -30,24 +32,27 @@ vi.mock("../config/sessions.js", () => ({
 }));
 
 vi.mock("./client.js", () => ({
-  createIMessageRpcClient: vi.fn(async (opts: { onNotification?: typeof notificationHandler }) => {
-    notificationHandler = opts.onNotification;
-    return {
-      request: (...args: unknown[]) => requestMock(...args),
-      waitForClose: () =>
-        new Promise<void>((resolve) => {
-          closeResolve = resolve;
-        }),
-      stop: (...args: unknown[]) => stopMock(...args),
-    };
-  }),
+  createIMessageRpcClient: vi.fn(
+    async (opts: { onNotification?: typeof notificationHandler }) => {
+      notificationHandler = opts.onNotification;
+      return {
+        request: (...args: unknown[]) => requestMock(...args),
+        waitForClose: () =>
+          new Promise<void>((resolve) => {
+            closeResolve = resolve;
+          }),
+        stop: (...args: unknown[]) => stopMock(...args),
+      };
+    },
+  ),
 }));
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 async function waitForSubscribe() {
   for (let i = 0; i < 5; i += 1) {
-    if (requestMock.mock.calls.some((call) => call[0] === "watch.subscribe")) return;
+    if (requestMock.mock.calls.some((call) => call[0] === "watch.subscribe"))
+      return;
     await flush();
   }
 }
@@ -62,7 +67,8 @@ beforeEach(() => {
     },
   };
   requestMock.mockReset().mockImplementation((method: string) => {
-    if (method === "watch.subscribe") return Promise.resolve({ subscription: 1 });
+    if (method === "watch.subscribe")
+      return Promise.resolve({ subscription: 1 });
     return Promise.resolve({});
   });
   stopMock.mockReset().mockResolvedValue(undefined);

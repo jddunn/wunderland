@@ -176,15 +176,18 @@ export async function monitorIMessageProvider(
       return;
     }
 
-    const attachments = includeAttachments ? message.attachments ?? [] : [];
+    const attachments = includeAttachments ? (message.attachments ?? []) : [];
     const firstAttachment = attachments?.find(
       (entry) => entry?.original_path && !entry?.missing,
     );
     const mediaPath = firstAttachment?.original_path ?? undefined;
     const mediaType = firstAttachment?.mime_type ?? undefined;
     const kind = mediaKindFromMime(mediaType ?? undefined);
-    const placeholder =
-      kind ? `<media:${kind}>` : attachments?.length ? "<media:attachment>" : "";
+    const placeholder = kind
+      ? `<media:${kind}>`
+      : attachments?.length
+        ? "<media:attachment>"
+        : "";
     const bodyText = messageText || placeholder;
     if (!bodyText) return;
 
@@ -279,7 +282,9 @@ export async function monitorIMessageProvider(
   const abort = opts.abortSignal;
   const onAbort = () => {
     if (subscriptionId) {
-      void client.request("watch.unsubscribe", { subscription: subscriptionId });
+      void client.request("watch.unsubscribe", {
+        subscription: subscriptionId,
+      });
     }
     void client.stop();
   };

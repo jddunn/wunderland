@@ -74,12 +74,12 @@ import {
   sendMessageDiscord,
 } from "../discord/index.js";
 import { type DiscordProbe, probeDiscord } from "../discord/probe.js";
+import { isVerbose } from "../globals.js";
 import {
   monitorIMessageProvider,
   sendMessageIMessage,
 } from "../imessage/index.js";
-import { probeIMessage, type IMessageProbe } from "../imessage/probe.js";
-import { isVerbose } from "../globals.js";
+import { type IMessageProbe, probeIMessage } from "../imessage/probe.js";
 import {
   clearAgentRunContext,
   getAgentRunContext,
@@ -1394,14 +1394,13 @@ export async function startGatewayServer(
         ? channelRaw
         : channelRaw === "imsg"
           ? "imessage"
-        : channelRaw === undefined
-          ? "last"
-          : null;
+          : channelRaw === undefined
+            ? "last"
+            : null;
     if (channel === null) {
       return {
         ok: false,
-        error:
-          "channel must be last|whatsapp|telegram|discord|signal|imessage",
+        error: "channel must be last|whatsapp|telegram|discord|signal|imessage",
       };
     }
     const toRaw = payload.to;
@@ -4331,7 +4330,8 @@ export async function startGatewayServer(
 
               const imessageCfg = cfg.imessage;
               const imessageEnabled = imessageCfg?.enabled !== false;
-              const imessageConfigured = Boolean(imessageCfg) && imessageEnabled;
+              const imessageConfigured =
+                Boolean(imessageCfg) && imessageEnabled;
               let imessageProbe: IMessageProbe | undefined;
               let imessageLastProbeAt: number | null = null;
               if (probe && imessageConfigured) {
@@ -6788,9 +6788,7 @@ export async function startGatewayServer(
       await Promise.allSettled(
         [whatsappTask, telegramTask, signalTask, imessageTask].filter(
           Boolean,
-        ) as Array<
-          Promise<unknown>
-        >,
+        ) as Array<Promise<unknown>>,
       );
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve, reject) =>

@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 
 import type { RuntimeEnv } from "../runtime.js";
@@ -51,7 +51,9 @@ export class IMessageRpcClient {
 
   constructor(opts: IMessageRpcClientOptions = {}) {
     this.cliPath = opts.cliPath?.trim() || "imsg";
-    this.dbPath = opts.dbPath?.trim() ? resolveUserPath(opts.dbPath) : undefined;
+    this.dbPath = opts.dbPath?.trim()
+      ? resolveUserPath(opts.dbPath)
+      : undefined;
     this.runtime = opts.runtime;
     this.onNotification = opts.onNotification;
     this.closed = new Promise((resolve) => {
@@ -166,7 +168,7 @@ export class IMessageRpcClient {
     let parsed: IMessageRpcResponse<unknown>;
     try {
       parsed = JSON.parse(line) as IMessageRpcResponse<unknown>;
-    } catch (err) {
+    } catch (_err) {
       this.runtime?.error?.(`imsg rpc: failed to parse ${line}`);
       return;
     }

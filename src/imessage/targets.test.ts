@@ -27,9 +27,7 @@ describe("imessage targets", () => {
     expect(normalizeIMessageHandle("Name@Example.com")).toBe(
       "name@example.com",
     );
-    expect(normalizeIMessageHandle(" +1 (555) 222-3333 ")).toBe(
-      "+15552223333",
-    );
+    expect(normalizeIMessageHandle(" +1 (555) 222-3333 ")).toBe("+15552223333");
   });
 
   it("checks allowFrom against chat_id", () => {
