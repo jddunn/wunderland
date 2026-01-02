@@ -2,7 +2,7 @@
 name: trello
 description: Manage Trello boards, lists, and cards via the Trello REST API.
 homepage: https://developer.atlassian.com/cloud/trello/rest/
-metadata: {"clawdis":{"emoji":"📋","requires":{"env":["TRELLO_API_KEY","TRELLO_TOKEN"]}}}
+metadata: {"clawdis":{"emoji":"📋","requires":{"bins":["jq"],"env":["TRELLO_API_KEY","TRELLO_TOKEN"]}}}
 ---
 
 # Trello Skill
@@ -68,7 +68,7 @@ curl -s -X PUT "https://api.trello.com/1/cards/{cardId}?key=$TRELLO_API_KEY&toke
 
 - Board/List/Card IDs can be found in the Trello URL or via the list commands
 - The API key and token provide full access to your Trello account - keep them secret!
-- Rate limits: 100 requests per 10 seconds per token
+- Rate limits: 300 requests per 10 seconds per API key; 100 requests per 10 seconds per token; `/1/members` endpoints are limited to 100 requests per 900 seconds
 
 ## Examples
 
