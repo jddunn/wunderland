@@ -116,6 +116,7 @@ Example:
 ## Docs
 
 - Start here:
+  - [FAQ](./faq.md) ← *common questions answered*
   - [Configuration](./configuration.md)
   - [Nix mode](./nix.md)
   - [Clawd personal assistant setup](./clawd.md)
