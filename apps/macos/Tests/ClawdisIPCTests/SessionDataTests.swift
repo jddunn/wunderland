@@ -6,7 +6,7 @@ import Testing
 struct SessionDataTests {
     @Test func sessionKindFromKeyDetectsCommonKinds() {
         #expect(SessionKind.from(key: "global") == .global)
-        #expect(SessionKind.from(key: "group:engineering") == .group)
+        #expect(SessionKind.from(key: "discord:group:engineering") == .group)
         #expect(SessionKind.from(key: "unknown") == .unknown)
         #expect(SessionKind.from(key: "user@example.com") == .direct)
     }
@@ -27,6 +27,11 @@ struct SessionDataTests {
             id: "x",
             key: "user@example.com",
             kind: .direct,
+            displayName: nil,
+            surface: nil,
+            subject: nil,
+            room: nil,
+            space: nil,
             updatedAt: Date(),
             sessionId: nil,
             thinkingLevel: "high",
@@ -41,4 +46,3 @@ struct SessionDataTests {
         #expect(row.flagLabels.contains("aborted"))
     }
 }
-

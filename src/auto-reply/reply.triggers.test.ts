@@ -220,6 +220,7 @@ describe("trigger handling", () => {
           From: "123@g.us",
           To: "+2000",
           ChatType: "group",
+          Surface: "whatsapp",
           SenderE164: "+2000",
         },
         {},
@@ -230,7 +231,7 @@ describe("trigger handling", () => {
       const store = JSON.parse(
         await fs.readFile(cfg.session.store, "utf-8"),
       ) as Record<string, { groupActivation?: string }>;
-      expect(store["group:123@g.us"]?.groupActivation).toBe("always");
+      expect(store["whatsapp:group:123@g.us"]?.groupActivation).toBe("always");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
     });
   });
@@ -244,6 +245,7 @@ describe("trigger handling", () => {
           From: "123@g.us",
           To: "+2000",
           ChatType: "group",
+          Surface: "whatsapp",
           SenderE164: "+999",
         },
         {},
@@ -270,6 +272,7 @@ describe("trigger handling", () => {
           From: "123@g.us",
           To: "+2000",
           ChatType: "group",
+          Surface: "whatsapp",
           SenderE164: "+2000",
           GroupSubject: "Test Group",
           GroupMembers: "Alice (+1), Bob (+2)",
