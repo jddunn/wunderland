@@ -276,11 +276,11 @@ export async function runInteractiveOnboarding(
           ...nextConfig,
           agent: {
             ...nextConfig.agent,
-            model: "google-antigravity/claude-opus-4-5",
+            model: "google-antigravity/claude-opus-4-5-thinking",
           },
         };
         note(
-          "Default model set to google-antigravity/claude-opus-4-5",
+          "Default model set to google-antigravity/claude-opus-4-5-thinking",
           "Model configured",
         );
       }
