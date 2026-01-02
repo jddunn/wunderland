@@ -63,6 +63,7 @@
 - Logging/Signal: treat signal-cli "Failed …" lines as errors in gateway logs.
 - Discord: include recent guild context when replying to mentions and add `discord.historyLimit` to tune how many messages are captured.
 - Discord: include author tag + id in group context `[from:]` lines for ping-ready replies (thanks @thewilloftheshadow).
+- Discord: include replied-to message context when a Discord message references another message (thanks @thewilloftheshadow).
 - Gateway: fix TypeScript build by aligning hook mapping `channel` types and removing a dead Group DM branch in Discord monitor.
 - Skills: switch imsg installer to brew tap formula.
 - Skills: gate macOS-only skills by OS and surface block reasons in the Skills UI.
