@@ -16,7 +16,7 @@
 </p>
 
 **Clawdis** is a *personal AI assistant* you run on your own devices.
-It answers you on the surfaces you already use (WhatsApp, Telegram, Discord, WebChat), can speak and listen on macOS/iOS, and can render a live Canvas you control. The Gateway is just the control plane — the product is the assistant.
+It answers you on the surfaces you already use (WhatsApp, Telegram, Discord, iMessage, WebChat), can speak and listen on macOS/iOS, and can render a live Canvas you control. The Gateway is just the control plane — the product is the assistant.
 
 If you want a private, single-user assistant that feels local, fast, and always-on, this is it.
 
@@ -45,7 +45,7 @@ Your surfaces
 ## What Clawdis does
 
 - **Personal assistant** — one user, one identity, one memory surface.
-- **Multi-surface inbox** — WhatsApp, Telegram, Discord, WebChat, macOS, iOS. Signal support via `signal-cli` (see `docs/signal.md`).
+- **Multi-surface inbox** — WhatsApp, Telegram, Discord, iMessage, WebChat, macOS, iOS. Signal support via `signal-cli` (see `docs/signal.md`). iMessage uses `imsg` (see `docs/imessage.md`).
 - **Voice wake + push-to-talk** — local speech recognition on macOS/iOS.
 - **Canvas** — a live visual workspace you can drive from the agent.
 - **Automation-ready** — browser control, media handling, and tool streaming.

@@ -88,7 +88,7 @@ Allowlist of E.164 phone numbers that may trigger auto-replies.
 
 ### `routing.groupChat`
 
-Group messages default to **require mention** (either metadata mention or regex patterns).
+Group messages default to **require mention** (either metadata mention or regex patterns). Applies to WhatsApp, Telegram, Discord, and iMessage group chats.
 
 ```json5
 {

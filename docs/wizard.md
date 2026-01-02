@@ -65,6 +65,7 @@ It does **not** install or change anything on the remote host.
    - Telegram: bot token.
    - Discord: bot token.
    - Signal: optional `signal-cli` install + account config.
+   - iMessage: local `imsg` CLI path + DB access.
 
 6) **Daemon install**
    - macOS: LaunchAgent
@@ -131,7 +132,7 @@ Typical fields in `~/.clawdis/clawdis.json`:
 - `agent.workspace`
 - `agent.model` / `models.providers` (if Minimax chosen)
 - `gateway.*` (mode, bind, auth, tailscale)
-- `telegram.botToken`, `discord.token`, `signal.*`
+- `telegram.botToken`, `discord.token`, `signal.*`, `imessage.*`
 - `skills.install.nodeManager`
 - `wizard.lastRunAt`
 - `wizard.lastRunVersion`
@@ -146,5 +147,5 @@ Sessions are stored under `~/.clawdis/sessions/`.
 
 - macOS app onboarding: `docs/onboarding.md`
 - Config reference: `docs/configuration.md`
-- Providers: `docs/whatsapp.md`, `docs/telegram.md`, `docs/discord.md`, `docs/signal.md`
+- Providers: `docs/whatsapp.md`, `docs/telegram.md`, `docs/discord.md`, `docs/signal.md`, `docs/imessage.md`
 - Skills: `docs/skills.md`, `docs/skills-config.md`
