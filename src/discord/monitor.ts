@@ -833,6 +833,16 @@ export function resolveDiscordGuildEntry(params: {
       channels: entry.channels,
     };
   }
+  const wildcard = guildEntries["*"];
+  if (wildcard) {
+    return {
+      id: guildId,
+      slug: wildcard.slug ?? guildSlug,
+      requireMention: wildcard.requireMention,
+      users: wildcard.users,
+      channels: wildcard.channels,
+    };
+  }
   return null;
 }
 

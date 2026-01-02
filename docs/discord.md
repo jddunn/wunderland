@@ -63,6 +63,7 @@ Note: Guild context `[from:]` lines include `author.tag` + `id` to make ping-rea
       groupChannels: ["clawd-dm"]
     },
     guilds: {
+      "*": { requireMention: true },
       "123456789012345678": {
         slug: "friends-of-clawd",
         requireMention: false,
@@ -82,6 +83,7 @@ Note: Guild context `[from:]` lines include `author.tag` + `id` to make ping-rea
 - `dm.groupEnabled`: enable group DMs (default `false`).
 - `dm.groupChannels`: optional allowlist for group DM channel ids or slugs.
 - `guilds`: per-guild rules keyed by guild id (preferred) or slug.
+- `guilds."*"`: default per-guild settings applied when no explicit entry exists.
 - `guilds.<id>.slug`: optional friendly slug used for display names.
 - `guilds.<id>.users`: optional per-guild user allowlist (ids or names).
 - `guilds.<id>.channels`: channel rules (keys are channel slugs or ids).

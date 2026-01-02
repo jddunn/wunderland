@@ -75,6 +75,18 @@ describe("discord guild/channel resolution", () => {
     expect(resolved?.slug).toBe("friends-of-clawd");
   });
 
+  it("falls back to wildcard guild entry", () => {
+    const guildEntries = makeEntries({
+      "*": { requireMention: false },
+    });
+    const resolved = resolveDiscordGuildEntry({
+      guild: fakeGuild("123", "Friends of Clawd"),
+      guildEntries,
+    });
+    expect(resolved?.id).toBe("123");
+    expect(resolved?.requireMention).toBe(false);
+  });
+
   it("resolves channel config by slug", () => {
     const guildInfo: DiscordGuildEntryResolved = {
       channels: {

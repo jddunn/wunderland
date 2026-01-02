@@ -208,6 +208,7 @@ Configure the Discord bot by setting the bot token and optional gating:
       groupChannels: ["clawd-dm"]          // optional group DM allowlist
     },
     guilds: {
+      "*": { requireMention: true },       // default per-guild mention gating
       "123456789012345678": {               // guild id (preferred) or slug
         slug: "friends-of-clawd",
         requireMention: false,              // per-guild default
@@ -225,6 +226,7 @@ Configure the Discord bot by setting the bot token and optional gating:
 
 Clawdis starts Discord only when a `discord` config section exists. The token is resolved from `DISCORD_BOT_TOKEN` or `discord.token` (unless `discord.enabled` is `false`). Use `user:<id>` (DM) or `channel:<id>` (guild channel) when specifying delivery targets for cron/CLI commands.
 Guild slugs are lowercase with spaces replaced by `-`; channel keys use the slugged channel name (no leading `#`). Prefer guild ids as keys to avoid rename ambiguity.
+Use `discord.guilds."*"` for default per-guild settings.
 
 ### `imessage` (imsg CLI)
 
