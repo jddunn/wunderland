@@ -12,14 +12,13 @@ Search for nearby places using a local Google Places API proxy. Two-step flow: r
 ## Setup
 
 ```bash
-cd {baseDir}/server
+cd {baseDir}
 echo "GOOGLE_PLACES_API_KEY=your-key" > .env
 uv venv && uv pip install -e ".[dev]"
 uv run --env-file .env uvicorn local_places.main:app --host 127.0.0.1 --port 8000
 ```
 
 Requires `GOOGLE_PLACES_API_KEY` in `.env` or environment.
-Server code is in `{baseDir}/server/` (submodule from Hyaxia/local_places).
 
 ## Quick Start
 
