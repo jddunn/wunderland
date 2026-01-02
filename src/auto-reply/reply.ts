@@ -853,6 +853,11 @@ export async function getReplyFromConfig(
     : undefined;
   const from = (ctx.From ?? "").replace(/^whatsapp:/, "");
   const to = (ctx.To ?? "").replace(/^whatsapp:/, "");
+  const isEmptyConfig = Object.keys(cfg).length === 0;
+  if (isWhatsAppSurface && isEmptyConfig && from && to && from !== to) {
+    cleanupTyping();
+    return undefined;
+  }
   const defaultAllowFrom =
     isWhatsAppSurface &&
     (!configuredAllowFrom || configuredAllowFrom.length === 0) &&
