@@ -301,7 +301,9 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
             .join("\n");
           combinedBody = `[Chat messages since your last reply - for context]\n${historyText}\n\n[Current message - respond to this]\n${combinedBody}`;
         }
-        combinedBody = `${combinedBody}\n[from: ${message.member?.displayName ?? message.author.tag}]`;
+        const name = message.author.tag;
+        const id = message.author.id;
+        combinedBody = `${combinedBody}\n[from: ${name} id:${id}]`;
         shouldClearHistory = true;
       }
 
