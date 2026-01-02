@@ -5,7 +5,9 @@ homepage: https://github.com/Hyaxia/local_places
 metadata: {"clawdis":{"emoji":"📍","requires":{"bins":["uv"],"env":["GOOGLE_PLACES_API_KEY"]},"primaryEnv":"GOOGLE_PLACES_API_KEY"}}
 ---
 
-# Local Places
+# 📍 Local Places
+
+*Find places, Go fast*
 
 Search for nearby places using a local Google Places API proxy. Two-step flow: resolve location first, then search.
 
