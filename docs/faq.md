@@ -213,6 +213,29 @@ One WhatsApp account = one phone number = one gateway connection. For a second n
 
 ---
 
+## Skills & Tools
+
+### How do I add new skills?
+
+Skills are auto-discovered from your workspace's `skills/` folder. After adding new skills:
+
+1. Send `/reset` (or `/new`) in chat to start a new session
+2. The new skills will be available
+
+No gateway restart needed!
+
+### How do I run commands on other machines?
+
+Use **Tailscale** to create a secure network between your machines:
+
+1. Install Tailscale on all machines
+2. Each gets a stable IP (like `100.x.x.x`)
+3. SSH just works: `ssh user@100.x.x.x "command"`
+
+For deeper integration, look into **Clawdis nodes** — pair remote machines with your gateway for camera/screen/automation access.
+
+---
+
 ## Troubleshooting
 
 ### Build errors (TypeScript)
@@ -245,6 +268,48 @@ Common issues:
 - Port already in use (change with `--port`)
 - Missing API keys in config
 - Invalid config syntax (remember it's JSON5, but still check for errors)
+
+**Pro tip:** Use Codex to debug:
+```bash
+cd ~/path/to/clawdis
+codex --full-auto "debug why clawdis gateway won't start"
+```
+
+### Processes keep restarting after I kill them (Linux)
+
+Something is supervising them. Check:
+
+```bash
+# systemd?
+systemctl list-units | grep -i clawdis
+sudo systemctl stop clawdis
+
+# pm2?
+pm2 list
+pm2 delete all
+```
+
+Stop the supervisor first, then the processes.
+
+### Clean uninstall (start fresh)
+
+```bash
+# Stop processes
+pkill -f "clawdis"
+
+# If using systemd
+sudo systemctl stop clawdis
+sudo systemctl disable clawdis
+
+# Remove data
+rm -rf ~/.clawdis
+
+# Remove repo and re-clone
+rm -rf ~/clawdis
+git clone https://github.com/steipete/clawdis.git
+cd clawdis && pnpm install && pnpm build
+pnpm clawdis onboard
+```
 
 ---
 
