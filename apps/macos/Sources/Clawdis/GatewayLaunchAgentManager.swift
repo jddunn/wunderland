@@ -17,6 +17,26 @@ enum GatewayLaunchAgentManager {
         "\(bundlePath)/Contents/Resources/Relay"
     }
 
+    private static func gatewayProgramArguments(bundlePath: String, port: Int, bind: String) -> [String] {
+#if DEBUG
+        let projectRoot = CommandResolver.projectRoot()
+        if let localBin = CommandResolver.projectClawdisExecutable(projectRoot: projectRoot) {
+            return [localBin, "gateway", "--port", "\(port)", "--bind", bind]
+        }
+        if let entry = CommandResolver.gatewayEntrypoint(in: projectRoot),
+           case let .success(runtime) = CommandResolver.runtimeResolution()
+        {
+            return CommandResolver.makeRuntimeCommand(
+                runtime: runtime,
+                entrypoint: entry,
+                subcommand: "gateway",
+                extraArgs: ["--port", "\(port)", "--bind", bind])
+        }
+#endif
+        let gatewayBin = self.gatewayExecutablePath(bundlePath: bundlePath)
+        return [gatewayBin, "gateway-daemon", "--port", "\(port)", "--bind", bind]
+    }
+
     static func status() async -> Bool {
         guard FileManager.default.fileExists(atPath: self.plistURL.path) else { return false }
         let result = await self.runLaunchctl(["print", "gui/\(getuid())/\(gatewayLaunchdLabel)"])
@@ -58,11 +78,11 @@ enum GatewayLaunchAgentManager {
     }
 
     private static func writePlist(bundlePath: String, port: Int) {
-        let gatewayBin = self.gatewayExecutablePath(bundlePath: bundlePath)
         let relayDir = self.relayDir(bundlePath: bundlePath)
         let preferredPath = ([relayDir] + CommandResolver.preferredPaths())
             .joined(separator: ":")
         let bind = self.preferredGatewayBind() ?? "loopback"
+        let programArguments = self.gatewayProgramArguments(bundlePath: bundlePath, port: port, bind: bind)
         let token = self.preferredGatewayToken()
         let password = self.preferredGatewayPassword()
         var envEntries = """
@@ -85,6 +105,9 @@ enum GatewayLaunchAgentManager {
                 <string>\(escapedPassword)</string>
             """
         }
+        let argsXml = programArguments
+            .map { "<string>\(self.escapePlistValue($0))</string>" }
+            .joined(separator: "\n            ")
         let plist = """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -94,12 +117,7 @@ enum GatewayLaunchAgentManager {
           <string>\(gatewayLaunchdLabel)</string>
           <key>ProgramArguments</key>
           <array>
-            <string>\(gatewayBin)</string>
-            <string>gateway-daemon</string>
-            <string>--port</string>
-            <string>\(port)</string>
-            <string>--bind</string>
-            <string>\(bind)</string>
+            \(argsXml)
           </array>
           <key>WorkingDirectory</key>
           <string>\(FileManager.default.homeDirectoryForCurrentUser.path)</string>
