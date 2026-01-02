@@ -157,7 +157,7 @@ Minimal `~/.clawdis/clawdis.json`:
 
 ```json5
 {
-  routing: {
+  whatsapp: {
     allowFrom: ["+1234567890"]
   }
 }
@@ -166,7 +166,7 @@ Minimal `~/.clawdis/clawdis.json`:
 ### WhatsApp
 
 - Link the device: `pnpm clawdis login` (stores creds in `~/.clawdis/credentials`).
-- Allowlist who can talk to the assistant via `routing.allowFrom`.
+- Allowlist who can talk to the assistant via `whatsapp.allowFrom`.
 
 ### Telegram
 

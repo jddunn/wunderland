@@ -163,6 +163,7 @@ vi.mock("../config/config.js", () => {
         valid: true,
         config: {},
         issues: [],
+        legacyIssues: [],
       };
     }
     try {
@@ -176,6 +177,7 @@ vi.mock("../config/config.js", () => {
         valid: true,
         config: parsed,
         issues: [],
+        legacyIssues: [],
       };
     } catch (err) {
       return {
@@ -186,6 +188,7 @@ vi.mock("../config/config.js", () => {
         valid: false,
         config: {},
         issues: [{ path: "", message: `read failed: ${String(err)}` }],
+        legacyIssues: [],
       };
     }
   };
@@ -206,7 +209,7 @@ vi.mock("../config/config.js", () => {
         model: "anthropic/claude-opus-4-5",
         workspace: path.join(os.tmpdir(), "clawd-gateway-test"),
       },
-      routing: {
+      whatsapp: {
         allowFrom: testAllowFrom,
       },
       session: { mainKey: "main", store: testSessionStorePath },

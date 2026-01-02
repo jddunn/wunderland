@@ -9,7 +9,7 @@ read_when:
 CLAWDIS reads an optional **JSON5** config from `~/.clawdis/clawdis.json` (comments + trailing commas allowed).
 
 If the file is missing, CLAWDIS uses safe-ish defaults (embedded Pi agent + per-sender sessions + workspace `~/clawd`). You usually only need a config to:
-- restrict who can trigger the bot (`routing.allowFrom`)
+- restrict who can trigger the bot (`whatsapp.allowFrom`, `telegram.allowFrom`, etc.)
 - tune group mention behavior (`routing.groupChat`)
 - customize message prefixes (`messages`)
 - set the agent’s workspace (`agent.workspace`)
@@ -21,7 +21,7 @@ If the file is missing, CLAWDIS uses safe-ish defaults (embedded Pi agent + per-
 ```json5
 {
   agent: { workspace: "~/clawd" },
-  routing: { allowFrom: ["+15555550123"] }
+  whatsapp: { allowFrom: ["+15555550123"] }
 }
 ```
 
@@ -76,13 +76,13 @@ Metadata written by CLI wizards (`onboard`, `configure`, `doctor`, `update`).
 }
 ```
 
-### `routing.allowFrom`
+### `whatsapp.allowFrom`
 
-Allowlist of E.164 phone numbers that may trigger auto-replies.
+Allowlist of E.164 phone numbers that may trigger WhatsApp auto-replies.
 
 ```json5
 {
-  routing: { allowFrom: ["+15555550123", "+447700900123"] }
+  whatsapp: { allowFrom: ["+15555550123", "+447700900123"] }
 }
 ```
 

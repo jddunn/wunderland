@@ -6641,7 +6641,7 @@ export async function startGatewayServer(
                 if (explicit) return resolvedTo;
 
                 const cfg = cfgForAgent ?? loadConfig();
-                const rawAllow = cfg.routing?.allowFrom ?? [];
+                const rawAllow = cfg.whatsapp?.allowFrom ?? [];
                 if (rawAllow.includes("*")) return resolvedTo;
                 const allowFrom = rawAllow
                   .map((val) => normalizeE164(val))

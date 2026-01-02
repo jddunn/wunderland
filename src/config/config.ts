@@ -58,6 +58,11 @@ export type WebConfig = {
   reconnect?: WebReconnectConfig;
 };
 
+export type WhatsAppConfig = {
+  /** Optional allowlist for WhatsApp direct chats (E.164). */
+  allowFrom?: string[];
+};
+
 export type BrowserConfig = {
   enabled?: boolean;
   /** Base URL of the clawd browser control server. Default: http://127.0.0.1:18791 */
@@ -260,7 +265,6 @@ export type GroupChatConfig = {
 };
 
 export type RoutingConfig = {
-  allowFrom?: string[]; // E.164 numbers allowed to trigger auto-reply (without whatsapp:)
   transcribeAudio?: {
     // Optional CLI to turn inbound audio into text; templated args, must output transcript to stdout.
     command: string[];
@@ -525,6 +529,7 @@ export type ClawdisConfig = {
   messages?: MessagesConfig;
   session?: SessionConfig;
   web?: WebConfig;
+  whatsapp?: WhatsAppConfig;
   telegram?: TelegramConfig;
   discord?: DiscordConfig;
   signal?: SignalConfig;
@@ -693,7 +698,6 @@ const HeartbeatSchema = z
 
 const RoutingSchema = z
   .object({
-    allowFrom: z.array(z.string()).optional(),
     groupChat: GroupChatSchema,
     transcribeAudio: TranscribeAudioSchema,
     queue: z
@@ -907,6 +911,11 @@ const ClawdisSchema = z.object({
           maxAttempts: z.number().int().min(0).optional(),
         })
         .optional(),
+    })
+    .optional(),
+  whatsapp: z
+    .object({
+      allowFrom: z.array(z.string()).optional(),
     })
     .optional(),
   telegram: z
@@ -1131,6 +1140,11 @@ export type ConfigValidationIssue = {
   message: string;
 };
 
+export type LegacyConfigIssue = {
+  path: string;
+  message: string;
+};
+
 export type ConfigFileSnapshot = {
   path: string;
   exists: boolean;
@@ -1139,7 +1153,41 @@ export type ConfigFileSnapshot = {
   valid: boolean;
   config: ClawdisConfig;
   issues: ConfigValidationIssue[];
+  legacyIssues: LegacyConfigIssue[];
 };
+
+type LegacyConfigRule = {
+  path: string[];
+  message: string;
+};
+
+const LEGACY_CONFIG_RULES: LegacyConfigRule[] = [
+  {
+    path: ["routing", "allowFrom"],
+    message:
+      "routing.allowFrom was removed; use whatsapp.allowFrom instead (run `clawdis doctor` to migrate).",
+  },
+];
+
+function findLegacyConfigIssues(raw: unknown): LegacyConfigIssue[] {
+  if (!raw || typeof raw !== "object") return [];
+  const root = raw as Record<string, unknown>;
+  const issues: LegacyConfigIssue[] = [];
+  for (const rule of LEGACY_CONFIG_RULES) {
+    let cursor: unknown = root;
+    for (const key of rule.path) {
+      if (!cursor || typeof cursor !== "object") {
+        cursor = undefined;
+        break;
+      }
+      cursor = (cursor as Record<string, unknown>)[key];
+    }
+    if (cursor !== undefined) {
+      issues.push({ path: rule.path.join("."), message: rule.message });
+    }
+  }
+  return issues;
+}
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1199,6 +1247,16 @@ export function validateConfigObject(
 ):
   | { ok: true; config: ClawdisConfig }
   | { ok: false; issues: ConfigValidationIssue[] } {
+  const legacyIssues = findLegacyConfigIssues(raw);
+  if (legacyIssues.length > 0) {
+    return {
+      ok: false,
+      issues: legacyIssues.map((iss) => ({
+        path: iss.path,
+        message: iss.message,
+      })),
+    };
+  }
   const validated = ClawdisSchema.safeParse(raw);
   if (!validated.success) {
     return {
@@ -1271,6 +1329,7 @@ export async function readConfigFileSnapshot(): Promise<ConfigFileSnapshot> {
   const exists = fs.existsSync(configPath);
   if (!exists) {
     const config = applyTalkApiKey({});
+    const legacyIssues: LegacyConfigIssue[] = [];
     return {
       path: configPath,
       exists: false,
@@ -1279,6 +1338,7 @@ export async function readConfigFileSnapshot(): Promise<ConfigFileSnapshot> {
       valid: true,
       config,
       issues: [],
+      legacyIssues,
     };
   }
 
@@ -1296,8 +1356,11 @@ export async function readConfigFileSnapshot(): Promise<ConfigFileSnapshot> {
         issues: [
           { path: "", message: `JSON5 parse failed: ${parsedRes.error}` },
         ],
+        legacyIssues: [],
       };
     }
+
+    const legacyIssues = findLegacyConfigIssues(parsedRes.parsed);
 
     const validated = validateConfigObject(parsedRes.parsed);
     if (!validated.ok) {
@@ -1309,6 +1372,7 @@ export async function readConfigFileSnapshot(): Promise<ConfigFileSnapshot> {
         valid: false,
         config: {},
         issues: validated.issues,
+        legacyIssues,
       };
     }
 
@@ -1320,6 +1384,7 @@ export async function readConfigFileSnapshot(): Promise<ConfigFileSnapshot> {
       valid: true,
       config: applyTalkApiKey(validated.config),
       issues: [],
+      legacyIssues,
     };
   } catch (err) {
     return {
@@ -1330,6 +1395,7 @@ export async function readConfigFileSnapshot(): Promise<ConfigFileSnapshot> {
       valid: false,
       config: {},
       issues: [{ path: "", message: `read failed: ${String(err)}` }],
+      legacyIssues: [],
     };
   }
 }
