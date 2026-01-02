@@ -192,6 +192,17 @@ export type DiscordGuildEntry = {
   channels?: Record<string, DiscordGuildChannelConfig>;
 };
 
+export type DiscordSlashCommandConfig = {
+  /** Enable handling for the configured slash command (default: false). */
+  enabled?: boolean;
+  /** Slash command name (default: "clawd"). */
+  name?: string;
+  /** Session key prefix for slash commands (default: "discord:slash"). */
+  sessionPrefix?: string;
+  /** Reply ephemerally (default: true). */
+  ephemeral?: boolean;
+};
+
 export type DiscordConfig = {
   /** If false, do not start the Discord provider. Default: true. */
   enabled?: boolean;
@@ -200,6 +211,7 @@ export type DiscordConfig = {
   historyLimit?: number;
   /** Allow agent-triggered Discord reactions (default: true). */
   enableReactions?: boolean;
+  slashCommand?: DiscordSlashCommandConfig;
   dm?: DiscordDmConfig;
   /** New per-guild config keyed by guild id or slug. */
   guilds?: Record<string, DiscordGuildEntry>;
@@ -936,6 +948,14 @@ const ClawdisSchema = z.object({
     .object({
       enabled: z.boolean().optional(),
       token: z.string().optional(),
+      slashCommand: z
+        .object({
+          enabled: z.boolean().optional(),
+          name: z.string().optional(),
+          sessionPrefix: z.string().optional(),
+          ephemeral: z.boolean().optional(),
+        })
+        .optional(),
       mediaMaxMb: z.number().positive().optional(),
       historyLimit: z.number().int().min(0).optional(),
       enableReactions: z.boolean().optional(),

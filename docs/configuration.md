@@ -175,6 +175,12 @@ Configure the Discord bot by setting the bot token and optional gating:
     token: "your-bot-token",
     mediaMaxMb: 8,                          // clamp inbound media size
     enableReactions: true,                  // allow agent-triggered reactions
+    slashCommand: {                         // user-installed app slash commands
+      enabled: true,
+      name: "clawd",
+      sessionPrefix: "discord:slash",
+      ephemeral: true
+    },
     dm: {
       enabled: true,                        // disable all DMs when false
       allowFrom: ["1234567890", "steipete"], // optional DM allowlist (ids or names)
