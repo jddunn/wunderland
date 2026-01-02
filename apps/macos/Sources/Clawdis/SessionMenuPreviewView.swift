@@ -1,5 +1,6 @@
 import ClawdisChatUI
 import ClawdisKit
+import OSLog
 import SwiftUI
 
 private struct SessionPreviewItem: Identifiable, Sendable {
@@ -45,9 +46,16 @@ private actor SessionPreviewCache {
     func store(items: [SessionPreviewItem], for sessionKey: String) {
         self.entries[sessionKey] = CacheEntry(items: items, updatedAt: Date())
     }
+
+    func lastItems(for sessionKey: String) -> [SessionPreviewItem]? {
+        self.entries[sessionKey]?.items
+    }
 }
 
 struct SessionMenuPreviewView: View {
+    private static let logger = Logger(subsystem: "com.steipete.clawdis", category: "SessionPreview")
+    private static let previewTimeoutSeconds: Double = 4
+
     let sessionKey: String
     let width: CGFloat
     let maxItems: Int
@@ -57,6 +65,10 @@ struct SessionMenuPreviewView: View {
     @Environment(\.menuItemHighlighted) private var isHighlighted
     @State private var items: [SessionPreviewItem] = []
     @State private var status: LoadStatus = .loading
+
+    private struct PreviewTimeoutError: LocalizedError {
+        var errorDescription: String? { "preview timeout" }
+    }
 
     private enum LoadStatus: Equatable {
         case loading
@@ -73,9 +85,13 @@ struct SessionMenuPreviewView: View {
         self.isHighlighted ? Color(nsColor: .selectedMenuItemTextColor).opacity(0.85) : .secondary
     }
 
+    private var previewLimit: Int {
+        min(max(self.maxItems * 3, 20), 120)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(self.title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(self.secondaryColor)
@@ -104,8 +120,8 @@ struct SessionMenuPreviewView: View {
             }
         }
         .padding(.vertical, 6)
-        .padding(.leading, 18)
-        .padding(.trailing, 12)
+        .padding(.leading, 16)
+        .padding(.trailing, 11)
         .frame(width: max(1, self.width), alignment: .leading)
         .task(id: self.sessionKey) {
             await self.loadPreview()
@@ -114,7 +130,7 @@ struct SessionMenuPreviewView: View {
 
     @ViewBuilder
     private func previewRow(_ item: SessionPreviewItem) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 4) {
             Text(item.role.label)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(self.roleColor(item.role))
@@ -155,17 +171,34 @@ struct SessionMenuPreviewView: View {
         }
 
         do {
-            let payload = try await GatewayConnection.shared.chatHistory(sessionKey: self.sessionKey)
+            let timeoutMs = Int(Self.previewTimeoutSeconds * 1000)
+            let payload = try await AsyncTimeout.withTimeout(
+                seconds: Self.previewTimeoutSeconds,
+                onTimeout: { PreviewTimeoutError() }) {
+                    try await GatewayConnection.shared.chatHistory(
+                        sessionKey: self.sessionKey,
+                        limit: self.previewLimit,
+                        timeoutMs: timeoutMs)
+                }
             let built = Self.previewItems(from: payload, maxItems: self.maxItems)
             await SessionPreviewCache.shared.store(items: built, for: self.sessionKey)
             await MainActor.run {
                 self.items = built
                 self.status = built.isEmpty ? .empty : .ready
             }
+        } catch is CancellationError {
+            return
         } catch {
+            let fallback = await SessionPreviewCache.shared.lastItems(for: self.sessionKey)
             await MainActor.run {
-                self.status = .error("Preview unavailable")
+                if let fallback {
+                    self.items = fallback
+                    self.status = fallback.isEmpty ? .empty : .ready
+                } else {
+                    self.status = .error("Preview unavailable")
+                }
             }
+            Self.logger.warning("Session preview failed session=\(self.sessionKey, privacy: .public) error=\(String(describing: error), privacy: .public)")
         }
     }
 
