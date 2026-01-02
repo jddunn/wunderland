@@ -31,6 +31,26 @@ describe("sessions", () => {
     );
   });
 
+  it("prefixes group keys with surface when available", () => {
+    expect(
+      deriveSessionKey("per-sender", {
+        From: "12345-678@g.us",
+        ChatType: "group",
+        Surface: "whatsapp",
+      }),
+    ).toBe("whatsapp:group:12345-678@g.us");
+  });
+
+  it("keeps explicit surface when provided in group key", () => {
+    expect(
+      resolveSessionKey(
+        "per-sender",
+        { From: "group:discord:12345", ChatType: "group" },
+        "main",
+      ),
+    ).toBe("discord:group:12345");
+  });
+
   it("collapses direct chats to main by default", () => {
     expect(resolveSessionKey("per-sender", { From: "+1555" })).toBe("main");
   });
