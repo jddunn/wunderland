@@ -660,7 +660,6 @@ type DedupeEntry = {
   error?: ErrorShape;
 };
 
-const getGatewayToken = () => process.env.CLAWDIS_GATEWAY_TOKEN;
 
 function formatForLog(value: unknown): string {
   try {
@@ -1371,7 +1370,8 @@ export async function startGatewayServer(
     ...tailscaleOverrides,
   };
   const tailscaleMode = tailscaleConfig.mode ?? "off";
-  const token = getGatewayToken();
+  const token =
+    authConfig.token ?? process.env.CLAWDIS_GATEWAY_TOKEN ?? undefined;
   const password =
     authConfig.password ?? process.env.CLAWDIS_GATEWAY_PASSWORD ?? undefined;
   const authMode: ResolvedGatewayAuth["mode"] =

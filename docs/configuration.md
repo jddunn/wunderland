@@ -555,7 +555,7 @@ Defaults:
     mode: "local", // or "remote"
     bind: "loopback",
     // controlUi: { enabled: true }
-    // auth: { mode: "token" | "password" }
+    // auth: { mode: "token", token: "your-token" } // token is for multi-machine CLI access
     // tailscale: { mode: "off" | "serve" | "funnel" }
   }
 }
@@ -566,6 +566,7 @@ Notes:
 
 Auth and Tailscale:
 - `gateway.auth.mode` sets the handshake requirements (`token` or `password`).
+- `gateway.auth.token` stores the shared token for token auth (used by the CLI on the same machine).
 - When `gateway.auth.mode` is set, only that method is accepted (plus optional Tailscale headers).
 - `gateway.auth.password` can be set here, or via `CLAWDIS_GATEWAY_PASSWORD` (recommended).
 - `gateway.auth.allowTailscale` controls whether Tailscale identity headers can satisfy auth.

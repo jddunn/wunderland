@@ -45,6 +45,7 @@
 
 ### Fixes
 - Chat UI: keep the chat scrolled to the latest message after switching sessions.
+- CLI onboarding: persist gateway token in config so local CLI auth works; recommend auth Off unless you need multi-machine access.
 - Chat UI: add extra top padding before the first message bubble in Web Chat (macOS/iOS/Android).
 - Control UI: refine Web Chat session selector styling (chevron spacing + background).
 - WebChat: stream live updates for sessions even when runs start outside the chat UI.

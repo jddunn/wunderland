@@ -280,8 +280,16 @@ export async function runInteractiveOnboarding(
     await select({
       message: "Gateway auth",
       options: [
-        { value: "off", label: "Off (loopback only)" },
-        { value: "token", label: "Token" },
+        {
+          value: "off",
+          label: "Off (loopback only)",
+          hint: "Recommended for single-machine setups",
+        },
+        {
+          value: "token",
+          label: "Token",
+          hint: "Use for multi-machine access or non-loopback binds",
+        },
         { value: "password", label: "Password" },
       ],
     }),
@@ -344,6 +352,7 @@ export async function runInteractiveOnboarding(
     const tokenInput = guardCancel(
       await text({
         message: "Gateway token (blank to generate)",
+        placeholder: "Needed for multi-machine or non-loopback access",
         initialValue: randomToken(),
       }),
       runtime,
@@ -375,7 +384,11 @@ export async function runInteractiveOnboarding(
       ...nextConfig,
       gateway: {
         ...nextConfig.gateway,
-        auth: { ...nextConfig.gateway?.auth, mode: "token" },
+        auth: {
+          ...nextConfig.gateway?.auth,
+          mode: "token",
+          token: gatewayToken,
+        },
       },
     };
   }
