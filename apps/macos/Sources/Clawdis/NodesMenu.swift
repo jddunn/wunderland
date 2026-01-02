@@ -14,7 +14,7 @@ struct NodeMenuEntryFormatter {
         if self.isGateway(entry) {
             return entry.displayName?.nonEmpty ?? "Gateway"
         }
-        entry.displayName?.nonEmpty ?? entry.nodeId
+        return entry.displayName?.nonEmpty ?? entry.nodeId
     }
 
     static func summaryText(_ entry: NodeInfo) -> String {
