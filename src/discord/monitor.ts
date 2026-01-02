@@ -66,6 +66,21 @@ export type DiscordChannelConfigResolved = {
   requireMention?: boolean;
 };
 
+function summarizeAllowList(list?: Array<string | number>) {
+  if (!list || list.length === 0) return "any";
+  const sample = list.slice(0, 4).map((entry) => String(entry));
+  const suffix = list.length > sample.length ? ` (+${list.length - sample.length})` : "";
+  return `${sample.join(", ")}${suffix}`;
+}
+
+function summarizeGuilds(entries?: Record<string, DiscordGuildEntryResolved>) {
+  if (!entries || Object.keys(entries).length === 0) return "any";
+  const keys = Object.keys(entries);
+  const sample = keys.slice(0, 4);
+  const suffix = keys.length > sample.length ? ` (+${keys.length - sample.length})` : "";
+  return `${sample.join(", ")}${suffix}`;
+}
+
 export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
   const cfg = loadConfig();
   const token = normalizeDiscordToken(
@@ -104,6 +119,12 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
   const groupDmEnabled = dmConfig?.groupEnabled ?? false;
   const groupDmChannels = dmConfig?.groupChannels;
 
+  if (isVerbose()) {
+    logVerbose(
+      `discord: config dm=${dmEnabled ? "on" : "off"} allowFrom=${summarizeAllowList(allowFrom)} groupDm=${groupDmEnabled ? "on" : "off"} groupDmChannels=${summarizeAllowList(groupDmChannels)} guilds=${summarizeGuilds(guildEntries)} historyLimit=${historyLimit} mediaMaxMb=${Math.round(mediaMaxBytes / (1024 * 1024))}`,
+    );
+  }
+
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -138,8 +159,14 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
       const isGroupDm = channelType === ChannelType.GroupDM;
       const isDirectMessage = channelType === ChannelType.DM;
       const isGuildMessage = Boolean(message.guild);
-      if (isGroupDm && !groupDmEnabled) return;
-      if (isDirectMessage && !dmEnabled) return;
+      if (isGroupDm && !groupDmEnabled) {
+        logVerbose("discord: drop group dm (group dms disabled)");
+        return;
+      }
+      if (isDirectMessage && !dmEnabled) {
+        logVerbose("discord: drop dm (dms disabled)");
+        return;
+      }
       const botId = client.user?.id;
       const wasMentioned =
         !isDirectMessage && Boolean(botId && message.mentions.has(botId));
@@ -149,6 +176,11 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         (attachment ? inferPlaceholder(attachment) : "") ||
         message.embeds[0]?.description ||
         "";
+      if (isVerbose()) {
+        logVerbose(
+          `discord: inbound id=${message.id} guild=${message.guild?.id ?? "dm"} channel=${message.channelId} mention=${wasMentioned ? "yes" : "no"} type=${isDirectMessage ? "dm" : isGroupDm ? "group-dm" : "guild"} content=${baseText ? "yes" : "no"}`,
+        );
+      }
 
       const guildInfo = isGuildMessage
         ? resolveDiscordGuildEntry({
@@ -218,6 +250,9 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         channelConfig?.requireMention ?? guildInfo?.requireMention ?? true;
       if (isGuildMessage && resolvedRequireMention) {
         if (botId && !wasMentioned) {
+          logVerbose(
+            `discord: drop guild message (mention required, botId=${botId})`,
+          );
           logger.info(
             {
               channelId: message.channelId,
@@ -278,7 +313,10 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         media?.placeholder ??
         message.embeds[0]?.description ??
         "";
-      if (!text) return;
+      if (!text) {
+        logVerbose(`discord: drop message ${message.id} (empty content)`);
+        return;
+      }
 
       const fromLabel = isDirectMessage
         ? buildDirectLabel(message)
@@ -379,6 +417,11 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         token,
         runtime,
       });
+      if (isVerbose()) {
+        logVerbose(
+          `discord: delivered ${replies.length} reply${replies.length === 1 ? "" : "ies"} to ${ctxPayload.To}`,
+        );
+      }
       if (isGuildMessage && shouldClearHistory && historyLimit > 0) {
         guildHistories.set(message.channelId, []);
       }
@@ -400,8 +443,19 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         !interaction.inGuild() && channelType === ChannelType.DM;
       const isGuildMessage = interaction.inGuild();
 
-      if (isGroupDm && !groupDmEnabled) return;
-      if (isDirectMessage && !dmEnabled) return;
+      if (isGroupDm && !groupDmEnabled) {
+        logVerbose("discord: drop slash (group dms disabled)");
+        return;
+      }
+      if (isDirectMessage && !dmEnabled) {
+        logVerbose("discord: drop slash (dms disabled)");
+        return;
+      }
+      if (isVerbose()) {
+        logVerbose(
+          `discord: slash inbound guild=${interaction.guildId ?? "dm"} channel=${interaction.channelId} type=${isDirectMessage ? "dm" : isGroupDm ? "group-dm" : "guild"}`,
+        );
+      }
 
       if (isGuildMessage) {
         const guildInfo = resolveDiscordGuildEntry({
