@@ -30,7 +30,11 @@ export async function doctorCommand(runtime: RuntimeEnv = defaultRuntime) {
 
   const snapshot = await readConfigFileSnapshot();
   let cfg: ClawdisConfig = snapshot.valid ? snapshot.config : {};
-  if (snapshot.exists && !snapshot.valid && snapshot.legacyIssues.length === 0) {
+  if (
+    snapshot.exists &&
+    !snapshot.valid &&
+    snapshot.legacyIssues.length === 0
+  ) {
     note("Config invalid; doctor will run with defaults.", "Config");
   }
 
@@ -50,7 +54,9 @@ export async function doctorCommand(runtime: RuntimeEnv = defaultRuntime) {
     );
     if (migrate) {
       // Legacy migration (2026-01-02, commit: 16420e5b) — normalize per-provider allowlists; move WhatsApp gating into whatsapp.allowFrom.
-      const { config: migrated, changes } = migrateLegacyConfig(snapshot.parsed);
+      const { config: migrated, changes } = migrateLegacyConfig(
+        snapshot.parsed,
+      );
       if (changes.length > 0) {
         note(changes.join("\n"), "Doctor changes");
       }

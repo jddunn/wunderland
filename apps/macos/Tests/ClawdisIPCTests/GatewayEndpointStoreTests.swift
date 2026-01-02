@@ -82,6 +82,44 @@ import Testing
         #expect(password == "pw")
     }
 
+    @Test func resolvesGatewayPasswordByMode() {
+        let root: [String: Any] = [
+            "gateway": [
+                "auth": ["password": " local "],
+                "remote": ["password": " remote "],
+            ],
+        ]
+        let env: [String: String] = [:]
+
+        #expect(GatewayEndpointStore._testResolveGatewayPassword(
+            isRemote: false,
+            root: root,
+            env: env) == "local")
+        #expect(GatewayEndpointStore._testResolveGatewayPassword(
+            isRemote: true,
+            root: root,
+            env: env) == "remote")
+    }
+
+    @Test func gatewayPasswordEnvOverridesConfig() {
+        let root: [String: Any] = [
+            "gateway": [
+                "auth": ["password": "local"],
+                "remote": ["password": "remote"],
+            ],
+        ]
+        let env = ["CLAWDIS_GATEWAY_PASSWORD": " env "]
+
+        #expect(GatewayEndpointStore._testResolveGatewayPassword(
+            isRemote: false,
+            root: root,
+            env: env) == "env")
+        #expect(GatewayEndpointStore._testResolveGatewayPassword(
+            isRemote: true,
+            root: root,
+            env: env) == "env")
+    }
+
     @Test func unconfiguredModeRejectsConfig() async {
         let mode = ModeBox(.unconfigured)
         let store = GatewayEndpointStore(deps: .init(

@@ -10,11 +10,11 @@ import { sessionsCommand } from "../commands/sessions.js";
 import { setupCommand } from "../commands/setup.js";
 import { statusCommand } from "../commands/status.js";
 import { updateCommand } from "../commands/update.js";
+import { readConfigFileSnapshot } from "../config/config.js";
 import { danger, setVerbose } from "../globals.js";
 import { loginWeb, logoutWeb } from "../provider-web.js";
 import { defaultRuntime } from "../runtime.js";
 import { VERSION } from "../version.js";
-import { readConfigFileSnapshot } from "../config/config.js";
 import { registerBrowserCli } from "./browser-cli.js";
 import { registerCanvasCli } from "./canvas-cli.js";
 import { registerCronCli } from "./cron-cli.js";
@@ -79,7 +79,7 @@ export function buildProgram() {
       .join("\n");
     defaultRuntime.error(
       danger(
-        `Legacy config entries detected. Run \"clawdis doctor\" (or ask your agent) to migrate.\n${issues}`,
+        `Legacy config entries detected. Run "clawdis doctor" (or ask your agent) to migrate.\n${issues}`,
       ),
     );
     process.exit(1);

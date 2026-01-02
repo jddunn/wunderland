@@ -508,7 +508,9 @@ describe("legacy config detection", () => {
     const res = migrateLegacyConfig({
       routing: { allowFrom: ["+15555550123"] },
     });
-    expect(res.changes).toContain("Moved routing.allowFrom → whatsapp.allowFrom.");
+    expect(res.changes).toContain(
+      "Moved routing.allowFrom → whatsapp.allowFrom.",
+    );
     expect(res.config?.whatsapp?.allowFrom).toEqual(["+15555550123"]);
     expect(res.config?.routing?.allowFrom).toBeUndefined();
   });

@@ -854,7 +854,9 @@ export async function getReplyFromConfig(
   const from = (ctx.From ?? "").replace(/^whatsapp:/, "");
   const to = (ctx.To ?? "").replace(/^whatsapp:/, "");
   const defaultAllowFrom =
-    isWhatsAppSurface && (!configuredAllowFrom || configuredAllowFrom.length === 0) && to
+    isWhatsAppSurface &&
+    (!configuredAllowFrom || configuredAllowFrom.length === 0) &&
+    to
       ? [to]
       : undefined;
   const allowFrom =

@@ -226,5 +226,9 @@ extension GatewayLaunchAgentManager {
     static func _testPreferredGatewayToken() -> String? {
         self.preferredGatewayToken()
     }
+
+    static func _testEscapePlistValue(_ raw: String) -> String {
+        self.escapePlistValue(raw)
+    }
 }
 #endif

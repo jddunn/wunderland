@@ -26,38 +26,49 @@ actor GatewayEndpointStore {
             mode: { await MainActor.run { AppStateStore.shared.connectionMode } },
             token: { ProcessInfo.processInfo.environment["CLAWDIS_GATEWAY_TOKEN"] },
             password: {
-                let raw = ProcessInfo.processInfo.environment["CLAWDIS_GATEWAY_PASSWORD"] ?? ""
-                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    return trimmed
-                }
                 let root = ClawdisConfigFile.loadDict()
-                if CommandResolver.connectionModeIsRemote() {
-                    if let gateway = root["gateway"] as? [String: Any],
-                       let remote = gateway["remote"] as? [String: Any],
-                       let password = remote["password"] as? String
-                    {
-                        let pw = password.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !pw.isEmpty {
-                            return pw
-                        }
-                    }
-                    return nil
-                }
-                if let gateway = root["gateway"] as? [String: Any],
-                   let auth = gateway["auth"] as? [String: Any],
-                   let password = auth["password"] as? String
-                {
-                    let pw = password.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !pw.isEmpty {
-                        return pw
-                    }
-                }
-                return nil
+                return GatewayEndpointStore.resolveGatewayPassword(
+                    isRemote: CommandResolver.connectionModeIsRemote(),
+                    root: root,
+                    env: ProcessInfo.processInfo.environment)
             },
             localPort: { GatewayEnvironment.gatewayPort() },
             remotePortIfRunning: { await RemoteTunnelManager.shared.controlTunnelPortIfRunning() },
             ensureRemoteTunnel: { try await RemoteTunnelManager.shared.ensureControlTunnel() })
+    }
+
+    private static func resolveGatewayPassword(
+        isRemote: Bool,
+        root: [String: Any],
+        env: [String: String]
+    ) -> String? {
+        let raw = env["CLAWDIS_GATEWAY_PASSWORD"] ?? ""
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        if isRemote {
+            if let gateway = root["gateway"] as? [String: Any],
+               let remote = gateway["remote"] as? [String: Any],
+               let password = remote["password"] as? String
+            {
+                let pw = password.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !pw.isEmpty {
+                    return pw
+                }
+            }
+            return nil
+        }
+        if let gateway = root["gateway"] as? [String: Any],
+           let auth = gateway["auth"] as? [String: Any],
+           let password = auth["password"] as? String
+        {
+            let pw = password.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !pw.isEmpty {
+                return pw
+            }
+        }
+        return nil
     }
 
     private let deps: Deps
@@ -193,3 +204,15 @@ actor GatewayEndpointStore {
         }
     }
 }
+
+#if DEBUG
+extension GatewayEndpointStore {
+    static func _testResolveGatewayPassword(
+        isRemote: Bool,
+        root: [String: Any],
+        env: [String: String]
+    ) -> String? {
+        self.resolveGatewayPassword(isRemote: isRemote, root: root, env: env)
+    }
+}
+#endif

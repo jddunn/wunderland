@@ -660,7 +660,6 @@ type DedupeEntry = {
   error?: ErrorShape;
 };
 
-
 function formatForLog(value: unknown): string {
   try {
     if (value instanceof Error) {
@@ -1334,7 +1333,7 @@ export async function startGatewayServer(
     );
     if (!migrated) {
       throw new Error(
-        "Legacy config entries detected but auto-migration failed. Run \"clawdis doctor\" to migrate.",
+        'Legacy config entries detected but auto-migration failed. Run "clawdis doctor" to migrate.',
       );
     }
     await writeConfigFile(migrated);
