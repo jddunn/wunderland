@@ -133,10 +133,16 @@ extension OnboardingView {
     }
 
     func onboardingPage(@ViewBuilder _ content: () -> some View) -> some View {
-        VStack(spacing: 16) {
-            content()
-            Spacer()
+        let scrollIndicatorGutter: CGFloat = 18
+        return ScrollView {
+            VStack(spacing: 16) {
+                content()
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+            .padding(.trailing, scrollIndicatorGutter)
         }
+        .scrollIndicators(.visible)
         .padding(.horizontal, 28)
         .frame(width: self.pageWidth, alignment: .top)
     }
