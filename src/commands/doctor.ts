@@ -49,7 +49,7 @@ export async function doctorCommand(runtime: RuntimeEnv = defaultRuntime) {
       runtime,
     );
     if (migrate) {
-      // Legacy migration (2026-01-02, commit: 0766c5e3) — normalize per-provider allowlists; move WhatsApp gating into whatsapp.allowFrom.
+      // Legacy migration (2026-01-02, commit: 16420e5b) — normalize per-provider allowlists; move WhatsApp gating into whatsapp.allowFrom.
       const { config: migrated, changes } = migrateLegacyConfig(snapshot.parsed);
       if (changes.length > 0) {
         note(changes.join("\n"), "Doctor changes");
