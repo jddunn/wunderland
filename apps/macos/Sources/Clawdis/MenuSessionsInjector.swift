@@ -106,13 +106,7 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         guard let insertIndex = self.findInsertIndex(in: menu) else { return }
         let width = self.initialWidth(for: menu)
 
-        guard self.isControlChannelConnected else {
-            menu.insertItem(self.makeMessageItem(
-                text: self.controlChannelStatusText,
-                symbolName: "wifi.slash",
-                width: width), at: insertIndex)
-            return
-        }
+        guard self.isControlChannelConnected else { return }
 
         guard let snapshot = self.cachedSnapshot else {
             let headerItem = NSMenuItem()
@@ -195,16 +189,7 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         menu.insertItem(topSeparator, at: cursor)
         cursor += 1
 
-        guard self.isControlChannelConnected else {
-            menu.insertItem(
-                self.makeMessageItem(text: self.controlChannelStatusText, symbolName: "wifi.slash", width: width),
-                at: cursor)
-            cursor += 1
-            let separator = NSMenuItem.separator()
-            separator.tag = self.nodesTag
-            menu.insertItem(separator, at: cursor)
-            return
-        }
+        guard self.isControlChannelConnected else { return }
 
         if let error = self.nodesStore.lastError?.nonEmpty {
             menu.insertItem(
@@ -265,36 +250,14 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         return false
     }
 
-    private var controlChannelStatusText: String {
-        switch ControlChannel.shared.state {
-        case .connected:
-            return "Connected"
-        case .connecting:
-            return "Connecting to gateway…"
-        case let .degraded(reason):
-            if self.shouldShowConnecting { return "Connecting to gateway…" }
-            return reason.nonEmpty ?? "No connection to gateway"
-        case .disconnected:
-            return self.shouldShowConnecting ? "Connecting to gateway…" : "No connection to gateway"
-        }
-    }
-
-    private var shouldShowConnecting: Bool {
-        switch GatewayProcessManager.shared.status {
-        case .starting, .running, .attachedExisting:
-            return true
-        case .stopped, .failed:
-            return false
-        }
-    }
-
     private func makeMessageItem(text: String, symbolName: String, width: CGFloat) -> NSMenuItem {
         let view = AnyView(
             Label(text, systemImage: symbolName)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .multilineTextAlignment(.leading)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 18)
                 .padding(.trailing, 12)
                 .padding(.vertical, 6)
