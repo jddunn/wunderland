@@ -23,6 +23,8 @@ Last run (2025-12-31, 20 runs):
 
 ## Onboarding E2E (Docker)
 
+Docker is optional; this is only needed for containerized onboarding smoke tests.
+
 Full cold-start flow in a clean Linux container:
 
 ```bash

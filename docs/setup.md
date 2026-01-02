@@ -17,6 +17,7 @@ Last updated: 2026-01-01
 ## Prereqs (from source)
 - Node `>=22`
 - `pnpm`
+- Docker (optional; only for containerized setup/e2e — see `docs/docker.md`)
 
 ## Tailoring strategy (so updates don’t hurt)
 
