@@ -181,6 +181,19 @@ If you see WebSocket errors like `ws.WebSocket 'upgrade' event is not implemente
 
 **For debugging:** Use `pnpm gateway:watch` for live reload during development.
 
+### WhatsApp keeps disconnecting / crashing (macOS app)
+
+This is often the bun WebSocket issue. Workaround:
+
+1. Run gateway with Node instead:
+   ```bash
+   pnpm gateway:watch
+   ```
+2. In **Clawdis.app → Settings → Debug**, check **"External gateway"**
+3. The app now connects to your Node gateway instead of spawning bun
+
+This is the most stable setup until bun's WebSocket handling improves.
+
 ---
 
 ## Multi-Instance & Contexts
