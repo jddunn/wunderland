@@ -40,19 +40,46 @@ Interactive (preferred in tmux):
 
 ## Codex CLI
 
-One-shot (safe in tmux):
-- `codex exec "Write a Python function that ..."`
-- `codex exec --model gpt-4o "Complex task"`
-- `codex exec --model o3 "Reasoning-heavy task"`
+⚠️ **Model-specific settings required!**
 
-Interactive:
+| Model | Config Needed |
+|-------|---------------|
+| `gpt-4o` | Works with defaults |
+| `gpt-5.2-codex` | Requires `-c reasoning_effort="medium"` (NOT low/high!) |
+| `o3` | ❌ Not available with ChatGPT accounts |
+
+**One-shot with tmux (recommended):**
+```bash
+# IMPORTANT: Use bash workdir param to start in the target folder!
+# This way Codex "wakes up in a little box" - only sees relevant files
+
+# Default model (gpt-4o)
+bash workdir:~/project/folder command:"tmux new -d -s codex-task 'codex exec \"Your task\"'"
+
+# gpt-5.2-codex (MUST use medium reasoning)
+bash workdir:~/project/folder command:"tmux new -d -s codex-task 'codex exec --model gpt-5.2-codex -c reasoning_effort=\"medium\" \"Your task\"'"
+
+# Full auto mode (sandboxed, auto-approve)
+bash workdir:~/project/folder command:"tmux new -d -s codex-task 'codex exec --full-auto \"Your task\"'"
+
+# Monitor progress
+tmux capture-pane -t codex-task -p | tail -20
+```
+
+**Interactive:**
 - `codex "Your prompt"`
 - `codex resume`
 - `codex resume --last`
 - `codex resume --session <id>`
 
-Apply changes:
+**Apply changes:**
 - `codex apply`
+
+**Useful flags:**
+- `-s workspace-write` — Allow writing to workspace
+- `--full-auto` — Sandboxed + auto-approve
+- `-C <dir>` — Set working directory
+- `--skip-git-repo-check` — Run outside git repos
 
 ## OpenCode
 
@@ -74,5 +101,15 @@ Session management:
 
 ## Notes
 
-- Prefer **tmux** even for one-shot runs; keep history + recovery.
-- For auth, run the tool’s login flow in tmux (`claude`, `codex login`, `opencode auth`).
+- **Always prefer tmux** — keeps history, survives disconnects, allows monitoring
+- For auth: `claude`, `codex login`, `opencode auth`
+- Check tmux session: `tmux attach -t <session-name>`
+- List sessions: `tmux list-sessions`
+
+## ⚠️ IMPORTANT: Respect Tool Choice!
+
+**If user asks for Codex/Claude Code/OpenCode → USE THAT TOOL!**
+- NEVER offer to "just build it yourself" instead
+- NEVER kill a running session because it's "too slow"
+- Let the tool complete its work — be patient!
+- The user wants to test/use that specific tool for a reason
