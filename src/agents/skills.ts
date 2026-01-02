@@ -30,6 +30,7 @@ export type ClawdisSkillMetadata = {
   os?: string[];
   requires?: {
     bins?: string[];
+    anyBins?: string[];
     env?: string[];
     config?: string[];
   };
@@ -307,6 +308,7 @@ function resolveClawdisMetadata(
       requires: requiresRaw
         ? {
             bins: normalizeStringList(requiresRaw.bins),
+            anyBins: normalizeStringList(requiresRaw.anyBins),
             env: normalizeStringList(requiresRaw.env),
             config: normalizeStringList(requiresRaw.config),
           }
@@ -346,6 +348,11 @@ function shouldIncludeSkill(params: {
     for (const bin of requiredBins) {
       if (!hasBinary(bin)) return false;
     }
+  }
+  const requiredAnyBins = entry.clawdis?.requires?.anyBins ?? [];
+  if (requiredAnyBins.length > 0) {
+    const anyFound = requiredAnyBins.some((bin) => hasBinary(bin));
+    if (!anyFound) return false;
   }
 
   const requiredEnv = entry.clawdis?.requires?.env ?? [];

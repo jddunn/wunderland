@@ -61,6 +61,7 @@ Fields under `metadata.clawdis`:
 - `homepage` — optional URL shown as “Website” in the macOS Skills UI.
 - `os` — optional list of platforms (`darwin`, `linux`, `win32`). If set, the skill is only eligible on those OSes.
 - `requires.bins` — list; each must exist on `PATH`.
+- `requires.anyBins` — list; at least one must exist on `PATH`.
 - `requires.env` — list; env var must exist **or** be provided in config.
 - `requires.config` — list of `clawdis.json` paths that must be truthy.
 - `primaryEnv` — env var name associated with `skills.entries.<name>.apiKey`.
