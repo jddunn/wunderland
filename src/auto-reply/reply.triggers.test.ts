@@ -186,6 +186,31 @@ describe("trigger handling", () => {
     });
   });
 
+  it("strips HEARTBEAT_OK at edges outside heartbeat runs", async () => {
+    await withTempHome(async (home) => {
+      vi.mocked(runEmbeddedPiAgent).mockResolvedValue({
+        payloads: [{ text: `${HEARTBEAT_TOKEN} hello` }],
+        meta: {
+          durationMs: 1,
+          agentMeta: { sessionId: "s", provider: "p", model: "m" },
+        },
+      });
+
+      const res = await getReplyFromConfig(
+        {
+          Body: "hello",
+          From: "+1002",
+          To: "+2000",
+        },
+        {},
+        makeCfg(home),
+      );
+
+      const text = Array.isArray(res) ? res[0]?.text : res?.text;
+      expect(text).toBe("hello");
+    });
+  });
+
   it("updates group activation when the owner sends /activation", async () => {
     await withTempHome(async (home) => {
       const cfg = makeCfg(home);

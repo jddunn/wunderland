@@ -53,6 +53,7 @@ import {
   normalizeGroupActivation,
   parseActivationCommand,
 } from "./group-activation.js";
+import { stripHeartbeatToken } from "./heartbeat.js";
 import { extractModelDirective } from "./model.js";
 import { buildStatusMessage } from "./status.js";
 import type { MsgContext, TemplateContext } from "./templating.js";
@@ -62,7 +63,7 @@ import {
   type ThinkLevel,
   type VerboseLevel,
 } from "./thinking.js";
-import { HEARTBEAT_TOKEN, SILENT_REPLY_TOKEN } from "./tokens.js";
+import { SILENT_REPLY_TOKEN } from "./tokens.js";
 import { isAudio, transcribeInboundAudio } from "./transcription.js";
 import type { GetReplyOptions, ReplyPayload } from "./types.js";
 
@@ -1191,7 +1192,7 @@ export async function getReplyFromConfig(
     return undefined;
   }
 
-  let suppressedByHeartbeatAck = false;
+  let didLogHeartbeatStrip = false;
   try {
     if (shouldEagerType) {
       await startTypingLoop();
@@ -1221,20 +1222,24 @@ export async function getReplyFromConfig(
         runId,
         onPartialReply: opts?.onPartialReply
           ? async (payload) => {
-              if (
-                !opts?.isHeartbeat &&
-                payload.text?.includes(HEARTBEAT_TOKEN)
-              ) {
-                suppressedByHeartbeatAck = true;
-                logVerbose(
-                  "Suppressing partial reply: detected HEARTBEAT_OK token",
-                );
-                return;
+              let text = payload.text;
+              if (!opts?.isHeartbeat && text?.includes("HEARTBEAT_OK")) {
+                const stripped = stripHeartbeatToken(text, { mode: "message" });
+                if (stripped.didStrip && !didLogHeartbeatStrip) {
+                  didLogHeartbeatStrip = true;
+                  logVerbose("Stripped stray HEARTBEAT_OK token from reply");
+                }
+                if (
+                  stripped.shouldSkip &&
+                  (payload.mediaUrls?.length ?? 0) === 0
+                ) {
+                  return;
+                }
+                text = stripped.text;
               }
-              if (suppressedByHeartbeatAck) return;
-              await startTypingOnText(payload.text);
+              await startTypingOnText(text);
               await opts.onPartialReply?.({
-                text: payload.text,
+                text,
                 mediaUrls: payload.mediaUrls,
               });
             }
@@ -1242,22 +1247,23 @@ export async function getReplyFromConfig(
         shouldEmitToolResult,
         onToolResult: opts?.onToolResult
           ? async (payload) => {
-              if (
-                !opts?.isHeartbeat &&
-                payload.text?.includes(HEARTBEAT_TOKEN)
-              ) {
-                suppressedByHeartbeatAck = true;
-                logVerbose(
-                  "Suppressing tool result: detected HEARTBEAT_OK token",
-                );
-                return;
+              let text = payload.text;
+              if (!opts?.isHeartbeat && text?.includes("HEARTBEAT_OK")) {
+                const stripped = stripHeartbeatToken(text, { mode: "message" });
+                if (stripped.didStrip && !didLogHeartbeatStrip) {
+                  didLogHeartbeatStrip = true;
+                  logVerbose("Stripped stray HEARTBEAT_OK token from reply");
+                }
+                if (
+                  stripped.shouldSkip &&
+                  (payload.mediaUrls?.length ?? 0) === 0
+                ) {
+                  return;
+                }
+                text = stripped.text;
               }
-              if (suppressedByHeartbeatAck) return;
-              await startTypingOnText(payload.text);
-              await opts.onToolResult?.({
-                text: payload.text,
-                mediaUrls: payload.mediaUrls,
-              });
+              await startTypingOnText(text);
+              await opts.onToolResult?.({ text, mediaUrls: payload.mediaUrls });
             }
           : undefined,
       });
@@ -1288,22 +1294,28 @@ export async function getReplyFromConfig(
 
     const payloadArray = runResult.payloads ?? [];
     if (payloadArray.length === 0) return undefined;
-    if (
-      suppressedByHeartbeatAck ||
-      (!opts?.isHeartbeat &&
-        payloadArray.some((payload) => payload.text?.includes(HEARTBEAT_TOKEN)))
-    ) {
-      logVerbose("Suppressing reply: detected HEARTBEAT_OK token");
-      return undefined;
-    }
-    const shouldSignalTyping = payloadArray.some((payload) => {
+
+    const sanitizedPayloads = opts?.isHeartbeat
+      ? payloadArray
+      : payloadArray.flatMap((payload) => {
+          const text = payload.text;
+          if (!text || !text.includes("HEARTBEAT_OK")) return [payload];
+          const stripped = stripHeartbeatToken(text, { mode: "message" });
+          if (stripped.didStrip && !didLogHeartbeatStrip) {
+            didLogHeartbeatStrip = true;
+            logVerbose("Stripped stray HEARTBEAT_OK token from reply");
+          }
+          const hasMedia =
+            Boolean(payload.mediaUrl) || (payload.mediaUrls?.length ?? 0) > 0;
+          if (stripped.shouldSkip && !hasMedia) return [];
+          return [{ ...payload, text: stripped.text }];
+        });
+
+    if (sanitizedPayloads.length === 0) return undefined;
+
+    const shouldSignalTyping = sanitizedPayloads.some((payload) => {
       const trimmed = payload.text?.trim();
-      if (
-        trimmed &&
-        trimmed !== SILENT_REPLY_TOKEN &&
-        !trimmed.includes(HEARTBEAT_TOKEN)
-      )
-        return true;
+      if (trimmed && trimmed !== SILENT_REPLY_TOKEN) return true;
       if (payload.mediaUrl) return true;
       if (payload.mediaUrls && payload.mediaUrls.length > 0) return true;
       return false;
@@ -1356,11 +1368,11 @@ export async function getReplyFromConfig(
     }
 
     // If verbose is enabled and this is a new session, prepend a session hint.
-    let finalPayloads = payloadArray;
+    let finalPayloads = sanitizedPayloads;
     if (resolvedVerboseLevel === "on" && isNewSession) {
       finalPayloads = [
         { text: `🧭 New session: ${sessionIdFinal}` },
-        ...payloadArray,
+        ...finalPayloads,
       ];
     }
 

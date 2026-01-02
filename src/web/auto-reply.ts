@@ -185,7 +185,6 @@ export { stripHeartbeatToken };
 function isSilentReply(payload?: ReplyPayload): boolean {
   if (!payload) return false;
   const text = payload.text?.trim();
-  if (text?.includes(HEARTBEAT_TOKEN)) return true;
   if (!text || text !== SILENT_REPLY_TOKEN) return false;
   if (payload.mediaUrl || payload.mediaUrls?.length) return false;
   return true;
@@ -337,7 +336,10 @@ export async function runWebHeartbeatOnce(opts: {
     const hasMedia = Boolean(
       replyPayload.mediaUrl || (replyPayload.mediaUrls?.length ?? 0) > 0,
     );
-    const stripped = stripHeartbeatToken(replyPayload.text);
+    const stripped = stripHeartbeatToken(replyPayload.text, {
+      mode: "heartbeat",
+      maxAckChars: 30,
+    });
     if (stripped.shouldSkip && !hasMedia) {
       // Don't let heartbeats keep sessions alive: restore previous updatedAt so idle expiry still works.
       const storePath = resolveStorePath(cfg.session?.store);
@@ -1034,6 +1036,7 @@ export async function monitorWebProvider(
       }
 
       const responsePrefix = cfg.messages?.responsePrefix;
+      let didLogHeartbeatStrip = false;
       let didSendReply = false;
       let toolSendChain: Promise<void> = Promise.resolve();
       const sendToolResult = (payload: ReplyPayload) => {
@@ -1046,6 +1049,20 @@ export async function monitorWebProvider(
         }
         if (isSilentReply(payload)) return;
         const toolPayload: ReplyPayload = { ...payload };
+        if (toolPayload.text?.includes(HEARTBEAT_TOKEN)) {
+          const stripped = stripHeartbeatToken(toolPayload.text, {
+            mode: "message",
+          });
+          if (stripped.didStrip && !didLogHeartbeatStrip) {
+            didLogHeartbeatStrip = true;
+            logVerbose("Stripped stray HEARTBEAT_OK token from web reply");
+          }
+          const hasMedia = Boolean(
+            toolPayload.mediaUrl || (toolPayload.mediaUrls?.length ?? 0) > 0,
+          );
+          if (stripped.shouldSkip && !hasMedia) return;
+          toolPayload.text = stripped.text;
+        }
         if (
           responsePrefix &&
           toolPayload.text &&
@@ -1134,6 +1151,20 @@ export async function monitorWebProvider(
       await toolSendChain;
 
       for (const replyPayload of sendableReplies) {
+        if (replyPayload.text?.includes(HEARTBEAT_TOKEN)) {
+          const stripped = stripHeartbeatToken(replyPayload.text, {
+            mode: "message",
+          });
+          if (stripped.didStrip && !didLogHeartbeatStrip) {
+            didLogHeartbeatStrip = true;
+            logVerbose("Stripped stray HEARTBEAT_OK token from web reply");
+          }
+          const hasMedia = Boolean(
+            replyPayload.mediaUrl || (replyPayload.mediaUrls?.length ?? 0) > 0,
+          );
+          if (stripped.shouldSkip && !hasMedia) continue;
+          replyPayload.text = stripped.text;
+        }
         if (
           responsePrefix &&
           replyPayload.text &&

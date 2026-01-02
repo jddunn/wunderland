@@ -95,7 +95,7 @@ export function buildAgentSystemPromptAppend(params: {
     "## Heartbeats",
     'If you receive a heartbeat poll (a user message containing just "HEARTBEAT"), and there is nothing that needs attention, reply exactly:',
     "HEARTBEAT_OK",
-    'Any response containing "HEARTBEAT_OK" is treated as a heartbeat ack and will not be delivered.',
+    'Clawdis treats a leading/trailing "HEARTBEAT_OK" as a heartbeat ack (and may discard it).',
     'If something needs attention, do NOT include "HEARTBEAT_OK"; reply with the alert text instead.',
     "",
     "## Runtime",

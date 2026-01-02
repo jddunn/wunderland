@@ -266,7 +266,10 @@ function normalizeHeartbeatReply(
   payload: ReplyPayload,
   responsePrefix?: string,
 ) {
-  const stripped = stripHeartbeatToken(payload.text);
+  const stripped = stripHeartbeatToken(payload.text, {
+    mode: "heartbeat",
+    maxAckChars: 30,
+  });
   const hasMedia = Boolean(
     payload.mediaUrl || (payload.mediaUrls?.length ?? 0) > 0,
   );
