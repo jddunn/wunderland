@@ -2096,41 +2096,35 @@ export async function startGatewayServer(
     };
   };
 
-  const startTelegramProvider = async () => {
-    if (telegramTask) return;
-    const cfg = loadConfig();
-    if (!cfg.telegram) {
-      telegramRuntime = {
-        ...telegramRuntime,
-        running: false,
-        lastError: "not configured",
-      };
-      logTelegram.info("skipping provider start (telegram not configured)");
-      return;
-    }
-    if (cfg.telegram?.enabled === false) {
-      telegramRuntime = {
-        ...telegramRuntime,
-        running: false,
-        lastError: "disabled",
-      };
-      logTelegram.info("skipping provider start (telegram.enabled=false)");
-      return;
-    }
-    const { token: telegramToken } = resolveTelegramToken(cfg, {
-      logMissingFile: (message) => logTelegram.warn(message),
-    });
-    if (!telegramToken.trim()) {
-      telegramRuntime = {
-        ...telegramRuntime,
-        running: false,
-        lastError: "not configured",
-      };
-      logTelegram.info(
-        "skipping provider start (no TELEGRAM_BOT_TOKEN/telegram config)",
-      );
-      return;
-    }
+	  const startTelegramProvider = async () => {
+	    if (telegramTask) return;
+	    const cfg = loadConfig();
+	    if (cfg.telegram?.enabled === false) {
+	      telegramRuntime = {
+	        ...telegramRuntime,
+	        running: false,
+	        lastError: "disabled",
+	      };
+	      if (isVerbose()) {
+	        logTelegram.debug("telegram provider disabled (telegram.enabled=false)");
+	      }
+	      return;
+	    }
+	    const { token: telegramToken } = resolveTelegramToken(cfg, {
+	      logMissingFile: (message) => logTelegram.warn(message),
+	    });
+	    if (!telegramToken.trim()) {
+	      telegramRuntime = {
+	        ...telegramRuntime,
+	        running: false,
+	        lastError: "not configured",
+	      };
+	      // keep quiet by default; this is a normal state
+	      if (isVerbose()) {
+	        logTelegram.debug("telegram provider not configured (no TELEGRAM_BOT_TOKEN)");
+	      }
+	      return;
+	    }
     let telegramBotLabel = "";
     try {
       const probe = await probeTelegram(
@@ -2145,11 +2139,13 @@ export async function startGatewayServer(
         logTelegram.debug(`bot probe failed: ${String(err)}`);
       }
     }
-    logTelegram.info(`starting provider${telegramBotLabel}`);
-    telegramAbort = new AbortController();
-    telegramRuntime = {
-      ...telegramRuntime,
-      running: true,
+	    logTelegram.info(
+	      `starting provider${telegramBotLabel}${cfg.telegram ? "" : " (no telegram config; token via env)"}`,
+	    );
+	    telegramAbort = new AbortController();
+	    telegramRuntime = {
+	      ...telegramRuntime,
+	      running: true,
       lastStartAt: Date.now(),
       lastError: null,
       mode: cfg.telegram?.webhookUrl ? "webhook" : "polling",
@@ -2199,38 +2195,34 @@ export async function startGatewayServer(
     };
   };
 
-  const startDiscordProvider = async () => {
-    if (discordTask) return;
-    const cfg = loadConfig();
-    if (!cfg.discord) {
-      discordRuntime = {
-        ...discordRuntime,
-        running: false,
-        lastError: "not configured",
-      };
-      logDiscord.info("skipping provider start (discord not configured)");
-      return;
-    }
-    if (cfg.discord?.enabled === false) {
-      discordRuntime = {
-        ...discordRuntime,
-        running: false,
-        lastError: "disabled",
-      };
-      logDiscord.info("skipping provider start (discord.enabled=false)");
-      return;
-    }
-    const discordToken =
-      process.env.DISCORD_BOT_TOKEN ?? cfg.discord?.token ?? "";
-    if (!discordToken.trim()) {
-      discordRuntime = {
-        ...discordRuntime,
-        running: false,
-        lastError: "not configured",
-      };
-      logDiscord.info("skipping provider start (no DISCORD_BOT_TOKEN/config)");
-      return;
-    }
+	  const startDiscordProvider = async () => {
+	    if (discordTask) return;
+	    const cfg = loadConfig();
+	    if (cfg.discord?.enabled === false) {
+	      discordRuntime = {
+	        ...discordRuntime,
+	        running: false,
+	        lastError: "disabled",
+	      };
+	      if (isVerbose()) {
+	        logDiscord.debug("discord provider disabled (discord.enabled=false)");
+	      }
+	      return;
+	    }
+	    const discordToken =
+	      process.env.DISCORD_BOT_TOKEN ?? cfg.discord?.token ?? "";
+	    if (!discordToken.trim()) {
+	      discordRuntime = {
+	        ...discordRuntime,
+	        running: false,
+	        lastError: "not configured",
+	      };
+	      // keep quiet by default; this is a normal state
+	      if (isVerbose()) {
+	        logDiscord.debug("discord provider not configured (no DISCORD_BOT_TOKEN)");
+	      }
+	      return;
+	    }
     let discordBotLabel = "";
     try {
       const probe = await probeDiscord(discordToken.trim(), 2500);
@@ -2241,8 +2233,10 @@ export async function startGatewayServer(
         logDiscord.debug(`bot probe failed: ${String(err)}`);
       }
     }
-    logDiscord.info(`starting provider${discordBotLabel}`);
-    discordAbort = new AbortController();
+	    logDiscord.info(
+	      `starting provider${discordBotLabel}${cfg.discord ? "" : " (no discord config; token via env)"}`,
+	    );
+	    discordAbort = new AbortController();
     discordRuntime = {
       ...discordRuntime,
       running: true,
@@ -2293,27 +2287,32 @@ export async function startGatewayServer(
     };
   };
 
-  const startSignalProvider = async () => {
-    if (signalTask) return;
-    const cfg = loadConfig();
-    if (!cfg.signal) {
-      signalRuntime = {
-        ...signalRuntime,
-        running: false,
-        lastError: "not configured",
-      };
-      logSignal.info("skipping provider start (signal not configured)");
-      return;
-    }
-    if (cfg.signal?.enabled === false) {
-      signalRuntime = {
-        ...signalRuntime,
-        running: false,
-        lastError: "disabled",
-      };
-      logSignal.info("skipping provider start (signal.enabled=false)");
-      return;
-    }
+	  const startSignalProvider = async () => {
+	    if (signalTask) return;
+	    const cfg = loadConfig();
+	    if (!cfg.signal) {
+	      signalRuntime = {
+	        ...signalRuntime,
+	        running: false,
+	        lastError: "not configured",
+	      };
+	      // keep quiet by default; this is a normal state
+	      if (isVerbose()) {
+	        logSignal.debug("signal provider not configured (no signal config)");
+	      }
+	      return;
+	    }
+	    if (cfg.signal?.enabled === false) {
+	      signalRuntime = {
+	        ...signalRuntime,
+	        running: false,
+	        lastError: "disabled",
+	      };
+	      if (isVerbose()) {
+	        logSignal.debug("signal provider disabled (signal.enabled=false)");
+	      }
+	      return;
+	    }
     const signalCfg = cfg.signal;
     const signalMeaningfullyConfigured = Boolean(
       signalCfg.account?.trim() ||
@@ -2323,17 +2322,20 @@ export async function startGatewayServer(
         typeof signalCfg.httpPort === "number" ||
         typeof signalCfg.autoStart === "boolean",
     );
-    if (!signalMeaningfullyConfigured) {
-      signalRuntime = {
-        ...signalRuntime,
-        running: false,
-        lastError: "not configured",
-      };
-      logSignal.info(
-        "skipping provider start (signal config present but missing required fields)",
-      );
-      return;
-    }
+	    if (!signalMeaningfullyConfigured) {
+	      signalRuntime = {
+	        ...signalRuntime,
+	        running: false,
+	        lastError: "not configured",
+	      };
+	      // keep quiet by default; this is a normal state
+	      if (isVerbose()) {
+	        logSignal.debug(
+	          "signal provider not configured (signal config present but missing required fields)",
+	        );
+	      }
+	      return;
+	    }
     const host = cfg.signal?.httpHost?.trim() || "127.0.0.1";
     const port = cfg.signal?.httpPort ?? 8080;
     const baseUrl = cfg.signal?.httpUrl?.trim() || `http://${host}:${port}`;
@@ -2398,27 +2400,32 @@ export async function startGatewayServer(
     };
   };
 
-  const startIMessageProvider = async () => {
-    if (imessageTask) return;
-    const cfg = loadConfig();
-    if (!cfg.imessage) {
-      imessageRuntime = {
-        ...imessageRuntime,
-        running: false,
-        lastError: "not configured",
-      };
-      logIMessage.info("skipping provider start (imessage not configured)");
-      return;
-    }
-    if (cfg.imessage?.enabled === false) {
-      imessageRuntime = {
-        ...imessageRuntime,
-        running: false,
-        lastError: "disabled",
-      };
-      logIMessage.info("skipping provider start (imessage.enabled=false)");
-      return;
-    }
+	  const startIMessageProvider = async () => {
+	    if (imessageTask) return;
+	    const cfg = loadConfig();
+	    if (!cfg.imessage) {
+	      imessageRuntime = {
+	        ...imessageRuntime,
+	        running: false,
+	        lastError: "not configured",
+	      };
+	      // keep quiet by default; this is a normal state
+	      if (isVerbose()) {
+	        logIMessage.debug("imessage provider not configured (no imessage config)");
+	      }
+	      return;
+	    }
+	    if (cfg.imessage?.enabled === false) {
+	      imessageRuntime = {
+	        ...imessageRuntime,
+	        running: false,
+	        lastError: "disabled",
+	      };
+	      if (isVerbose()) {
+	        logIMessage.debug("imessage provider disabled (imessage.enabled=false)");
+	      }
+	      return;
+	    }
     const cliPath = cfg.imessage?.cliPath?.trim() || "imsg";
     const dbPath = cfg.imessage?.dbPath?.trim();
     logIMessage.info(

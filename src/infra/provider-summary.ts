@@ -35,11 +35,8 @@ export async function buildProviderSummary(
   if (!telegramEnabled) {
     lines.push(chalk.cyan("Telegram: disabled"));
   } else {
-    const { token: telegramToken } = effective.telegram
-      ? resolveTelegramToken(effective)
-      : { token: "" };
-    const telegramConfigured =
-      Boolean(effective.telegram) && Boolean(telegramToken);
+    const { token: telegramToken } = resolveTelegramToken(effective);
+    const telegramConfigured = Boolean(telegramToken?.trim());
     lines.push(
       telegramConfigured
         ? chalk.green("Telegram: configured")
