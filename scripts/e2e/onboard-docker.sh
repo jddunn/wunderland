@@ -12,6 +12,26 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
   set -euo pipefail
   export TERM=xterm-256color
 
+  # Provide a minimal trash shim to avoid noisy "missing trash" logs in containers.
+  export PATH="/tmp/clawdis-bin:$PATH"
+  mkdir -p /tmp/clawdis-bin
+  cat > /tmp/clawdis-bin/trash <<'"'"'TRASH'"'"'
+#!/usr/bin/env bash
+set -euo pipefail
+trash_dir="$HOME/.Trash"
+mkdir -p "$trash_dir"
+for target in "$@"; do
+  [ -e "$target" ] || continue
+  base="$(basename "$target")"
+  dest="$trash_dir/$base"
+  if [ -e "$dest" ]; then
+    dest="$trash_dir/${base}-$(date +%s)-$$"
+  fi
+  mv "$target" "$dest"
+done
+TRASH
+  chmod +x /tmp/clawdis-bin/trash
+
   send() {
     local payload="$1"
     local delay="${2:-0.4}"
@@ -20,11 +40,36 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
     printf "%b" "$payload" >&3
   }
 
+  start_gateway() {
+    node dist/index.js gateway-daemon --port 18789 --bind loopback > /tmp/gateway-e2e.log 2>&1 &
+    GATEWAY_PID="$!"
+  }
+
+  wait_for_gateway() {
+    for _ in $(seq 1 10); do
+      if grep -q "listening on ws://127.0.0.1:18789" /tmp/gateway-e2e.log; then
+        return 0
+      fi
+      sleep 1
+    done
+    cat /tmp/gateway-e2e.log
+    return 1
+  }
+
+  stop_gateway() {
+    local gw_pid="$1"
+    if [ -n "$gw_pid" ]; then
+      kill "$gw_pid" 2>/dev/null || true
+      wait "$gw_pid" || true
+    fi
+  }
+
   run_wizard_cmd() {
     local case_name="$1"
     local home_dir="$2"
     local command="$3"
     local send_fn="$4"
+    local with_gateway="${5:-false}"
 
     echo "== Wizard case: $case_name =="
     export HOME="$home_dir"
@@ -37,11 +82,19 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
     wizard_pid=$!
     exec 3> "$input_fifo"
 
+    local gw_pid=""
+    if [ "$with_gateway" = "true" ]; then
+      start_gateway
+      gw_pid="$GATEWAY_PID"
+      wait_for_gateway
+    fi
+
     "$send_fn"
 
     exec 3>&-
     wait "$wizard_pid"
     rm -f "$input_fifo"
+    stop_gateway "$gw_pid"
   }
 
   run_wizard() {
@@ -50,7 +103,7 @@ docker run --rm -t "$IMAGE_NAME" bash -lc '
     local send_fn="$3"
 
     # Default onboarding command wrapper.
-    run_wizard_cmd "$case_name" "$home_dir" "node dist/index.js onboard" "$send_fn"
+    run_wizard_cmd "$case_name" "$home_dir" "node dist/index.js onboard" "$send_fn" true
   }
 
   make_home() {
