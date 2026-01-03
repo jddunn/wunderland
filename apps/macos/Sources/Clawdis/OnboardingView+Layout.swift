@@ -142,7 +142,7 @@ extension OnboardingView {
             .frame(maxWidth: .infinity, alignment: .top)
             .padding(.trailing, scrollIndicatorGutter)
         }
-        .scrollIndicators(.visible)
+        .scrollIndicators(.automatic)
         .padding(.horizontal, 28)
         .frame(width: self.pageWidth, alignment: .top)
     }
