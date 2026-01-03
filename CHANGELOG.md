@@ -55,6 +55,7 @@
 
 ### Fixes
 - Gog calendar: format date ranges as RFC 3339 with timezone to satisfy Google Calendar API (thanks @jayhickey).
+- macOS onboarding: add scrollable page gutter for overflowing content (#105) — thanks @thewilloftheshadow.
 - Chat UI: keep the chat scrolled to the latest message after switching sessions.
 - Auto-reply: stream completed reply blocks as soon as they finish (configurable default + break); skip empty tool-only blocks unless verbose.
 - Discord: avoid duplicate sends when block streaming is enabled (race with typing hook).
