@@ -34,13 +34,14 @@ const DEFAULT_MAX_OUTPUT = clampNumber(
 const DEFAULT_PTY_NAME = "xterm-256color";
 
 type PtyModule = typeof import("node-pty");
-let ptyModulePromise: Promise<PtyModule | null> | null = null;
+type PtyLoadResult = { module: PtyModule | null; error?: unknown };
+let ptyModulePromise: Promise<PtyLoadResult> | null = null;
 
-async function loadPtyModule(): Promise<PtyModule | null> {
+async function loadPtyModule(): Promise<PtyLoadResult> {
   if (!ptyModulePromise) {
     ptyModulePromise = import("node-pty")
-      .then((mod) => mod)
-      .catch(() => null);
+      .then((mod) => ({ module: mod }))
+      .catch((error) => ({ module: null, error }));
   }
   return ptyModulePromise;
 }
@@ -166,10 +167,11 @@ export function createBashTool(
       let pty: IPty | undefined;
 
       if (stdinMode === "pty") {
-        const ptyModule = await loadPtyModule();
+        const { module: ptyModule, error: ptyError } = await loadPtyModule();
         if (!ptyModule) {
           warning =
-            "Warning: node-pty failed to load; falling back to pipe mode.";
+            `Warning: node-pty failed to load${formatPtyError(ptyError)}; ` +
+            "falling back to pipe mode.";
           stdinMode = "pipe";
         } else {
           const ptyEnv = {
@@ -184,9 +186,10 @@ export function createBashTool(
               cols: 120,
               rows: 30,
             });
-          } catch {
+          } catch (error) {
             warning =
-              "Warning: node-pty failed to start; falling back to pipe mode.";
+              `Warning: node-pty failed to start${formatPtyError(error)}; ` +
+              "falling back to pipe mode.";
             stdinMode = "pipe";
           }
         }
@@ -883,6 +886,20 @@ function killSession(session: {
     } catch {
       // ignore kill failures
     }
+  }
+}
+
+function formatPtyError(error: unknown) {
+  if (!error) return "";
+  if (typeof error === "string") return ` (${error})`;
+  if (error instanceof Error) {
+    const firstLine = error.message.split(/\r?\n/)[0]?.trim();
+    return firstLine ? ` (${firstLine})` : "";
+  }
+  try {
+    return ` (${JSON.stringify(error)})`;
+  } catch {
+    return "";
   }
 }
 

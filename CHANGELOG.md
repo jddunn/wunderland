@@ -95,6 +95,7 @@
 - macOS: log health refresh failures and recovery to make gateway issues easier to diagnose.
 - macOS codesign: skip hardened runtime for ad-hoc signing and avoid empty options args (#70) — thanks @petter-b
 - macOS codesign: include camera entitlement so permission prompts work in the menu bar app.
+- Agent tools: bash tool supports real TTY via `stdinMode: "pty"` with node-pty, warning + fallback on load/start failure.
 - Agent tools: map `camera.snap` JPEG payloads to `image/jpeg` to avoid MIME mismatch errors.
 - Tests: cover `camera.snap` MIME mapping to prevent image/png vs image/jpeg mismatches.
 - macOS camera: wait for exposure/white balance to settle before capturing a snap to avoid dark images.
