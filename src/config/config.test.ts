@@ -122,6 +122,49 @@ describe("config identity defaults", () => {
     });
   });
 
+  it("supports provider textChunkLimit config", async () => {
+    await withTempHome(async (home) => {
+      const configDir = path.join(home, ".clawdis");
+      await fs.mkdir(configDir, { recursive: true });
+      await fs.writeFile(
+        path.join(configDir, "clawdis.json"),
+        JSON.stringify(
+          {
+            messages: {
+              messagePrefix: "[clawdis]",
+              responsePrefix: "🦞",
+              // legacy field should be ignored (moved to providers)
+              textChunkLimit: 9999,
+            },
+            routing: {},
+            whatsapp: { allowFrom: ["+15555550123"], textChunkLimit: 4444 },
+            telegram: { enabled: true, textChunkLimit: 3333 },
+            discord: { enabled: true, textChunkLimit: 1999 },
+            signal: { enabled: true, textChunkLimit: 2222 },
+            imessage: { enabled: true, textChunkLimit: 1111 },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      vi.resetModules();
+      const { loadConfig } = await import("./config.js");
+      const cfg = loadConfig();
+
+      expect(cfg.whatsapp?.textChunkLimit).toBe(4444);
+      expect(cfg.telegram?.textChunkLimit).toBe(3333);
+      expect(cfg.discord?.textChunkLimit).toBe(1999);
+      expect(cfg.signal?.textChunkLimit).toBe(2222);
+      expect(cfg.imessage?.textChunkLimit).toBe(1111);
+
+      const legacy = (cfg.messages as unknown as Record<string, unknown>)
+        .textChunkLimit;
+      expect(legacy).toBeUndefined();
+    });
+  });
+
   it("respects empty responsePrefix to disable identity defaults", async () => {
     await withTempHome(async (home) => {
       const configDir = path.join(home, ".clawdis");
