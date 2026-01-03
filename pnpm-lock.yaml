@@ -37,6 +37,9 @@ importers:
       '@mariozechner/pi-coding-agent':
         specifier: ^0.31.1
         version: 0.31.1(patch_hash=d0d5ffa1bfda8a0f9d14a5e73a074014346d3edbdb2ffc91444d3be5119f5745)(ws@8.18.3)(zod@4.3.4)
+      '@mariozechner/pi-tui':
+        specifier: ^0.31.1
+        version: 0.31.1
       '@sinclair/typebox':
         specifier: 0.34.46
         version: 0.34.46
