@@ -604,10 +604,11 @@ export async function getReplyFromConfig(
     (agentCfg?.verboseDefault as VerboseLevel | undefined);
   const resolvedBlockStreaming =
     agentCfg?.blockStreamingDefault === "off" ? "off" : "on";
+  // TODO(steipete): Default to message_end for now; figure out why text_end breaks and whether we can revert.
   const resolvedBlockStreamingBreak =
-    agentCfg?.blockStreamingBreak === "message_end"
-      ? "message_end"
-      : "text_end";
+    agentCfg?.blockStreamingBreak === "text_end"
+      ? "text_end"
+      : "message_end";
   const blockStreamingEnabled = resolvedBlockStreaming === "on";
   const streamedPayloadKeys = new Set<string>();
   const pendingBlockTasks = new Set<Promise<void>>();
