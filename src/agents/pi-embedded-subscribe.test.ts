@@ -182,6 +182,55 @@ describe("subscribeEmbeddedPiSession", () => {
     expect(subscription.assistantTexts).toEqual(["Hello block"]);
   });
 
+  it("does not emit duplicate block replies when text_end repeats", () => {
+    let handler: ((evt: unknown) => void) | undefined;
+    const session: StubSession = {
+      subscribe: (fn) => {
+        handler = fn;
+        return () => {};
+      },
+    };
+
+    const onBlockReply = vi.fn();
+
+    const subscription = subscribeEmbeddedPiSession({
+      session: session as unknown as Parameters<
+        typeof subscribeEmbeddedPiSession
+      >[0]["session"],
+      runId: "run",
+      onBlockReply,
+      blockReplyBreak: "text_end",
+    });
+
+    handler?.({
+      type: "message_update",
+      message: { role: "assistant" },
+      assistantMessageEvent: {
+        type: "text_delta",
+        delta: "Hello block",
+      },
+    });
+
+    handler?.({
+      type: "message_update",
+      message: { role: "assistant" },
+      assistantMessageEvent: {
+        type: "text_end",
+      },
+    });
+
+    handler?.({
+      type: "message_update",
+      message: { role: "assistant" },
+      assistantMessageEvent: {
+        type: "text_end",
+      },
+    });
+
+    expect(onBlockReply).toHaveBeenCalledTimes(1);
+    expect(subscription.assistantTexts).toEqual(["Hello block"]);
+  });
+
   it("waits for auto-compaction retry and clears buffered text", async () => {
     const listeners: SessionEventHandler[] = [];
     const session = {

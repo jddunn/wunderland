@@ -78,6 +78,7 @@ export function subscribeEmbeddedPiSession(params: {
   const blockReplyBreak = params.blockReplyBreak ?? "text_end";
   let deltaBuffer = "";
   let lastStreamedAssistant: string | undefined;
+  let lastBlockReplyText: string | undefined;
   let assistantTextBaseline = 0;
   let compactionInFlight = false;
   let pendingCompactionRetry = 0;
@@ -152,6 +153,7 @@ export function subscribeEmbeddedPiSession(params: {
     toolMetaById.clear();
     deltaBuffer = "";
     lastStreamedAssistant = undefined;
+    lastBlockReplyText = undefined;
     assistantTextBaseline = 0;
     toolDebouncer.flush();
   };
@@ -304,6 +306,12 @@ export function subscribeEmbeddedPiSession(params: {
             }
 
             if (evtType === "text_end" && blockReplyBreak === "text_end") {
+              if (next && next === lastBlockReplyText) {
+                deltaBuffer = "";
+                lastStreamedAssistant = undefined;
+                return;
+              }
+              lastBlockReplyText = next || undefined;
               if (next) assistantTexts.push(next);
               if (next && params.onBlockReply) {
                 const { text: cleanedText, mediaUrls } =
@@ -349,6 +357,12 @@ export function subscribeEmbeddedPiSession(params: {
             text &&
             params.onBlockReply
           ) {
+            if (text === lastBlockReplyText) {
+              deltaBuffer = "";
+              lastStreamedAssistant = undefined;
+              return;
+            }
+            lastBlockReplyText = text;
             const { text: cleanedText, mediaUrls } = splitMediaFromOutput(text);
             if (cleanedText || (mediaUrls && mediaUrls.length > 0)) {
               void params.onBlockReply({
@@ -359,6 +373,7 @@ export function subscribeEmbeddedPiSession(params: {
           }
           deltaBuffer = "";
           lastStreamedAssistant = undefined;
+          lastBlockReplyText = undefined;
         }
       }
 
