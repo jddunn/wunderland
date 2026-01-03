@@ -1,6 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
@@ -160,7 +161,11 @@ export function createBashTool(
       const maxOutput = DEFAULT_MAX_OUTPUT;
       const startedAt = Date.now();
       const sessionId = randomUUID();
-      const workdir = params.workdir?.trim() || process.cwd();
+      const warnings: string[] = [];
+      const workdir = resolveWorkdir(
+        params.workdir?.trim() || process.cwd(),
+        warnings,
+      );
 
       const { shell, args: shellArgs } = getShellConfig();
       const env = params.env ? { ...process.env, ...params.env } : process.env;
@@ -230,6 +235,8 @@ export function createBashTool(
         });
       }
 
+      if (warning) warnings.push(warning);
+
       const session = {
         id: sessionId,
         command: params.command,
@@ -286,7 +293,7 @@ export function createBashTool(
       const emitUpdate = () => {
         if (!onUpdate) return;
         const tailText = session.tail || session.aggregated;
-        const warningText = warning ? `${warning}\n\n` : "";
+        const warningText = warnings.length ? `${warnings.join("\n")}\n\n` : "";
         onUpdate({
           content: [{ type: "text", text: warningText + (tailText || "") }],
           details: {
@@ -336,7 +343,7 @@ export function createBashTool(
                   {
                     type: "text",
                     text:
-                      `${warning ? `${warning}\n\n` : ""}` +
+                      `${warnings.length ? `${warnings.join("\n")}\n\n` : ""}` +
                       `Command still running (session ${sessionId}, pid ${session.pid ?? "n/a"}). ` +
                       "Use process (list/poll/log/write/kill/clear/remove) for follow-up.",
                   },
@@ -410,7 +417,7 @@ export function createBashTool(
                   {
                     type: "text",
                     text:
-                      `${warning ? `${warning}\n\n` : ""}` +
+                      `${warnings.length ? `${warnings.join("\n")}\n\n` : ""}` +
                       (aggregated || "(no output)"),
                   },
                 ],
@@ -912,6 +919,30 @@ function killSession(session: {
     } catch {
       // ignore kill failures
     }
+  }
+}
+
+function resolveWorkdir(workdir: string, warnings: string[]) {
+  const current = safeCwd();
+  const fallback = current ?? homedir();
+  try {
+    const stats = statSync(workdir);
+    if (stats.isDirectory()) return workdir;
+  } catch {
+    // ignore, fallback below
+  }
+  warnings.push(
+    `Warning: workdir "${workdir}" is unavailable; using "${fallback}".`,
+  );
+  return fallback;
+}
+
+function safeCwd() {
+  try {
+    const cwd = process.cwd();
+    return existsSync(cwd) ? cwd : null;
+  } catch {
+    return null;
   }
 }
 
