@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { chunkText } from "./chunk.js";
+import { chunkText, resolveTextChunkLimit } from "./chunk.js";
 
 describe("chunkText", () => {
   it("keeps multi-line text in one chunk when under limit", () => {
@@ -43,5 +43,32 @@ describe("chunkText", () => {
     const text = "Supercalifragilisticexpialidocious"; // 34 chars
     const chunks = chunkText(text, 10);
     expect(chunks).toEqual(["Supercalif", "ragilistic", "expialidoc", "ious"]);
+  });
+});
+
+describe("resolveTextChunkLimit", () => {
+  it("uses per-surface defaults", () => {
+    expect(resolveTextChunkLimit(undefined, "whatsapp")).toBe(4000);
+    expect(resolveTextChunkLimit(undefined, "telegram")).toBe(4000);
+    expect(resolveTextChunkLimit(undefined, "signal")).toBe(4000);
+    expect(resolveTextChunkLimit(undefined, "imessage")).toBe(4000);
+    expect(resolveTextChunkLimit(undefined, "discord")).toBe(2000);
+  });
+
+  it("supports a global override", () => {
+    const cfg = { messages: { textChunkLimit: 1234 } };
+    expect(resolveTextChunkLimit(cfg, "whatsapp")).toBe(1234);
+    expect(resolveTextChunkLimit(cfg, "discord")).toBe(1234);
+  });
+
+  it("prefers per-surface overrides over global", () => {
+    const cfg = {
+      messages: {
+        textChunkLimit: 1234,
+        textChunkLimitBySurface: { discord: 111 },
+      },
+    };
+    expect(resolveTextChunkLimit(cfg, "discord")).toBe(111);
+    expect(resolveTextChunkLimit(cfg, "telegram")).toBe(1234);
   });
 });

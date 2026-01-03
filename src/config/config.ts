@@ -314,6 +314,15 @@ export type MessagesConfig = {
   messagePrefix?: string; // Prefix added to all inbound messages (default: "[clawdis]" if no allowFrom, else "")
   responsePrefix?: string; // Prefix auto-added to all outbound replies (e.g., "🦞")
   timestampPrefix?: boolean | string; // true/false or IANA timezone string (default: true with UTC)
+  /** Outbound text chunk size (chars). Default varies by provider (e.g. 4000, Discord 2000). */
+  textChunkLimit?: number;
+  /** Optional per-surface chunk overrides. */
+  textChunkLimitBySurface?: Partial<
+    Record<
+      "whatsapp" | "telegram" | "discord" | "signal" | "imessage" | "webchat",
+      number
+    >
+  >;
 };
 
 export type BridgeBindMode = "auto" | "lan" | "tailnet" | "loopback";
@@ -708,6 +717,17 @@ const MessagesSchema = z
     messagePrefix: z.string().optional(),
     responsePrefix: z.string().optional(),
     timestampPrefix: z.union([z.boolean(), z.string()]).optional(),
+    textChunkLimit: z.number().int().positive().optional(),
+    textChunkLimitBySurface: z
+      .object({
+        whatsapp: z.number().int().positive().optional(),
+        telegram: z.number().int().positive().optional(),
+        discord: z.number().int().positive().optional(),
+        signal: z.number().int().positive().optional(),
+        imessage: z.number().int().positive().optional(),
+        webchat: z.number().int().positive().optional(),
+      })
+      .optional(),
   })
   .optional();
 

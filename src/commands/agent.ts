@@ -17,7 +17,7 @@ import {
   DEFAULT_AGENT_WORKSPACE_DIR,
   ensureAgentWorkspace,
 } from "../agents/workspace.js";
-import { chunkText } from "../auto-reply/chunk.js";
+import { chunkText, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import type { MsgContext } from "../auto-reply/templating.js";
 import {
   normalizeThinkLevel,
@@ -524,6 +524,15 @@ export async function agentCommand(
     return;
   }
 
+  const deliveryTextLimit =
+    deliveryProvider === "whatsapp" ||
+    deliveryProvider === "telegram" ||
+    deliveryProvider === "discord" ||
+    deliveryProvider === "signal" ||
+    deliveryProvider === "imessage"
+      ? resolveTextChunkLimit(cfg, deliveryProvider)
+      : resolveTextChunkLimit(cfg, "whatsapp");
+
   for (const payload of payloads) {
     const mediaList =
       payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
@@ -564,7 +573,7 @@ export async function agentCommand(
     if (deliveryProvider === "telegram" && telegramTarget) {
       try {
         if (media.length === 0) {
-          for (const chunk of chunkText(text, 4000)) {
+          for (const chunk of chunkText(text, deliveryTextLimit)) {
             await deps.sendMessageTelegram(telegramTarget, chunk, {
               verbose: false,
               token: telegramToken || undefined,
@@ -645,7 +654,7 @@ export async function agentCommand(
     if (deliveryProvider === "imessage" && imessageTarget) {
       try {
         if (media.length === 0) {
-          for (const chunk of chunkText(text, 4000)) {
+          for (const chunk of chunkText(text, deliveryTextLimit)) {
             await deps.sendMessageIMessage(imessageTarget, chunk, {
               maxBytes: cfg.imessage?.mediaMaxMb
                 ? cfg.imessage.mediaMaxMb * 1024 * 1024

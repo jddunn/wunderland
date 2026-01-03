@@ -1,4 +1,4 @@
-import { chunkText } from "../auto-reply/chunk.js";
+import { chunkText, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { formatAgentEnvelope } from "../auto-reply/envelope.js";
 import {
   normalizeGroupActivation,
@@ -41,7 +41,6 @@ import {
 } from "./reconnect.js";
 import { formatError, getWebAuthAgeMs, readWebSelfId } from "./session.js";
 
-const WEB_TEXT_LIMIT = 4000;
 const DEFAULT_GROUP_HISTORY_LIMIT = 50;
 const whatsappLog = createSubsystemLogger("gateway/providers/whatsapp");
 const whatsappInboundLog = whatsappLog.child("inbound");
@@ -502,6 +501,7 @@ async function deliverWebReply(params: {
   replyResult: ReplyPayload;
   msg: WebInboundMsg;
   maxMediaBytes: number;
+  textLimit: number;
   replyLogger: ReturnType<typeof getChildLogger>;
   connectionId?: string;
   skipLog?: boolean;
@@ -510,12 +510,13 @@ async function deliverWebReply(params: {
     replyResult,
     msg,
     maxMediaBytes,
+    textLimit,
     replyLogger,
     connectionId,
     skipLog,
   } = params;
   const replyStarted = Date.now();
-  const textChunks = chunkText(replyResult.text || "", WEB_TEXT_LIMIT);
+  const textChunks = chunkText(replyResult.text || "", textLimit);
   const mediaList = replyResult.mediaUrls?.length
     ? replyResult.mediaUrls
     : replyResult.mediaUrl
@@ -1050,6 +1051,7 @@ export async function monitorWebProvider(
       }
 
       const responsePrefix = cfg.messages?.responsePrefix;
+      const textLimit = resolveTextChunkLimit(cfg, "whatsapp");
       let didLogHeartbeatStrip = false;
       let didSendReply = false;
       let toolSendChain: Promise<void> = Promise.resolve();
@@ -1091,6 +1093,7 @@ export async function monitorWebProvider(
               replyResult: toolPayload,
               msg,
               maxMediaBytes,
+              textLimit,
               replyLogger,
               connectionId,
               skipLog: true,
@@ -1134,6 +1137,7 @@ export async function monitorWebProvider(
               replyResult: blockPayload,
               msg,
               maxMediaBytes,
+              textLimit,
               replyLogger,
               connectionId,
               skipLog: true,
@@ -1238,6 +1242,7 @@ export async function monitorWebProvider(
             replyResult: replyPayload,
             msg,
             maxMediaBytes,
+            textLimit,
             replyLogger,
             connectionId,
           });

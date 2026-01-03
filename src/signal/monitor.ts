@@ -1,4 +1,4 @@
-import { chunkText } from "../auto-reply/chunk.js";
+import { chunkText, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { formatAgentEnvelope } from "../auto-reply/envelope.js";
 import { getReplyFromConfig } from "../auto-reply/reply.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
@@ -178,15 +178,17 @@ async function deliverReplies(params: {
   account?: string;
   runtime: RuntimeEnv;
   maxBytes: number;
+  textLimit: number;
 }) {
-  const { replies, target, baseUrl, account, runtime, maxBytes } = params;
+  const { replies, target, baseUrl, account, runtime, maxBytes, textLimit } =
+    params;
   for (const payload of replies) {
     const mediaList =
       payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
     const text = payload.text ?? "";
     if (!text && mediaList.length === 0) continue;
     if (mediaList.length === 0) {
-      for (const chunk of chunkText(text, 4000)) {
+      for (const chunk of chunkText(text, textLimit)) {
         await sendMessageSignal(target, chunk, {
           baseUrl,
           account,
@@ -215,6 +217,7 @@ export async function monitorSignalProvider(
 ): Promise<void> {
   const runtime = resolveRuntime(opts);
   const cfg = loadConfig();
+  const textLimit = resolveTextChunkLimit(cfg, "signal");
   const baseUrl = resolveBaseUrl(opts);
   const account = resolveAccount(opts);
   const allowFrom = resolveAllowFrom(opts);
@@ -391,6 +394,7 @@ export async function monitorSignalProvider(
               account,
               runtime,
               maxBytes: mediaMaxBytes,
+              textLimit,
             });
           })
           .catch((err) => {
@@ -420,6 +424,7 @@ export async function monitorSignalProvider(
         account,
         runtime,
         maxBytes: mediaMaxBytes,
+        textLimit,
       });
     };
 

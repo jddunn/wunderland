@@ -1,4 +1,4 @@
-import { chunkText } from "../auto-reply/chunk.js";
+import { chunkText, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import {
   HEARTBEAT_PROMPT,
   stripHeartbeatToken,
@@ -292,6 +292,7 @@ async function deliverHeartbeatReply(params: {
   to: string;
   text: string;
   mediaUrls: string[];
+  textLimit: number;
   deps: Required<
     Pick<
       HeartbeatDeps,
@@ -303,10 +304,10 @@ async function deliverHeartbeatReply(params: {
     >
   >;
 }) {
-  const { channel, to, text, mediaUrls, deps } = params;
+  const { channel, to, text, mediaUrls, deps, textLimit } = params;
   if (channel === "whatsapp") {
     if (mediaUrls.length === 0) {
-      for (const chunk of chunkText(text, 4000)) {
+      for (const chunk of chunkText(text, textLimit)) {
         await deps.sendWhatsApp(to, chunk, { verbose: false });
       }
       return;
@@ -322,7 +323,7 @@ async function deliverHeartbeatReply(params: {
 
   if (channel === "signal") {
     if (mediaUrls.length === 0) {
-      for (const chunk of chunkText(text, 4000)) {
+      for (const chunk of chunkText(text, textLimit)) {
         await deps.sendSignal(to, chunk);
       }
       return;
@@ -338,7 +339,7 @@ async function deliverHeartbeatReply(params: {
 
   if (channel === "imessage") {
     if (mediaUrls.length === 0) {
-      for (const chunk of chunkText(text, 4000)) {
+      for (const chunk of chunkText(text, textLimit)) {
         await deps.sendIMessage(to, chunk);
       }
       return;
@@ -354,7 +355,7 @@ async function deliverHeartbeatReply(params: {
 
   if (channel === "telegram") {
     if (mediaUrls.length === 0) {
-      for (const chunk of chunkText(text, 4000)) {
+      for (const chunk of chunkText(text, textLimit)) {
         await deps.sendTelegram(to, chunk, { verbose: false });
       }
       return;
@@ -500,11 +501,13 @@ export async function runHeartbeatOnce(opts: {
       sendSignal: opts.deps?.sendSignal ?? sendMessageSignal,
       sendIMessage: opts.deps?.sendIMessage ?? sendMessageIMessage,
     };
+    const textLimit = resolveTextChunkLimit(cfg, delivery.channel);
     await deliverHeartbeatReply({
       channel: delivery.channel,
       to: delivery.to,
       text: normalized.text,
       mediaUrls,
+      textLimit,
       deps,
     });
 

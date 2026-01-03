@@ -282,7 +282,17 @@ Controls inbound/outbound prefixes and timestamps.
   messages: {
     messagePrefix: "[clawdis]",
     responsePrefix: "🦞",
-    timestampPrefix: "Europe/London"
+    timestampPrefix: "Europe/London",
+    // outbound chunk size (chars); defaults vary by surface (e.g. 4000, Discord 2000)
+    textChunkLimit: 4000,
+    // optional per-surface overrides
+    textChunkLimitBySurface: {
+      whatsapp: 4000,
+      telegram: 4000,
+      signal: 4000,
+      imessage: 4000,
+      discord: 2000
+    }
   }
 }
 ```

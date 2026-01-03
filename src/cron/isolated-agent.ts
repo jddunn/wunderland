@@ -12,7 +12,7 @@ import {
   DEFAULT_AGENT_WORKSPACE_DIR,
   ensureAgentWorkspace,
 } from "../agents/workspace.js";
-import { chunkText } from "../auto-reply/chunk.js";
+import { chunkText, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { normalizeThinkLevel } from "../auto-reply/thinking.js";
 import type { CliDeps } from "../cli/deps.js";
 import type { ClawdisConfig } from "../config/config.js";
@@ -357,12 +357,13 @@ export async function runCronIsolatedAgentTurn(params: {
         };
       }
       const chatId = resolvedDelivery.to;
+      const textLimit = resolveTextChunkLimit(params.cfg, "telegram");
       try {
         for (const payload of payloads) {
           const mediaList =
             payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
           if (mediaList.length === 0) {
-            for (const chunk of chunkText(payload.text ?? "", 4000)) {
+            for (const chunk of chunkText(payload.text ?? "", textLimit)) {
               await params.deps.sendMessageTelegram(chatId, chunk, {
                 verbose: false,
                 token: telegramToken || undefined,
@@ -444,12 +445,13 @@ export async function runCronIsolatedAgentTurn(params: {
         };
       }
       const to = resolvedDelivery.to;
+      const textLimit = resolveTextChunkLimit(params.cfg, "signal");
       try {
         for (const payload of payloads) {
           const mediaList =
             payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
           if (mediaList.length === 0) {
-            for (const chunk of chunkText(payload.text ?? "", 4000)) {
+            for (const chunk of chunkText(payload.text ?? "", textLimit)) {
               await params.deps.sendMessageSignal(to, chunk);
             }
           } else {
@@ -482,12 +484,13 @@ export async function runCronIsolatedAgentTurn(params: {
         };
       }
       const to = resolvedDelivery.to;
+      const textLimit = resolveTextChunkLimit(params.cfg, "imessage");
       try {
         for (const payload of payloads) {
           const mediaList =
             payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
           if (mediaList.length === 0) {
-            for (const chunk of chunkText(payload.text ?? "", 4000)) {
+            for (const chunk of chunkText(payload.text ?? "", textLimit)) {
               await params.deps.sendMessageIMessage(to, chunk);
             }
           } else {

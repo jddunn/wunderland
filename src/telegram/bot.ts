@@ -5,7 +5,7 @@ import { apiThrottler } from "@grammyjs/transformer-throttler";
 import type { ApiClientOptions, Message } from "grammy";
 import { Bot, InputFile, webhookCallback } from "grammy";
 
-import { chunkText } from "../auto-reply/chunk.js";
+import { chunkText, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { formatAgentEnvelope } from "../auto-reply/envelope.js";
 import { getReplyFromConfig } from "../auto-reply/reply.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
@@ -60,6 +60,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
   bot.api.config.use(apiThrottler());
 
   const cfg = loadConfig();
+  const textLimit = resolveTextChunkLimit(cfg, "telegram");
   const allowFrom = opts.allowFrom ?? cfg.telegram?.allowFrom;
   const replyToMode = opts.replyToMode ?? cfg.telegram?.replyToMode ?? "off";
   const mediaMaxBytes =
@@ -245,6 +246,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         runtime,
         bot,
         replyToMode,
+        textLimit,
       });
     } catch (err) {
       runtime.error?.(danger(`handler failed: ${String(err)}`));
@@ -268,8 +270,9 @@ async function deliverReplies(params: {
   runtime: RuntimeEnv;
   bot: Bot;
   replyToMode: ReplyToMode;
+  textLimit: number;
 }) {
-  const { replies, chatId, runtime, bot, replyToMode } = params;
+  const { replies, chatId, runtime, bot, replyToMode, textLimit } = params;
   let hasReplied = false;
   for (const reply of replies) {
     if (!reply?.text && !reply?.mediaUrl && !(reply?.mediaUrls?.length ?? 0)) {
@@ -286,7 +289,7 @@ async function deliverReplies(params: {
         ? [reply.mediaUrl]
         : [];
     if (mediaList.length === 0) {
-      for (const chunk of chunkText(reply.text || "", 4000)) {
+      for (const chunk of chunkText(reply.text || "", textLimit)) {
         await sendTelegramText(bot, chatId, chunk, runtime, {
           replyToMessageId:
             replyToId && (replyToMode === "all" || !hasReplied)
