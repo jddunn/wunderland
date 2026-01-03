@@ -7,6 +7,7 @@
 - Agent runtime: update pi-mono dependencies to 0.31.1 (agent-core split).
 - Dependencies: bump to latest compatible versions (TypeBox, grammY, Zod, Rolldown, oxlint-tsgolint).
 - Tests: cover read tool image metadata + text output.
+- Tests: add queue mode coverage (collect/followup + directive parsing).
 
 ### Breaking
 - Skills config schema moved under `skills.*`:
@@ -47,6 +48,7 @@
 - CLI: add `configure`, `doctor`, and `update` wizards for ongoing setup, health checks, and modernization.
 - CLI: add Signal CLI auto-install from GitHub releases in the wizard and persist wizard run metadata in config.
 - CLI: add remote gateway client config (gateway.remote.*) with Bonjour-assisted discovery.
+- CLI: add `clawdis tui` for a Gateway-connected terminal UI.
 - Skills: allow `bun` as a node manager for skill installs.
 - Skills: add `things-mac` (Things 3 CLI) for read/search plus add/update via URL scheme.
 - Skills: add Apple Notes + Reminders skills via memo CLI (thanks @tylerwince).
