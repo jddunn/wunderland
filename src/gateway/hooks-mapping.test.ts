@@ -74,6 +74,61 @@ describe("hooks mapping", () => {
     }
   });
 
+  it("treats null transform as a handled skip", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clawdis-hooks-skip-"));
+    const modPath = path.join(dir, "transform.mjs");
+    fs.writeFileSync(modPath, "export default () => null;");
+
+    const mappings = resolveHookMappings({
+      transformsDir: dir,
+      mappings: [
+        {
+          match: { path: "skip" },
+          action: "agent",
+          transform: { module: "transform.mjs" },
+        },
+      ],
+    });
+
+    const result = await applyHookMappings(mappings, {
+      payload: {},
+      headers: {},
+      url: new URL("http://127.0.0.1:18789/hooks/skip"),
+      path: "skip",
+    });
+
+    expect(result?.ok).toBe(true);
+    if (result?.ok) {
+      expect(result.action).toBeNull();
+      expect("skipped" in result).toBe(true);
+    }
+  });
+
+  it("prefers explicit mappings over presets", async () => {
+    const mappings = resolveHookMappings({
+      presets: ["gmail"],
+      mappings: [
+        {
+          id: "override",
+          match: { path: "gmail" },
+          action: "agent",
+          messageTemplate: "Override subject: {{messages[0].subject}}",
+        },
+      ],
+    });
+    const result = await applyHookMappings(mappings, {
+      payload: { messages: [{ subject: "Hello" }] },
+      headers: {},
+      url: baseUrl,
+      path: "gmail",
+    });
+    expect(result?.ok).toBe(true);
+    if (result?.ok) {
+      expect(result.action.kind).toBe("agent");
+      expect(result.action.message).toBe("Override subject: Hello");
+    }
+  });
+
   it("rejects missing message", async () => {
     const mappings = resolveHookMappings({
       mappings: [{ match: { path: "noop" }, action: "agent" }],

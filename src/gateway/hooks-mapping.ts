@@ -70,6 +70,7 @@ export type HookAction =
 
 export type HookMappingResult =
   | { ok: true; action: HookAction }
+  | { ok: true; action: null; skipped: true }
   | { ok: false; error: string };
 
 const hookPresetMappings: Record<string, HookMappingConfig[]> = {
@@ -145,7 +146,9 @@ export async function applyHookMappings(
     if (mapping.transform) {
       const transform = await loadTransform(mapping.transform);
       override = await transform(ctx);
-      if (override === null) return null;
+      if (override === null) {
+        return { ok: true, action: null, skipped: true };
+      }
     }
 
     const merged = mergeAction(base.action, override, mapping.action);

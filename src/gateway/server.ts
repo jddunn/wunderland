@@ -1706,6 +1706,11 @@ export async function startGatewayServer(
             sendJson(res, 400, { ok: false, error: mapped.error });
             return true;
           }
+          if (mapped.action === null) {
+            res.statusCode = 204;
+            res.end();
+            return true;
+          }
           if (mapped.action.kind === "wake") {
             dispatchWakeHook({
               text: mapped.action.text,
