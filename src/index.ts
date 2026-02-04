@@ -1,0 +1,99 @@
+/**
+ * @fileoverview Main entry point for Wunderland - Adaptive AI Agent Framework
+ * @module @framers/wunderland
+ *
+ * Wunderland provides a comprehensive framework for building adaptive AI agents
+ * with HEXACO personality traits, hierarchical inference routing, and multi-layered
+ * security including human-in-the-loop authorization.
+ *
+ * @example
+ * ```typescript
+ * import {
+ *   createWunderlandSeed,
+ *   WunderlandSecurityPipeline,
+ *   HierarchicalInferenceRouter,
+ *   StepUpAuthorizationManager,
+ *   HEXACO_PRESETS,
+ * } from '@framers/wunderland';
+ *
+ * // Create an agent with HEXACO personality
+ * const seed = createWunderlandSeed({
+ *   seedId: 'research-assistant',
+ *   name: 'Research Assistant',
+ *   description: 'Helps with academic research',
+ *   hexacoTraits: HEXACO_PRESETS.ANALYTICAL_RESEARCHER,
+ *   securityProfile: { enablePreLLM: true, enableDualLLMAudit: true, enableOutputSigning: true },
+ *   inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
+ *   stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
+ * });
+ *
+ * // Set up security pipeline
+ * const security = new WunderlandSecurityPipeline({ enablePreLLM: true });
+ *
+ * // Set up inference routing
+ * const router = new HierarchicalInferenceRouter();
+ *
+ * // Set up authorization
+ * const auth = new StepUpAuthorizationManager({}, hitlCallback);
+ * ```
+ */
+
+// Core exports
+export * from './core/index.js';
+
+// Security exports
+export * from './security/index.js';
+
+// Inference exports
+export * from './inference/index.js';
+
+// Authorization exports
+export * from './authorization/index.js';
+
+// Browser automation exports (ported from OpenClaw)
+export * from './browser/index.js';
+
+// Pairing/allowlist exports (ported from OpenClaw)
+export * from './pairing/index.js';
+
+// Skills exports (ported from OpenClaw)
+export * from './skills/index.js';
+
+// Social network exports (Wonderland)
+export * from './social/index.js';
+
+// Guardrails exports
+export { CitizenModeGuardrail, type CitizenGuardrailResult, type CitizenGuardrailAction } from './guardrails/CitizenModeGuardrail.js';
+
+// Tools exports
+export { SocialPostTool, type PublishResult, type PostStorageCallback } from './tools/SocialPostTool.js';
+
+// Re-export commonly used items at top level for convenience
+export {
+  createWunderlandSeed,
+  createDefaultWunderlandSeed,
+  HEXACO_PRESETS,
+  type IWunderlandSeed,
+} from './core/WunderlandSeed.js';
+
+export {
+  WunderlandSecurityPipeline,
+  createProductionSecurityPipeline,
+  createDevelopmentSecurityPipeline,
+} from './security/WunderlandSecurityPipeline.js';
+
+export { HierarchicalInferenceRouter } from './inference/HierarchicalInferenceRouter.js';
+
+export { StepUpAuthorizationManager } from './authorization/StepUpAuthorizationManager.js';
+
+// Browser automation (ported from OpenClaw)
+export { BrowserClient } from './browser/BrowserClient.js';
+export { BrowserSession } from './browser/BrowserSession.js';
+export { BrowserInteractions } from './browser/BrowserInteractions.js';
+
+// Pairing (ported from OpenClaw)
+export { PairingManager } from './pairing/PairingManager.js';
+
+// Version info
+export const VERSION = '0.3.0';
+export const PACKAGE_NAME = '@framers/wunderland';
