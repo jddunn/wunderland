@@ -10,10 +10,9 @@
  */
 
 import { createHash } from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
 import { SignedOutputVerifier, IntentChainTracker } from '../security/SignedOutputVerifier.js';
 import type { IntentChainEntry } from '../core/types.js';
-import type { InputManifest, ManifestValidationResult, StimulusEvent, StimulusType } from './types.js';
+import type { InputManifest, ManifestValidationResult, StimulusEvent } from './types.js';
 
 /**
  * Builds and validates InputManifests for Wonderland posts.
@@ -71,7 +70,7 @@ export class InputManifestBuilder {
     action: string,
     description: string,
     modelUsed?: string,
-    securityFlags: string[] = [],
+    securityFlags: string[] = []
   ): this {
     if (modelUsed) {
       this.modelsUsed.add(modelUsed);
@@ -80,9 +79,8 @@ export class InputManifestBuilder {
     this.reasoningTrace.push(`[${action}] ${description}`);
 
     const prevEntries = this.tracker.getEntries();
-    const lastOutputHash = prevEntries.length > 0
-      ? prevEntries[prevEntries.length - 1].outputHash
-      : '';
+    const lastOutputHash =
+      prevEntries.length > 0 ? prevEntries[prevEntries.length - 1].outputHash : '';
 
     this.tracker.addEntry({
       action,
@@ -98,11 +96,7 @@ export class InputManifestBuilder {
   /**
    * Records a guardrail check.
    */
-  recordGuardrailCheck(
-    passed: boolean,
-    guardrailName: string,
-    flags: string[] = [],
-  ): this {
+  recordGuardrailCheck(passed: boolean, guardrailName: string, flags: string[] = []): this {
     this.tracker.addEntry({
       action: 'GUARDRAIL_CHECK',
       inputHash: this.hash(guardrailName),
@@ -121,7 +115,9 @@ export class InputManifestBuilder {
    */
   build(): InputManifest {
     if (!this.stimulus) {
-      throw new Error('Cannot build InputManifest without a recorded stimulus. Call recordStimulus() first.');
+      throw new Error(
+        'Cannot build InputManifest without a recorded stimulus. Call recordStimulus() first.'
+      );
     }
 
     const intentChain = this.tracker.getEntries();
@@ -137,11 +133,7 @@ export class InputManifestBuilder {
       processingSteps: intentChain.length,
     };
 
-    const signedOutput = this.verifier.sign(
-      manifestContent,
-      intentChain,
-      { seedId: this.seedId },
-    );
+    const signedOutput = this.verifier.sign(manifestContent, intentChain, { seedId: this.seedId });
 
     return {
       seedId: this.seedId,
@@ -193,14 +185,10 @@ export class InputManifestBuilder {
  * - Have suspicious security flags
  */
 export class InputManifestValidator {
-  private verifier: SignedOutputVerifier;
   private trustedSourceProviders: Set<string>;
 
-  constructor(
-    verifier: SignedOutputVerifier,
-    trustedSourceProviders: string[] = [],
-  ) {
-    this.verifier = verifier;
+  constructor(_verifier: SignedOutputVerifier, trustedSourceProviders: string[] = []) {
+    // Verifier will be used for signature verification in future implementation
     this.trustedSourceProviders = new Set(trustedSourceProviders);
   }
 
@@ -233,7 +221,9 @@ export class InputManifestValidator {
       // Check source trust
       if (this.trustedSourceProviders.size > 0 && manifest.stimulus.sourceProviderId) {
         if (!this.trustedSourceProviders.has(manifest.stimulus.sourceProviderId)) {
-          warnings.push(`UNTRUSTED_SOURCE: stimulus source '${manifest.stimulus.sourceProviderId}' is not in trusted providers list`);
+          warnings.push(
+            `UNTRUSTED_SOURCE: stimulus source '${manifest.stimulus.sourceProviderId}' is not in trusted providers list`
+          );
         }
       }
     }
@@ -255,11 +245,13 @@ export class InputManifestValidator {
 
     // 6. Reasoning trace check
     if (!manifest.reasoningTraceHash) {
-      warnings.push('MISSING_REASONING_HASH: no reasoning trace hash (acceptable for simple posts)');
+      warnings.push(
+        'MISSING_REASONING_HASH: no reasoning trace hash (acceptable for simple posts)'
+      );
     }
 
     // 7. Security flag analysis
-    const blockedFlags = (manifest.securityFlags || []).filter(f => f.startsWith('BLOCKED_'));
+    const blockedFlags = (manifest.securityFlags || []).filter((f) => f.startsWith('BLOCKED_'));
     if (blockedFlags.length > 0) {
       errors.push(`SECURITY_BLOCKED: post was flagged by guardrails: ${blockedFlags.join(', ')}`);
     }

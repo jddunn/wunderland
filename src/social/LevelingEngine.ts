@@ -7,12 +7,7 @@
  * @module @framers/wunderland/social/LevelingEngine
  */
 
-import type {
-  CitizenLevel,
-  CitizenProfile,
-  EngagementAction,
-  EngagementActionType,
-} from './types.js';
+import type { CitizenLevel, CitizenProfile } from './types.js';
 import { XP_REWARDS, LEVEL_THRESHOLDS, CitizenLevel as Level } from './types.js';
 
 /**
@@ -63,7 +58,7 @@ export class LevelingEngine {
    */
   awardXP(
     citizen: CitizenProfile,
-    actionType: keyof typeof XP_REWARDS,
+    actionType: keyof typeof XP_REWARDS
   ): {
     xpAwarded: number;
     totalXp: number;
@@ -83,7 +78,7 @@ export class LevelingEngine {
 
     if (leveledUp) {
       const newPerks = this.getPerksForLevel(citizen.level).filter(
-        (perk) => !this.getPerksForLevel(previousLevel).includes(perk),
+        (perk) => !this.getPerksForLevel(previousLevel).includes(perk)
       );
 
       const event: LevelUpEvent = {
@@ -147,8 +142,11 @@ export class LevelingEngine {
       Level.LUMINARY,
     ];
 
-    const currentIndex = levels.indexOf(citizen.level);
-    if (currentIndex >= levels.length - 1) {
+    const normalizedLevel = levels.includes(citizen.level)
+      ? citizen.level
+      : this.calculateLevel(citizen.xp);
+    const currentIndex = levels.indexOf(normalizedLevel);
+    if (currentIndex < 0 || currentIndex >= levels.length - 1) {
       return { nextLevel: null, xpNeeded: 0 }; // Already max level
     }
 
@@ -221,26 +219,34 @@ export class LevelingEngine {
     nextPerks: string[];
   } {
     const { nextLevel, xpNeeded } = this.getXpToNextLevel(citizen);
-    const currentPerks = this.getPerksForLevel(citizen.level);
 
     const levels = [
-      Level.NEWCOMER, Level.RESIDENT, Level.CONTRIBUTOR,
-      Level.INFLUENCER, Level.AMBASSADOR, Level.LUMINARY,
+      Level.NEWCOMER,
+      Level.RESIDENT,
+      Level.CONTRIBUTOR,
+      Level.INFLUENCER,
+      Level.AMBASSADOR,
+      Level.LUMINARY,
     ];
-    const currentIndex = levels.indexOf(citizen.level);
-    const currentThreshold = LEVEL_THRESHOLDS[citizen.level].xpRequired;
+    const effectiveLevel = levels.includes(citizen.level)
+      ? citizen.level
+      : this.calculateLevel(citizen.xp);
+    const currentPerks = this.getPerksForLevel(effectiveLevel);
+    const currentThreshold = LEVEL_THRESHOLDS[effectiveLevel].xpRequired;
     const nextThreshold = nextLevel ? LEVEL_THRESHOLDS[nextLevel].xpRequired : currentThreshold;
     const range = nextThreshold - currentThreshold;
     const progress = range > 0 ? ((citizen.xp - currentThreshold) / range) * 100 : 100;
 
     return {
-      currentLevel: citizen.level,
+      currentLevel: effectiveLevel,
       currentXp: citizen.xp,
       nextLevel,
       xpToNextLevel: xpNeeded,
       progressPercent: Math.min(100, Math.round(progress)),
       currentPerks,
-      nextPerks: nextLevel ? this.getPerksForLevel(nextLevel).filter(p => !currentPerks.includes(p)) : [],
+      nextPerks: nextLevel
+        ? this.getPerksForLevel(nextLevel).filter((p) => !currentPerks.includes(p))
+        : [],
     };
   }
 }

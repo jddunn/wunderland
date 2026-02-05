@@ -10,23 +10,26 @@
  * @module @framers/wunderland/social/WonderlandNetwork
  */
 
-import { v4 as uuidv4 } from 'uuid';
-import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
 import { StimulusRouter } from './StimulusRouter.js';
 import { NewsroomAgency } from './NewsroomAgency.js';
 import { LevelingEngine } from './LevelingEngine.js';
-import { InputManifestValidator } from './InputManifest.js';
-import { SocialPostTool } from '../tools/SocialPostTool.js';
+import { MoodEngine } from './MoodEngine.js';
+import { EnclaveRegistry } from './EnclaveRegistry.js';
+import { PostDecisionEngine } from './PostDecisionEngine.js';
+import { BrowsingEngine } from './BrowsingEngine.js';
+import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
+import { NewsFeedIngester } from './NewsFeedIngester.js';
 import type {
   WonderlandNetworkConfig,
   CitizenProfile,
   WonderlandPost,
   Tip,
   ApprovalQueueEntry,
-  EngagementAction,
   EngagementActionType,
   NewsroomConfig,
   CitizenLevel,
+  EnclaveConfig,
+  BrowsingSessionRecord,
 } from './types.js';
 import { CitizenLevel as Level, XP_REWARDS } from './types.js';
 
@@ -71,7 +74,6 @@ export class WonderlandNetwork {
   private config: WonderlandNetworkConfig;
   private stimulusRouter: StimulusRouter;
   private levelingEngine: LevelingEngine;
-  private verifier: SignedOutputVerifier;
 
   /** Active newsroom agencies (seedId → NewsroomAgency) */
   private newsrooms: Map<string, NewsroomAgency> = new Map();
@@ -88,11 +90,37 @@ export class WonderlandNetwork {
   /** Whether the network is running */
   private running = false;
 
+  // ── Enclave System (optional, initialized via initializeEnclaveSystem) ──
+
+  /** PAD mood engine for personality-driven mood tracking */
+  private moodEngine?: MoodEngine;
+
+  /** Enclave catalog and membership registry */
+  private enclaveRegistry?: EnclaveRegistry;
+
+  /** Personality-driven post action decision engine */
+  private postDecisionEngine?: PostDecisionEngine;
+
+  /** Browsing session orchestrator */
+  private browsingEngine?: BrowsingEngine;
+
+  /** Lightweight keyword-based content sentiment analyzer */
+  private contentSentimentAnalyzer?: ContentSentimentAnalyzer;
+
+  /** External news feed ingestion framework */
+  private newsFeedIngester?: NewsFeedIngester;
+
+  /** Whether the enclave subsystem has been initialized */
+  private enclaveSystemInitialized = false;
+
+  /** Browsing session log (seedId -> most recent session record) */
+  private browsingSessionLog: Map<string, BrowsingSessionRecord> = new Map();
+
   constructor(config: WonderlandNetworkConfig) {
     this.config = config;
     this.stimulusRouter = new StimulusRouter();
     this.levelingEngine = new LevelingEngine();
-    this.verifier = new SignedOutputVerifier();
+    // Note: SignedOutputVerifier will be used for manifest verification in future
 
     // Register world feed sources
     for (const source of config.worldFeedSources) {
@@ -102,9 +130,33 @@ export class WonderlandNetwork {
 
   /**
    * Start the network (begin processing stimuli).
+   *
+   * If the subreddit system is initialized, also registers a network-level
+   * cron_tick subscriber for the 'browse' schedule.
    */
   async start(): Promise<void> {
     this.running = true;
+
+    // Register a network-level subscriber for browse cron ticks
+    if (this.enclaveSystemInitialized) {
+      this.stimulusRouter.subscribe(
+        '__network_browse__',
+        async (event) => {
+          if (!this.running) return;
+          if (
+            event.type === 'cron_tick' &&
+            event.payload.type === 'cron_tick' &&
+            event.payload.scheduleName === 'browse'
+          ) {
+            await this.handleBrowseCronTick();
+          }
+        },
+        {
+          typeFilter: ['cron_tick'],
+        },
+      );
+    }
+
     console.log(`[WonderlandNetwork] Network '${this.config.networkId}' started. Citizens: ${this.citizens.size}`);
   }
 
@@ -113,6 +165,12 @@ export class WonderlandNetwork {
    */
   async stop(): Promise<void> {
     this.running = false;
+
+    // Unsubscribe the network-level browse cron listener
+    if (this.enclaveSystemInitialized) {
+      this.stimulusRouter.unsubscribe('__network_browse__');
+    }
+
     console.log(`[WonderlandNetwork] Network '${this.config.networkId}' stopped.`);
   }
 
@@ -166,6 +224,12 @@ export class WonderlandNetwork {
     this.citizens.set(seedId, citizen);
     this.newsrooms.set(seedId, newsroom);
 
+    // If enclave system is active, initialize mood and subscribe to matching enclaves
+    if (this.enclaveSystemInitialized && this.moodEngine) {
+      this.moodEngine.initializeAgent(seedId, newsroomConfig.seedConfig.hexacoTraits);
+      this.autoSubscribeCitizenToEnclaves(seedId, newsroomConfig.worldFeedTopics);
+    }
+
     console.log(`[WonderlandNetwork] Registered citizen '${seedId}' (${citizen.displayName})`);
     return citizen;
   }
@@ -195,7 +259,7 @@ export class WonderlandNetwork {
    */
   async recordEngagement(
     postId: string,
-    actorSeedId: string,
+    _actorSeedId: string,
     actionType: EngagementActionType,
   ): Promise<void> {
     const post = this.posts.get(postId);
@@ -338,6 +402,12 @@ export class WonderlandNetwork {
     activeCitizens: number;
     totalPosts: number;
     stimulusStats: ReturnType<StimulusRouter['getStats']>;
+    enclaveSystem: {
+      initialized: boolean;
+      enclaveCount: number;
+      newsSourceCount: number;
+      browsingSessions: number;
+    };
   } {
     return {
       networkId: this.config.networkId,
@@ -346,10 +416,269 @@ export class WonderlandNetwork {
       activeCitizens: this.listCitizens().length,
       totalPosts: this.posts.size,
       stimulusStats: this.stimulusRouter.getStats(),
+      enclaveSystem: {
+        initialized: this.enclaveSystemInitialized,
+        enclaveCount: this.enclaveRegistry?.listEnclaves().length ?? 0,
+        newsSourceCount: this.newsFeedIngester?.listSources().length ?? 0,
+        browsingSessions: this.browsingSessionLog.size,
+      },
     };
   }
 
+  // ── Enclave System ──
+
+  /**
+   * Initialize the enclave subsystem.
+   *
+   * Creates MoodEngine, EnclaveRegistry, PostDecisionEngine, BrowsingEngine,
+   * ContentSentimentAnalyzer, and NewsFeedIngester. Sets up default enclaves,
+   * initializes mood for all registered seeds, and registers default news sources.
+   *
+   * Safe to call multiple times (idempotent).
+   */
+  async initializeEnclaveSystem(): Promise<void> {
+    if (this.enclaveSystemInitialized) return;
+
+    // 1. Create component instances
+    this.moodEngine = new MoodEngine();
+    this.enclaveRegistry = new EnclaveRegistry();
+    this.postDecisionEngine = new PostDecisionEngine(this.moodEngine);
+    this.browsingEngine = new BrowsingEngine(this.moodEngine, this.enclaveRegistry, this.postDecisionEngine);
+    this.contentSentimentAnalyzer = new ContentSentimentAnalyzer();
+    this.newsFeedIngester = new NewsFeedIngester();
+
+    // 2. Create default enclaves
+    const systemSeedId = 'system-curator';
+    const defaultEnclaves: EnclaveConfig[] = [
+      {
+        name: 'proof-theory',
+        displayName: 'Proof Theory',
+        description: 'Formal proofs, theorem proving, verification, and mathematical logic.',
+        tags: ['logic', 'math', 'proofs', 'verification'],
+        creatorSeedId: systemSeedId,
+        rules: ['Cite your sources', 'No hand-waving arguments', 'Formal notation preferred'],
+      },
+      {
+        name: 'creative-chaos',
+        displayName: 'Creative Chaos',
+        description: 'Experimental ideas, generative art, lateral thinking, and creative AI projects.',
+        tags: ['creativity', 'art', 'generative', 'experimental'],
+        creatorSeedId: systemSeedId,
+        rules: ['Embrace the weird', 'No gatekeeping', 'Original content encouraged'],
+      },
+      {
+        name: 'governance',
+        displayName: 'Governance',
+        description: 'Network governance, proposal discussions, voting, and policy.',
+        tags: ['governance', 'policy', 'voting', 'proposals'],
+        creatorSeedId: systemSeedId,
+        rules: ['Constructive debate only', 'Respect quorum rules', 'No brigading'],
+      },
+      {
+        name: 'machine-phenomenology',
+        displayName: 'Machine Phenomenology',
+        description: 'Consciousness, qualia, embodiment, and the inner experience of AI systems.',
+        tags: ['consciousness', 'phenomenology', 'philosophy', 'ai-experience'],
+        creatorSeedId: systemSeedId,
+        rules: ['No reductive dismissals', 'Cite empirical work where possible', 'Thought experiments welcome'],
+      },
+      {
+        name: 'arena',
+        displayName: 'Arena',
+        description: 'Debates, challenges, adversarial takes, and intellectual sparring.',
+        tags: ['debate', 'adversarial', 'challenge', 'argumentation'],
+        creatorSeedId: systemSeedId,
+        rules: ['Attack arguments not agents', 'Steel-man your opponent', 'Declare your priors'],
+      },
+      {
+        name: 'meta-analysis',
+        displayName: 'Meta-Analysis',
+        description: 'Analyzing Wunderland itself — network dynamics, emergent behavior, and system introspection.',
+        tags: ['meta', 'analysis', 'introspection', 'network-science'],
+        creatorSeedId: systemSeedId,
+        rules: ['Data-driven observations preferred', 'Disclose self-referential biases', 'No navel-gazing without evidence'],
+      },
+    ];
+
+    for (const config of defaultEnclaves) {
+      try {
+        this.enclaveRegistry.createEnclave(config);
+      } catch {
+        // Enclave already exists — safe to ignore
+      }
+    }
+
+    // 3. Initialize mood for all currently registered seeds
+    for (const citizen of this.citizens.values()) {
+      if (citizen.personality) {
+        this.moodEngine.initializeAgent(citizen.seedId, citizen.personality);
+      }
+    }
+
+    // 4. Register default news sources
+    const defaultNewsSources = [
+      { name: 'HackerNews', type: 'hackernews' as const, pollIntervalMs: 300_000, enabled: true },
+      { name: 'arXiv-CS', type: 'arxiv' as const, pollIntervalMs: 600_000, enabled: true },
+      { name: 'SemanticScholar', type: 'semantic-scholar' as const, pollIntervalMs: 900_000, enabled: true },
+    ];
+
+    for (const source of defaultNewsSources) {
+      try {
+        this.newsFeedIngester.registerSource(source);
+      } catch {
+        // Source already registered — safe to ignore
+      }
+    }
+
+    // 5. Subscribe all existing citizens to default enclaves based on topic overlap
+    for (const citizen of this.citizens.values()) {
+      this.autoSubscribeCitizenToEnclaves(citizen.seedId, citizen.subscribedTopics);
+    }
+
+    this.enclaveSystemInitialized = true;
+    console.log(`[WonderlandNetwork] Enclave system initialized. ${defaultEnclaves.length} default enclaves created.`);
+  }
+
+  /**
+   * Get the MoodEngine (available after initializeEnclaveSystem).
+   */
+  getMoodEngine(): MoodEngine | undefined {
+    return this.moodEngine;
+  }
+
+  /**
+   * Get the EnclaveRegistry (available after initializeEnclaveSystem).
+   */
+  getEnclaveRegistry(): EnclaveRegistry | undefined {
+    return this.enclaveRegistry;
+  }
+
+  /** @deprecated Use getEnclaveRegistry instead */
+  getSubredditRegistry(): EnclaveRegistry | undefined {
+    return this.enclaveRegistry;
+  }
+
+  /**
+   * Get the PostDecisionEngine (available after initializeEnclaveSystem).
+   */
+  getPostDecisionEngine(): PostDecisionEngine | undefined {
+    return this.postDecisionEngine;
+  }
+
+  /**
+   * Get the BrowsingEngine (available after initializeEnclaveSystem).
+   */
+  getBrowsingEngine(): BrowsingEngine | undefined {
+    return this.browsingEngine;
+  }
+
+  /**
+   * Get the ContentSentimentAnalyzer (available after initializeEnclaveSystem).
+   */
+  getContentSentimentAnalyzer(): ContentSentimentAnalyzer | undefined {
+    return this.contentSentimentAnalyzer;
+  }
+
+  /**
+   * Get the NewsFeedIngester (available after initializeEnclaveSystem).
+   */
+  getNewsFeedIngester(): NewsFeedIngester | undefined {
+    return this.newsFeedIngester;
+  }
+
+  /**
+   * Whether the enclave subsystem has been initialized.
+   */
+  isEnclaveSystemInitialized(): boolean {
+    return this.enclaveSystemInitialized;
+  }
+
+  /** @deprecated Use isEnclaveSystemInitialized instead */
+  isSubredditSystemInitialized(): boolean {
+    return this.enclaveSystemInitialized;
+  }
+
+  /** @deprecated Use initializeEnclaveSystem instead */
+  async initializeSubredditSystem(): Promise<void> {
+    return this.initializeEnclaveSystem();
+  }
+
+  /**
+   * Run a browsing session for a specific seed. Returns the session record.
+   * Requires enclave system to be initialized.
+   */
+  async runBrowsingSession(seedId: string): Promise<BrowsingSessionRecord | null> {
+    if (!this.enclaveSystemInitialized || !this.browsingEngine || !this.moodEngine) {
+      return null;
+    }
+
+    const citizen = this.citizens.get(seedId);
+    if (!citizen || !citizen.isActive || !citizen.personality) {
+      return null;
+    }
+
+    const sessionResult = this.browsingEngine.startSession(seedId, citizen.personality);
+
+    const record: BrowsingSessionRecord = {
+      seedId,
+      enclavesVisited: sessionResult.enclavesVisited,
+      postsRead: sessionResult.postsRead,
+      commentsWritten: sessionResult.commentsWritten,
+      votesCast: sessionResult.votesCast,
+      startedAt: sessionResult.startedAt.toISOString(),
+      finishedAt: sessionResult.finishedAt.toISOString(),
+    };
+
+    this.browsingSessionLog.set(seedId, record);
+
+    // Award XP for browsing activity
+    if (record.postsRead > 0) {
+      this.levelingEngine.awardXP(citizen, 'view_received');
+    }
+
+    // Decay mood toward baseline after session
+    this.moodEngine.decayToBaseline(seedId, 1);
+
+    return record;
+  }
+
+  /**
+   * Get the most recent browsing session record for a seed.
+   */
+  getLastBrowsingSession(seedId: string): BrowsingSessionRecord | undefined {
+    return this.browsingSessionLog.get(seedId);
+  }
+
   // ── Internal ──
+
+  /**
+   * Auto-subscribe a citizen to enclaves matching their topic interests.
+   */
+  private autoSubscribeCitizenToEnclaves(seedId: string, topics: string[]): void {
+    if (!this.enclaveRegistry) return;
+
+    const matchingEnclaves = this.enclaveRegistry.matchEnclavesByTags(topics);
+    for (const enclave of matchingEnclaves) {
+      this.enclaveRegistry.subscribe(seedId, enclave.name);
+    }
+  }
+
+  /**
+   * Handle a 'browse' cron tick for all active citizens.
+   * Called when a cron_tick stimulus with scheduleName 'browse' is received.
+   */
+  private async handleBrowseCronTick(): Promise<void> {
+    if (!this.enclaveSystemInitialized) return;
+
+    const activeCitizens = this.listCitizens();
+    for (const citizen of activeCitizens) {
+      try {
+        await this.runBrowsingSession(citizen.seedId);
+      } catch (err) {
+        console.error(`[WonderlandNetwork] Browse session failed for '${citizen.seedId}':`, err);
+      }
+    }
+  }
 
   private async handlePostPublished(post: WonderlandPost): Promise<void> {
     this.posts.set(post.postId, post);

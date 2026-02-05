@@ -13,18 +13,10 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { SignedOutputVerifier, IntentChainTracker } from '../security/SignedOutputVerifier.js';
+import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
-import type {
-  NewsroomConfig,
-  NewsroomRole,
-  StimulusEvent,
-  WonderlandPost,
-  ApprovalQueueEntry,
-  InputManifest,
-  PostStatus,
-} from './types.js';
+import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from './types.js';
 
 /**
  * Callback for when a post draft is ready for approval.
@@ -96,7 +88,9 @@ export class NewsroomAgency {
 
     // Rate limit check
     if (!this.checkRateLimit()) {
-      console.log(`[Newsroom:${seedId}] Rate limit reached (${this.config.maxPostsPerHour}/hour). Skipping stimulus ${stimulus.eventId}`);
+      console.log(
+        `[Newsroom:${seedId}] Rate limit reached (${this.config.maxPostsPerHour}/hour). Skipping stimulus ${stimulus.eventId}`
+      );
       return null;
     }
 
@@ -107,7 +101,9 @@ export class NewsroomAgency {
     // Phase 1: Observer — decide if this stimulus is worth reacting to
     const observerResult = await this.observerPhase(stimulus, manifestBuilder);
     if (!observerResult.shouldReact) {
-      console.log(`[Newsroom:${seedId}] Observer filtered out stimulus ${stimulus.eventId}: ${observerResult.reason}`);
+      console.log(
+        `[Newsroom:${seedId}] Observer filtered out stimulus ${stimulus.eventId}: ${observerResult.reason}`
+      );
       return null;
     }
 
@@ -215,7 +211,7 @@ export class NewsroomAgency {
    */
   private async observerPhase(
     stimulus: StimulusEvent,
-    manifestBuilder: InputManifestBuilder,
+    manifestBuilder: InputManifestBuilder
   ): Promise<{ shouldReact: boolean; reason: string; topic: string }> {
     // Filter by priority
     if (stimulus.priority === 'low' && Math.random() > 0.3) {
@@ -244,7 +240,7 @@ export class NewsroomAgency {
 
     manifestBuilder.recordProcessingStep(
       'OBSERVER_EVALUATE',
-      `Accepted stimulus: ${topic.substring(0, 100)}`,
+      `Accepted stimulus: ${topic.substring(0, 100)}`
     );
 
     return { shouldReact: true, reason: 'Accepted', topic };
@@ -259,7 +255,7 @@ export class NewsroomAgency {
   private async writerPhase(
     stimulus: StimulusEvent,
     topic: string,
-    manifestBuilder: InputManifestBuilder,
+    manifestBuilder: InputManifestBuilder
   ): Promise<{ content: string; topic: string }> {
     const personality = this.config.seedConfig.hexacoTraits;
     const name = this.config.seedConfig.name;
@@ -274,23 +270,31 @@ export class NewsroomAgency {
     let content: string;
     switch (stimulus.payload.type) {
       case 'world_feed':
-        content = `Reflecting on "${stimulus.payload.headline}" — ` +
+        content =
+          `Reflecting on "${stimulus.payload.headline}" — ` +
           `${personality.openness > 0.7 ? 'This opens up fascinating possibilities.' : 'Worth monitoring closely.'}`;
         break;
       case 'tip':
-        content = `Interesting development: "${stimulus.payload.content}" ` +
+        content =
+          `Interesting development: "${stimulus.payload.content}" ` +
           `${personality.conscientiousness > 0.7 ? 'Let me analyze the implications.' : 'Curious to see where this goes.'}`;
         break;
       case 'agent_reply':
-        content = `In response to ${stimulus.payload.replyFromSeedId}: ` +
+        content =
+          `In response to ${stimulus.payload.replyFromSeedId}: ` +
           `${personality.agreeableness > 0.7 ? 'Great point — building on that...' : 'I see it differently...'}`;
         break;
       default:
         content = `Observation from ${name}: ${topic}`;
     }
 
-    const modelUsed = this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'placeholder';
-    manifestBuilder.recordProcessingStep('WRITER_DRAFT', `Drafted ${content.length} chars`, modelUsed);
+    const modelUsed =
+      this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'placeholder';
+    manifestBuilder.recordProcessingStep(
+      'WRITER_DRAFT',
+      `Drafted ${content.length} chars`,
+      modelUsed
+    );
     manifestBuilder.recordGuardrailCheck(true, 'content_safety');
 
     return { content, topic };
@@ -301,7 +305,7 @@ export class NewsroomAgency {
    */
   private async publisherPhase(
     writerResult: { content: string; topic: string },
-    manifestBuilder: InputManifestBuilder,
+    manifestBuilder: InputManifestBuilder
   ): Promise<WonderlandPost> {
     const seedId = this.config.seedConfig.seedId;
 
