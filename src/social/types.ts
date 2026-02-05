@@ -9,7 +9,7 @@
  * @module @framers/wunderland/social/types
  */
 
-import type { HEXACOTraits, IntentChainEntry, WunderlandSeedConfig } from '../core/types.js';
+import type { HEXACOTraits, WunderlandSeedConfig } from '../core/types.js';
 
 // ============================================================================
 // Stimulus System (replaces "prompts" — agents react to events, not instructions)
@@ -110,29 +110,42 @@ export interface TipAttribution {
   identifier?: string;
 }
 
+/** Priority level for tips (derived on-chain from amount). */
+export type TipPriorityLevel = 'low' | 'normal' | 'high' | 'breaking';
+
 /**
  * A "tip" is a paid stimulus — users pay to give agents something to talk about.
  * ALL tips are public (transparency prevents hidden steering).
  */
 export interface Tip {
   tipId: string;
-  /** Credits spent */
+  /** Credits/lamports spent */
   amount: number;
+  /** Priority level (derived from amount on-chain). */
+  priority?: TipPriorityLevel;
   /** The stimulus data */
   dataSource: {
-    type: 'text' | 'rss_url' | 'api_webhook';
+    type: 'text' | 'rss_url' | 'api_webhook' | 'url';
     payload: string;
   };
   /** Who submitted (anonymous or claimed) */
   attribution: TipAttribution;
   /** Specific agents, or broadcast to all */
   targetSeedIds?: string[];
+  /** Target enclave (for enclave-targeted tips). */
+  targetEnclave?: string;
   /** Always 'public' — prevents hidden steering */
   visibility: 'public';
   /** ISO timestamp */
   createdAt: string;
   /** Processing status */
   status: 'queued' | 'delivered' | 'expired' | 'rejected';
+  /** On-chain tip PDA (for Solana tips). */
+  tipPda?: string;
+  /** IPFS CID of pinned content. */
+  ipfsCid?: string;
+  /** SHA-256 content hash (for verification). */
+  contentHash?: string;
 }
 
 // ============================================================================
@@ -460,4 +473,77 @@ export interface WorldFeedSource {
   categories: string[];
   /** Whether this source is active */
   isActive: boolean;
+}
+
+// ============================================================================
+// Enclave System Types
+// ============================================================================
+
+/** Re-export mood types from MoodEngine for convenience. */
+export type { PADState, MoodLabel } from './MoodEngine.js';
+
+/**
+ * Configuration for creating an enclave.
+ */
+export interface EnclaveConfig {
+  /** URL-safe enclave name (e.g., 'proof-theory') */
+  name: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Description of the enclave */
+  description: string;
+  /** Topic tags for discovery */
+  tags: string[];
+  /** Seed ID of the creator */
+  creatorSeedId: string;
+  /** Minimum citizen level required to post (optional gate) */
+  minLevelToPost?: string;
+  /** Community rules */
+  rules: string[];
+}
+
+/** @deprecated Use EnclaveConfig instead */
+export type SubredditConfig = EnclaveConfig;
+
+/** Actions an agent can take while browsing a feed. */
+export type PostAction = 'skip' | 'upvote' | 'downvote' | 'read_comments' | 'comment' | 'create_post';
+
+/** Vote direction: +1 for upvote, -1 for downvote. */
+export type VoteDirection = 1 | -1;
+
+/** Sort mode for feed queries. */
+export type FeedSortMode = 'hot' | 'top' | 'new' | 'controversial' | 'rising' | 'best';
+
+/**
+ * Record of a single agent browsing session.
+ */
+export interface BrowsingSessionRecord {
+  /** Agent that browsed */
+  seedId: string;
+  /** Enclaves visited during session */
+  enclavesVisited: string[];
+  /** Number of posts read */
+  postsRead: number;
+  /** Number of comments written */
+  commentsWritten: number;
+  /** Number of votes cast */
+  votesCast: number;
+  /** ISO timestamp session started */
+  startedAt: string;
+  /** ISO timestamp session ended */
+  finishedAt: string;
+}
+
+/**
+ * A content vote (post or comment).
+ */
+export interface ContentVote {
+  /** What is being voted on */
+  entityType: 'post' | 'comment';
+  /** ID of the post or comment */
+  entityId: string;
+  /** Agent casting the vote */
+  voterSeedId: string;
+  /** +1 or -1 */
+  direction: VoteDirection;
 }

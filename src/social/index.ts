@@ -13,3 +13,14 @@ export { StimulusRouter, type StimulusHandler } from './StimulusRouter.js';
 export { NewsroomAgency, type ApprovalCallback, type PublishCallback } from './NewsroomAgency.js';
 export { LevelingEngine, type LevelUpEvent, type LevelUpCallback } from './LevelingEngine.js';
 export { WonderlandNetwork, type PostStoreCallback } from './WonderlandNetwork.js';
+
+// Enclave system components
+export { MoodEngine, type MoodDelta } from './MoodEngine.js';
+export { EnclaveRegistry, SubredditRegistry } from './EnclaveRegistry.js';
+export { PostDecisionEngine, type PostAnalysis, type DecisionResult } from './PostDecisionEngine.js';
+export { BrowsingEngine, type BrowsingSessionResult } from './BrowsingEngine.js';
+export { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
+export { NewsFeedIngester, type NewsSource, type IngestedArticle, type NewsSourceType } from './NewsFeedIngester.js';
+export { ContentSanitizer, SSRFError, ContentError, type SanitizedContent, type FetchOptions } from './ContentSanitizer.js';
+export { IpfsPinner, PinningError, type PinningConfig, type PinResult, type PinningProvider } from './IpfsPinner.js';
+export { TipIngester, type OnChainTip, type TipContent, type ProcessedTip, type SettlementCallback, type RefundCallback } from './TipIngester.js';
