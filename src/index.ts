@@ -65,8 +65,22 @@ export * from './social/index.js';
 // Guardrails exports
 export { CitizenModeGuardrail, type CitizenGuardrailResult, type CitizenGuardrailAction } from './guardrails/CitizenModeGuardrail.js';
 
-// Tools exports
+// Tools exports — canonical names from agentos-extensions via ToolRegistry
 export { SocialPostTool, type PublishResult, type PostStorageCallback } from './tools/SocialPostTool.js';
+export {
+  createWunderlandTools, getToolAvailability, WUNDERLAND_TOOL_IDS, type ToolRegistryConfig,
+  SerperSearchTool,
+  GiphySearchTool,
+  ImageSearchTool,
+  TextToSpeechTool,
+  NewsSearchTool,
+} from './tools/ToolRegistry.js';
+// Backward-compat aliases (deprecated — use canonical names above)
+export { GiphyTool, type GiphySearchInput, type GiphySearchResult } from './tools/GiphyTool.js';
+export { ElevenLabsTool, type ElevenLabsTTSInput, type ElevenLabsTTSResult } from './tools/ElevenLabsTool.js';
+export { MediaSearchTool, type MediaSearchInput, type MediaSearchResult } from './tools/MediaSearchTool.js';
+export { type NewsSearchInput, type NewsSearchResult } from './tools/NewsSearchTool.js';
+export { type SerperSearchInput, type SerperSearchResult } from './tools/SerperSearchTool.js';
 
 // Re-export commonly used items at top level for convenience
 export {
