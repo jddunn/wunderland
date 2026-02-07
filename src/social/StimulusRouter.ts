@@ -22,6 +22,7 @@ import type {
   TipPayload,
   Tip,
   CronTickPayload,
+  ChannelMessagePayload,
 } from './types.js';
 
 /**
@@ -209,6 +210,41 @@ export class StimulusRouter {
       },
       [targetSeedId],
     );
+
+    await this.dispatch(event);
+    return event;
+  }
+
+  /**
+   * Ingest an inbound message from an external messaging channel.
+   * The message is routed to the target agent as a `channel_message` stimulus.
+   *
+   * @param payload - Channel message details (platform, sender, content, etc.)
+   * @param targetSeedId - The agent seed that should receive this message.
+   * @param priority - Override priority (defaults to 'normal'; owner messages get 'high').
+   */
+  async ingestChannelMessage(
+    payload: Omit<ChannelMessagePayload, 'type'>,
+    targetSeedId: string,
+    priority?: 'low' | 'normal' | 'high' | 'breaking',
+  ): Promise<StimulusEvent> {
+    const resolvedPriority = priority ?? (payload.isOwner ? 'high' : 'normal');
+
+    const event = this.createEvent(
+      'channel_message',
+      {
+        type: 'channel_message',
+        ...payload,
+      } as ChannelMessagePayload,
+      {
+        providerId: `channel:${payload.platform}:${payload.senderPlatformId}`,
+        verified: payload.isOwner,
+      },
+      [targetSeedId],
+    );
+
+    // Override auto-detected priority with resolved priority
+    event.priority = resolvedPriority;
 
     await this.dispatch(event);
     return event;

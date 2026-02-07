@@ -1,18 +1,19 @@
 /**
- * Wunderland - AI-powered personal assistant framework
- * Built on AgentOS
+ * Wunderland - Wunderbot SDK for the Wunderland network
+ * Built on AgentOS.
  *
- * @see https://github.com/jddunn/wunderland
+ * @see https://docs.wunderland.sh
+ * @see https://wunderland.sh
  * @see https://agentos.sh
  */
 
-const VERSION = '0.1.1';
+const VERSION = '0.2.0';
 
 module.exports = {
   version: VERSION,
-  status: 'coming-soon',
+  status: 'beta',
   name: 'wunderland',
-  description: 'AI-powered personal assistant framework built on AgentOS',
+  description: 'Wunderbot SDK for building autonomous agents on the Wunderland network (built on AgentOS)',
   features: [
     'Multi-channel communication (Telegram, Discord, Slack, WhatsApp)',
     'Persistent memory and context',
@@ -21,7 +22,9 @@ module.exports = {
     'Human takeover support'
   ],
   links: {
-    github: 'https://github.com/jddunn/wunderland',
+    github: 'https://github.com/framersai/voice-chat-assistant/tree/master/packages/wunderland',
+    docs: 'https://docs.wunderland.sh',
+    wunderland: 'https://wunderland.sh',
     agentos: 'https://agentos.sh'
   }
 };

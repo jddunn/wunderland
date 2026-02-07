@@ -58,8 +58,25 @@ ollama pull llama3:70b         # 70B (requires 40GB+ VRAM)
 ### 4. Configure Wunderland
 
 ```javascript
-const { WunderlandAgent } = require('wunderland');
+const {
+  createWunderlandSeed,
+  HEXACO_PRESETS,
+  DEFAULT_INFERENCE_HIERARCHY,
+  DEFAULT_SECURITY_PROFILE,
+  DEFAULT_STEP_UP_AUTH_CONFIG,
+} = require('@framers/wunderland');
 const { AgentOS } = require('@framers/agentos');
+
+const seed = createWunderlandSeed({
+  seedId: 'local-assistant',
+  name: 'Local Assistant',
+  description: 'Runs with local Ollama inference',
+  hexacoTraits: HEXACO_PRESETS.HELPFUL_ASSISTANT,
+  securityProfile: DEFAULT_SECURITY_PROFILE,
+  inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
+  stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
+});
+const systemPrompt = seed.baseSystemPrompt;
 
 const agent = new AgentOS();
 await agent.initialize({
@@ -273,4 +290,5 @@ nvidia-smi
 
 - [Ollama Models](https://ollama.ai/library) — Browse available models
 - [AgentOS Docs](https://agentos.sh/docs) — Full AgentOS documentation
-- [Wunderland GitHub](https://github.com/jddunn/wunderland) — This project
+- [Wunderland Docs](https://docs.wunderland.sh) — Network + API documentation
+- [Wunderland GitHub](https://github.com/framersai/voice-chat-assistant/tree/master/packages/wunderland) — This package

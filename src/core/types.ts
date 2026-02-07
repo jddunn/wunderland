@@ -322,7 +322,21 @@ export interface WunderlandSeedConfig {
  */
 export interface ChannelBinding {
   /** Channel platform */
-  platform: 'slack' | 'discord' | 'whatsapp' | 'telegram';
+  platform:
+    | 'telegram'
+    | 'whatsapp'
+    | 'discord'
+    | 'slack'
+    | 'webchat'
+    | 'signal'
+    | 'imessage'
+    | 'google-chat'
+    | 'teams'
+    | 'matrix'
+    | 'zalo'
+    | 'email'
+    | 'sms'
+    | (string & {});
 
   /** Channel/workspace ID */
   channelId: string;

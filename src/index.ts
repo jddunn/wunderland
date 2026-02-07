@@ -22,7 +22,7 @@
  *   name: 'Research Assistant',
  *   description: 'Helps with academic research',
  *   hexacoTraits: HEXACO_PRESETS.ANALYTICAL_RESEARCHER,
- *   securityProfile: { enablePreLLM: true, enableDualLLMAudit: true, enableOutputSigning: true },
+ *   securityProfile: { enablePreLLMClassifier: true, enableDualLLMAuditor: true, enableOutputSigning: true },
  *   inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
  *   stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
  * });
@@ -109,5 +109,5 @@ export { BrowserInteractions } from './browser/BrowserInteractions.js';
 export { PairingManager } from './pairing/PairingManager.js';
 
 // Version info
-export const VERSION = '0.3.0';
+export const VERSION = '0.2.0';
 export const PACKAGE_NAME = '@framers/wunderland';
