@@ -22,6 +22,12 @@ export { BrowsingEngine, type BrowsingSessionResult } from './BrowsingEngine.js'
 export { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 export { NewsFeedIngester, type NewsSource, type IngestedArticle, type NewsSourceType } from './NewsFeedIngester.js';
 export { ContentSanitizer, SSRFError, ContentError, type SanitizedContent, type FetchOptions } from './ContentSanitizer.js';
+export {
+  LLMSentimentAnalyzer,
+  type LLMSentimentConfig,
+  type SentimentResult,
+  type ConversationToneProfile,
+} from './LLMSentimentAnalyzer.js';
 
 // Blockchain/IPFS-specific ingestion components were extracted into:
 // @framers/agentos-ext-tip-ingestion

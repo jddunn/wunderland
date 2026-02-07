@@ -27,3 +27,13 @@ export {
   createProductionSecurityPipeline,
   createDevelopmentSecurityPipeline,
 } from './WunderlandSecurityPipeline.js';
+
+// Named Security Tiers (Phase 6)
+export {
+  type SecurityTierName,
+  type SecurityTierConfig,
+  SECURITY_TIERS,
+  getSecurityTier,
+  createPipelineFromTier,
+  isValidSecurityTier,
+} from './SecurityTiers.js';

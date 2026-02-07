@@ -37,6 +37,17 @@ function printHelp(): void {
     ${chalk.white('voice')}                  Voice provider status
     ${chalk.white('cron')}                   Scheduled jobs management
     ${chalk.white('status')}                 Agent & connection status
+    ${chalk.white('seal')}                   Seal agent config (integrity hash)
+    ${chalk.white('list-presets')}            List personality & HEXACO presets
+    ${chalk.white('skills')}                 Manage agent skills
+    ${chalk.white('skills list')}             List available skills
+    ${chalk.white('skills info')} ${d('<name>')}     Show skill details
+    ${chalk.white('skills enable')} ${d('<name>')}   Enable a skill
+    ${chalk.white('skills disable')} ${d('<name>')}  Disable a skill
+    ${chalk.white('models')}                 List LLM providers & models
+    ${chalk.white('models set-default')} ${d('<p> <m>')} Set default provider/model
+    ${chalk.white('models test')} ${d('[provider]')} Test provider connectivity
+    ${chalk.white('plugins')}                List installed extension packs
     ${chalk.white('version')}                Show version
 
   ${c('Global Options:')}
@@ -52,6 +63,9 @@ function printHelp(): void {
     ${d('--port <number>')}        Server port (default: PORT env or 3777)
     ${d('--model <id>')}           LLM model override
     ${d('--preset <name>')}        Personality preset for init
+    ${d('--security-tier <tier>')} Security tier (dangerous/permissive/balanced/strict/paranoid)
+    ${d('--dir <path>')}           Working directory (seal)
+    ${d('--format <json|table>')}  Output format (list-presets, skills, models, plugins)
 	    ${d('--force')}                Overwrite existing files
 	    ${d('--skills-dir <path>')}    Load skills from directory
 	    ${d('--no-skills')}            Disable skill loading
@@ -67,16 +81,21 @@ function printHelp(): void {
 
 /** Command registry — lazy imports for fast startup. */
 const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Promise<void> }>> = {
-  setup:    () => import('./commands/setup.js'),
-  init:     () => import('./commands/init.js'),
-  start:    () => import('./commands/start.js'),
-  chat:     () => import('./commands/chat.js'),
-  doctor:   () => import('./commands/doctor.js'),
-  channels: () => import('./commands/channels.js'),
-  config:   () => import('./commands/config-cmd.js'),
-  status:   () => import('./commands/status.js'),
-  voice:    () => import('./commands/voice.js'),
-  cron:     () => import('./commands/cron.js'),
+  setup:          () => import('./commands/setup.js'),
+  init:           () => import('./commands/init.js'),
+  start:          () => import('./commands/start.js'),
+  chat:           () => import('./commands/chat.js'),
+  doctor:         () => import('./commands/doctor.js'),
+  channels:       () => import('./commands/channels.js'),
+  config:         () => import('./commands/config-cmd.js'),
+  status:         () => import('./commands/status.js'),
+  voice:          () => import('./commands/voice.js'),
+  cron:           () => import('./commands/cron.js'),
+  seal:           () => import('./commands/seal.js'),
+  'list-presets': () => import('./commands/list-presets.js'),
+  skills:         () => import('./commands/skills.js'),
+  models:         () => import('./commands/models.js'),
+  plugins:        () => import('./commands/plugins.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */

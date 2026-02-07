@@ -304,6 +304,14 @@ export interface WunderlandSeedConfig {
   /** Security profile configuration */
   securityProfile: SecurityProfile;
 
+  /**
+   * Named security tier preset. When set, overrides individual security
+   * profile flags with the tier's defaults.
+   *
+   * @see {@link SecurityTierName} from `wunderland/security/SecurityTiers`
+   */
+  securityTier?: 'dangerous' | 'permissive' | 'balanced' | 'strict' | 'paranoid';
+
   /** Inference hierarchy configuration */
   inferenceHierarchy: InferenceHierarchyConfig;
 

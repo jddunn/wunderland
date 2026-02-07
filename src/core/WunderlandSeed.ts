@@ -20,6 +20,7 @@ import {
   DEFAULT_STEP_UP_AUTH_CONFIG,
   normalizeHEXACOTraits,
 } from './types.js';
+import type { StyleAdaptationEngine } from './StyleAdaptation.js';
 
 /**
  * Extended persona definition interface for Wunderland Seeds.
@@ -43,6 +44,9 @@ export interface IWunderlandSeed extends IPersonaDefinition {
 
   /** Channel bindings */
   channelBindings: ChannelBinding[];
+
+  /** Optional communication style adaptation engine for user-aware responses */
+  styleEngine?: StyleAdaptationEngine;
 }
 
 /**
