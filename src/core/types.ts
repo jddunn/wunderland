@@ -266,7 +266,10 @@ export interface StepUpAuthorizationConfig {
  * financial/system = Tier 3 (requires HITL).
  */
 export const DEFAULT_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
-  defaultTier: ToolRiskTier.TIER_1_AUTONOMOUS,
+  // Read-only tools are always treated as Tier 1. This default tier is the
+  // fallback for *side-effecting* tools that don't match any explicit override.
+  // Safer default: require synchronous human approval for unknown side effects.
+  defaultTier: ToolRiskTier.TIER_3_SYNC_HITL,
   categoryTierOverrides: {
     data_modification: ToolRiskTier.TIER_2_ASYNC_REVIEW,
     external_api: ToolRiskTier.TIER_2_ASYNC_REVIEW,

@@ -1,5 +1,5 @@
 /**
- * @fileoverview `wunderland list-presets` — display HEXACO personality and agent template presets.
+ * @fileoverview `wunderland list-presets` — display personality, HEXACO, and agent presets.
  * @module wunderland/cli/commands/list-presets
  */
 
@@ -9,8 +9,7 @@ import { PERSONALITY_PRESETS } from '../constants.js';
 import { accent, dim, muted } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
-
-// ── Command ─────────────────────────────────────────────────────────────────
+import { PresetLoader } from '../../core/PresetLoader.js';
 
 export default async function cmdListPresets(
   _args: string[],
@@ -18,6 +17,15 @@ export default async function cmdListPresets(
   _globals: GlobalFlags,
 ): Promise<void> {
   const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+
+  // Load agent presets
+  let agentPresets: ReturnType<PresetLoader['listPresets']> = [];
+  try {
+    const loader = new PresetLoader();
+    agentPresets = loader.listPresets();
+  } catch {
+    // Non-fatal — presets dir might not exist
+  }
 
   if (format === 'json') {
     const output = {
@@ -30,12 +38,36 @@ export default async function cmdListPresets(
         id: key,
         ...values,
       })),
+      agentPresets: agentPresets.map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        securityTier: p.securityTier,
+        suggestedSkills: p.suggestedSkills,
+        suggestedChannels: p.suggestedChannels,
+      })),
     };
     console.log(JSON.stringify(output, null, 2));
     return;
   }
 
-  // Table format
+  // ── Agent Presets ────────────────────────────────────────────────────────
+  if (agentPresets.length > 0) {
+    fmt.section('Agent Presets');
+    fmt.blank();
+    console.log(`    ${chalk.white('ID'.padEnd(22))} ${chalk.white('Name'.padEnd(22))} ${chalk.white('Security'.padEnd(12))} ${chalk.white('Skills')}`);
+    console.log(`    ${dim('\u2500'.repeat(22))} ${dim('\u2500'.repeat(22))} ${dim('\u2500'.repeat(12))} ${dim('\u2500'.repeat(36))}`);
+
+    for (const preset of agentPresets) {
+      const skills = preset.suggestedSkills.length > 0 ? preset.suggestedSkills.join(', ') : dim('none');
+      console.log(
+        `    ${accent(preset.id.padEnd(22))} ${preset.name.padEnd(22)} ${muted(preset.securityTier.padEnd(12))} ${muted(typeof skills === 'string' ? skills : skills)}`,
+      );
+    }
+    fmt.blank();
+  }
+
+  // ── Personality Presets ─────────────────────────────────────────────────
   fmt.section('Personality Presets');
   fmt.blank();
   console.log(`    ${chalk.white('ID'.padEnd(26))} ${chalk.white('Label'.padEnd(24))} ${chalk.white('Description')}`);
@@ -47,7 +79,7 @@ export default async function cmdListPresets(
 
   fmt.blank();
 
-  // HEXACO raw presets
+  // ── HEXACO Trait Presets ────────────────────────────────────────────────
   const hexacoKeys = Object.keys(HEXACO_PRESETS);
   if (hexacoKeys.length > 0) {
     fmt.section('HEXACO Trait Presets');
@@ -67,6 +99,6 @@ export default async function cmdListPresets(
     fmt.blank();
   }
 
-  fmt.note(`Use with: ${accent('wunderland init my-agent --preset HELPFUL_ASSISTANT')}`);
+  fmt.note(`Use with: ${accent('wunderland init my-agent --preset research-assistant')}`);
   fmt.blank();
 }

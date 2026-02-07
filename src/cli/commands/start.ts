@@ -14,12 +14,13 @@ import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcess } from '../config/env-manager.js';
 import { isOllamaRunning, startOllama, detectOllamaInstall } from '../ollama/ollama-manager.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
-import { runToolCallingTurn, type ToolInstance } from '../openai/tool-calling.js';
+import { createAuthorizationManager, runToolCallingTurn, type ToolInstance } from '../openai/tool-calling.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
+  ToolRiskTier,
 } from '../../core/index.js';
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
@@ -185,9 +186,33 @@ export default async function cmdStart(
     .flatMap((p) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
     .filter(Boolean) as ToolInstance[];
 
-  // In server mode we can't prompt for approvals, so default to safe tools only
-  // unless the user explicitly opts into auto-approval.
-  const tools: ToolInstance[] = autoApproveToolCalls ? allTools : allTools.filter((t) => t.hasSideEffects !== true);
+  // In server mode we can't prompt for approvals. Expose only tools that are
+  // executable without Tier 3 HITL unless the user explicitly opts into
+  // fully-autonomous mode (`--yes` / `--dangerously-skip-permissions`).
+  const headlessAuthManager = autoApproveToolCalls
+    ? undefined
+    : createAuthorizationManager({ dangerouslySkipPermissions: false });
+
+  const tools: ToolInstance[] = autoApproveToolCalls
+    ? allTools
+    : allTools.filter((tool) => {
+        // Extra conservative: never expose side-effecting tools in headless mode.
+        if (tool.hasSideEffects === true) return false;
+        const tier = headlessAuthManager!.getRiskTier({
+          tool: {
+            id: tool.name,
+            displayName: tool.name,
+            description: tool.description,
+            category: tool.category,
+            hasSideEffects: tool.hasSideEffects ?? false,
+            requiredCapabilities: tool.requiredCapabilities,
+          },
+          args: {},
+          context: { userId: 'server', sessionId: 'server', gmiId: seed.seedId },
+          timestamp: new Date(),
+        });
+        return tier !== ToolRiskTier.TIER_3_SYNC_HITL;
+      });
 
   const toolMap = new Map<string, ToolInstance>();
   for (const tool of tools) {
@@ -200,9 +225,12 @@ export default async function cmdStart(
     function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
   }));
 
-  // Skills
+  // Skills — load from filesystem dirs + config-declared skills
   let skillsPrompt = '';
   if (enableSkills) {
+    const parts: string[] = [];
+
+    // 1. Directory-based skills (local ./skills/ dirs, --skills-dir flag)
     const skillRegistry = new SkillRegistry();
     const dirs = resolveDefaultSkillsDirs({
       cwd: process.cwd(),
@@ -211,14 +239,27 @@ export default async function cmdStart(
     if (dirs.length > 0) {
       await skillRegistry.loadFromDirs(dirs);
       const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
-      skillsPrompt = snapshot.prompt || '';
+      if (snapshot.prompt) parts.push(snapshot.prompt);
     }
+
+    // 2. Config-declared skills (from agent.config.json "skills" array)
+    if (Array.isArray(cfg.skills) && cfg.skills.length > 0) {
+      try {
+        const { resolveSkillsByNames } = await import('../../core/PresetSkillResolver.js');
+        const presetSnapshot = await resolveSkillsByNames(cfg.skills as string[]);
+        if (presetSnapshot.prompt) parts.push(presetSnapshot.prompt);
+      } catch { /* non-fatal — registry package may not be installed */ }
+    }
+
+    skillsPrompt = parts.filter(Boolean).join('\n\n');
   }
 
   const systemPrompt = [
     typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
     'You are a local Wunderland agent server.',
-    'You can use tools to read/write files, run shell commands, and browse the web.',
+    autoApproveToolCalls
+      ? 'You can use tools to read/write files, run shell commands, and browse the web.'
+      : 'You can use tools, but high-risk tools (filesystem, shell, and other side effects) are disabled in this mode.',
     skillsPrompt || '',
   ].filter(Boolean).join('\n\n');
 

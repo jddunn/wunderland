@@ -47,6 +47,8 @@ function printHelp(): void {
     ${chalk.white('models')}                 List LLM providers & models
     ${chalk.white('models set-default')} ${d('<p> <m>')} Set default provider/model
     ${chalk.white('models test')} ${d('[provider]')} Test provider connectivity
+    ${chalk.white('export')}                 Export agent as shareable manifest
+    ${chalk.white('import')} ${d('<manifest>')}     Import agent from manifest file
     ${chalk.white('plugins')}                List installed extension packs
     ${chalk.white('version')}                Show version
 
@@ -54,7 +56,7 @@ function printHelp(): void {
     ${d('--help, -h')}             Show help
     ${d('--version, -v')}          Show version
     ${d('--quiet, -q')}            Suppress banner
-    ${d('--yes, -y')}              Auto-accept prompts (headless)
+    ${d('--yes, -y')}              Auto-approve tool calls (headless)
     ${d('--no-color')}             Disable colors (also: NO_COLOR env)
     ${d('--dry-run')}              Preview without writing
     ${d('--config <path>')}        Config directory path
@@ -96,6 +98,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   skills:         () => import('./commands/skills.js'),
   models:         () => import('./commands/models.js'),
   plugins:        () => import('./commands/plugins.js'),
+  'export':       () => import('./commands/export-agent.js'),
+  'import':       () => import('./commands/import-agent.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
