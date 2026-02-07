@@ -9,7 +9,7 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { PERSONALITY_PRESETS } from '../constants.js';
-import { accent, success as sColor, muted, dim } from '../ui/theme.js';
+import { accent, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
 
@@ -112,7 +112,7 @@ export default async function cmdInit(
 
   await writeFile(
     path.join(targetDir, 'README.md'),
-    `# ${config.displayName}\n\nScaffolded by the Wunderland CLI.\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { "message": "Hello" }\n`,
+    `# ${config.displayName}\n\nScaffolded by the Wunderland CLI.\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { \"message\": \"Hello\", \"sessionId\": \"local\" }\n\nNotes:\n- By default, side-effect tools are disabled (shell execution + file writes).\n- Enable side effects with: \`wunderland start --yes\` (shell safety checks remain on).\n- Fully disable shell safety checks with: \`wunderland start --dangerously-skip-permissions\`.\n`,
     'utf8',
   );
 

@@ -58,10 +58,25 @@ export const CHANNEL_PLATFORMS = [
 
 export const TOOL_CATEGORIES = [
   { id: 'web-search', label: 'Web Search', providers: ['serper', 'serpapi', 'brave'] },
-  { id: 'voice', label: 'Voice Synthesis', providers: ['elevenlabs'] },
+  { id: 'voice-synthesis', label: 'Voice Synthesis', providers: ['elevenlabs'] },
   { id: 'image-search', label: 'Image Search', providers: ['pexels', 'unsplash', 'pixabay'] },
   { id: 'news', label: 'News Search', providers: ['newsapi'] },
   { id: 'media', label: 'GIFs & Media', providers: ['giphy'] },
+] as const;
+
+// ── Voice Telephony Providers ────────────────────────────────────────────────
+
+export const VOICE_PROVIDERS = [
+  { id: 'twilio', label: 'Twilio', icon: '\u{1F4DE}', tier: 'p0' },
+  { id: 'telnyx', label: 'Telnyx', icon: '\u{1F4DE}', tier: 'p0' },
+  { id: 'plivo', label: 'Plivo', icon: '\u{1F4DE}', tier: 'p0' },
+] as const;
+
+// ── Productivity Integrations ────────────────────────────────────────────────
+
+export const PRODUCTIVITY_INTEGRATIONS = [
+  { id: 'google-calendar', label: 'Google Calendar', icon: '\u{1F4C5}', providers: ['google-calendar'] },
+  { id: 'gmail', label: 'Gmail', icon: '\u{2709}\u{FE0F}', providers: ['gmail'] },
 ] as const;
 
 // ── HEXACO Presets ──────────────────────────────────────────────────────────

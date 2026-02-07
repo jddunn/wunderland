@@ -13,173 +13,7 @@ import { accent, success as sColor, warn as wColor, tool as tColor, muted, dim }
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcess } from '../config/env-manager.js';
 import { SkillRegistry } from '../../skills/index.js';
-
-// ── OpenAI helpers ──────────────────────────────────────────────────────────
-
-interface ToolCallMessage {
-  role: string;
-  content: string | null;
-  tool_calls?: Array<{
-    id: string;
-    function: { name: string; arguments: string };
-  }>;
-}
-
-function truncateString(value: unknown, maxLen: number): string {
-  const s = typeof value === 'string' ? value : String(value ?? '');
-  if (s.length <= maxLen) return s;
-  return s.slice(0, maxLen) + `\n...[truncated ${s.length - maxLen} chars]`;
-}
-
-function safeJsonStringify(value: unknown, maxLen: number): string {
-  try {
-    const json = JSON.stringify(value, null, 2);
-    return truncateString(json, maxLen);
-  } catch {
-    return truncateString(value, maxLen);
-  }
-}
-
-function redactToolOutputForLLM(output: Record<string, unknown>): Record<string, unknown> {
-  if (!output || typeof output !== 'object') return output;
-  const out = Array.isArray(output) ? output.slice(0, 50) : { ...output };
-  for (const key of ['stdout', 'stderr', 'content', 'html', 'text'] as const) {
-    if (typeof (out as Record<string, unknown>)[key] === 'string') {
-      (out as Record<string, unknown>)[key] = truncateString((out as Record<string, unknown>)[key], 12000);
-    }
-  }
-  return out as Record<string, unknown>;
-}
-
-async function openaiChatWithTools(opts: {
-  apiKey: string;
-  model: string;
-  messages: Array<Record<string, unknown>>;
-  tools: Array<Record<string, unknown>>;
-  temperature: number;
-  maxTokens: number;
-}): Promise<{ message: ToolCallMessage; model: string; usage: unknown }> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${opts.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: opts.model,
-      messages: opts.messages,
-      tools: opts.tools.length > 0 ? opts.tools : undefined,
-      tool_choice: opts.tools.length > 0 ? 'auto' : undefined,
-      temperature: opts.temperature,
-      max_tokens: opts.maxTokens,
-    }),
-  });
-
-  const text = await res.text();
-  if (!res.ok) throw new Error(`OpenAI error (${res.status}): ${text.slice(0, 300)}`);
-  const data = JSON.parse(text);
-  const msg = data?.choices?.[0]?.message;
-  if (!msg) throw new Error('OpenAI returned an empty response.');
-  return { message: msg, model: data?.model || opts.model, usage: data?.usage };
-}
-
-interface ToolInstance {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  hasSideEffects?: boolean;
-  execute: (args: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<{ success: boolean; output?: unknown; error?: string }>;
-}
-
-async function runToolCallingTurn(opts: {
-  apiKey: string;
-  model: string;
-  messages: Array<Record<string, unknown>>;
-  toolMap: Map<string, ToolInstance>;
-  toolDefs: Array<Record<string, unknown>>;
-  toolContext: Record<string, unknown>;
-  maxRounds: number;
-  dangerouslySkipPermissions: boolean;
-  askPermission: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
-}): Promise<string> {
-  const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
-
-  for (let round = 0; round < rounds; round += 1) {
-    const { message } = await openaiChatWithTools({
-      apiKey: opts.apiKey,
-      model: opts.model,
-      messages: opts.messages,
-      tools: opts.toolDefs,
-      temperature: 0.2,
-      maxTokens: 1400,
-    });
-
-    const toolCalls = message.tool_calls || [];
-
-    if (toolCalls.length === 0) {
-      const content = typeof message.content === 'string' ? message.content.trim() : '';
-      opts.messages.push({ role: 'assistant', content: content || '(no content)' });
-      return content || '';
-    }
-
-    opts.messages.push({
-      role: 'assistant',
-      content: typeof message.content === 'string' ? message.content : null,
-      tool_calls: toolCalls,
-    });
-
-    for (const call of toolCalls) {
-      const toolName = call?.function?.name;
-      const rawArgs = call?.function?.arguments;
-
-      if (!toolName || typeof rawArgs !== 'string') {
-        opts.messages.push({ role: 'tool', tool_call_id: call?.id, content: JSON.stringify({ error: 'Malformed tool call.' }) });
-        continue;
-      }
-
-      const tool = opts.toolMap.get(toolName);
-      if (!tool) {
-        opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Tool not found: ${toolName}` }) });
-        continue;
-      }
-
-      let args: Record<string, unknown>;
-      try {
-        args = JSON.parse(rawArgs);
-      } catch {
-        opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Invalid JSON arguments for ${toolName}` }) });
-        continue;
-      }
-
-      console.log(`  ${tColor('\u25B6')} ${tColor(toolName)} ${dim(truncateString(JSON.stringify(args), 120))}`);
-
-      if (tool.hasSideEffects && !opts.dangerouslySkipPermissions) {
-        const ok = await opts.askPermission(tool, args);
-        if (!ok) {
-          opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Permission denied for tool: ${toolName}` }) });
-          continue;
-        }
-      }
-
-      let result: { success: boolean; output?: unknown; error?: string };
-      try {
-        result = await tool.execute(args, opts.toolContext);
-      } catch (err) {
-        opts.messages.push({
-          role: 'tool',
-          tool_call_id: call.id,
-          content: JSON.stringify({ error: `Tool threw: ${err instanceof Error ? err.message : String(err)}` }),
-        });
-        continue;
-      }
-
-      const payload = result?.success ? redactToolOutputForLLM(result.output as Record<string, unknown>) : { error: result?.error || 'Tool failed' };
-      opts.messages.push({ role: 'tool', tool_call_id: call.id, content: safeJsonStringify(payload, 20000) });
-    }
-  }
-
-  return '';
-}
+import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance } from '../openai/tool-calling.js';
 
 // ── Skills resolver ─────────────────────────────────────────────────────────
 
@@ -212,7 +46,7 @@ function resolveSkillsDirs(flags: Record<string, string | boolean>): string[] {
 export default async function cmdChat(
   _args: string[],
   flags: Record<string, string | boolean>,
-  _globals: GlobalFlags,
+  globals: GlobalFlags,
 ): Promise<void> {
   await loadDotEnvIntoProcess(
     path.resolve(process.cwd(), '.env'),
@@ -228,17 +62,30 @@ export default async function cmdChat(
 
   const model = typeof flags['model'] === 'string' ? flags['model'] : (process.env['OPENAI_MODEL'] || 'gpt-4o-mini');
   const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
+  const dangerouslySkipCommandSafety =
+    flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
+  const autoApproveToolCalls = globals.yes || dangerouslySkipPermissions;
   const enableSkills = flags['no-skills'] !== true;
 
   // Load tools from curated extensions
-  const [cliExecutor, webSearch, webBrowser] = await Promise.all([
+  const [cliExecutor, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
     import('@framers/agentos-ext-cli-executor'),
     import('@framers/agentos-ext-web-search'),
     import('@framers/agentos-ext-web-browser'),
+    import('@framers/agentos-ext-giphy'),
+    import('@framers/agentos-ext-image-search'),
+    import('@framers/agentos-ext-voice-synthesis'),
+    import('@framers/agentos-ext-news-search'),
   ]);
 
   const packs = [
-    cliExecutor.createExtensionPack({ options: { workingDirectory: process.cwd() }, logger: console }),
+    cliExecutor.createExtensionPack({
+      options: {
+        workingDirectory: process.cwd(),
+        dangerouslySkipSecurityChecks: dangerouslySkipCommandSafety,
+      },
+      logger: console,
+    }),
     webSearch.createExtensionPack({
       options: {
         serperApiKey: process.env['SERPER_API_KEY'],
@@ -248,6 +95,17 @@ export default async function cmdChat(
       logger: console,
     }),
     webBrowser.createExtensionPack({ options: { headless: true }, logger: console }),
+    giphy.createExtensionPack({ options: { giphyApiKey: process.env['GIPHY_API_KEY'] }, logger: console }),
+    imageSearch.createExtensionPack({
+      options: {
+        pexelsApiKey: process.env['PEXELS_API_KEY'],
+        unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
+        pixabayApiKey: process.env['PIXABAY_API_KEY'],
+      },
+      logger: console,
+    }),
+    voiceSynthesis.createExtensionPack({ options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] }, logger: console }),
+    newsSearch.createExtensionPack({ options: { newsApiKey: process.env['NEWSAPI_API_KEY'] }, logger: console }),
   ];
 
   const tools: ToolInstance[] = packs
@@ -332,17 +190,20 @@ export default async function cmdChat(
 
     messages.push({ role: 'user', content: input });
 
-    const reply = await runToolCallingTurn({
-      apiKey,
-      model,
-      messages,
-      toolMap,
-      toolDefs,
-      toolContext,
-      maxRounds: 8,
-      dangerouslySkipPermissions,
-      askPermission,
-    });
+	    const reply = await runToolCallingTurn({
+	      apiKey,
+	      model,
+	      messages,
+	      toolMap,
+	      toolDefs,
+	      toolContext,
+	      maxRounds: 8,
+	      dangerouslySkipPermissions: autoApproveToolCalls,
+	      askPermission,
+	      onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
+	        console.log(`  ${tColor('\u25B6')} ${tColor(tool.name)} ${dim(truncateString(JSON.stringify(args), 120))}`);
+	      },
+	    });
 
     if (reply) {
       console.log();

@@ -6,10 +6,10 @@
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import type { GlobalFlags, DiagnosticSection, DiagnosticCheck } from '../types.js';
-import { success as sColor, error as eColor, warn as wColor, muted, dim, accent, info as iColor } from '../ui/theme.js';
+import { success as sColor, error as eColor, muted, dim, accent, info as iColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
-import { getConfigPath, getConfigDir, loadConfig } from '../config/config-manager.js';
-import { getEnvPath, loadEnv, loadDotEnvIntoProcess } from '../config/env-manager.js';
+import { getConfigPath } from '../config/config-manager.js';
+import { getEnvPath, loadDotEnvIntoProcess } from '../config/env-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
 import { URLS } from '../constants.js';
 

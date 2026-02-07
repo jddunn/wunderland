@@ -8,10 +8,13 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import * as path from 'node:path';
+import os from 'node:os';
 import type { GlobalFlags } from '../types.js';
-import { accent, success as sColor, info as iColor, warn as wColor, muted, dim } from '../ui/theme.js';
+import { accent, success as sColor, info as iColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcess } from '../config/env-manager.js';
+import { SkillRegistry } from '../../skills/index.js';
+import { runToolCallingTurn, type ToolInstance } from '../openai/tool-calling.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
@@ -50,35 +53,28 @@ function sendJson(res: import('node:http').ServerResponse, status: number, body:
   res.end(json);
 }
 
-async function chatWithOpenAI(opts: {
-  apiKey: string;
-  model: string;
-  systemPrompt: string;
-  userMessage: string;
-}): Promise<string> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${opts.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: opts.model,
-      messages: [
-        { role: 'system', content: opts.systemPrompt },
-        { role: 'user', content: opts.userMessage },
-      ],
-      temperature: 0.7,
-    }),
+function resolveSkillsDirs(flags: Record<string, string | boolean>): string[] {
+  const dirs: string[] = [];
+  const skillsDirFlag = flags['skills-dir'];
+  if (typeof skillsDirFlag === 'string' && skillsDirFlag.trim()) {
+    for (const part of skillsDirFlag.split(',')) {
+      const p = part.trim();
+      if (p) dirs.push(path.resolve(process.cwd(), p));
+    }
+  }
+  const codexHome = typeof process.env['CODEX_HOME'] === 'string' ? process.env['CODEX_HOME'].trim() : '';
+  if (codexHome) dirs.push(path.join(codexHome, 'skills'));
+  dirs.push(path.join(os.homedir(), '.codex', 'skills'));
+  dirs.push(path.join(process.cwd(), 'skills'));
+
+  const seen = new Set<string>();
+  return dirs.filter((d) => {
+    if (!d) return false;
+    const key = path.resolve(d);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return existsSync(key);
   });
-
-  const text = await res.text();
-  if (!res.ok) throw new Error(`OpenAI error (${res.status}): ${text.slice(0, 300)}`);
-
-  const data = JSON.parse(text);
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) throw new Error('OpenAI returned an empty response.');
-  return content.trim();
 }
 
 // ── Command ─────────────────────────────────────────────────────────────────
@@ -86,7 +82,7 @@ async function chatWithOpenAI(opts: {
 export default async function cmdStart(
   _args: string[],
   flags: Record<string, string | boolean>,
-  _globals: GlobalFlags,
+  globals: GlobalFlags,
 ): Promise<void> {
   const configPath = typeof flags['config'] === 'string'
     ? path.resolve(process.cwd(), flags['config'])
@@ -138,7 +134,94 @@ export default async function cmdStart(
   const portRaw = typeof flags['port'] === 'string' ? flags['port'] : (process.env['PORT'] || '');
   const port = Number(portRaw) || 3777;
   const apiKey = process.env['OPENAI_API_KEY'] || '';
-  const model = process.env['OPENAI_MODEL'] || 'gpt-4o-mini';
+  const model = typeof flags['model'] === 'string' ? flags['model'] : (process.env['OPENAI_MODEL'] || 'gpt-4o-mini');
+
+  const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
+  const dangerouslySkipCommandSafety =
+    flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
+  const autoApproveToolCalls = globals.yes || dangerouslySkipPermissions;
+  const enableSkills = flags['no-skills'] !== true;
+
+  // Load tools from curated extensions (same stack as `wunderland chat`)
+  const [cliExecutor, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
+    import('@framers/agentos-ext-cli-executor'),
+    import('@framers/agentos-ext-web-search'),
+    import('@framers/agentos-ext-web-browser'),
+    import('@framers/agentos-ext-giphy'),
+    import('@framers/agentos-ext-image-search'),
+    import('@framers/agentos-ext-voice-synthesis'),
+    import('@framers/agentos-ext-news-search'),
+  ]);
+
+  const packs = [
+    cliExecutor.createExtensionPack({
+      options: {
+        workingDirectory: process.cwd(),
+        dangerouslySkipSecurityChecks: dangerouslySkipCommandSafety,
+      },
+      logger: console,
+    }),
+    webSearch.createExtensionPack({
+      options: {
+        serperApiKey: process.env['SERPER_API_KEY'],
+        serpApiKey: process.env['SERPAPI_API_KEY'],
+        braveApiKey: process.env['BRAVE_API_KEY'],
+      },
+      logger: console,
+    }),
+    webBrowser.createExtensionPack({ options: { headless: true }, logger: console }),
+    giphy.createExtensionPack({ options: { giphyApiKey: process.env['GIPHY_API_KEY'] }, logger: console }),
+    imageSearch.createExtensionPack({
+      options: {
+        pexelsApiKey: process.env['PEXELS_API_KEY'],
+        unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
+        pixabayApiKey: process.env['PIXABAY_API_KEY'],
+      },
+      logger: console,
+    }),
+    voiceSynthesis.createExtensionPack({ options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] }, logger: console }),
+    newsSearch.createExtensionPack({ options: { newsApiKey: process.env['NEWSAPI_API_KEY'] }, logger: console }),
+  ];
+
+  const allTools: ToolInstance[] = packs
+    .flatMap((p) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
+    .filter(Boolean) as ToolInstance[];
+
+  // In server mode we can't prompt for approvals, so default to safe tools only
+  // unless the user explicitly opts into auto-approval.
+  const tools: ToolInstance[] = autoApproveToolCalls ? allTools : allTools.filter((t) => t.hasSideEffects !== true);
+
+  const toolMap = new Map<string, ToolInstance>();
+  for (const tool of tools) {
+    if (!tool?.name) continue;
+    toolMap.set(tool.name, tool);
+  }
+
+  const toolDefs = [...toolMap.values()].map((tool) => ({
+    type: 'function',
+    function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+  }));
+
+  // Skills
+  let skillsPrompt = '';
+  if (enableSkills) {
+    const skillRegistry = new SkillRegistry();
+    const dirs = resolveSkillsDirs(flags);
+    if (dirs.length > 0) {
+      await skillRegistry.loadFromDirs(dirs);
+      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform });
+      skillsPrompt = snapshot.prompt || '';
+    }
+  }
+
+  const systemPrompt = [
+    typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
+    'You are a local Wunderland agent server.',
+    'You can use tools to read/write files, run shell commands, and browse the web.',
+    skillsPrompt || '',
+  ].filter(Boolean).join('\n\n');
+
+  const sessions = new Map<string, Array<Record<string, unknown>>>();
 
   const server = createServer(async (req, res) => {
     try {
@@ -170,11 +253,44 @@ export default async function cmdStart(
 
         let reply: string;
         if (apiKey) {
-          reply = await chatWithOpenAI({
+          const sessionId = typeof parsed.sessionId === 'string' && parsed.sessionId.trim()
+            ? parsed.sessionId.trim().slice(0, 128)
+            : 'default';
+
+          if (parsed.reset === true) {
+            sessions.delete(sessionId);
+          }
+
+          let messages = sessions.get(sessionId);
+          if (!messages) {
+            messages = [{ role: 'system', content: systemPrompt }];
+            sessions.set(sessionId, messages);
+          }
+
+          // Keep a soft cap to avoid unbounded memory in long-running servers.
+          if (messages.length > 200) {
+            messages = [messages[0]!, ...messages.slice(-120)];
+            sessions.set(sessionId, messages);
+          }
+
+          messages.push({ role: 'user', content: message });
+
+          const toolContext = {
+            gmiId: `wunderland-server-${sessionId}`,
+            personaId: seed.seedId,
+            userContext: { userId: sessionId },
+          };
+
+          reply = await runToolCallingTurn({
             apiKey,
             model,
-            systemPrompt: seed.baseSystemPrompt,
-            userMessage: message,
+            messages,
+            toolMap,
+            toolDefs,
+            toolContext,
+            maxRounds: 8,
+            dangerouslySkipPermissions: autoApproveToolCalls,
+            askPermission: async () => false,
           });
         } else {
           reply =
@@ -204,6 +320,8 @@ export default async function cmdStart(
   fmt.kvPair('Model', model);
   fmt.kvPair('API Key', apiKey ? sColor('set') : wColor('not set'));
   fmt.kvPair('Port', String(port));
+  fmt.kvPair('Tools', `${toolDefs.length} loaded`);
+  fmt.kvPair('Side Effects', autoApproveToolCalls ? wColor('auto-approved') : sColor('disabled'));
   fmt.blank();
   fmt.ok(`Health: ${iColor(`http://localhost:${port}/health`)}`);
   fmt.ok(`Chat:   ${iColor(`POST http://localhost:${port}/chat`)}`);

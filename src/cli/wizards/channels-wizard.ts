@@ -35,7 +35,6 @@ export async function runChannelsWizard(state: WizardState): Promise<void> {
     if (secrets.length === 0) continue;
 
     const creds: Record<string, string> = {};
-    let hasRequired = false;
 
     for (const secret of secrets) {
       // Check env first
@@ -46,12 +45,11 @@ export async function runChannelsWizard(state: WizardState): Promise<void> {
         continue;
       }
 
-      if (!secret.optional) hasRequired = true;
-
       const value = await p.password({
         message: `${secret.label}:`,
-        validate: (val) => {
+        validate: (val: string) => {
           if (!val && !secret.optional) return `${secret.label} is required`;
+          return undefined;
         },
       });
 
