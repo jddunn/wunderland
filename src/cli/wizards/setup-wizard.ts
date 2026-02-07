@@ -6,9 +6,8 @@
 
 import * as p from '@clack/prompts';
 import boxen from 'boxen';
-import chalk from 'chalk';
 import type { GlobalFlags, WizardState, SetupMode } from '../types.js';
-import { accent, success as sColor, info as iColor, muted, dim, warn as wColor } from '../ui/theme.js';
+import { accent, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { updateConfig } from '../config/config-manager.js';
 import { mergeEnv } from '../config/env-manager.js';
@@ -60,8 +59,9 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
     message: 'What should your agent be called?',
     placeholder: 'My Wunderbot',
     defaultValue: 'My Wunderbot',
-    validate: (val) => {
+    validate: (val: string) => {
       if (!val.trim()) return 'Name cannot be empty';
+      return undefined;
     },
   });
 
@@ -235,9 +235,10 @@ async function runSecurityWizard(state: WizardState): Promise<void> {
     message: 'Risk threshold (0.0 - 1.0):',
     defaultValue: '0.7',
     placeholder: '0.7',
-    validate: (val) => {
+    validate: (val: string) => {
       const n = parseFloat(val);
       if (isNaN(n) || n < 0 || n > 1) return 'Must be a number between 0 and 1';
+      return undefined;
     },
   });
 

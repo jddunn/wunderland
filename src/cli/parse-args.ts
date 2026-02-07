@@ -51,7 +51,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
       if (!key) continue;
 
       // Boolean flags that never take a value
-      const BOOL_FLAGS = new Set(['help', 'version', 'quiet', 'yes', 'no-color', 'dry-run', 'force', 'no-skills', 'dangerously-skip-permissions']);
+      const BOOL_FLAGS = new Set([
+        'help',
+        'version',
+        'quiet',
+        'yes',
+        'no-color',
+        'dry-run',
+        'force',
+        'no-skills',
+        'dangerously-skip-permissions',
+        'dangerously-skip-command-safety',
+      ]);
       if (BOOL_FLAGS.has(key)) {
         flags[key] = true;
         continue;

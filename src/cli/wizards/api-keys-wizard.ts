@@ -49,8 +49,9 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
 
     const apiKey = await p.password({
       message: `${provider.label} API Key:`,
-      validate: (val) => {
+      validate: (val: string) => {
         if (!val.trim()) return `${provider.label} key is required`;
+        return undefined;
       },
     });
 

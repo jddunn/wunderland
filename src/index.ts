@@ -62,6 +62,9 @@ export * from './skills/index.js';
 // Social network exports (Wonderland)
 export * from './social/index.js';
 
+// Scheduling exports (cron scheduler, modeled after OpenClaw)
+export * from './scheduling/index.js';
+
 // Guardrails exports
 export { CitizenModeGuardrail, type CitizenGuardrailResult, type CitizenGuardrailAction } from './guardrails/CitizenModeGuardrail.js';
 
@@ -107,6 +110,9 @@ export { BrowserInteractions } from './browser/BrowserInteractions.js';
 
 // Pairing (ported from OpenClaw)
 export { PairingManager } from './pairing/PairingManager.js';
+
+// Scheduling (modeled after OpenClaw)
+export { CronScheduler } from './scheduling/CronScheduler.js';
 
 // Version info
 export const VERSION = '0.2.0';

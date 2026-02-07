@@ -3,7 +3,7 @@
  * @module wunderland/cli/commands/setup
  */
 
-import type { GlobalFlags, WizardState } from '../types.js';
+import type { GlobalFlags } from '../types.js';
 import { runSetupWizard } from '../wizards/setup-wizard.js';
 
 export default async function cmdSetup(

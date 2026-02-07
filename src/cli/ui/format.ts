@@ -5,7 +5,7 @@
  */
 
 import chalk from 'chalk';
-import { success as sColor, error as eColor, warn as wColor, info as iColor, muted, dim, key as kColor, tool as tColor, channel as cColor, accent, bright, HEX } from './theme.js';
+import { success as sColor, error as eColor, warn as wColor, info as iColor, muted, dim, key as kColor, tool as tColor, channel as cColor, accent, bright } from './theme.js';
 
 // ── Prefixed output ─────────────────────────────────────────────────────────
 

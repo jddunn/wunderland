@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import { accent, success as sColor, warn as wColor, muted, dim, info as iColor, channel as cColor, key as kColor } from '../ui/theme.js';
+import { accent, warn as wColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadConfig } from '../config/config-manager.js';
 import { loadEnv, loadDotEnvIntoProcess } from '../config/env-manager.js';

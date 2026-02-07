@@ -49,6 +49,10 @@
     "./tools": {
       "import": "./dist/tools/index.js",
       "types": "./dist/tools/index.d.ts"
+    },
+    "./scheduling": {
+      "import": "./dist/scheduling/index.js",
+      "types": "./dist/scheduling/index.d.ts"
     }
   },
   "bin": {

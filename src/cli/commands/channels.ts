@@ -103,7 +103,7 @@ async function addChannelById(platformId: string, globals: GlobalFlags): Promise
 
       const value = await p.password({
         message: `${secret.label}:`,
-        validate: (val) => (!val && !secret.optional ? `${secret.label} is required` : undefined),
+        validate: (val: string) => (!val && !secret.optional ? `${secret.label} is required` : undefined),
       });
 
       if (p.isCancel(value)) {
@@ -158,10 +158,9 @@ async function removeChannel(args: string[], globals: GlobalFlags): Promise<void
 
 export default async function cmdChannels(
   args: string[],
-  flags: Record<string, string | boolean>,
+  _flags: Record<string, string | boolean>,
   globals: GlobalFlags,
 ): Promise<void> {
-  void flags;
   const sub = args[0];
 
   if (sub === 'add') {

@@ -9,7 +9,7 @@ import { parseArgs, extractGlobalFlags } from './parse-args.js';
 import { printBanner } from './ui/banner.js';
 import { printCompactHeader } from './ui/compact-header.js';
 import { VERSION, URLS } from './constants.js';
-import { error as eColor, muted, dim, accent } from './ui/theme.js';
+import { muted, dim, accent } from './ui/theme.js';
 import * as fmt from './ui/format.js';
 
 // ── Help text ───────────────────────────────────────────────────────────────
@@ -34,6 +34,8 @@ function printHelp(): void {
     ${chalk.white('config')}                 Show current config
     ${chalk.white('config get')} ${d('<key>')}       Get a config value
     ${chalk.white('config set')} ${d('<key> <val>')} Set a config value
+    ${chalk.white('voice')}                  Voice provider status
+    ${chalk.white('cron')}                   Scheduled jobs management
     ${chalk.white('status')}                 Agent & connection status
     ${chalk.white('version')}                Show version
 
@@ -50,10 +52,11 @@ function printHelp(): void {
     ${d('--port <number>')}        Server port (default: PORT env or 3777)
     ${d('--model <id>')}           LLM model override
     ${d('--preset <name>')}        Personality preset for init
-    ${d('--force')}                Overwrite existing files
-    ${d('--skills-dir <path>')}    Load skills from directory
-    ${d('--no-skills')}            Disable skill loading
-    ${d('--dangerously-skip-permissions')}  Auto-approve tool calls
+	    ${d('--force')}                Overwrite existing files
+	    ${d('--skills-dir <path>')}    Load skills from directory
+	    ${d('--no-skills')}            Disable skill loading
+	    ${d('--dangerously-skip-permissions')}  Auto-approve tool calls
+	    ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
 
   ${c('Links:')}
     ${muted(URLS.website)}${dim('  \u00B7  ')}${muted(URLS.saas)}${dim('  \u00B7  ')}${muted(URLS.docs)}
@@ -72,6 +75,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   channels: () => import('./commands/channels.js'),
   config:   () => import('./commands/config-cmd.js'),
   status:   () => import('./commands/status.js'),
+  voice:    () => import('./commands/voice.js'),
+  cron:     () => import('./commands/cron.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */

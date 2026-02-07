@@ -25,8 +25,9 @@ export async function runVoiceWizard(state: WizardState): Promise<void> {
   } else {
     const keyInput = await p.password({
       message: 'ElevenLabs API Key:',
-      validate: (val) => {
+      validate: (val: string) => {
         if (!val.trim()) return 'API key is required';
+        return undefined;
       },
     });
 

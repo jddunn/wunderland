@@ -4,7 +4,7 @@
  */
 
 import type { GlobalFlags } from '../types.js';
-import { accent, muted, dim, info as iColor } from '../ui/theme.js';
+import { accent, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadConfig, getConfigValue, setConfigValue, getConfigPath } from '../config/config-manager.js';
 

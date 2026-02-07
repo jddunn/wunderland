@@ -6,7 +6,7 @@
 import * as p from '@clack/prompts';
 import type { WizardState } from '../types.js';
 import { PERSONALITY_PRESETS } from '../constants.js';
-import { accent, dim } from '../ui/theme.js';
+import { dim } from '../ui/theme.js';
 
 const HEXACO_TRAITS = [
   { key: 'honesty_humility', label: 'Honesty-Humility', desc: 'sincerity, fairness, modesty' },
@@ -43,9 +43,10 @@ export async function runPersonalityWizard(state: WizardState): Promise<void> {
         message: `${trait.label} (${dim(trait.desc)}):`,
         placeholder: '0.5',
         defaultValue: '0.5',
-        validate: (val) => {
+        validate: (val: string) => {
           const n = parseFloat(val);
           if (isNaN(n) || n < 0 || n > 1) return 'Must be a number between 0.0 and 1.0';
+          return undefined;
         },
       });
 
