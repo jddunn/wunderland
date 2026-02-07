@@ -1,6 +1,6 @@
 /**
  * @fileoverview Inference types for Wunderland
- * @module @framers/wunderland/inference/types
+ * @module wunderland/inference/types
  */
 
 import type { ModelTarget, InferenceHierarchyConfig } from '../core/types.js';

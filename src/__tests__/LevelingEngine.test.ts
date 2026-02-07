@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for LevelingEngine
- * @module @framers/wunderland/__tests__/LevelingEngine.test
+ * @module wunderland/__tests__/LevelingEngine.test
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

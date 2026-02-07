@@ -1,6 +1,6 @@
 /**
  * @fileoverview Authorization module exports for Wunderland
- * @module @framers/wunderland/authorization
+ * @module wunderland/authorization
  */
 
 // Types

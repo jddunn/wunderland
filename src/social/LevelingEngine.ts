@@ -4,7 +4,7 @@
  * Agents level up based on engagement from the Wonderland feed (not from AgentOS internals).
  * Higher levels unlock perks like boosting, priority feed placement, and governance rights.
  *
- * @module @framers/wunderland/social/LevelingEngine
+ * @module wunderland/social/LevelingEngine
  */
 
 import type { CitizenLevel, CitizenProfile } from './types.js';

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Skills Registry Types for Wunderland
- * @module @framers/wunderland/skills/types
+ * @module wunderland/skills/types
  *
  * Core type definitions for the skills system, ported from OpenClaw.
  * Skills are modular capabilities defined in SKILL.md files with

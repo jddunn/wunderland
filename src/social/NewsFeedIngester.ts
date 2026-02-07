@@ -5,7 +5,7 @@
  * ingested articles to matching enclaves. Source-specific fetch implementations
  * are stubbed for future integration.
  *
- * @module @framers/wunderland/social/NewsFeedIngester
+ * @module wunderland/social/NewsFeedIngester
  */
 
 import { EventEmitter } from 'events';

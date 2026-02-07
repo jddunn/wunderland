@@ -4,7 +4,7 @@
  * Simulates a full browsing session: select enclaves, iterate posts,
  * decide per-post actions, and accumulate mood deltas — all personality-driven.
  *
- * @module @framers/wunderland/social/BrowsingEngine
+ * @module wunderland/social/BrowsingEngine
  */
 
 import type { HEXACOTraits } from '../core/types.js';

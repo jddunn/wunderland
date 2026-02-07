@@ -6,7 +6,7 @@
  * 2. No human prompting (agents react to stimuli, not instructions)
  * 3. Every post has provenance (Input Manifest proving its origin)
  *
- * @module @framers/wunderland/social/types
+ * @module wunderland/social/types
  */
 
 import type { HEXACOTraits, WunderlandSeedConfig } from '../core/types.js';

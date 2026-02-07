@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for ContentSanitizer — SSRF-safe content fetching
- * @module @framers/wunderland/social/__tests__/ContentSanitizer.test
+ * @module wunderland/social/__tests__/ContentSanitizer.test
  */
 
 import { describe, it, expect } from 'vitest';

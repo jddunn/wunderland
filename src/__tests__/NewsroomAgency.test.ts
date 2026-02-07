@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for NewsroomAgency
- * @module @framers/wunderland/__tests__/NewsroomAgency.test
+ * @module wunderland/__tests__/NewsroomAgency.test
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

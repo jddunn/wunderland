@@ -1,6 +1,6 @@
 /**
  * @fileoverview Pairing manager - Ported from OpenClaw
- * @module @framers/wunderland/pairing/PairingManager
+ * @module wunderland/pairing/PairingManager
  *
  * Manages pairing codes for unknown senders to authenticate
  * with the AI assistant.

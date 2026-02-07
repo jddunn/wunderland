@@ -33,10 +33,10 @@ try {
 // Import tools via ToolRegistry
 import { createWunderlandTools, getToolAvailability } from './src/tools/ToolRegistry.js';
 import { SerperSearchTool } from './src/tools/SerperSearchTool.js';
-import { GiphySearchTool } from '../../packages/agentos-extensions/registry/curated/media/giphy/src/tools/giphySearch.js';
-import { ImageSearchTool } from '../../packages/agentos-extensions/registry/curated/media/image-search/src/tools/imageSearch.js';
-import { TextToSpeechTool } from '../../packages/agentos-extensions/registry/curated/media/voice-synthesis/src/tools/textToSpeech.js';
-import { NewsSearchTool } from '../../packages/agentos-extensions/registry/curated/research/news-search/src/tools/newsSearch.js';
+import { GiphySearchTool } from '@framers/agentos-ext-giphy';
+import { ImageSearchTool } from '@framers/agentos-ext-image-search';
+import { TextToSpeechTool } from '@framers/agentos-ext-voice-synthesis';
+import { NewsSearchTool } from '@framers/agentos-ext-news-search';
 
 // Minimal execution context for testing
 const testContext = {

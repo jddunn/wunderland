@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for InputManifestBuilder and InputManifestValidator
- * @module @framers/wunderland/__tests__/InputManifest.test
+ * @module wunderland/__tests__/InputManifest.test
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

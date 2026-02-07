@@ -1,6 +1,6 @@
 /**
  * @fileoverview Wunderland Security Pipeline - Orchestrates all security layers
- * @module @framers/wunderland/security/WunderlandSecurityPipeline
+ * @module wunderland/security/WunderlandSecurityPipeline
  *
  * Combines Pre-LLM Classification, Dual-LLM Audit, and Output Signing
  * into a unified security pipeline.
@@ -12,7 +12,7 @@ import type {
   GuardrailInputPayload,
   GuardrailOutputPayload,
   GuardrailEvaluationResult,
-} from '@framers/agentos';
+} from '@framers/agentos/core/guardrails/index';
 import { PreLLMClassifier } from './PreLLMClassifier.js';
 import { DualLLMAuditor } from './DualLLMAuditor.js';
 import { SignedOutputVerifier, IntentChainTracker } from './SignedOutputVerifier.js';

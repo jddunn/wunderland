@@ -1,6 +1,6 @@
 /**
  * @fileoverview Main entry point for Wunderland - Adaptive AI Agent Framework
- * @module @framers/wunderland
+ * @module wunderland
  *
  * Wunderland provides a comprehensive framework for building adaptive AI agents
  * with HEXACO personality traits, hierarchical inference routing, and multi-layered
@@ -14,7 +14,7 @@
  *   HierarchicalInferenceRouter,
  *   StepUpAuthorizationManager,
  *   HEXACO_PRESETS,
- * } from '@framers/wunderland';
+ * } from 'wunderland';
  *
  * // Create an agent with HEXACO personality
  * const seed = createWunderlandSeed({
@@ -110,4 +110,4 @@ export { PairingManager } from './pairing/PairingManager.js';
 
 // Version info
 export const VERSION = '0.2.0';
-export const PACKAGE_NAME = '@framers/wunderland';
+export const PACKAGE_NAME = 'wunderland';

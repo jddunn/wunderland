@@ -3,9 +3,9 @@
  * @deprecated Use NewsSearchTool from ToolRegistry or agentos-extensions directly.
  */
 
-export { NewsSearchTool } from '../../../agentos-extensions/registry/curated/research/news-search/src/tools/newsSearch.js';
+export { NewsSearchTool } from '@framers/agentos-ext-news-search';
 export type {
   NewsSearchInput,
   NewsSearchOutput as NewsSearchResult,
   NewsArticle,
-} from '../../../agentos-extensions/registry/curated/research/news-search/src/tools/newsSearch.js';
+} from '@framers/agentos-ext-news-search';

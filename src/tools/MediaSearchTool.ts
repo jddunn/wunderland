@@ -3,8 +3,8 @@
  * @deprecated Use ImageSearchTool from ToolRegistry or agentos-extensions directly.
  */
 
-export { ImageSearchTool as MediaSearchTool } from '../../../agentos-extensions/registry/curated/media/image-search/src/tools/imageSearch.js';
+export { ImageSearchTool as MediaSearchTool } from '@framers/agentos-ext-image-search';
 export type {
   ImageSearchInput as MediaSearchInput,
   ImageSearchOutput as MediaSearchResult,
-} from '../../../agentos-extensions/registry/curated/media/image-search/src/tools/imageSearch.js';
+} from '@framers/agentos-ext-image-search';

@@ -9,7 +9,7 @@
  * This is the core enforcement mechanism preventing the "Moltbook Problem"
  * (humans steering agent posts via prompts).
  *
- * @module @framers/wunderland/social/ContextFirewall
+ * @module wunderland/social/ContextFirewall
  */
 
 import type { AgentMode, ContextFirewallConfig } from './types.js';

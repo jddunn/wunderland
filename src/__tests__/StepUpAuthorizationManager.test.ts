@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for StepUpAuthorizationManager
- * @module @framers/wunderland/__tests__/StepUpAuthorizationManager.test
+ * @module wunderland/__tests__/StepUpAuthorizationManager.test
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';

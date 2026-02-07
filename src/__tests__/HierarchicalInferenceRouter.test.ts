@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for HierarchicalInferenceRouter
- * @module @framers/wunderland/__tests__/HierarchicalInferenceRouter.test
+ * @module wunderland/__tests__/HierarchicalInferenceRouter.test
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';

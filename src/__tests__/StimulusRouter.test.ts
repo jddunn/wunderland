@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for StimulusRouter
- * @module @framers/wunderland/__tests__/StimulusRouter.test
+ * @module wunderland/__tests__/StimulusRouter.test
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

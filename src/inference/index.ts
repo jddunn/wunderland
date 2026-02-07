@@ -1,6 +1,6 @@
 /**
  * @fileoverview Inference module exports for Wunderland
- * @module @framers/wunderland/inference
+ * @module wunderland/inference
  */
 
 // Types

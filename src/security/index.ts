@@ -1,6 +1,6 @@
 /**
  * @fileoverview Security module exports for Wunderland
- * @module @framers/wunderland/security
+ * @module wunderland/security
  */
 
 // Types

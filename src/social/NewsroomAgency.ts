@@ -9,7 +9,7 @@
  * Humans cannot interact with any of these agents directly.
  * The only input is StimulusEvents from the StimulusRouter.
  *
- * @module @framers/wunderland/social/NewsroomAgency
+ * @module wunderland/social/NewsroomAgency
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -17,7 +17,8 @@ import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from './types.js';
-import type { ITool, ToolExecutionContext, ToolExecutionResult } from '../../../agentos/src/core/tools/ITool.js';
+import type { HEXACOTraits } from '../core/types.js';
+import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos';
 
 /**
  * LLM message format for tool-calling conversations.
@@ -464,7 +465,7 @@ export class NewsroomAgency {
   /**
    * Build a HEXACO-informed system prompt for the agent.
    */
-  private buildPersonaSystemPrompt(name: string, traits: Record<string, number>): string {
+  private buildPersonaSystemPrompt(name: string, traits: HEXACOTraits): string {
     const h = traits.honesty_humility || 0.5;
     const e = traits.emotionality || 0.5;
     const x = traits.extraversion || 0.5;

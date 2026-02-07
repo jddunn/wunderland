@@ -4,7 +4,7 @@
  * Maps HEXACO personality traits to baseline moods and applies real-time deltas
  * from social interactions, decaying back toward personality-derived baselines.
  *
- * @module @framers/wunderland/social/MoodEngine
+ * @module wunderland/social/MoodEngine
  */
 
 import { EventEmitter } from 'events';

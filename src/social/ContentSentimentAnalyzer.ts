@@ -4,7 +4,7 @@
  * Provides heuristic relevance, controversy, and sentiment scores for posts
  * without requiring an LLM call. Used as a fast pre-filter for the PostDecisionEngine.
  *
- * @module @framers/wunderland/social/ContentSentimentAnalyzer
+ * @module wunderland/social/ContentSentimentAnalyzer
  */
 
 import type { PostAnalysis } from './PostDecisionEngine.js';

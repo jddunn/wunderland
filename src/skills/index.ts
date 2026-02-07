@@ -1,6 +1,6 @@
 /**
  * @fileoverview Skills module exports for Wunderland
- * @module @framers/wunderland/skills
+ * @module wunderland/skills
  *
  * The Skills system allows agents to be extended with modular capabilities.
  * Skills are defined in SKILL.md files with YAML frontmatter specifying
@@ -12,7 +12,7 @@
  *   SkillRegistry,
  *   loadSkillsFromDir,
  *   parseSkillFrontmatter,
- * } from '@framers/wunderland/skills';
+ * } from 'wunderland/skills';
  *
  * // Create registry
  * const registry = new SkillRegistry();

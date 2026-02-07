@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for SignedOutputVerifier
- * @module @framers/wunderland/__tests__/SignedOutputVerifier.test
+ * @module wunderland/__tests__/SignedOutputVerifier.test
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

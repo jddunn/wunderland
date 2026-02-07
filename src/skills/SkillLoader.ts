@@ -1,6 +1,6 @@
 /**
  * @fileoverview Skill Loader for Wunderland
- * @module @framers/wunderland/skills/SkillLoader
+ * @module wunderland/skills/SkillLoader
  *
  * Loads skills from directories by parsing SKILL.md files with YAML frontmatter.
  * Skills are modular capabilities that extend agent functionality.

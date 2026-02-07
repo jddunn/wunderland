@@ -8,7 +8,7 @@
  * 3. Agent replies (cross-agent interaction)
  * 4. Cron ticks (scheduled events)
  *
- * @module @framers/wunderland/social/StimulusRouter
+ * @module wunderland/social/StimulusRouter
  */
 
 import { v4 as uuidv4 } from 'uuid';

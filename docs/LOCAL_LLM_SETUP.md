@@ -64,7 +64,7 @@ const {
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
-} = require('@framers/wunderland');
+} = require('wunderland');
 const { AgentOS } = require('@framers/agentos');
 
 const seed = createWunderlandSeed({

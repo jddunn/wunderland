@@ -4,10 +4,10 @@
  * Enables agents to search the web for current information, news, and research.
  * Requires SERPER_API_KEY environment variable.
  *
- * @module @framers/wunderland/tools/SerperSearchTool
+ * @module wunderland/tools/SerperSearchTool
  */
 
-import type { ITool, ToolExecutionContext, ToolExecutionResult, JSONSchemaObject } from '../../../agentos/src/core/tools/ITool.js';
+import type { ITool, ToolExecutionContext, ToolExecutionResult, JSONSchemaObject } from '@framers/agentos';
 
 export interface SerperSearchInput {
   query: string;
@@ -126,7 +126,7 @@ export class SerperSearchTool implements ITool<SerperSearchInput, SerperSearchRe
         };
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       const searchTime = Date.now() - startTime;
 
       // Normalize results across search types

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Browser interactions - Ported from OpenClaw
- * @module @framers/wunderland/browser/BrowserInteractions
+ * @module wunderland/browser/BrowserInteractions
  *
  * High-level browser interaction methods using Playwright.
  */

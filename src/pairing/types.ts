@@ -1,6 +1,6 @@
 /**
  * @fileoverview Pairing store types - Ported from OpenClaw
- * @module @framers/wunderland/pairing/types
+ * @module wunderland/pairing/types
  */
 
 /**

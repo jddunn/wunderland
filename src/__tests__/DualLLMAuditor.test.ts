@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for DualLLMAuditor
- * @module @framers/wunderland/__tests__/DualLLMAuditor.test
+ * @module wunderland/__tests__/DualLLMAuditor.test
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';

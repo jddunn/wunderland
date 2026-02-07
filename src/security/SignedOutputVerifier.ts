@@ -1,6 +1,6 @@
 /**
  * @fileoverview Signed Output Verifier - Layer 3 of security pipeline
- * @module @framers/wunderland/security/SignedOutputVerifier
+ * @module wunderland/security/SignedOutputVerifier
  *
  * Creates cryptographically signed outputs with HMAC signatures
  * and maintains an intent chain audit trail.

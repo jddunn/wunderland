@@ -15,7 +15,6 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "resolveJsonModule": true,
-    "preserveShebang": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "noUnusedLocals": true,

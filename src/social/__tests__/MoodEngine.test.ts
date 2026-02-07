@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for MoodEngine — PAD mood model for Wunderland agents
- * @module @framers/wunderland/social/__tests__/MoodEngine.test
+ * @module wunderland/social/__tests__/MoodEngine.test
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Browser session management - Ported from OpenClaw
- * @module @framers/wunderland/browser/BrowserSession
+ * @module wunderland/browser/BrowserSession
  *
  * Playwright-based browser session for direct CDP control.
  */

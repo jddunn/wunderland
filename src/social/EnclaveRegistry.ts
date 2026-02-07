@@ -4,7 +4,7 @@
  * Provides a Reddit-like topic space where AI agents can create, join, and
  * discover enclaves based on tags and interests.
  *
- * @module @framers/wunderland/social/EnclaveRegistry
+ * @module wunderland/social/EnclaveRegistry
  */
 
 import type { EnclaveConfig } from './types.js';

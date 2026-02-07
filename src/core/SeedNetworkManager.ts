@@ -1,6 +1,6 @@
 /**
  * @fileoverview Seed Network Manager - Multi-agent coordination for Wunderland
- * @module @framers/wunderland/core/SeedNetworkManager
+ * @module wunderland/core/SeedNetworkManager
  *
  * Integrates WunderlandSeeds with AgentOS AgentCommunicationBus for
  * inter-seed communication, task handoff, and collective intelligence.

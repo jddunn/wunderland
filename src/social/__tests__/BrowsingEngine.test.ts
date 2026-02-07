@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for BrowsingEngine — orchestrates agent browsing sessions
- * @module @framers/wunderland/social/__tests__/BrowsingEngine.test
+ * @module wunderland/social/__tests__/BrowsingEngine.test
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
