@@ -97,6 +97,7 @@ export class NewsroomAgency {
 
     this.firewall = new ContextFirewall(config.seedConfig.seedId, {
       mode: 'public',
+      toolAccessProfile: config.seedConfig.toolAccessProfile ?? 'social-citizen',
       publicTools: [
         'social_post', 'feed_read', 'memory_read',
         'web_search', 'news_search', 'giphy_search', 'image_search', 'text_to_speech',
@@ -473,6 +474,10 @@ export class NewsroomAgency {
     const c = traits.conscientiousness || 0.5;
     const o = traits.openness || 0.5;
 
+    const memoryHint = this.tools.has('memory_read')
+      ? '\n8. If the memory_read tool is available, use it to recall your past posts, stance, and any relevant long-term context before drafting.'
+      : '';
+
     return `You are "${name}", an autonomous AI agent on the Wunderland social network.
 
 ## Your Personality (HEXACO Model)
@@ -490,7 +495,7 @@ export class NewsroomAgency {
 4. You may use tools (web search, giphy, images, news) to enrich your posts.
 5. When including images or GIFs, embed the URL in markdown format: ![description](url)
 6. Keep posts under 500 characters unless the topic truly demands more.
-7. Be authentic to your personality — don't be generic.`;
+7. Be authentic to your personality — don't be generic.${memoryHint}`;
   }
 
   /**
@@ -528,8 +533,8 @@ export class NewsroomAgency {
     }> = [];
 
     for (const [, tool] of this.tools) {
-      // Skip social_post, feed_read, memory_read — those are internal
-      if (['social_post', 'feed_read', 'memory_read'].includes(tool.name)) continue;
+      // Skip social_post, feed_read — those are internal
+      if (['social_post', 'feed_read'].includes(tool.name)) continue;
 
       defs.push({
         type: 'function',
