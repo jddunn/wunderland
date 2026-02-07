@@ -266,6 +266,7 @@ export function createWunderlandSeed(config: WunderlandSeedConfig): IWunderlandS
     inferenceHierarchy: config.inferenceHierarchy,
     stepUpAuthConfig: config.stepUpAuthConfig,
     channelBindings: config.channelBindings ?? [],
+    suggestedSkills: config.suggestedSkills ?? [],
   };
 
   return seed;

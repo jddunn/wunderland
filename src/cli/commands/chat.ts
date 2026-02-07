@@ -97,9 +97,12 @@ export default async function cmdChat(
     function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
   }));
 
-  // Skills
+  // Skills — load from filesystem dirs + config-declared skills
   let skillsPrompt = '';
   if (enableSkills) {
+    const parts: string[] = [];
+
+    // 1. Directory-based skills (local ./skills/ dirs, --skills-dir flag)
     const skillRegistry = new SkillRegistry();
     const dirs = resolveDefaultSkillsDirs({
       cwd: process.cwd(),
@@ -108,8 +111,22 @@ export default async function cmdChat(
     if (dirs.length > 0) {
       await skillRegistry.loadFromDirs(dirs);
       const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
-      skillsPrompt = snapshot.prompt || '';
+      if (snapshot.prompt) parts.push(snapshot.prompt);
     }
+
+    // 2. Config-declared skills (from agent.config.json "skills" array)
+    const configPath = path.resolve(process.cwd(), 'agent.config.json');
+    try {
+      const { readFile } = await import('node:fs/promises');
+      const cfgRaw = JSON.parse(await readFile(configPath, 'utf8'));
+      if (Array.isArray(cfgRaw.skills) && cfgRaw.skills.length > 0) {
+        const { resolveSkillsByNames } = await import('../../core/PresetSkillResolver.js');
+        const presetSnapshot = await resolveSkillsByNames(cfgRaw.skills as string[]);
+        if (presetSnapshot.prompt) parts.push(presetSnapshot.prompt);
+      }
+    } catch { /* non-fatal — no config or registry not installed */ }
+
+    skillsPrompt = parts.filter(Boolean).join('\n\n');
   }
 
   const systemPrompt = [

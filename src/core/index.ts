@@ -37,3 +37,17 @@ export {
   type AgentPreset,
   type TemplateConfig,
 } from './PresetLoader.js';
+
+// PresetSkillResolver (auto-resolve skills from preset/config)
+export {
+  resolvePresetSkills,
+  resolveSkillsByNames,
+} from './PresetSkillResolver.js';
+
+// AgentManifest (serialization / export / import)
+export {
+  type AgentManifest,
+  exportAgent,
+  importAgent,
+  validateManifest,
+} from './AgentManifest.js';
