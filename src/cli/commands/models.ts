@@ -9,8 +9,7 @@ import { LLM_PROVIDERS } from '../constants.js';
 import { accent, dim, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadConfig, updateConfig } from '../config/config-manager.js';
-import { loadDotEnvIntoProcess } from '../config/env-manager.js';
-import * as path from 'node:path';
+import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 
 // ── Sub-commands ────────────────────────────────────────────────────────────
 
@@ -78,10 +77,7 @@ async function setDefault(args: string[], globals: GlobalFlags): Promise<void> {
 
 async function testProvider(args: string[], globals: GlobalFlags): Promise<void> {
   // Load env files so API keys are available
-  await loadDotEnvIntoProcess(
-    path.resolve(process.cwd(), '.env'),
-    path.resolve(process.cwd(), '.env.local'),
-  );
+  await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
   const config = await loadConfig(globals.config);
   const providerArg = args[0] || config.llmProvider;

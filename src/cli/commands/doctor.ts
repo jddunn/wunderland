@@ -9,7 +9,7 @@ import type { GlobalFlags, DiagnosticSection, DiagnosticCheck } from '../types.j
 import { success as sColor, error as eColor, muted, dim, accent, info as iColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { getConfigPath } from '../config/config-manager.js';
-import { getEnvPath, loadDotEnvIntoProcess } from '../config/env-manager.js';
+import { getEnvPath, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
 import { URLS } from '../constants.js';
 
@@ -43,11 +43,7 @@ export default async function cmdDoctor(
   globals: GlobalFlags,
 ): Promise<void> {
   // Load env files so secrets are available
-  await loadDotEnvIntoProcess(
-    getEnvPath(globals.config),
-    path.resolve(process.cwd(), '.env'),
-    path.resolve(process.cwd(), '.env.local'),
-  );
+  await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
   const sections: DiagnosticSection[] = [];
 
