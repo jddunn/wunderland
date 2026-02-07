@@ -145,6 +145,17 @@ export class StepUpAuthorizationManager {
   }
 
   /**
+   * Returns the effective risk tier for a request without performing
+   * authorization side effects (no stats, no async-review queue, no HITL).
+   *
+   * Useful for filtering tool exposure in headless/server modes.
+   */
+  getRiskTier(request: ToolCallRequest): ToolRiskTier {
+    if (this.config.autoApproveAll) return ToolRiskTier.TIER_1_AUTONOMOUS;
+    return this.determineEffectiveTier(request);
+  }
+
+  /**
    * Determines the effective risk tier for a request.
    */
   private determineEffectiveTier(request: ToolCallRequest): ToolRiskTier {

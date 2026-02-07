@@ -43,11 +43,11 @@ export async function resolveSkillsByNames(skillNames: string[]): Promise<SkillS
   if (!skillNames.length) return { ...EMPTY_SNAPSHOT, createdAt: new Date() };
 
   try {
-    // Dynamic import — only resolved when called. These packages are optional peer dependencies.
-    // @ts-expect-error -- optional peer dependency resolved at runtime
-    const catalog = await import('@framers/agentos-skills-registry/catalog');
-    // @ts-expect-error -- optional peer dependency resolved at runtime
-    const registry = await import('@framers/agentos-skills-registry');
+    // Keep these optional without forcing TS to resolve the modules at build time.
+    const catalogModule = '@framers/agentos-skills-registry/catalog';
+    const registryModule = '@framers/agentos-skills-registry';
+    const catalog: any = await import(catalogModule);
+    const registry: any = await import(registryModule);
 
     const valid = skillNames.filter((name) => {
       const entry = catalog.getSkillByName(name);

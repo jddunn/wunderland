@@ -39,10 +39,19 @@ export interface ToolInstance {
   inputSchema: Record<string, unknown>;
   hasSideEffects?: boolean;
   /** Tool category for tiered authorization */
-  category?: 'data_modification' | 'external_api' | 'financial' | 'communication' | 'system' | 'other';
+  category?: string;
   /** Required capabilities */
   requiredCapabilities?: string[];
   execute: (args: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<{ success: boolean; output?: unknown; error?: string }>;
+}
+
+export function buildToolDefs(toolMap: Map<string, ToolInstance>): Array<Record<string, unknown>> {
+  const tools = [...toolMap.values()].filter((t): t is ToolInstance => !!t && typeof t.name === 'string' && !!t.name);
+  tools.sort((a, b) => a.name.localeCompare(b.name));
+  return tools.map((tool) => ({
+    type: 'function',
+    function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+  }));
 }
 
 export function truncateString(value: unknown, maxLen: number): string {
@@ -164,7 +173,13 @@ export async function runToolCallingTurn(opts: {
   model: string;
   messages: Array<Record<string, unknown>>;
   toolMap: Map<string, ToolInstance>;
-  toolDefs: Array<Record<string, unknown>>;
+  /**
+   * Optional static tool defs. Prefer omitting this and letting the loop
+   * derive tool defs from the mutable `toolMap` each round.
+   */
+  toolDefs?: Array<Record<string, unknown>>;
+  /** Optional callback to provide tool defs per round (schema-on-demand). */
+  getToolDefs?: () => Array<Record<string, unknown>>;
   toolContext: Record<string, unknown>;
   maxRounds: number;
   dangerouslySkipPermissions: boolean;
@@ -182,11 +197,15 @@ export async function runToolCallingTurn(opts: {
   });
 
   for (let round = 0; round < rounds; round += 1) {
+    const toolDefs = opts.getToolDefs
+      ? opts.getToolDefs()
+      : buildToolDefs(opts.toolMap);
+
     const { message } = await openaiChatWithTools({
       apiKey: opts.apiKey,
       model: opts.model,
       messages: opts.messages,
-      tools: opts.toolDefs,
+      tools: toolDefs,
       temperature: 0.2,
       maxTokens: 1400,
     });

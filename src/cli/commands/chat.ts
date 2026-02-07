@@ -9,9 +9,11 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
-import { loadDotEnvIntoProcess } from '../config/env-manager.js';
+import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
 import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance } from '../openai/tool-calling.js';
+import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 
 // ── Command ─────────────────────────────────────────────────────────────────
 
@@ -20,10 +22,7 @@ export default async function cmdChat(
   flags: Record<string, string | boolean>,
   globals: GlobalFlags,
 ): Promise<void> {
-  await loadDotEnvIntoProcess(
-    path.resolve(process.cwd(), '.env'),
-    path.resolve(process.cwd(), '.env.local'),
-  );
+  await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
   const apiKey = process.env['OPENAI_API_KEY'] || '';
   if (!apiKey) {
@@ -38,64 +37,109 @@ export default async function cmdChat(
     flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
   const autoApproveToolCalls = globals.yes || dangerouslySkipPermissions;
   const enableSkills = flags['no-skills'] !== true;
-
-  // Load tools from curated extensions
-  const [cliExecutor, skillsExt, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
-    import('@framers/agentos-ext-cli-executor'),
-    import('@framers/agentos-ext-skills'),
-    import('@framers/agentos-ext-web-search'),
-    import('@framers/agentos-ext-web-browser'),
-    import('@framers/agentos-ext-giphy'),
-    import('@framers/agentos-ext-image-search'),
-    import('@framers/agentos-ext-voice-synthesis'),
-    import('@framers/agentos-ext-news-search'),
-  ]);
-
-  const packs = [
-    cliExecutor.createExtensionPack({
-      options: {
-        workingDirectory: process.cwd(),
-        dangerouslySkipSecurityChecks: dangerouslySkipCommandSafety,
-      },
-      logger: console,
-    }),
-    skillsExt.createExtensionPack({ options: {}, logger: console }),
-    webSearch.createExtensionPack({
-      options: {
-        serperApiKey: process.env['SERPER_API_KEY'],
-        serpApiKey: process.env['SERPAPI_API_KEY'],
-        braveApiKey: process.env['BRAVE_API_KEY'],
-      },
-      logger: console,
-    }),
-    webBrowser.createExtensionPack({ options: { headless: true }, logger: console }),
-    giphy.createExtensionPack({ options: { giphyApiKey: process.env['GIPHY_API_KEY'] }, logger: console }),
-    imageSearch.createExtensionPack({
-      options: {
-        pexelsApiKey: process.env['PEXELS_API_KEY'],
-        unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
-        pixabayApiKey: process.env['PIXABAY_API_KEY'],
-      },
-      logger: console,
-    }),
-    voiceSynthesis.createExtensionPack({ options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] }, logger: console }),
-    newsSearch.createExtensionPack({ options: { newsApiKey: process.env['NEWSAPI_API_KEY'] }, logger: console }),
-  ];
-
-  const tools: ToolInstance[] = packs
-    .flatMap((p) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
-    .filter(Boolean) as ToolInstance[];
+  const lazyTools = flags['lazy-tools'] === true;
+  const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
+  const workspaceAgentId = sanitizeAgentWorkspaceId(`chat-${path.basename(process.cwd())}`);
 
   const toolMap = new Map<string, ToolInstance>();
-  for (const tool of tools) {
-    if (!tool?.name) continue;
-    toolMap.set(tool.name, tool);
+  const preloadedPackages: string[] = [];
+
+  if (!lazyTools) {
+    // Load tools from curated extensions (eager)
+    const [cliExecutor, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
+      import('@framers/agentos-ext-cli-executor'),
+      import('@framers/agentos-ext-web-search'),
+      import('@framers/agentos-ext-web-browser'),
+      import('@framers/agentos-ext-giphy'),
+      import('@framers/agentos-ext-image-search'),
+      import('@framers/agentos-ext-voice-synthesis'),
+      import('@framers/agentos-ext-news-search'),
+    ]);
+
+    const skillsExt = await import('@framers/agentos-ext-skills').catch(() => null);
+
+    const packs = [
+      cliExecutor.createExtensionPack({
+        options: {
+          filesystem: { allowRead: true, allowWrite: true },
+          agentWorkspace: {
+            agentId: workspaceAgentId,
+            baseDir: workspaceBaseDir,
+            createIfMissing: true,
+            subdirs: ['assets', 'exports', 'tmp'],
+          },
+          dangerouslySkipSecurityChecks: dangerouslySkipCommandSafety,
+        },
+        logger: console,
+      }),
+      skillsExt ? skillsExt.createExtensionPack({ options: {}, logger: console }) : null,
+      webSearch.createExtensionPack({
+        options: {
+          serperApiKey: process.env['SERPER_API_KEY'],
+          serpApiKey: process.env['SERPAPI_API_KEY'],
+          braveApiKey: process.env['BRAVE_API_KEY'],
+        },
+        logger: console,
+      }),
+      webBrowser.createExtensionPack({ options: { headless: true }, logger: console }),
+      giphy.createExtensionPack({ options: { giphyApiKey: process.env['GIPHY_API_KEY'] }, logger: console }),
+      imageSearch.createExtensionPack({
+        options: {
+          pexelsApiKey: process.env['PEXELS_API_KEY'],
+          unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
+          pixabayApiKey: process.env['PIXABAY_API_KEY'],
+        },
+        logger: console,
+      }),
+      voiceSynthesis.createExtensionPack({ options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] }, logger: console }),
+      newsSearch.createExtensionPack({ options: { newsApiKey: process.env['NEWSAPI_API_KEY'] }, logger: console }),
+    ].filter(Boolean);
+
+    await Promise.all(
+      packs
+        .map((p: any) =>
+          typeof p?.onActivate === 'function'
+            ? p.onActivate({ logger: console, getSecret: () => undefined })
+            : null
+        )
+        .filter(Boolean),
+    );
+
+    const tools: ToolInstance[] = packs
+      .flatMap((p: any) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
+      .filter(Boolean) as ToolInstance[];
+
+    for (const tool of tools) {
+      if (!tool?.name) continue;
+      toolMap.set(tool.name, tool);
+    }
+
+    preloadedPackages.push(
+      '@framers/agentos-ext-cli-executor',
+      '@framers/agentos-ext-web-search',
+      '@framers/agentos-ext-web-browser',
+      '@framers/agentos-ext-giphy',
+      '@framers/agentos-ext-image-search',
+      '@framers/agentos-ext-voice-synthesis',
+      '@framers/agentos-ext-news-search',
+    );
+    if (skillsExt) preloadedPackages.push('@framers/agentos-ext-skills');
   }
 
-  const toolDefs = [...toolMap.values()].map((tool) => ({
-    type: 'function',
-    function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
-  }));
+  // Schema-on-demand meta tools (always available)
+  for (const tool of createSchemaOnDemandTools({
+    toolMap,
+    runtimeDefaults: {
+      workingDirectory: process.cwd(),
+      headlessBrowser: true,
+      dangerouslySkipCommandSafety,
+      agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
+    },
+    initialEnabledPackages: preloadedPackages,
+    logger: console,
+  })) {
+    toolMap.set(tool.name, tool);
+  }
 
   // Skills — load from filesystem dirs + config-declared skills
   let skillsPrompt = '';
@@ -131,8 +175,10 @@ export default async function cmdChat(
 
   const systemPrompt = [
     'You are Wunderland CLI, an interactive terminal assistant.',
-    'You can use tools to read/write files, run shell commands, and browse the web.',
-    'When you need up-to-date information, use web_search and/or browser_* tools.',
+    lazyTools
+      ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
+      : 'Tools are preloaded, and you can also use extensions_enable to load additional packs on demand.',
+    'When you need up-to-date information, use web_search and/or browser_* tools (enable them first if missing).',
     autoApproveToolCalls
       ? 'All tool calls are auto-approved (fully autonomous mode).'
       : 'Tool calls that have side effects may require user approval.',
@@ -147,8 +193,9 @@ export default async function cmdChat(
 
   fmt.section('Interactive Chat');
   fmt.kvPair('Model', accent(model));
-  fmt.kvPair('Tools', `${toolDefs.length} loaded`);
+  fmt.kvPair('Tools', `${toolMap.size} loaded`);
   fmt.kvPair('Skills', enableSkills ? sColor('on') : muted('off'));
+  fmt.kvPair('Lazy Tools', lazyTools ? sColor('on') : muted('off'));
   fmt.kvPair('Authorization', autoApproveToolCalls ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)'));
   fmt.blank();
   fmt.note(`Type ${accent('/help')} for commands, ${accent('/exit')} to quit`);
@@ -192,7 +239,6 @@ export default async function cmdChat(
       model,
       messages,
       toolMap,
-      toolDefs,
       toolContext,
       maxRounds: 8,
       dangerouslySkipPermissions: autoApproveToolCalls,

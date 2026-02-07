@@ -78,6 +78,7 @@ export {
   TextToSpeechTool,
   NewsSearchTool,
 } from './tools/ToolRegistry.js';
+export { createMemoryReadTool, type MemoryReadFn, type MemoryReadItem, type MemoryReadResult } from './tools/MemoryReadTool.js';
 // Backward-compat aliases (deprecated — use canonical names above)
 export { GiphyTool, type GiphySearchInput, type GiphySearchResult } from './tools/GiphyTool.js';
 export { ElevenLabsTool, type ElevenLabsTTSInput, type ElevenLabsTTSResult } from './tools/ElevenLabsTool.js';

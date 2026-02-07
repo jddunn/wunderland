@@ -166,6 +166,26 @@ describe('StepUpAuthorizationManager', () => {
         });
     });
 
+    describe('getRiskTier', () => {
+        it('returns Tier 1 for read-only tools by default', () => {
+            const defaultManager = new StepUpAuthorizationManager();
+            const tier = defaultManager.getRiskTier(createRequest(createTool({ hasSideEffects: false, category: 'research' })));
+            expect(tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('returns Tier 3 for side-effect tools without explicit overrides', () => {
+            const defaultManager = new StepUpAuthorizationManager();
+            const tier = defaultManager.getRiskTier(createRequest(createTool({ hasSideEffects: true, category: 'research' })));
+            expect(tier).toBe(ToolRiskTier.TIER_3_SYNC_HITL);
+        });
+
+        it('returns Tier 3 for system-category tools even when read-only', () => {
+            const defaultManager = new StepUpAuthorizationManager();
+            const tier = defaultManager.getRiskTier(createRequest(createTool({ hasSideEffects: false, category: 'system' })));
+            expect(tier).toBe(ToolRiskTier.TIER_3_SYNC_HITL);
+        });
+    });
+
     describe('statistics', () => {
         it('should track authorization statistics', async () => {
             // Make a few authorization requests
