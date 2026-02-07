@@ -1,7 +1,28 @@
 /**
  * @fileoverview OpenAI tool-calling loop helpers used by Wunderland CLI commands.
+ *
+ * Integrates {@link StepUpAuthorizationManager} for tiered tool authorization:
+ * - Tier 1 (Autonomous): Execute without approval — read-only, safe tools
+ * - Tier 2 (Async Review): Execute, then queue for human review
+ * - Tier 3 (Sync HITL): Require explicit human approval before execution
+ *
+ * When `dangerouslySkipPermissions` is true (via `--yes` or
+ * `--dangerously-skip-permissions`), uses {@link FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG}
+ * which auto-approves ALL tool calls — skills, side effects, capabilities,
+ * destructive commands, build commands, and every other tool type.
+ *
  * @module wunderland/cli/openai/tool-calling
  */
+
+import {
+  StepUpAuthorizationManager,
+} from '../../authorization/StepUpAuthorizationManager.js';
+import {
+  FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
+  DEFAULT_STEP_UP_AUTH_CONFIG,
+  ToolRiskTier,
+} from '../../core/types.js';
+import type { AuthorizableTool } from '../../authorization/types.js';
 
 export interface ToolCallMessage {
   role: string;
@@ -17,6 +38,10 @@ export interface ToolInstance {
   description: string;
   inputSchema: Record<string, unknown>;
   hasSideEffects?: boolean;
+  /** Tool category for tiered authorization */
+  category?: 'data_modification' | 'external_api' | 'financial' | 'communication' | 'system' | 'other';
+  /** Required capabilities */
+  requiredCapabilities?: string[];
   execute: (args: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<{ success: boolean; output?: unknown; error?: string }>;
 }
 
@@ -48,6 +73,58 @@ export function redactToolOutputForLLM(output: unknown): unknown {
   }
 
   return out;
+}
+
+/**
+ * Convert a {@link ToolInstance} to an {@link AuthorizableTool} for
+ * the StepUpAuthorizationManager.
+ */
+function toAuthorizableTool(tool: ToolInstance): AuthorizableTool {
+  return {
+    id: tool.name,
+    displayName: tool.name,
+    description: tool.description,
+    category: tool.category,
+    hasSideEffects: tool.hasSideEffects ?? false,
+    requiredCapabilities: tool.requiredCapabilities,
+  };
+}
+
+/**
+ * Creates a {@link StepUpAuthorizationManager} appropriate for the given mode.
+ *
+ * - When `dangerouslySkipPermissions` is true, returns a manager using
+ *   {@link FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG} — auto-approves everything.
+ * - Otherwise, returns a manager using the provided config (defaults to
+ *   {@link DEFAULT_STEP_UP_AUTH_CONFIG}) with an optional HITL callback
+ *   for Tier 3 authorization (e.g. interactive terminal prompt).
+ */
+export function createAuthorizationManager(opts: {
+  dangerouslySkipPermissions: boolean;
+  askPermission?: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
+}): StepUpAuthorizationManager {
+  if (opts.dangerouslySkipPermissions) {
+    return new StepUpAuthorizationManager(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG);
+  }
+
+  // Build HITL callback that bridges the interactive askPermission prompt
+  const hitlCallback = opts.askPermission
+    ? async (request: { actionId: string; description: string }) => {
+        // We can't easily recover the ToolInstance from the request,
+        // but the description is human-readable. Use the original
+        // askPermission for backward compat via the tool-calling loop.
+        // The HITL callback is wired directly in runToolCallingTurn.
+        return {
+          actionId: request.actionId,
+          approved: false,
+          decidedBy: 'system',
+          decidedAt: new Date(),
+          rejectionReason: 'Tier 3 HITL not handled via manager; falling back to direct prompt',
+        };
+      }
+    : undefined;
+
+  return new StepUpAuthorizationManager(DEFAULT_STEP_UP_AUTH_CONFIG, hitlCallback);
 }
 
 export async function openaiChatWithTools(opts: {
@@ -93,8 +170,16 @@ export async function runToolCallingTurn(opts: {
   dangerouslySkipPermissions: boolean;
   askPermission: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
   onToolCall?: (tool: ToolInstance, args: Record<string, unknown>) => void;
+  /** Optional pre-configured authorization manager. Created automatically if not provided. */
+  authorizationManager?: StepUpAuthorizationManager;
 }): Promise<string> {
   const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
+
+  // Use provided manager or create one based on permission mode
+  const authManager = opts.authorizationManager ?? createAuthorizationManager({
+    dangerouslySkipPermissions: opts.dangerouslySkipPermissions,
+    askPermission: opts.askPermission,
+  });
 
   for (let round = 0; round < rounds; round += 1) {
     const { message } = await openaiChatWithTools({
@@ -151,9 +236,34 @@ export async function runToolCallingTurn(opts: {
         }
       }
 
-      if (tool.hasSideEffects && !opts.dangerouslySkipPermissions) {
-        const ok = await opts.askPermission(tool, args);
-        if (!ok) {
+      // Tiered authorization via StepUpAuthorizationManager.
+      // When autoApproveAll is set (fully autonomous), this is a no-op
+      // that immediately returns authorized. Otherwise it checks
+      // the tool's tier, category, escalation triggers, etc.
+      const authResult = await authManager.authorize({
+        tool: toAuthorizableTool(tool),
+        args,
+        context: {
+          userId: String(opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
+            ? (opts.toolContext['userContext'] as Record<string, unknown>)?.['userId'] ?? 'cli-user'
+            : 'cli-user'),
+          sessionId: String(opts.toolContext?.['gmiId'] ?? 'cli'),
+          gmiId: String(opts.toolContext?.['personaId'] ?? 'cli'),
+        },
+        timestamp: new Date(),
+      });
+
+      if (!authResult.authorized) {
+        // Tier 3 (sync HITL) denial from the manager — fall back to
+        // interactive askPermission prompt if available.
+        if (authResult.tier === ToolRiskTier.TIER_3_SYNC_HITL && !opts.dangerouslySkipPermissions) {
+          const ok = await opts.askPermission(tool, args);
+          if (!ok) {
+            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Permission denied for tool: ${toolName}` }) });
+            continue;
+          }
+          // User approved interactively — proceed
+        } else {
           opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Permission denied for tool: ${toolName}` }) });
           continue;
         }

@@ -47,6 +47,9 @@ export interface IWunderlandSeed extends IPersonaDefinition {
 
   /** Optional communication style adaptation engine for user-aware responses */
   styleEngine?: StyleAdaptationEngine;
+
+  /** Suggested skill IDs this seed should auto-load */
+  suggestedSkills: string[];
 }
 
 /**
@@ -251,6 +254,8 @@ export function createWunderlandSeed(config: WunderlandSeedConfig): IWunderlandS
         enabled: true,
         defaultRetrievalStrategy: 'similarity',
         defaultRetrievalTopK: 5,
+        retrievalTriggers: { onUserQuery: true },
+        ingestionTriggers: { onTurnSummary: true },
       },
     },
 

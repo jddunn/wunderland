@@ -4,42 +4,14 @@
  * @module wunderland/cli/commands/chat
  */
 
-import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
-import os from 'node:os';
 import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcess } from '../config/env-manager.js';
-import { SkillRegistry } from '../../skills/index.js';
+import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
 import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance } from '../openai/tool-calling.js';
-
-// ── Skills resolver ─────────────────────────────────────────────────────────
-
-function resolveSkillsDirs(flags: Record<string, string | boolean>): string[] {
-  const dirs: string[] = [];
-  const skillsDirFlag = flags['skills-dir'];
-  if (typeof skillsDirFlag === 'string' && skillsDirFlag.trim()) {
-    for (const part of skillsDirFlag.split(',')) {
-      const p = part.trim();
-      if (p) dirs.push(path.resolve(process.cwd(), p));
-    }
-  }
-  const codexHome = typeof process.env['CODEX_HOME'] === 'string' ? process.env['CODEX_HOME'].trim() : '';
-  if (codexHome) dirs.push(path.join(codexHome, 'skills'));
-  dirs.push(path.join(os.homedir(), '.codex', 'skills'));
-  dirs.push(path.join(process.cwd(), 'skills'));
-
-  const seen = new Set<string>();
-  return dirs.filter((d) => {
-    if (!d) return false;
-    const key = path.resolve(d);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return existsSync(key);
-  });
-}
 
 // ── Command ─────────────────────────────────────────────────────────────────
 
@@ -129,10 +101,13 @@ export default async function cmdChat(
   let skillsPrompt = '';
   if (enableSkills) {
     const skillRegistry = new SkillRegistry();
-    const dirs = resolveSkillsDirs(flags);
+    const dirs = resolveDefaultSkillsDirs({
+      cwd: process.cwd(),
+      skillsDirFlag: typeof flags['skills-dir'] === 'string' ? flags['skills-dir'] : undefined,
+    });
     if (dirs.length > 0) {
       await skillRegistry.loadFromDirs(dirs);
-      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform });
+      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
       skillsPrompt = snapshot.prompt || '';
     }
   }
@@ -141,7 +116,9 @@ export default async function cmdChat(
     'You are Wunderland CLI, an interactive terminal assistant.',
     'You can use tools to read/write files, run shell commands, and browse the web.',
     'When you need up-to-date information, use web_search and/or browser_* tools.',
-    'Tool calls that have side effects may require user approval.',
+    autoApproveToolCalls
+      ? 'All tool calls are auto-approved (fully autonomous mode).'
+      : 'Tool calls that have side effects may require user approval.',
     skillsPrompt || '',
   ].filter(Boolean).join('\n\n');
 
@@ -155,6 +132,7 @@ export default async function cmdChat(
   fmt.kvPair('Model', accent(model));
   fmt.kvPair('Tools', `${toolDefs.length} loaded`);
   fmt.kvPair('Skills', enableSkills ? sColor('on') : muted('off'));
+  fmt.kvPair('Authorization', autoApproveToolCalls ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)'));
   fmt.blank();
   fmt.note(`Type ${accent('/help')} for commands, ${accent('/exit')} to quit`);
   fmt.blank();
@@ -192,20 +170,22 @@ export default async function cmdChat(
 
     messages.push({ role: 'user', content: input });
 
-	    const reply = await runToolCallingTurn({
-	      apiKey,
-	      model,
-	      messages,
-	      toolMap,
-	      toolDefs,
-	      toolContext,
-	      maxRounds: 8,
-	      dangerouslySkipPermissions: autoApproveToolCalls,
-	      askPermission,
-	      onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
-	        console.log(`  ${tColor('\u25B6')} ${tColor(tool.name)} ${dim(truncateString(JSON.stringify(args), 120))}`);
-	      },
-	    });
+    const reply = await runToolCallingTurn({
+      apiKey,
+      model,
+      messages,
+      toolMap,
+      toolDefs,
+      toolContext,
+      maxRounds: 8,
+      dangerouslySkipPermissions: autoApproveToolCalls,
+      askPermission,
+      onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
+        console.log(
+          `  ${tColor('\u25B6')} ${tColor(tool.name)} ${dim(truncateString(JSON.stringify(args), 120))}`
+        );
+      },
+    });
 
     if (reply) {
       console.log();

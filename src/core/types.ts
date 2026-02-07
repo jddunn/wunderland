@@ -249,10 +249,21 @@ export interface StepUpAuthorizationConfig {
 
   /** Timeout for HITL approval requests (ms) */
   approvalTimeoutMs?: number;
+
+  /**
+   * When true, auto-approve ALL tool calls regardless of tier, category,
+   * side effects, capabilities, or escalation triggers. Everything executes
+   * as Tier 1 (autonomous) with no human intervention.
+   *
+   * Use with `--dangerously-skip-permissions` or `--yes` CLI flags.
+   */
+  autoApproveAll?: boolean;
 }
 
 /**
  * Default step-up authorization config.
+ * Uses tiered authorization: read-only = Tier 1, data/API/comms = Tier 2,
+ * financial/system = Tier 3 (requires HITL).
  */
 export const DEFAULT_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
   defaultTier: ToolRiskTier.TIER_1_AUTONOMOUS,
@@ -279,6 +290,22 @@ export const DEFAULT_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
     },
   ],
   approvalTimeoutMs: 300000, // 5 minutes
+};
+
+/**
+ * Fully autonomous step-up authorization config.
+ * Auto-approves ALL tool calls: skills, side effects, capabilities,
+ * destructive commands, build commands, and every other tool type.
+ * No escalation triggers, no tier gates, no HITL.
+ *
+ * Used when `--dangerously-skip-permissions` or `--yes` is passed.
+ */
+export const FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
+  defaultTier: ToolRiskTier.TIER_1_AUTONOMOUS,
+  autoApproveAll: true,
+  categoryTierOverrides: {},
+  escalationTriggers: [],
+  contextualOverrides: [],
 };
 
 // ============================================================================
@@ -329,6 +356,9 @@ export interface WunderlandSeedConfig {
 
   /** Capabilities this seed has access to */
   allowedCapabilities?: string[];
+
+  /** Suggested skill IDs for this agent (from preset or user selection) */
+  suggestedSkills?: string[];
 }
 
 /**
