@@ -122,7 +122,6 @@
     "@framers/agentos-ext-giphy": "workspace:*",
     "@framers/agentos-ext-image-search": "workspace:*",
     "@framers/agentos-ext-news-search": "workspace:*",
-    "@framers/agentos-ext-skills": "workspace:*",
     "@framers/agentos-ext-voice-synthesis": "workspace:*",
     "@framers/agentos-ext-web-browser": "workspace:*",
     "@framers/agentos-ext-web-search": "workspace:*",
@@ -136,6 +135,7 @@
     "uuid": "^9.0.0"
   },
   "optionalDependencies": {
+    "@framers/agentos-ext-skills": "workspace:*",
     "@framers/agentos-skills-registry": "workspace:*"
   },
   "devDependencies": {
