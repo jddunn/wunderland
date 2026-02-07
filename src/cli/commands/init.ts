@@ -9,9 +9,11 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { PERSONALITY_PRESETS } from '../constants.js';
-import { accent, success as sColor } from '../ui/theme.js';
+import { accent, success as sColor, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
+import { isValidSecurityTier, getSecurityTier } from '../../security/SecurityTiers.js';
+import type { SecurityTierName } from '../../security/SecurityTiers.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -68,6 +70,12 @@ export default async function cmdInit(
     ? HEXACO_PRESETS[presetKey as keyof typeof HEXACO_PRESETS]
     : undefined;
 
+  // Warn if --preset was given but didn't match any known preset
+  if (presetKey && !hexacoValues) {
+    fmt.warning(`Unknown preset "${flags['preset']}". Using default personality values.`);
+    fmt.note(`Run ${accent('wunderland list-presets')} to see available presets.`);
+  }
+
   const personality = hexacoValues
     ? {
         honesty: hexacoValues.honesty_humility,
@@ -86,13 +94,45 @@ export default async function cmdInit(
         openness: 0.75,
       };
 
-  const config = {
+  // Resolve security tier
+  const VALID_TIERS = ['dangerous', 'permissive', 'balanced', 'strict', 'paranoid'];
+  const securityTierFlag = typeof flags['security-tier'] === 'string' ? flags['security-tier'].toLowerCase() : undefined;
+  let securityTierName: SecurityTierName | undefined;
+
+  if (securityTierFlag) {
+    if (isValidSecurityTier(securityTierFlag)) {
+      securityTierName = securityTierFlag;
+    } else {
+      fmt.errorBlock(
+        'Invalid security tier',
+        `"${securityTierFlag}" is not a valid tier.\nValid tiers: ${VALID_TIERS.join(', ')}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  const tierConfig = securityTierName ? getSecurityTier(securityTierName) : undefined;
+
+  const security = tierConfig
+    ? {
+        tier: tierConfig.name,
+        preLLMClassifier: tierConfig.pipelineConfig.enablePreLLM,
+        dualLLMAudit: tierConfig.pipelineConfig.enableDualLLMAudit,
+        outputSigning: tierConfig.pipelineConfig.enableOutputSigning,
+        riskThreshold: tierConfig.riskThreshold,
+      }
+    : { preLLMClassifier: true, dualLLMAudit: true, outputSigning: true };
+
+  const config: Record<string, unknown> = {
     seedId: toSeedId(dirName),
     displayName: toDisplayName(dirName),
     bio: 'Autonomous Wunderland agent',
     personality,
     systemPrompt: 'You are an autonomous agent in the Wunderland network.',
-    security: { preLLMClassifier: true, dualLLMAudit: true, outputSigning: true },
+    security,
+    skills: [],
+    skillsDir: './skills',
   };
 
   // Write files
@@ -110,21 +150,35 @@ export default async function cmdInit(
 
   await writeFile(path.join(targetDir, '.gitignore'), '.env\nnode_modules\n', 'utf8');
 
+  // Create skills directory
+  const skillsDir = path.join(targetDir, 'skills');
+  await mkdir(skillsDir, { recursive: true });
+  await writeFile(
+    path.join(skillsDir, '.gitkeep'),
+    '',
+    'utf8',
+  );
+
   await writeFile(
     path.join(targetDir, 'README.md'),
-    `# ${config.displayName}\n\nScaffolded by the Wunderland CLI.\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { \"message\": \"Hello\", \"sessionId\": \"local\" }\n\nNotes:\n- By default, side-effect tools are disabled (shell execution + file writes).\n- Enable side effects with: \`wunderland start --yes\` (shell safety checks remain on).\n- Fully disable shell safety checks with: \`wunderland start --dangerously-skip-permissions\`.\n`,
+    `# ${config.displayName}\n\nScaffolded by the Wunderland CLI.\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { \"message\": \"Hello\", \"sessionId\": \"local\" }\n\nNotes:\n- By default, side-effect tools are disabled (shell execution + file writes).\n- Enable side effects with: \`wunderland start --yes\` (shell safety checks remain on).\n- Fully disable shell safety checks with: \`wunderland start --dangerously-skip-permissions\`.\n\n## Skills\n\nAdd custom SKILL.md files to the \`skills/\` directory.\nEnable curated skills with: \`wunderland skills enable <name>\`\n`,
     'utf8',
   );
 
   // Output
   fmt.section('Project Initialized');
   fmt.kvPair('Directory', accent(targetDir));
-  fmt.kvPair('Seed ID', config.seedId);
-  fmt.kvPair('Display Name', config.displayName);
+  fmt.kvPair('Seed ID', String(config.seedId));
+  fmt.kvPair('Display Name', String(config.displayName));
   if (presetKey && hexacoValues) {
     const preset = PERSONALITY_PRESETS.find((p) => p.id === presetKey);
     fmt.kvPair('Personality', preset ? preset.label : presetKey);
   }
+  if (securityTierName && tierConfig) {
+    fmt.kvPair('Security Tier', accent(tierConfig.displayName));
+    fmt.kvPair('', dim(tierConfig.description));
+  }
+  fmt.kvPair('Skills Dir', dim('./skills'));
   fmt.blank();
   fmt.note(`Next: ${sColor(`cd ${dirName}`)} && ${sColor('cp .env.example .env')} && ${sColor('wunderland start')}`);
   fmt.blank();

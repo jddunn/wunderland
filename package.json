@@ -53,8 +53,20 @@
     "./scheduling": {
       "import": "./dist/scheduling/index.js",
       "types": "./dist/scheduling/index.d.ts"
+    },
+    "./presets": {
+      "import": "./dist/core/PresetLoader.js",
+      "types": "./dist/core/PresetLoader.d.ts"
+    },
+    "./presets/*.json": {
+      "import": "./presets/*.json"
     }
   },
+  "files": [
+    "dist",
+    "bin",
+    "presets"
+  ],
   "bin": {
     "wunderland": "bin/wunderland.js"
   },
@@ -110,6 +122,7 @@
     "@framers/agentos-ext-giphy": "workspace:*",
     "@framers/agentos-ext-image-search": "workspace:*",
     "@framers/agentos-ext-news-search": "workspace:*",
+    "@framers/agentos-ext-skills": "workspace:*",
     "@framers/agentos-ext-voice-synthesis": "workspace:*",
     "@framers/agentos-ext-web-browser": "workspace:*",
     "@framers/agentos-ext-web-search": "workspace:*",

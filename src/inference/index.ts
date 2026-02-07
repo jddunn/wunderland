@@ -8,3 +8,6 @@ export * from './types.js';
 
 // Hierarchical Inference Router
 export { HierarchicalInferenceRouter } from './HierarchicalInferenceRouter.js';
+
+// Small Model Resolver
+export { SmallModelResolver, type SmallModelResolverConfig } from './SmallModelResolver.js';

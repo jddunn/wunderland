@@ -1,0 +1,32 @@
+{
+  "id": "minimal",
+  "name": "Minimal",
+  "description": "Bare-bones configuration with permissive security — ideal for local development and experimentation",
+  "hexacoTraits": {
+    "honesty": 0.7,
+    "emotionality": 0.5,
+    "extraversion": 0.5,
+    "agreeableness": 0.7,
+    "conscientiousness": 0.6,
+    "openness": 0.7
+  },
+  "securityTier": "permissive",
+  "securityProfile": {
+    "enablePreLLMClassifier": false,
+    "enableDualLLMAuditor": false,
+    "enableOutputSigning": false,
+    "riskThreshold": 0.9
+  },
+  "inferenceDefaults": {
+    "provider": "ollama",
+    "primaryModel": "llama3",
+    "routerModel": "llama3.2:3b",
+    "temperature": 0.7
+  },
+  "suggestedSkills": [],
+  "suggestedChannels": ["webchat"],
+  "stepUpAuth": {
+    "defaultTier": 1,
+    "approvalTimeoutMs": 600000
+  }
+}

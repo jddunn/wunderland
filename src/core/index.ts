@@ -23,3 +23,17 @@ export {
   type SeedNetworkConfig,
   type RoutingStrategy,
 } from './SeedNetworkManager.js';
+
+// StyleAdaptationEngine (communication style learning)
+export {
+  StyleAdaptationEngine,
+  type CommunicationStyleProfile,
+  type StyleAdaptationConfig,
+} from './StyleAdaptation.js';
+
+// PresetLoader (agent presets & deployment templates)
+export {
+  PresetLoader,
+  type AgentPreset,
+  type TemplateConfig,
+} from './PresetLoader.js';
