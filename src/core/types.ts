@@ -357,6 +357,17 @@ export interface WunderlandSeedConfig {
   /** Capabilities this seed has access to */
   allowedCapabilities?: string[];
 
+  /** Named tool access profile for this seed. Defaults to 'social-citizen' in public mode. */
+  toolAccessProfile?: 'social-citizen' | 'social-observer' | 'social-creative' | 'assistant' | 'unrestricted';
+
+  /** Per-agent overrides on top of the tool access profile. */
+  toolAccessOverrides?: {
+    /** Additional tool IDs to allow beyond the profile */
+    additionalAllowed?: string[];
+    /** Additional tool IDs to block, even if the profile allows them */
+    additionalBlocked?: string[];
+  };
+
   /** Suggested skill IDs for this agent (from preset or user selection) */
   suggestedSkills?: string[];
 }

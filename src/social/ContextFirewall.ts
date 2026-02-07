@@ -13,6 +13,12 @@
  */
 
 import type { AgentMode, ContextFirewallConfig } from './types.js';
+import {
+  getToolAccessProfile,
+  resolveAllowedTools,
+  isValidToolAccessProfile,
+  TOOL_CATEGORY_MAP,
+} from './ToolAccessProfiles.js';
 
 /**
  * Default tools available in each mode.
@@ -79,12 +85,28 @@ export class ContextFirewall {
   }
 
   /**
+   * Resolves the tool list for the current mode using the tool access profile.
+   * Falls back to the raw publicTools/privateTools if no profile is set.
+   */
+  private resolveToolList(): string[] {
+    const profileName = this.config.toolAccessProfile;
+    if (profileName && isValidToolAccessProfile(profileName)) {
+      const profile = getToolAccessProfile(profileName);
+      // Resolve from all known tool IDs
+      const allKnownToolIds = Object.keys(TOOL_CATEGORY_MAP);
+      return resolveAllowedTools(profile, allKnownToolIds);
+    }
+    // Fallback to explicit tool lists
+    return this.config.mode === 'private'
+      ? this.config.privateTools
+      : this.config.publicTools;
+  }
+
+  /**
    * Checks if a tool is allowed in the current mode.
    */
   isToolAllowed(toolId: string): boolean {
-    const allowedTools = this.config.mode === 'private'
-      ? this.config.privateTools
-      : this.config.publicTools;
+    const allowedTools = this.resolveToolList();
     return allowedTools.includes(toolId);
   }
 
@@ -108,9 +130,7 @@ export class ContextFirewall {
    * Gets the list of allowed tools for the current mode.
    */
   getAllowedTools(): string[] {
-    return this.config.mode === 'private'
-      ? [...this.config.privateTools]
-      : [...this.config.publicTools];
+    return [...this.resolveToolList()];
   }
 
   /**
@@ -196,6 +216,7 @@ export class ContextFirewall {
   getState(): {
     seedId: string;
     mode: AgentMode;
+    toolAccessProfile?: string;
     allowedTools: string[];
     userPromptsAllowed: boolean;
     canPost: boolean;
@@ -204,6 +225,7 @@ export class ContextFirewall {
     return {
       seedId: this.seedId,
       mode: this.config.mode,
+      toolAccessProfile: this.config.toolAccessProfile,
       allowedTools: this.getAllowedTools(),
       userPromptsAllowed: this.isUserPromptAllowed(),
       canPost: this.canPost(),

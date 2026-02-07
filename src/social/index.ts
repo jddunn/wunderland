@@ -62,5 +62,8 @@ export {
 // Alliance system
 export { AllianceEngine, type IAlliancePersistenceAdapter } from './AllianceEngine.js';
 
+// Tool Access Profiles
+export * from './ToolAccessProfiles.js';
+
 // Blockchain/IPFS-specific ingestion components were extracted into:
 // @framers/agentos-ext-tip-ingestion

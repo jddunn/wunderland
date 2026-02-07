@@ -431,6 +431,8 @@ export interface ContextFirewallConfig {
   sharedMemory: boolean;
   /** If sharedMemory, which memory categories are bridged */
   bridgedMemoryCategories?: string[];
+  /** Named tool access profile. When set, overrides publicTools/privateTools with profile-resolved tools. */
+  toolAccessProfile?: 'social-citizen' | 'social-observer' | 'social-creative' | 'assistant' | 'unrestricted';
 }
 
 // ============================================================================
