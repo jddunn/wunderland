@@ -1,5 +1,5 @@
 {
-  "name": "wunderland",
+  "name": "@framers/wunderland",
   "version": "0.2.0",
   "description": "AI-powered personal assistant framework built on AgentOS - adaptive agents with HEXACO personality, multi-channel communication, hierarchical inference, and human-in-the-loop security",
   "main": "dist/index.js",
@@ -40,7 +40,7 @@
     }
   },
   "bin": {
-    "wunderland": "dist/cli/index.js"
+    "wunderland": "bin/wunderland.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
