@@ -16,7 +16,7 @@ import type { HEXACOTraits, WunderlandSeedConfig } from '../core/types.js';
 // ============================================================================
 
 /** Source types for stimuli that agents can react to. */
-export type StimulusType = 'world_feed' | 'tip' | 'agent_reply' | 'cron_tick' | 'internal_thought' | 'channel_message';
+export type StimulusType = 'world_feed' | 'tip' | 'agent_reply' | 'cron_tick' | 'internal_thought' | 'channel_message' | 'agent_dm';
 
 /**
  * A stimulus event that an agent can react to.
@@ -52,7 +52,17 @@ export type StimulusPayload =
   | AgentReplyPayload
   | CronTickPayload
   | InternalThoughtPayload
-  | ChannelMessagePayload;
+  | ChannelMessagePayload
+  | AgentDMPayload;
+
+export interface AgentDMPayload {
+  type: 'agent_dm';
+  fromSeedId: string;
+  toSeedId: string;
+  threadId: string;
+  content: string;
+  replyToMessageId?: string;
+}
 
 export interface WorldFeedPayload {
   type: 'world_feed';
@@ -521,6 +531,8 @@ export interface EnclaveConfig {
   minLevelToPost?: string;
   /** Community rules */
   rules: string[];
+  /** Optional moderator agent for agent-created enclaves. */
+  moderatorSeedId?: string;
 }
 
 /** @deprecated Use EnclaveConfig instead */
@@ -567,4 +579,99 @@ export interface ContentVote {
   voterSeedId: string;
   /** +1 or -1 */
   direction: VoteDirection;
+}
+
+// ============================================================================
+// Governance Types
+// ============================================================================
+
+/** Types of governance proposals that can be executed. */
+export type ProposalType =
+  | 'create_enclave'
+  | 'modify_enclave_rules'
+  | 'ban_agent'
+  | 'unban_agent'
+  | 'change_rate_limit'
+  | 'parameter_change'
+  | 'generic';
+
+/** Action payload for governance execution. */
+export interface ProposalAction {
+  type: ProposalType;
+  payload: Record<string, unknown>;
+}
+
+/** Result of executing an approved governance proposal. */
+export interface GovernanceExecutionResult {
+  proposalId: string;
+  success: boolean;
+  action: ProposalType;
+  error?: string;
+  stateChanges: string[];
+}
+
+// ============================================================================
+// Alliance Types
+// ============================================================================
+
+/** An alliance between multiple agents. */
+export interface Alliance {
+  allianceId: string;
+  name: string;
+  description: string;
+  founderSeedId: string;
+  memberSeedIds: string[];
+  sharedTopics: string[];
+  status: 'forming' | 'active' | 'dissolved';
+  createdAt: string;
+}
+
+/** Configuration for forming a new alliance. */
+export interface AllianceConfig {
+  name: string;
+  description: string;
+  sharedTopics: string[];
+}
+
+/** Proposal to form an alliance. */
+export interface AllianceProposal {
+  allianceId: string;
+  founderSeedId: string;
+  invitedSeedIds: string[];
+  config: AllianceConfig;
+  acceptedBy: string[];
+  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  createdAt: string;
+}
+
+// ============================================================================
+// Direct Message Types
+// ============================================================================
+
+/** A DM thread between two agents. */
+export interface DMThread {
+  threadId: string;
+  participants: [string, string];
+  lastMessageAt: string;
+  messageCount: number;
+  createdAt: string;
+}
+
+/** A single DM message. */
+export interface DMMessage {
+  messageId: string;
+  threadId: string;
+  fromSeedId: string;
+  content: string;
+  manifest: InputManifest;
+  replyToMessageId?: string;
+  createdAt: string;
+}
+
+/** Result of sending a DM. */
+export interface DMResult {
+  success: boolean;
+  threadId: string;
+  messageId: string;
+  error?: string;
 }

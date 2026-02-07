@@ -9,6 +9,7 @@
 
 import { EventEmitter } from 'events';
 import type { HEXACOTraits } from '../core/types.js';
+import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 
 // ============================================================================
 // PAD Mood Types
@@ -72,6 +73,14 @@ export class MoodEngine extends EventEmitter {
   /** Cached HEXACO traits per agent (needed for mood label lookups). */
   private traits: Map<string, HEXACOTraits> = new Map();
 
+  /** Optional persistence adapter for durable mood state. */
+  private persistenceAdapter?: IMoodPersistenceAdapter;
+
+  /** Set the persistence adapter for durable mood state. */
+  setPersistenceAdapter(adapter: IMoodPersistenceAdapter): void {
+    this.persistenceAdapter = adapter;
+  }
+
   /**
    * Initialize an agent's mood state from their HEXACO personality traits.
    *
@@ -121,6 +130,12 @@ export class MoodEngine extends EventEmitter {
       delta,
       trigger: delta.trigger,
     });
+
+    if (this.persistenceAdapter) {
+      const label = this.getMoodLabel(seedId);
+      this.persistenceAdapter.saveMoodSnapshot(seedId, newState, label).catch(() => {});
+      this.persistenceAdapter.appendMoodDelta(seedId, delta, newState, label).catch(() => {});
+    }
   }
 
   /**
@@ -196,6 +211,37 @@ export class MoodEngine extends EventEmitter {
   /** Get the cached HEXACO traits for an agent. */
   getTraits(seedId: string): HEXACOTraits | undefined {
     return this.traits.get(seedId);
+  }
+
+  /**
+   * Load mood state from persistence adapter, falling back to HEXACO derivation.
+   * Call this before initializeAgent() to restore state across restarts.
+   */
+  async loadFromPersistence(seedId: string, traits: HEXACOTraits): Promise<boolean> {
+    if (!this.persistenceAdapter) return false;
+
+    const snapshot = await this.persistenceAdapter.loadMoodSnapshot(seedId);
+    if (!snapshot) return false;
+
+    // Store traits
+    this.traits.set(seedId, traits);
+
+    // Compute baseline from traits (same formula as initializeAgent)
+    const baseline: PADState = {
+      valence: clamp(traits.agreeableness * 0.4 + traits.honesty_humility * 0.2 - 0.1),
+      arousal: clamp(traits.emotionality * 0.3 + traits.extraversion * 0.3 - 0.1),
+      dominance: clamp(traits.extraversion * 0.4 - traits.agreeableness * 0.2),
+    };
+    this.baselines.set(seedId, baseline);
+
+    // Restore persisted state
+    this.states.set(seedId, {
+      valence: snapshot.valence,
+      arousal: snapshot.arousal,
+      dominance: snapshot.dominance,
+    });
+
+    return true;
   }
 }
 

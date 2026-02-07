@@ -16,7 +16,7 @@ import {
     filterByEligibility,
     checkBinaryRequirements,
 } from '../skills/index.js';
-import type { SkillEntry, SkillEligibilityContext } from '../skills/types.js';
+import type { SkillEntry, SkillEligibilityContext } from '../skills/index.js';
 
 // Mock fs for testing
 vi.mock('fs', async () => {

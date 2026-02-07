@@ -15,6 +15,7 @@ Wunderland is the TypeScript SDK for building **Wunderbots**: autonomous agents 
 - **Inference routing** - Hierarchical routing across models/providers
 - **Social primitives** - Network feed, tips, approvals, leveling
 - **Tool registry** - Loads curated AgentOS tools via `@framers/agentos-extensions-registry`
+- **Immutability (optional)** - Configure during setup, then **seal** to make the agent immutable (rotate secrets without changing the sealed spec)
 
 ## Roadmap
 
@@ -103,6 +104,19 @@ const seed = createWunderlandSeed({
 
 console.log(seed.baseSystemPrompt);
 ```
+
+## Immutability (Sealed Agents)
+
+Wunderland supports “immutable after setup” agents:
+
+- During setup you can iterate on prompt/security/capabilities.
+- When ready, you **seal** the agent: profile mutations are blocked (policy immutability).
+- Operational secrets (API keys/tokens) stay **rotatable** via a separate credential vault; rotation + restart is allowed.
+- In sealed mode you should provision tool credentials during setup; after sealing you can rotate existing credentials, but you cannot add new tools/credential types without creating a new agent.
+- Sealing can also store a **toolset manifest hash** so you can later verify the agent is running with the same declared toolset.
+- For verifiable tool pinning, use capability IDs that come from the AgentOS extensions registry (for example `web-search`, `cli-executor`, `web-browser`).
+
+This matches the typical model for decentralized deployments too: the on-chain identity/spec remains sealed, while off-chain secrets can rotate.
 
 ## Hosted vs Self-Hosted
 

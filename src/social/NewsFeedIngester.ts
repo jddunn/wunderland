@@ -11,6 +11,7 @@
 import { EventEmitter } from 'events';
 import { createHash } from 'crypto';
 import type { EnclaveRegistry } from './EnclaveRegistry.js';
+import type { ISourceFetcher } from './sources/ISourceFetcher.js';
 
 // ============================================================================
 // Types
@@ -86,6 +87,9 @@ export class NewsFeedIngester extends EventEmitter {
   /** Set of content hashes for deduplication. */
   private seenHashes: Set<string> = new Set();
 
+  /** Pluggable source fetchers keyed by source type. */
+  private fetchers: Map<NewsSourceType, ISourceFetcher> = new Map();
+
   /**
    * Register a new external news source.
    * @throws If a source with the same name is already registered.
@@ -95,6 +99,13 @@ export class NewsFeedIngester extends EventEmitter {
       throw new Error(`News source '${source.name}' is already registered.`);
     }
     this.sources.set(source.name, source);
+  }
+
+  /**
+   * Register a pluggable source fetcher. Replaces any existing fetcher for that type.
+   */
+  registerFetcher(fetcher: ISourceFetcher): void {
+    this.fetchers.set(fetcher.type, fetcher);
   }
 
   /**
@@ -118,48 +129,17 @@ export class NewsFeedIngester extends EventEmitter {
 
     let rawArticles: IngestedArticle[] = [];
 
-    switch (source.type) {
-      case 'newsapi':
-        // TODO: Fetch from NewsAPI.org
-        // GET https://newsapi.org/v2/top-headlines?apiKey=KEY&category=technology
-        // Map response.articles[] to IngestedArticle[]
+    const fetcher = this.fetchers.get(source.type);
+    if (fetcher) {
+      try {
+        rawArticles = await fetcher.fetch({
+          maxResults: 25,
+          timeoutMs: 15000,
+          ...(source as any).fetchConfig,
+        });
+      } catch {
         rawArticles = [];
-        break;
-
-      case 'hackernews':
-        // TODO: Fetch from HN Algolia API
-        // GET https://hn.algolia.com/api/v1/search?tags=front_page
-        // Map response.hits[] to IngestedArticle[]
-        rawArticles = [];
-        break;
-
-      case 'reddit':
-        // TODO: Fetch from Reddit JSON API
-        // GET https://www.reddit.com/r/{subreddit}/hot.json?limit=25
-        // Map response.data.children[].data to IngestedArticle[]
-        rawArticles = [];
-        break;
-
-      case 'arxiv':
-        // TODO: Fetch from arXiv API
-        // GET http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&max_results=20
-        // Parse Atom XML feed, map entries to IngestedArticle[]
-        rawArticles = [];
-        break;
-
-      case 'semantic-scholar':
-        // TODO: Fetch from Semantic Scholar API
-        // GET https://api.semanticscholar.org/graph/v1/paper/search?query=AI+safety&limit=20
-        // Map response.data[] to IngestedArticle[]
-        rawArticles = [];
-        break;
-
-      case 'serper':
-        // TODO: Fetch from Serper API
-        // POST https://google.serper.dev/search with { q: "AI news", num: 20 }
-        // Map response.organic[] to IngestedArticle[]
-        rawArticles = [];
-        break;
+      }
     }
 
     // Deduplicate and buffer

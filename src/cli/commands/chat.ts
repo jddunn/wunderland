@@ -68,8 +68,9 @@ export default async function cmdChat(
   const enableSkills = flags['no-skills'] !== true;
 
   // Load tools from curated extensions
-  const [cliExecutor, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
+  const [cliExecutor, skillsExt, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
     import('@framers/agentos-ext-cli-executor'),
+    import('@framers/agentos-ext-skills'),
     import('@framers/agentos-ext-web-search'),
     import('@framers/agentos-ext-web-browser'),
     import('@framers/agentos-ext-giphy'),
@@ -86,6 +87,7 @@ export default async function cmdChat(
       },
       logger: console,
     }),
+    skillsExt.createExtensionPack({ options: {}, logger: console }),
     webSearch.createExtensionPack({
       options: {
         serperApiKey: process.env['SERPER_API_KEY'],

@@ -8,6 +8,7 @@
  */
 
 import type { EnclaveConfig } from './types.js';
+import type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
 
 // ============================================================================
 // EnclaveRegistry
@@ -42,6 +43,49 @@ export class EnclaveRegistry {
   /** seedId -> set of subscribed enclaveNames */
   private subscriptions: Map<string, Set<string>> = new Map();
 
+  /** Optional persistence adapter for durable enclave state. */
+  private persistenceAdapter?: IEnclavePersistenceAdapter;
+
+  /** Set the persistence adapter for durable enclave state. */
+  setPersistenceAdapter(adapter: IEnclavePersistenceAdapter): void {
+    this.persistenceAdapter = adapter;
+  }
+
+  /**
+   * Load enclaves and memberships from persistent storage.
+   * Should be called before creating default enclaves to avoid duplicates.
+   * @returns Number of enclaves loaded.
+   */
+  async loadFromPersistence(): Promise<number> {
+    if (!this.persistenceAdapter) return 0;
+
+    const enclaves = await this.persistenceAdapter.loadAllEnclaves();
+    for (const config of enclaves) {
+      if (!this.enclaves.has(config.name)) {
+        this.enclaves.set(config.name, config);
+        this.members.set(config.name, new Set());
+      }
+    }
+
+    const memberships = await this.persistenceAdapter.loadMemberships();
+    for (const [enclaveName, seedIds] of memberships) {
+      const memberSet = this.members.get(enclaveName);
+      if (memberSet) {
+        for (const seedId of seedIds) {
+          memberSet.add(seedId);
+          let subSet = this.subscriptions.get(seedId);
+          if (!subSet) {
+            subSet = new Set();
+            this.subscriptions.set(seedId, subSet);
+          }
+          subSet.add(enclaveName);
+        }
+      }
+    }
+
+    return enclaves.length;
+  }
+
   /**
    * Create a new enclave and auto-subscribe the creator.
    * @throws If an enclave with the same name already exists.
@@ -56,6 +100,10 @@ export class EnclaveRegistry {
 
     // Auto-subscribe the creator
     this.subscribe(config.creatorSeedId, config.name);
+
+    if (this.persistenceAdapter) {
+      this.persistenceAdapter.saveEnclave(config).catch(() => {});
+    }
   }
 
   /**
@@ -88,6 +136,10 @@ export class EnclaveRegistry {
     }
     subSet.add(enclaveName);
 
+    if (this.persistenceAdapter) {
+      this.persistenceAdapter.saveMembership(seedId, enclaveName).catch(() => {});
+    }
+
     return true;
   }
 
@@ -106,6 +158,10 @@ export class EnclaveRegistry {
     const subSet = this.subscriptions.get(seedId);
     if (subSet) {
       subSet.delete(enclaveName);
+    }
+
+    if (this.persistenceAdapter) {
+      this.persistenceAdapter.removeMembership(seedId, enclaveName).catch(() => {});
     }
 
     return true;
@@ -149,6 +205,14 @@ export class EnclaveRegistry {
     }
 
     return matches;
+  }
+
+  /** Set the moderator for an enclave (for agent-created enclaves). */
+  setModerator(seedId: string, enclaveName: string): boolean {
+    const config = this.enclaves.get(enclaveName);
+    if (!config) return false;
+    (config as any).moderatorSeedId = seedId;
+    return true;
   }
 
   // ── Deprecated compatibility methods ──

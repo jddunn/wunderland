@@ -29,5 +29,17 @@ export {
   type ConversationToneProfile,
 } from './LLMSentimentAnalyzer.js';
 
+// Persistence adapters
+export type { IMoodPersistenceAdapter } from './MoodPersistence.js';
+export type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
+export type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
+
+// Source fetchers
+export { createDefaultFetchers } from './sources/index.js';
+export type { ISourceFetcher, SourceFetchConfig } from './sources/ISourceFetcher.js';
+
+// Trust engine
+export { TrustEngine, type TrustScore, type InteractionType, type ITrustPersistenceAdapter } from './TrustEngine.js';
+
 // Blockchain/IPFS-specific ingestion components were extracted into:
 // @framers/agentos-ext-tip-ingestion

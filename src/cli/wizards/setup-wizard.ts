@@ -16,6 +16,11 @@ import { runApiKeysWizard } from './api-keys-wizard.js';
 import { runChannelsWizard } from './channels-wizard.js';
 import { runPersonalityWizard } from './personality-wizard.js';
 import { runVoiceWizard } from './voice-wizard.js';
+import {
+  autoConfigureOllama,
+  pullModel,
+  type OllamaAutoConfigResult,
+} from '../ollama/ollama-manager.js';
 
 function createDefaultState(): WizardState {
   return {
@@ -76,6 +81,11 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   if (!state.llmProvider) {
     p.cancel('No LLM provider selected.');
     return;
+  }
+
+  // Step 2b: Ollama auto-configuration (if Ollama selected)
+  if (state.llmProvider === 'ollama') {
+    await runOllamaAutoConfig(state);
   }
 
   // Step 3: Personality (Advanced only)
@@ -163,6 +173,63 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   fmt.note(`Next: ${sColor('wunderland init my-agent')} && ${sColor('wunderland start')}`);
   fmt.note(`Dashboard: ${fmt.link(URLS.saas)}`);
   fmt.blank();
+}
+
+// ── Ollama auto-configuration sub-wizard ─────────────────────────────────────
+
+async function runOllamaAutoConfig(state: WizardState): Promise<void> {
+  fmt.section('Ollama Auto-Configuration');
+
+  let result: OllamaAutoConfigResult;
+  try {
+    result = await autoConfigureOllama();
+  } catch {
+    fmt.warning('Ollama not available. You can install it later from https://ollama.ai/');
+    return;
+  }
+
+  if (!result.installed || !result.running) return;
+
+  const rec = result.recommendation;
+  const localNames = new Set(result.localModels.map((m) => m.name));
+
+  // Check which models need to be pulled
+  const needed: string[] = [];
+  for (const modelId of [rec.router, rec.primary, rec.auditor]) {
+    if (!localNames.has(modelId)) {
+      needed.push(modelId);
+    }
+  }
+
+  if (needed.length === 0) {
+    fmt.ok('All recommended models are already installed.');
+  } else {
+    fmt.blank();
+    fmt.note(`Models to pull: ${needed.map(accent).join(', ')}`);
+
+    const confirmPull = await p.confirm({
+      message: `Pull ${needed.length} recommended model${needed.length > 1 ? 's' : ''}?`,
+      initialValue: true,
+    });
+
+    if (!p.isCancel(confirmPull) && confirmPull) {
+      for (const modelId of needed) {
+        fmt.note(`Pulling ${accent(modelId)}...`);
+        try {
+          await pullModel(modelId);
+          fmt.ok(`${modelId} pulled successfully`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          fmt.warning(`Failed to pull ${modelId}: ${msg}`);
+        }
+      }
+    }
+  }
+
+  // Set the model in state
+  state.llmModel = rec.primary;
+  fmt.blank();
+  fmt.ok(`Ollama configured: primary=${accent(rec.primary)} router=${accent(rec.router)}`);
 }
 
 // ── Inline sub-wizards for tool keys & security ─────────────────────────────
