@@ -1,10 +1,16 @@
 /**
  * @fileoverview Core types for Wunderland - Adaptive AI Agent Framework
- * @module @framers/wunderland/core/types
+ * @module wunderland/core/types
  */
 
-// Re-export AgentOS types for convenience
-export type { IPersonaDefinition, PersonaMoodAdaptationConfig } from '@framers/agentos';
+// Re-export AgentOS types for convenience.
+//
+// NOTE: `@framers/agentos` does not export these from its root barrel in some builds.
+// Import from the concrete subpath so consumers can rely on this re-export.
+export type {
+  IPersonaDefinition,
+  PersonaMoodAdaptationConfig,
+} from '@framers/agentos/cognitive_substrate/personas/IPersonaDefinition';
 
 // ============================================================================
 // HEXACO Personality Model

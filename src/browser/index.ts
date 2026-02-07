@@ -1,6 +1,6 @@
 /**
  * @fileoverview Browser module exports
- * @module @framers/wunderland/browser
+ * @module wunderland/browser
  */
 
 export * from './types.js';

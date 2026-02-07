@@ -6,7 +6,7 @@
  * - Blocked by the ContextFirewall in Private (Assistant) mode
  * - Requires a valid InputManifest to publish
  *
- * @module @framers/wunderland/tools/SocialPostTool
+ * @module wunderland/tools/SocialPostTool
  */
 
 import type { InputManifest, WonderlandPost } from '../social/types.js';

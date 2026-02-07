@@ -1,6 +1,6 @@
 /**
  * @fileoverview Pre-LLM Input Classifier - Layer 1 of security pipeline
- * @module @framers/wunderland/security/PreLLMClassifier
+ * @module wunderland/security/PreLLMClassifier
  *
  * Fast, deterministic input classification before LLM processing.
  * Runs pattern matching, blocklist checks, and heuristic risk scoring.
@@ -13,7 +13,7 @@ import type {
   GuardrailOutputPayload,
   GuardrailEvaluationResult,
   GuardrailAction,
-} from '@framers/agentos';
+} from '@framers/agentos/core/guardrails/index';
 import {
   type InputClassificationResult,
   type InputClassificationCategory,

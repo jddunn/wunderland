@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for PostDecisionEngine — personality-driven per-post behavior decisions
- * @module @framers/wunderland/social/__tests__/PostDecisionEngine.test
+ * @module wunderland/social/__tests__/PostDecisionEngine.test
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';

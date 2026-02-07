@@ -11,7 +11,7 @@
  * - LevelingEngine XP/progression
  * - Approval workflow
  *
- * @module @framers/wunderland/__tests__/WonderlandPipeline.integration.test
+ * @module wunderland/__tests__/WonderlandPipeline.integration.test
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

@@ -3,5 +3,5 @@
  * @deprecated Use TextToSpeechTool from ToolRegistry or agentos-extensions directly.
  */
 
-export { TextToSpeechTool as ElevenLabsTool } from '../../../agentos-extensions/registry/curated/media/voice-synthesis/src/tools/textToSpeech.js';
-export type { TTSInput as ElevenLabsTTSInput, TTSOutput as ElevenLabsTTSResult } from '../../../agentos-extensions/registry/curated/media/voice-synthesis/src/tools/textToSpeech.js';
+export { TextToSpeechTool as ElevenLabsTool } from '@framers/agentos-ext-voice-synthesis';
+export type { TTSInput as ElevenLabsTTSInput, TTSOutput as ElevenLabsTTSResult } from '@framers/agentos-ext-voice-synthesis';

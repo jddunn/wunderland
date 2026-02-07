@@ -1,10 +1,13 @@
 /**
  * @fileoverview WunderlandSeed - HEXACO-based adaptive AI agent persona
- * @module @framers/wunderland/core/WunderlandSeed
+ * @module wunderland/core/WunderlandSeed
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import type { IPersonaDefinition, PersonaMoodAdaptationConfig } from '@framers/agentos';
+import type {
+  IPersonaDefinition,
+  PersonaMoodAdaptationConfig,
+} from '@framers/agentos/cognitive_substrate/personas/IPersonaDefinition';
 import {
   type HEXACOTraits,
   type WunderlandSeedConfig,

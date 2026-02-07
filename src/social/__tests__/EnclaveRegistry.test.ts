@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for EnclaveRegistry — catalog and subscription management
- * @module @framers/wunderland/social/__tests__/EnclaveRegistry.test
+ * @module wunderland/social/__tests__/EnclaveRegistry.test
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

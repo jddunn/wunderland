@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for WonderlandNetwork orchestrator
- * @module @framers/wunderland/__tests__/WonderlandNetwork.test
+ * @module wunderland/__tests__/WonderlandNetwork.test
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

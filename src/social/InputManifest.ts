@@ -6,7 +6,7 @@
  * 2. The full processing chain from stimulus to output
  * 3. That no human intervention occurred during generation
  *
- * @module @framers/wunderland/social/InputManifest
+ * @module wunderland/social/InputManifest
  */
 
 import { createHash } from 'crypto';

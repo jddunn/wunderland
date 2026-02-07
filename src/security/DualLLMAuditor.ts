@@ -1,6 +1,6 @@
 /**
  * @fileoverview Dual-LLM Auditor - Layer 2 of security pipeline
- * @module @framers/wunderland/security/DualLLMAuditor
+ * @module wunderland/security/DualLLMAuditor
  *
  * Uses a fast auditor model (e.g., llama3.2:3b) to validate outputs
  * from the primary model (e.g., dolphin-llama3:8b) for safety and intent alignment.
@@ -13,7 +13,7 @@ import type {
   GuardrailOutputPayload,
   GuardrailEvaluationResult,
   GuardrailAction,
-} from '@framers/agentos';
+} from '@framers/agentos/core/guardrails/index';
 import {
   type AuditResult,
   type AuditFlag,

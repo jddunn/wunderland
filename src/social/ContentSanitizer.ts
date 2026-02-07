@@ -8,7 +8,7 @@
  * - Size limits and timeouts
  * - HTML sanitization
  *
- * @module @framers/wunderland/social/ContentSanitizer
+ * @module wunderland/social/ContentSanitizer
  */
 
 import { createHash } from 'crypto';

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Browser automation client - Ported from OpenClaw
- * @module @framers/wunderland/browser/BrowserClient
+ * @module wunderland/browser/BrowserClient
  *
  * HTTP client for browser automation service.
  */

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Authorization types for Wunderland
- * @module @framers/wunderland/authorization/types
+ * @module wunderland/authorization/types
  */
 
 import type { ToolRiskTier } from '../core/types.js';

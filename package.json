@@ -1,5 +1,5 @@
 {
-  "name": "@framers/wunderland",
+  "name": "wunderland",
   "version": "0.2.0",
   "description": "AI-powered personal assistant framework built on AgentOS - adaptive agents with HEXACO personality, multi-channel communication, hierarchical inference, and human-in-the-loop security",
   "main": "dist/index.js",
@@ -26,6 +26,18 @@
       "import": "./dist/authorization/index.js",
       "types": "./dist/authorization/index.d.ts"
     },
+    "./browser": {
+      "import": "./dist/browser/index.js",
+      "types": "./dist/browser/index.d.ts"
+    },
+    "./pairing": {
+      "import": "./dist/pairing/index.js",
+      "types": "./dist/pairing/index.d.ts"
+    },
+    "./skills": {
+      "import": "./dist/skills/index.js",
+      "types": "./dist/skills/index.d.ts"
+    },
     "./social": {
       "import": "./dist/social/index.js",
       "types": "./dist/social/index.d.ts"
@@ -35,8 +47,8 @@
       "types": "./dist/guardrails/CitizenModeGuardrail.d.ts"
     },
     "./tools": {
-      "import": "./dist/tools/SocialPostTool.js",
-      "types": "./dist/tools/SocialPostTool.d.ts"
+      "import": "./dist/tools/index.js",
+      "types": "./dist/tools/index.d.ts"
     }
   },
   "bin": {
@@ -45,7 +57,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:security": "vitest run --reporter=verbose src/security",
     "lint": "eslint src --ext .ts",
     "clean": "rm -rf dist"
@@ -74,19 +87,34 @@
     "url": "https://github.com/jddunn"
   },
   "license": "MIT",
-  "homepage": "https://github.com/jddunn/wunderland",
+  "homepage": "https://github.com/framersai/voice-chat-assistant/tree/master/packages/wunderland",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jddunn/wunderland.git"
+    "url": "git+https://github.com/framersai/voice-chat-assistant.git",
+    "directory": "packages/wunderland"
   },
   "bugs": {
-    "url": "https://github.com/jddunn/wunderland/issues"
+    "url": "https://github.com/framersai/voice-chat-assistant/issues"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@framers/agentos": "^0.1.6",
+    "@framers/agentos": "workspace:*",
+    "@framers/agentos-extensions-registry": "workspace:*",
+    "@framers/agentos-ext-cli-executor": "workspace:*",
+    "@framers/agentos-ext-giphy": "workspace:*",
+    "@framers/agentos-ext-image-search": "workspace:*",
+    "@framers/agentos-ext-news-search": "workspace:*",
+    "@framers/agentos-ext-voice-synthesis": "workspace:*",
+    "@framers/agentos-ext-web-browser": "workspace:*",
+    "@framers/agentos-ext-web-search": "workspace:*",
+    "@clack/prompts": "^0.9.1",
+    "boxen": "^8.0.1",
+    "cfonts": "^3.3.0",
+    "chalk": "^5.4.1",
+    "gradient-string": "^3.0.0",
+    "nanospinner": "^1.2.2",
     "playwright-core": "^1.58.1",
     "uuid": "^9.0.0"
   },

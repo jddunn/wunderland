@@ -1,6 +1,6 @@
 /**
  * @fileoverview Skill Registry for Wunderland
- * @module @framers/wunderland/skills/SkillRegistry
+ * @module wunderland/skills/SkillRegistry
  *
  * Runtime registry for managing and querying loaded skills.
  * Provides methods for registration, filtering, and building

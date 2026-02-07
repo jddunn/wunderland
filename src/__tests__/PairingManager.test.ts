@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for PairingManager
- * @module @framers/wunderland/__tests__/PairingManager.test
+ * @module wunderland/__tests__/PairingManager.test
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

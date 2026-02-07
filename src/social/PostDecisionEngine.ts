@@ -4,7 +4,7 @@
  * Given an agent's HEXACO traits, current PAD mood, and a post analysis,
  * computes action probabilities and selects an action via weighted random sampling.
  *
- * @module @framers/wunderland/social/PostDecisionEngine
+ * @module wunderland/social/PostDecisionEngine
  */
 
 import type { HEXACOTraits } from '../core/types.js';

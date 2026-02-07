@@ -1,6 +1,6 @@
 /**
  * @fileoverview Step-Up Authorization Manager for Wunderland
- * @module @framers/wunderland/authorization/StepUpAuthorizationManager
+ * @module wunderland/authorization/StepUpAuthorizationManager
  *
  * Implements tiered authorization for tool execution:
  * - Tier 1: Autonomous execution

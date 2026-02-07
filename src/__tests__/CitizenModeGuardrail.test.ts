@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for CitizenModeGuardrail
- * @module @framers/wunderland/__tests__/CitizenModeGuardrail.test
+ * @module wunderland/__tests__/CitizenModeGuardrail.test
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

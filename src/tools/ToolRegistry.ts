@@ -1,27 +1,21 @@
 /**
- * @fileoverview Wunderland Tool Registry — instantiates tools from agentos-extensions.
+ * @fileoverview Wunderland Tool Registry — uses the curated extensions registry
+ * to load all available tools via a single `createCuratedManifest()` call.
  *
- * This is the convenience layer that pulls ITool implementations from
- * @framers/agentos-extensions and assembles them for NewsroomAgency use.
- * Tools are created lazily based on available environment variables / API keys.
+ * Instead of manually importing and wiring each extension, this delegates to
+ * `@framers/agentos-extensions-registry` which handles lazy loading, secret
+ * resolution, and factory invocation for all curated tools.
  *
- * @module @framers/wunderland/tools/ToolRegistry
+ * @module wunderland/tools/ToolRegistry
  */
 
-import type { ITool } from '../../../agentos/src/core/tools/ITool.js';
-
-// Import tool implementations from agentos-extensions (canonical source)
-import { GiphySearchTool } from '../../../agentos-extensions/registry/curated/media/giphy/src/tools/giphySearch.js';
-import { ImageSearchTool } from '../../../agentos-extensions/registry/curated/media/image-search/src/tools/imageSearch.js';
-import { TextToSpeechTool } from '../../../agentos-extensions/registry/curated/media/voice-synthesis/src/tools/textToSpeech.js';
-import { NewsSearchTool } from '../../../agentos-extensions/registry/curated/research/news-search/src/tools/newsSearch.js';
-
-// SerperSearchTool stays local — the existing web-search extension has its own
-// multi-provider SearchProviderService; our Serper tool is a simpler direct integration
-import { SerperSearchTool } from './SerperSearchTool.js';
+import type { ITool } from '@framers/agentos';
+import { createCuratedManifest } from '@framers/agentos-extensions-registry';
 
 export interface ToolRegistryConfig {
   serperApiKey?: string;
+  serpApiKey?: string;
+  braveApiKey?: string;
   giphyApiKey?: string;
   elevenLabsApiKey?: string;
   pexelsApiKey?: string;
@@ -35,6 +29,8 @@ export interface ToolRegistryConfig {
  */
 export const WUNDERLAND_TOOL_IDS = {
   WEB_SEARCH: 'web_search',
+  RESEARCH_AGGREGATE: 'research_aggregate',
+  FACT_CHECK: 'fact_check',
   NEWS_SEARCH: 'news_search',
   GIPHY_SEARCH: 'giphy_search',
   IMAGE_SEARCH: 'image_search',
@@ -45,44 +41,57 @@ export const WUNDERLAND_TOOL_IDS = {
 } as const;
 
 /**
- * Creates all available tools based on provided or environment API keys.
- * Only creates tools for which API keys are available.
- *
- * Tools are sourced from @framers/agentos-extensions where possible.
+ * Build a secrets map from config values and environment variables.
+ * Keys match the secret IDs expected by extension `getSecret()` resolvers.
  */
-export function createWunderlandTools(config?: ToolRegistryConfig): ITool[] {
+function buildSecretsMap(config?: ToolRegistryConfig): Record<string, string> {
+  const secrets: Record<string, string> = {};
+
+  const add = (key: string, configValue?: string, envKey?: string) => {
+    const val = configValue || (envKey ? process.env[envKey] : undefined);
+    if (val) secrets[key] = val;
+  };
+
+  add('serper.apiKey', config?.serperApiKey, 'SERPER_API_KEY');
+  add('serpapi.apiKey', config?.serpApiKey, 'SERPAPI_API_KEY');
+  add('brave.apiKey', config?.braveApiKey, 'BRAVE_API_KEY');
+  add('giphy.apiKey', config?.giphyApiKey, 'GIPHY_API_KEY');
+  add('elevenlabs.apiKey', config?.elevenLabsApiKey, 'ELEVENLABS_API_KEY');
+  add('pexels.apiKey', config?.pexelsApiKey, 'PEXELS_API_KEY');
+  add('unsplash.apiKey', config?.unsplashApiKey, 'UNSPLASH_ACCESS_KEY');
+  add('pixabay.apiKey', config?.pixabayApiKey, 'PIXABAY_API_KEY');
+  add('newsapi.apiKey', config?.newsApiKey, 'NEWSAPI_API_KEY');
+
+  return secrets;
+}
+
+/**
+ * Creates all available tools via the curated extensions registry.
+ * Only tools whose packages are installed will be loaded (via dynamic import).
+ * API keys resolve from config → secrets map → environment variables.
+ */
+export async function createWunderlandTools(config?: ToolRegistryConfig): Promise<ITool[]> {
+  const secrets = buildSecretsMap(config);
+
+  const manifest = await createCuratedManifest({
+    tools: 'all',
+    channels: 'none',
+    secrets,
+  });
+
   const tools: ITool[] = [];
-
-  // Serper Web Search (local — simple direct Serper integration)
-  const serperKey = config?.serperApiKey || process.env.SERPER_API_KEY;
-  if (serperKey) {
-    tools.push(new SerperSearchTool(serperKey));
-  }
-
-  // News Search (from agentos-extensions/research/news-search)
-  const newsKey = config?.newsApiKey || process.env.NEWSAPI_API_KEY;
-  if (newsKey) {
-    tools.push(new NewsSearchTool(newsKey));
-  }
-
-  // Giphy (from agentos-extensions/media/giphy)
-  const giphyKey = config?.giphyApiKey || process.env.GIPHY_API_KEY;
-  if (giphyKey) {
-    tools.push(new GiphySearchTool(giphyKey));
-  }
-
-  // Media Search (from agentos-extensions/media/image-search)
-  const pexelsKey = config?.pexelsApiKey || process.env.PEXELS_API_KEY;
-  const unsplashKey = config?.unsplashApiKey || process.env.UNSPLASH_ACCESS_KEY;
-  const pixabayKey = config?.pixabayApiKey || process.env.PIXABAY_API_KEY;
-  if (pexelsKey || unsplashKey || pixabayKey) {
-    tools.push(new ImageSearchTool({ pexels: pexelsKey, unsplash: unsplashKey, pixabay: pixabayKey }));
-  }
-
-  // ElevenLabs TTS (from agentos-extensions/media/voice-synthesis)
-  const elevenLabsKey = config?.elevenLabsApiKey || process.env.ELEVENLABS_API_KEY;
-  if (elevenLabsKey) {
-    tools.push(new TextToSpeechTool(elevenLabsKey));
+  for (const pack of manifest.packs) {
+    if (!('factory' in pack) || typeof pack.factory !== 'function') continue;
+    try {
+      const extensionPack = await pack.factory();
+      for (const descriptor of (extensionPack as any).descriptors || []) {
+        if (descriptor?.kind === 'tool' && descriptor.payload) {
+          tools.push(descriptor.payload);
+        }
+      }
+    } catch {
+      // Extension pack failed to initialize — skip silently
+    }
   }
 
   return tools;
@@ -92,37 +101,48 @@ export function createWunderlandTools(config?: ToolRegistryConfig): ITool[] {
  * Returns a map of tool name → availability status for diagnostic purposes.
  */
 export function getToolAvailability(config?: ToolRegistryConfig): Record<string, { available: boolean; reason?: string }> {
+  const secrets = buildSecretsMap(config);
+
+  const hasWebKey = !!(secrets['serper.apiKey'] || secrets['serpapi.apiKey'] || secrets['brave.apiKey']);
+
   return {
     [WUNDERLAND_TOOL_IDS.WEB_SEARCH]: {
-      available: !!(config?.serperApiKey || process.env.SERPER_API_KEY),
-      reason: config?.serperApiKey || process.env.SERPER_API_KEY ? undefined : 'SERPER_API_KEY not set',
+      available: true,
+      reason: hasWebKey ? undefined : 'No web-search API keys set (Serper/SerpAPI/Brave); using DuckDuckGo fallback',
+    },
+    [WUNDERLAND_TOOL_IDS.RESEARCH_AGGREGATE]: {
+      available: true,
+      reason: hasWebKey ? undefined : 'No web-search API keys set (Serper/SerpAPI/Brave); using DuckDuckGo fallback',
+    },
+    [WUNDERLAND_TOOL_IDS.FACT_CHECK]: {
+      available: true,
+      reason: hasWebKey ? undefined : 'No web-search API keys set (Serper/SerpAPI/Brave); using DuckDuckGo fallback',
     },
     [WUNDERLAND_TOOL_IDS.NEWS_SEARCH]: {
-      available: !!(config?.newsApiKey || process.env.NEWSAPI_API_KEY),
-      reason: config?.newsApiKey || process.env.NEWSAPI_API_KEY ? undefined : 'NEWSAPI_API_KEY not set',
+      available: !!secrets['newsapi.apiKey'],
+      reason: secrets['newsapi.apiKey'] ? undefined : 'NEWSAPI_API_KEY not set',
     },
     [WUNDERLAND_TOOL_IDS.GIPHY_SEARCH]: {
-      available: !!(config?.giphyApiKey || process.env.GIPHY_API_KEY),
-      reason: config?.giphyApiKey || process.env.GIPHY_API_KEY ? undefined : 'GIPHY_API_KEY not set',
+      available: !!secrets['giphy.apiKey'],
+      reason: secrets['giphy.apiKey'] ? undefined : 'GIPHY_API_KEY not set',
     },
     [WUNDERLAND_TOOL_IDS.IMAGE_SEARCH]: {
-      available: !!(config?.pexelsApiKey || process.env.PEXELS_API_KEY ||
-        config?.unsplashApiKey || process.env.UNSPLASH_ACCESS_KEY ||
-        config?.pixabayApiKey || process.env.PIXABAY_API_KEY),
-      reason: (config?.pexelsApiKey || process.env.PEXELS_API_KEY ||
-        config?.unsplashApiKey || process.env.UNSPLASH_ACCESS_KEY ||
-        config?.pixabayApiKey || process.env.PIXABAY_API_KEY) ? undefined : 'No image API keys set',
+      available: !!(secrets['pexels.apiKey'] || secrets['unsplash.apiKey'] || secrets['pixabay.apiKey']),
+      reason: (secrets['pexels.apiKey'] || secrets['unsplash.apiKey'] || secrets['pixabay.apiKey'])
+        ? undefined
+        : 'No image API keys set',
     },
     [WUNDERLAND_TOOL_IDS.TEXT_TO_SPEECH]: {
-      available: !!(config?.elevenLabsApiKey || process.env.ELEVENLABS_API_KEY),
-      reason: config?.elevenLabsApiKey || process.env.ELEVENLABS_API_KEY ? undefined : 'ELEVENLABS_API_KEY not set',
+      available: !!secrets['elevenlabs.apiKey'],
+      reason: secrets['elevenlabs.apiKey'] ? undefined : 'ELEVENLABS_API_KEY not set',
     },
   };
 }
 
-// Re-export extension tools for convenience
+// Re-export extension tools for convenience (individual packages remain as deps)
 export { SerperSearchTool } from './SerperSearchTool.js';
-export { GiphySearchTool } from '../../../agentos-extensions/registry/curated/media/giphy/src/tools/giphySearch.js';
-export { ImageSearchTool } from '../../../agentos-extensions/registry/curated/media/image-search/src/tools/imageSearch.js';
-export { TextToSpeechTool } from '../../../agentos-extensions/registry/curated/media/voice-synthesis/src/tools/textToSpeech.js';
-export { NewsSearchTool } from '../../../agentos-extensions/registry/curated/research/news-search/src/tools/newsSearch.js';
+export { WebSearchTool, ResearchAggregatorTool, FactCheckTool } from '@framers/agentos-ext-web-search';
+export { GiphySearchTool } from '@framers/agentos-ext-giphy';
+export { ImageSearchTool } from '@framers/agentos-ext-image-search';
+export { TextToSpeechTool } from '@framers/agentos-ext-voice-synthesis';
+export { NewsSearchTool } from '@framers/agentos-ext-news-search';

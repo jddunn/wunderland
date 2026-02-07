@@ -1,6 +1,6 @@
 /**
  * @fileoverview Core module exports for Wunderland
- * @module @framers/wunderland/core
+ * @module wunderland/core
  */
 
 // Types

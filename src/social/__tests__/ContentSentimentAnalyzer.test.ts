@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for ContentSentimentAnalyzer — lightweight keyword-based content analysis
- * @module @framers/wunderland/social/__tests__/ContentSentimentAnalyzer.test
+ * @module wunderland/social/__tests__/ContentSentimentAnalyzer.test
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

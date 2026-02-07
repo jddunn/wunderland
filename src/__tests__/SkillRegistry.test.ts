@@ -1,6 +1,6 @@
 /**
  * @fileoverview Unit tests for Skills Registry module
- * @module @framers/wunderland/skills/__tests__
+ * @module wunderland/skills/__tests__
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';

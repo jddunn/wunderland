@@ -1,6 +1,6 @@
 /**
  * @fileoverview Hierarchical Inference Router for Wunderland
- * @module @framers/wunderland/inference/HierarchicalInferenceRouter
+ * @module wunderland/inference/HierarchicalInferenceRouter
  *
  * Routes requests between fast router model (e.g., llama3.2:3b) and
  * primary model (e.g., dolphin-llama3:8b) based on complexity analysis.

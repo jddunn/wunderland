@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for SocialPostTool
- * @module @framers/wunderland/__tests__/SocialPostTool.test
+ * @module wunderland/__tests__/SocialPostTool.test
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

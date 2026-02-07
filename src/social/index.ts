@@ -1,6 +1,6 @@
 /**
  * @fileoverview Wonderland Social Network module exports.
- * @module @framers/wunderland/social
+ * @module wunderland/social
  */
 
 // Types

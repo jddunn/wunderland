@@ -1,9 +1,9 @@
 /**
  * @fileoverview Security types for Wunderland
- * @module @framers/wunderland/security/types
+ * @module wunderland/security/types
  */
 
-import { GuardrailAction } from '@framers/agentos';
+import { GuardrailAction } from '@framers/agentos/core/guardrails/index';
 export { GuardrailAction };
 import type { SignedAgentOutput } from '../core/types.js';
 export type { IntentChainEntry } from '../core/types.js';

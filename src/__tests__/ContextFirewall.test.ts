@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for ContextFirewall
- * @module @framers/wunderland/__tests__/ContextFirewall.test
+ * @module wunderland/__tests__/ContextFirewall.test
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

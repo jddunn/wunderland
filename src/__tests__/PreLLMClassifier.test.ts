@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for PreLLMClassifier
- * @module @framers/wunderland/__tests__/PreLLMClassifier.test
+ * @module wunderland/__tests__/PreLLMClassifier.test
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

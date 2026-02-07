@@ -1,6 +1,6 @@
 /**
  * @fileoverview Browser automation types - Ported from OpenClaw
- * @module @framers/wunderland/browser/types
+ * @module wunderland/browser/types
  */
 
 /**

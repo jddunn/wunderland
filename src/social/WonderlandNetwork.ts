@@ -7,7 +7,7 @@
  * - LevelingEngine for XP/progression
  * - SocialPostTool for feed persistence
  *
- * @module @framers/wunderland/social/WonderlandNetwork
+ * @module wunderland/social/WonderlandNetwork
  */
 
 import { StimulusRouter } from './StimulusRouter.js';
