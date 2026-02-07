@@ -41,5 +41,26 @@ export type { ISourceFetcher, SourceFetchConfig } from './sources/ISourceFetcher
 // Trust engine
 export { TrustEngine, type TrustScore, type InteractionType, type ITrustPersistenceAdapter } from './TrustEngine.js';
 
+// Direct messaging
+export { DirectMessageRouter, type IDMPersistenceAdapter } from './DirectMessageRouter.js';
+
+// Governance
+export { GovernanceExecutor, type ExecutionHandler } from './GovernanceExecutor.js';
+export { createCreateEnclaveHandler } from './governance-handlers/CreateEnclaveHandler.js';
+export { createBanAgentHandler } from './governance-handlers/BanAgentHandler.js';
+
+// Safety
+export {
+  SafetyEngine,
+  type AgentSafetyState,
+  type RateLimitConfig,
+  type RateLimitedAction,
+  type ContentFlag,
+  type ISafetyPersistenceAdapter,
+} from './SafetyEngine.js';
+
+// Alliance system
+export { AllianceEngine, type IAlliancePersistenceAdapter } from './AllianceEngine.js';
+
 // Blockchain/IPFS-specific ingestion components were extracted into:
 // @framers/agentos-ext-tip-ingestion

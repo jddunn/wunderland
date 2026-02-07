@@ -8,13 +8,12 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import * as path from 'node:path';
-import os from 'node:os';
 import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor, info as iColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcess } from '../config/env-manager.js';
 import { isOllamaRunning, startOllama, detectOllamaInstall } from '../ollama/ollama-manager.js';
-import { SkillRegistry } from '../../skills/index.js';
+import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
 import { runToolCallingTurn, type ToolInstance } from '../openai/tool-calling.js';
 import {
   createWunderlandSeed,
@@ -52,30 +51,6 @@ function sendJson(res: import('node:http').ServerResponse, status: number, body:
     'Content-Length': Buffer.byteLength(json),
   });
   res.end(json);
-}
-
-function resolveSkillsDirs(flags: Record<string, string | boolean>): string[] {
-  const dirs: string[] = [];
-  const skillsDirFlag = flags['skills-dir'];
-  if (typeof skillsDirFlag === 'string' && skillsDirFlag.trim()) {
-    for (const part of skillsDirFlag.split(',')) {
-      const p = part.trim();
-      if (p) dirs.push(path.resolve(process.cwd(), p));
-    }
-  }
-  const codexHome = typeof process.env['CODEX_HOME'] === 'string' ? process.env['CODEX_HOME'].trim() : '';
-  if (codexHome) dirs.push(path.join(codexHome, 'skills'));
-  dirs.push(path.join(os.homedir(), '.codex', 'skills'));
-  dirs.push(path.join(process.cwd(), 'skills'));
-
-  const seen = new Set<string>();
-  return dirs.filter((d) => {
-    if (!d) return false;
-    const key = path.resolve(d);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return existsSync(key);
-  });
 }
 
 // ── Command ─────────────────────────────────────────────────────────────────
@@ -229,10 +204,13 @@ export default async function cmdStart(
   let skillsPrompt = '';
   if (enableSkills) {
     const skillRegistry = new SkillRegistry();
-    const dirs = resolveSkillsDirs(flags);
+    const dirs = resolveDefaultSkillsDirs({
+      cwd: process.cwd(),
+      skillsDirFlag: typeof flags['skills-dir'] === 'string' ? flags['skills-dir'] : undefined,
+    });
     if (dirs.length > 0) {
       await skillRegistry.loadFromDirs(dirs);
-      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform });
+      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
       skillsPrompt = snapshot.prompt || '';
     }
   }
@@ -344,7 +322,7 @@ export default async function cmdStart(
   fmt.kvPair('API Key', apiKey ? sColor('set') : wColor('not set'));
   fmt.kvPair('Port', String(port));
   fmt.kvPair('Tools', `${toolDefs.length} loaded`);
-  fmt.kvPair('Side Effects', autoApproveToolCalls ? wColor('auto-approved') : sColor('disabled'));
+  fmt.kvPair('Authorization', autoApproveToolCalls ? wColor('fully autonomous (all auto-approved)') : sColor('tiered (safe tools only)'));
   if (isOllamaProvider) {
     fmt.kvPair('Ollama', sColor('http://localhost:11434'));
   }

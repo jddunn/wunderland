@@ -103,9 +103,25 @@ export class StepUpAuthorizationManager {
 
   /**
    * Authorizes a tool execution request.
+   *
+   * When `autoApproveAll` is enabled in the config, all requests are
+   * immediately authorized as Tier 1 (autonomous) with no further checks.
+   * This covers skill tools, side-effect tools, capability-requiring tools,
+   * destructive commands, build commands, and every other tool type.
    */
   async authorize(request: ToolCallRequest): Promise<AuthorizationResult> {
     this.stats.totalRequests++;
+
+    // Fully autonomous mode: auto-approve everything
+    if (this.config.autoApproveAll) {
+      this.stats.requestsByTier[ToolRiskTier.TIER_1_AUTONOMOUS]++;
+      this.stats.authorizedCount++;
+      return {
+        authorized: true,
+        tier: ToolRiskTier.TIER_1_AUTONOMOUS,
+        auditRequired: false,
+      };
+    }
 
     // Determine effective risk tier
     const effectiveTier = this.determineEffectiveTier(request);

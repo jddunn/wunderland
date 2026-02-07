@@ -12,7 +12,7 @@ import type {
     AuthorizableTool,
     HITLRequestCallback,
 } from '../authorization/types.js';
-import { ToolRiskTier } from '../core/types.js';
+import { ToolRiskTier, FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG } from '../core/types.js';
 
 describe('StepUpAuthorizationManager', () => {
     let manager: StepUpAuthorizationManager;
@@ -176,6 +176,125 @@ describe('StepUpAuthorizationManager', () => {
 
             expect(stats.totalRequests).toBe(2);
             expect(stats.authorizedCount).toBe(2);
+        });
+    });
+
+    describe('autoApproveAll mode', () => {
+        it('should auto-approve all tools when autoApproveAll is true', async () => {
+            const autoManager = new StepUpAuthorizationManager({
+                autoApproveAll: true,
+                defaultTier: ToolRiskTier.TIER_3_SYNC_HITL, // would normally block
+            });
+
+            // Side-effect tool with financial category — normally Tier 3
+            const request = createRequest(
+                createTool({ id: 'transfer-funds', category: 'financial', hasSideEffects: true }),
+                { amount: 10000, currency: 'USD' }
+            );
+
+            const result = await autoManager.authorize(request);
+            expect(result.authorized).toBe(true);
+            expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            expect(result.auditRequired).toBe(false);
+        });
+
+        it('should auto-approve destructive tools when autoApproveAll is true', async () => {
+            const autoManager = new StepUpAuthorizationManager({ autoApproveAll: true });
+
+            const request = createRequest(
+                createTool({ id: 'rm_rf', category: 'system', hasSideEffects: true }),
+                { path: '/important/data' }
+            );
+
+            const result = await autoManager.authorize(request);
+            expect(result.authorized).toBe(true);
+            expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('should not invoke HITL callback when autoApproveAll is true', async () => {
+            const mockHitl = vi.fn();
+            const autoManager = new StepUpAuthorizationManager(
+                { autoApproveAll: true },
+                mockHitl
+            );
+
+            const request = createRequest(
+                createTool({ id: 'delete_file', category: 'financial', hasSideEffects: true }),
+                {}
+            );
+
+            await autoManager.authorize(request);
+            expect(mockHitl).not.toHaveBeenCalled();
+        });
+
+        it('should skip escalation triggers when autoApproveAll is true', async () => {
+            const autoManager = new StepUpAuthorizationManager({
+                autoApproveAll: true,
+                escalationTriggers: [
+                    { condition: 'sensitive_data_detected', escalateTo: ToolRiskTier.TIER_3_SYNC_HITL },
+                ],
+            });
+
+            // Args contain credit card pattern — normally would trigger escalation
+            const request = createRequest(
+                createTool({ id: 'process_payment', hasSideEffects: true }),
+                { cardNumber: '4111-1111-1111-1111' }
+            );
+
+            const result = await autoManager.authorize(request);
+            expect(result.authorized).toBe(true);
+            expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('should track statistics correctly in autoApproveAll mode', async () => {
+            const autoManager = new StepUpAuthorizationManager({ autoApproveAll: true });
+
+            await autoManager.authorize(createRequest(createTool({ id: 'tool_1' })));
+            await autoManager.authorize(createRequest(createTool({ id: 'tool_2', hasSideEffects: true })));
+            await autoManager.authorize(createRequest(createTool({ id: 'tool_3', category: 'financial' })));
+
+            const stats = autoManager.getStatistics();
+            expect(stats.totalRequests).toBe(3);
+            expect(stats.authorizedCount).toBe(3);
+            expect(stats.deniedCount).toBe(0);
+            expect(stats.requestsByTier[ToolRiskTier.TIER_1_AUTONOMOUS]).toBe(3);
+        });
+    });
+
+    describe('FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG', () => {
+        it('should have autoApproveAll set to true', () => {
+            expect(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG.autoApproveAll).toBe(true);
+        });
+
+        it('should have Tier 1 as default tier', () => {
+            expect(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG.defaultTier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('should have empty escalation triggers', () => {
+            expect(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG.escalationTriggers).toEqual([]);
+        });
+
+        it('should have empty category overrides', () => {
+            expect(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG.categoryTierOverrides).toEqual({});
+        });
+
+        it('should auto-approve everything when used with StepUpAuthorizationManager', async () => {
+            const manager = new StepUpAuthorizationManager(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG);
+
+            const tools = [
+                createTool({ id: 'read_file' }),
+                createTool({ id: 'write_file', hasSideEffects: true, category: 'data_modification' }),
+                createTool({ id: 'send_email', hasSideEffects: true, category: 'communication' }),
+                createTool({ id: 'transfer_funds', hasSideEffects: true, category: 'financial' }),
+                createTool({ id: 'system_admin', hasSideEffects: true, category: 'system' }),
+                createTool({ id: 'run_build', hasSideEffects: true, category: 'system' }),
+            ];
+
+            for (const tool of tools) {
+                const result = await manager.authorize(createRequest(tool));
+                expect(result.authorized).toBe(true);
+                expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            }
         });
     });
 });
