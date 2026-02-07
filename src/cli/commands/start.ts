@@ -13,6 +13,7 @@ import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor, info as iColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcess } from '../config/env-manager.js';
+import { isOllamaRunning, startOllama, detectOllamaInstall } from '../ollama/ollama-manager.js';
 import { SkillRegistry } from '../../skills/index.js';
 import { runToolCallingTurn, type ToolInstance } from '../openai/tool-calling.js';
 import {
@@ -131,6 +132,26 @@ export default async function cmdStart(
     stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
   });
 
+  // Auto-start Ollama if configured as provider
+  const isOllamaProvider = cfg.llmProvider === 'ollama' || flags['ollama'] === true;
+  if (isOllamaProvider) {
+    const ollamaBin = await detectOllamaInstall();
+    if (ollamaBin) {
+      const running = await isOllamaRunning();
+      if (!running) {
+        fmt.note('Ollama is configured but not running — starting...');
+        try {
+          await startOllama();
+          fmt.ok('Ollama server started at http://localhost:11434');
+        } catch {
+          fmt.warning('Failed to start Ollama. Start it manually: ollama serve');
+        }
+      } else {
+        fmt.ok('Ollama server is running');
+      }
+    }
+  }
+
   const portRaw = typeof flags['port'] === 'string' ? flags['port'] : (process.env['PORT'] || '');
   const port = Number(portRaw) || 3777;
   const apiKey = process.env['OPENAI_API_KEY'] || '';
@@ -143,8 +164,9 @@ export default async function cmdStart(
   const enableSkills = flags['no-skills'] !== true;
 
   // Load tools from curated extensions (same stack as `wunderland chat`)
-  const [cliExecutor, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
+  const [cliExecutor, skillsExt, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
     import('@framers/agentos-ext-cli-executor'),
+    import('@framers/agentos-ext-skills'),
     import('@framers/agentos-ext-web-search'),
     import('@framers/agentos-ext-web-browser'),
     import('@framers/agentos-ext-giphy'),
@@ -161,6 +183,7 @@ export default async function cmdStart(
       },
       logger: console,
     }),
+    skillsExt.createExtensionPack({ options: {}, logger: console }),
     webSearch.createExtensionPack({
       options: {
         serperApiKey: process.env['SERPER_API_KEY'],
@@ -322,6 +345,9 @@ export default async function cmdStart(
   fmt.kvPair('Port', String(port));
   fmt.kvPair('Tools', `${toolDefs.length} loaded`);
   fmt.kvPair('Side Effects', autoApproveToolCalls ? wColor('auto-approved') : sColor('disabled'));
+  if (isOllamaProvider) {
+    fmt.kvPair('Ollama', sColor('http://localhost:11434'));
+  }
   fmt.blank();
   fmt.ok(`Health: ${iColor(`http://localhost:${port}/health`)}`);
   fmt.ok(`Chat:   ${iColor(`POST http://localhost:${port}/chat`)}`);

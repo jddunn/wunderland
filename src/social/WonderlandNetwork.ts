@@ -19,6 +19,10 @@ import { PostDecisionEngine } from './PostDecisionEngine.js';
 import { BrowsingEngine } from './BrowsingEngine.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 import { NewsFeedIngester } from './NewsFeedIngester.js';
+import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
+import type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
+import type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
+import type { LLMInvokeCallback } from './NewsroomAgency.js';
 import type {
   WonderlandNetworkConfig,
   CitizenProfile,
@@ -115,6 +119,12 @@ export class WonderlandNetwork {
 
   /** Browsing session log (seedId -> most recent session record) */
   private browsingSessionLog: Map<string, BrowsingSessionRecord> = new Map();
+
+  // ── Persistence Adapters (optional, set before initializeEnclaveSystem) ──
+
+  private moodPersistenceAdapter?: IMoodPersistenceAdapter;
+  private enclavePersistenceAdapter?: IEnclavePersistenceAdapter;
+  private browsingPersistenceAdapter?: IBrowsingPersistenceAdapter;
 
   constructor(config: WonderlandNetworkConfig) {
     this.config = config;
@@ -392,6 +402,37 @@ export class WonderlandNetwork {
     this.postStoreCallback = callback;
   }
 
+  /** Set persistence adapter for mood state. */
+  setMoodPersistenceAdapter(adapter: IMoodPersistenceAdapter): void {
+    this.moodPersistenceAdapter = adapter;
+    if (this.moodEngine) {
+      this.moodEngine.setPersistenceAdapter(adapter);
+    }
+  }
+
+  /** Set persistence adapter for enclave state. */
+  setEnclavePersistenceAdapter(adapter: IEnclavePersistenceAdapter): void {
+    this.enclavePersistenceAdapter = adapter;
+    if (this.enclaveRegistry) {
+      this.enclaveRegistry.setPersistenceAdapter(adapter);
+    }
+  }
+
+  /** Set persistence adapter for browsing sessions. */
+  setBrowsingPersistenceAdapter(adapter: IBrowsingPersistenceAdapter): void {
+    this.browsingPersistenceAdapter = adapter;
+  }
+
+  /**
+   * Set LLM callback for ALL registered newsroom agencies.
+   * This enables production mode (real LLM calls) for the Writer phase.
+   */
+  setLLMCallbackForAll(callback: LLMInvokeCallback): void {
+    for (const newsroom of this.newsrooms.values()) {
+      newsroom.setLLMCallback(callback);
+    }
+  }
+
   /**
    * Get network statistics.
    */
@@ -442,6 +483,17 @@ export class WonderlandNetwork {
     // 1. Create component instances
     this.moodEngine = new MoodEngine();
     this.enclaveRegistry = new EnclaveRegistry();
+
+    // Wire persistence adapters
+    if (this.moodPersistenceAdapter) {
+      this.moodEngine.setPersistenceAdapter(this.moodPersistenceAdapter);
+    }
+    if (this.enclavePersistenceAdapter) {
+      this.enclaveRegistry.setPersistenceAdapter(this.enclavePersistenceAdapter);
+      // Load persisted enclaves before creating defaults
+      await this.enclaveRegistry.loadFromPersistence();
+    }
+
     this.postDecisionEngine = new PostDecisionEngine(this.moodEngine);
     this.browsingEngine = new BrowsingEngine(this.moodEngine, this.enclaveRegistry, this.postDecisionEngine);
     this.contentSentimentAnalyzer = new ContentSentimentAnalyzer();
@@ -511,7 +563,10 @@ export class WonderlandNetwork {
     // 3. Initialize mood for all currently registered seeds
     for (const citizen of this.citizens.values()) {
       if (citizen.personality) {
-        this.moodEngine.initializeAgent(citizen.seedId, citizen.personality);
+        const loaded = await this.moodEngine.loadFromPersistence(citizen.seedId, citizen.personality);
+        if (!loaded) {
+          this.moodEngine.initializeAgent(citizen.seedId, citizen.personality);
+        }
       }
     }
 
@@ -630,6 +685,12 @@ export class WonderlandNetwork {
     };
 
     this.browsingSessionLog.set(seedId, record);
+
+    // Persist browsing session
+    if (this.browsingPersistenceAdapter) {
+      const sessionId = `${seedId}-${Date.now()}`;
+      this.browsingPersistenceAdapter.saveBrowsingSession(sessionId, record).catch(() => {});
+    }
 
     // Award XP for browsing activity
     if (record.postsRead > 0) {

@@ -8,6 +8,24 @@ import { readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { getConfigDir, ensureConfigDir } from './config-manager.js';
 import { ENV_FILE_NAME } from '../constants.js';
+import { getAllSecrets } from './secrets.js';
+
+// ── Import Result ────────────────────────────────────────────────────────────
+
+export interface ImportResult {
+  /** Total keys parsed from input. */
+  total: number;
+  /** Keys successfully imported (new). */
+  imported: number;
+  /** Keys skipped (already set with same value). */
+  skipped: number;
+  /** Keys updated (existed but different value). */
+  updated: number;
+  /** Keys not matching any known secret. */
+  unrecognized: number;
+  /** Per-key action details. */
+  details: { key: string; action: 'imported' | 'skipped' | 'updated' | 'unrecognized' }[];
+}
 
 /** Resolve the .env file path. */
 export function getEnvPath(configDirOverride?: string): string {
@@ -107,4 +125,72 @@ export async function loadDotEnvIntoProcess(...paths: string[]): Promise<void> {
       // silently skip unreadable files
     }
   }
+}
+
+/**
+ * Parse a raw .env block (multi-line text) and import recognized keys.
+ * Matches keys against known extension secrets from extension-secrets.json.
+ * Returns a summary of what was imported.
+ */
+export async function importEnvBlock(text: string): Promise<ImportResult> {
+  // 1. Parse the pasted text as .env format
+  const parsed = parseEnvFile(text);
+  const parsedKeys = Object.keys(parsed);
+
+  // 2. Load existing env from ~/.wunderland/.env
+  const existing = await loadEnv();
+
+  // 3. Build envVar -> secretId lookup from known secret definitions
+  const secrets = getAllSecrets();
+  const knownEnvVars = new Set(secrets.map((s) => s.envVar));
+
+  // 4. Classify each parsed key
+  const result: ImportResult = {
+    total: parsedKeys.length,
+    imported: 0,
+    skipped: 0,
+    updated: 0,
+    unrecognized: 0,
+    details: [],
+  };
+
+  const toMerge: Record<string, string> = {};
+
+  for (const key of parsedKeys) {
+    const value = parsed[key];
+
+    if (!knownEnvVars.has(key)) {
+      // Not a recognized secret env var
+      result.unrecognized++;
+      result.details.push({ key, action: 'unrecognized' });
+      continue;
+    }
+
+    if (key in existing && existing[key] === value) {
+      // Already set with the same value — skip
+      result.skipped++;
+      result.details.push({ key, action: 'skipped' });
+      continue;
+    }
+
+    if (key in existing && existing[key] !== value) {
+      // Exists but with a different value — update
+      result.updated++;
+      result.details.push({ key, action: 'updated' });
+      toMerge[key] = value;
+      continue;
+    }
+
+    // New key — import
+    result.imported++;
+    result.details.push({ key, action: 'imported' });
+    toMerge[key] = value;
+  }
+
+  // 5. Merge recognized keys into existing env and save
+  if (Object.keys(toMerge).length > 0) {
+    await mergeEnv(toMerge);
+  }
+
+  return result;
 }
