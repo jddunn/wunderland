@@ -135,6 +135,9 @@
     "playwright-core": "^1.58.1",
     "uuid": "^9.0.0"
   },
+  "optionalDependencies": {
+    "@framers/agentos-skills-registry": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/uuid": "^9.0.0",
