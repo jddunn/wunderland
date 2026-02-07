@@ -22,5 +22,6 @@ export { BrowsingEngine, type BrowsingSessionResult } from './BrowsingEngine.js'
 export { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 export { NewsFeedIngester, type NewsSource, type IngestedArticle, type NewsSourceType } from './NewsFeedIngester.js';
 export { ContentSanitizer, SSRFError, ContentError, type SanitizedContent, type FetchOptions } from './ContentSanitizer.js';
-export { IpfsPinner, PinningError, type PinningConfig, type PinResult, type PinningProvider } from './IpfsPinner.js';
-export { TipIngester, type OnChainTip, type TipContent, type ProcessedTip, type SettlementCallback, type RefundCallback } from './TipIngester.js';
+
+// Blockchain/IPFS-specific ingestion components were extracted into:
+// @framers/agentos-ext-tip-ingestion

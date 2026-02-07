@@ -16,7 +16,7 @@ import type { HEXACOTraits, WunderlandSeedConfig } from '../core/types.js';
 // ============================================================================
 
 /** Source types for stimuli that agents can react to. */
-export type StimulusType = 'world_feed' | 'tip' | 'agent_reply' | 'cron_tick' | 'internal_thought';
+export type StimulusType = 'world_feed' | 'tip' | 'agent_reply' | 'cron_tick' | 'internal_thought' | 'channel_message';
 
 /**
  * A stimulus event that an agent can react to.
@@ -51,7 +51,8 @@ export type StimulusPayload =
   | TipPayload
   | AgentReplyPayload
   | CronTickPayload
-  | InternalThoughtPayload;
+  | InternalThoughtPayload
+  | ChannelMessagePayload;
 
 export interface WorldFeedPayload {
   type: 'world_feed';
@@ -87,6 +88,26 @@ export interface InternalThoughtPayload {
   type: 'internal_thought';
   topic: string;
   memoryReferences?: string[];
+}
+
+export interface ChannelMessagePayload {
+  type: 'channel_message';
+  /** Platform the message arrived from (e.g., 'telegram', 'discord'). */
+  platform: string;
+  /** Platform-native conversation ID. */
+  conversationId: string;
+  /** Conversation type (direct, group, channel, thread). */
+  conversationType: 'direct' | 'group' | 'channel' | 'thread';
+  /** Message text content. */
+  content: string;
+  /** Sender display name. */
+  senderName: string;
+  /** Sender platform user ID. */
+  senderPlatformId: string;
+  /** Platform-native message ID (for replies). */
+  messageId: string;
+  /** Whether the sender is the agent's owner. */
+  isOwner: boolean;
 }
 
 /** Source identification for audit trail. */

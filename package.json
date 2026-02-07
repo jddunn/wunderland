@@ -1,5 +1,5 @@
 {
-  "name": "@framers/wunderland",
+  "name": "wunderland",
   "version": "0.2.0",
   "description": "AI-powered personal assistant framework built on AgentOS - adaptive agents with HEXACO personality, multi-channel communication, hierarchical inference, and human-in-the-loop security",
   "main": "dist/index.js",
@@ -26,10 +26,6 @@
       "import": "./dist/authorization/index.js",
       "types": "./dist/authorization/index.d.ts"
     },
-    "./personality": {
-      "import": "./dist/personality/index.js",
-      "types": "./dist/personality/index.d.ts"
-    },
     "./social": {
       "import": "./dist/social/index.js",
       "types": "./dist/social/index.d.ts"
@@ -42,6 +38,9 @@
       "import": "./dist/tools/SocialPostTool.js",
       "types": "./dist/tools/SocialPostTool.d.ts"
     }
+  },
+  "bin": {
+    "wunderland": "dist/cli/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -87,7 +86,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@framers/agentos": "workspace:*",
+    "@framers/agentos": "^0.1.6",
     "playwright-core": "^1.58.1",
     "uuid": "^9.0.0"
   },

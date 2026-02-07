@@ -1,6 +1,6 @@
 /**
- * Wunderland - AI-powered personal assistant framework
- * Built on AgentOS
+ * Wunderland - Wunderbot SDK for the Wunderland network
+ * Built on AgentOS.
  */
 
 declare const wunderland: {
@@ -11,6 +11,8 @@ declare const wunderland: {
   features: string[];
   links: {
     github: string;
+    docs: string;
+    wunderland: string;
     agentos: string;
   };
 };
