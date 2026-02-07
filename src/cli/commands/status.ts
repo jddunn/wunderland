@@ -10,7 +10,7 @@ import type { GlobalFlags } from '../types.js';
 import { accent, warn as wColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadConfig } from '../config/config-manager.js';
-import { loadEnv, loadDotEnvIntoProcess } from '../config/env-manager.js';
+import { loadEnv, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
 
@@ -20,10 +20,7 @@ export default async function cmdStatus(
   globals: GlobalFlags,
 ): Promise<void> {
   // Load env files
-  await loadDotEnvIntoProcess(
-    path.resolve(process.cwd(), '.env'),
-    path.resolve(process.cwd(), '.env.local'),
-  );
+  await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
   const config = await loadConfig(globals.config);
   const env = await loadEnv(globals.config);

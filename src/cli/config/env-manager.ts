@@ -127,6 +127,53 @@ export async function loadDotEnvIntoProcess(...paths: string[]): Promise<void> {
   }
 }
 
+function collectEnvPathsUpward(startDir: string, filenames: string[]): string[] {
+  const out: string[] = [];
+  let dir = path.resolve(startDir);
+
+  // Hard cap to prevent pathological traversal in weird FS setups.
+  for (let depth = 0; depth < 50; depth += 1) {
+    for (const name of filenames) {
+      const candidate = path.join(dir, name);
+      if (existsSync(candidate)) out.push(candidate);
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return out;
+}
+
+/**
+ * Load .env files from the current working directory *and all parent dirs*,
+ * plus the global Wunderland env file (~/.wunderland/.env) as a fallback.
+ *
+ * Precedence (highest first, because we do NOT overwrite process.env):
+ * - nearest `.env.local`
+ * - nearest `.env`
+ * - parent `.env.local`
+ * - parent `.env`
+ * - ...
+ * - global `~/.wunderland/.env`
+ */
+export async function loadDotEnvIntoProcessUpward(opts?: {
+  startDir?: string;
+  includeGlobal?: boolean;
+  configDirOverride?: string;
+}): Promise<void> {
+  const startDir = opts?.startDir ? path.resolve(opts.startDir) : process.cwd();
+  const includeGlobal = opts?.includeGlobal !== false;
+
+  const projectEnvPaths = collectEnvPathsUpward(startDir, ['.env.local', '.env']);
+  const pathsToLoad = includeGlobal
+    ? [...projectEnvPaths, getEnvPath(opts?.configDirOverride)]
+    : projectEnvPaths;
+
+  await loadDotEnvIntoProcess(...pathsToLoad);
+}
+
 /**
  * Parse a raw .env block (multi-line text) and import recognized keys.
  * Matches keys against known extension secrets from extension-secrets.json.

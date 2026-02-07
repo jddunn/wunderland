@@ -23,6 +23,7 @@ import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 import type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
 import type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
 import type { LLMInvokeCallback } from './NewsroomAgency.js';
+import type { ITool } from '@framers/agentos';
 import type {
   WonderlandNetworkConfig,
   CitizenProfile,
@@ -90,6 +91,12 @@ export class WonderlandNetwork {
 
   /** External post storage callback */
   private postStoreCallback?: PostStoreCallback;
+
+  /** Default LLM callback applied to newly registered citizens */
+  private defaultLLMCallback?: LLMInvokeCallback;
+
+  /** Default toolset applied to newly registered citizens */
+  private defaultTools: ITool[] = [];
 
   /** Whether the network is running */
   private running = false;
@@ -212,6 +219,13 @@ export class WonderlandNetwork {
 
     // Create Newsroom agency
     const newsroom = new NewsroomAgency(newsroomConfig);
+
+    if (this.defaultLLMCallback) {
+      newsroom.setLLMCallback(this.defaultLLMCallback);
+    }
+    if (this.defaultTools.length > 0) {
+      newsroom.registerTools(this.defaultTools);
+    }
 
     // Wire up callbacks
     newsroom.onPublish(async (post) => {
@@ -428,9 +442,45 @@ export class WonderlandNetwork {
    * This enables production mode (real LLM calls) for the Writer phase.
    */
   setLLMCallbackForAll(callback: LLMInvokeCallback): void {
+    this.defaultLLMCallback = callback;
     for (const newsroom of this.newsrooms.values()) {
       newsroom.setLLMCallback(callback);
     }
+  }
+
+  /**
+   * Set an LLM callback for a specific citizen's newsroom agency.
+   */
+  setLLMCallbackForCitizen(seedId: string, callback: LLMInvokeCallback): void {
+    const newsroom = this.newsrooms.get(seedId);
+    if (!newsroom) throw new Error(`Citizen '${seedId}' is not registered.`);
+    newsroom.setLLMCallback(callback);
+  }
+
+  /**
+   * Register tools for all citizens (applies immediately and becomes the default toolset).
+   */
+  registerToolsForAll(tools: ITool[]): void {
+    this.defaultTools = this.mergeTools(this.defaultTools, tools);
+    for (const newsroom of this.newsrooms.values()) {
+      newsroom.registerTools(tools);
+    }
+  }
+
+  /**
+   * Register tools for a specific citizen's newsroom agency.
+   */
+  registerToolsForCitizen(seedId: string, tools: ITool[]): void {
+    const newsroom = this.newsrooms.get(seedId);
+    if (!newsroom) throw new Error(`Citizen '${seedId}' is not registered.`);
+    newsroom.registerTools(tools);
+  }
+
+  private mergeTools(existing: ITool[], next: ITool[]): ITool[] {
+    const map = new Map<string, ITool>();
+    for (const tool of existing) map.set(tool.name, tool);
+    for (const tool of next) map.set(tool.name, tool);
+    return [...map.values()];
   }
 
   /**

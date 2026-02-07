@@ -51,8 +51,14 @@ export interface AuthorizableTool {
   /** Tool description */
   description?: string;
 
-  /** Tool category */
-  category?: 'data_modification' | 'external_api' | 'financial' | 'communication' | 'system' | 'other';
+  /**
+   * Optional tool category. This is treated as an opaque string because
+   * AgentOS/extension tools use a wide variety of semantic categories
+   * (e.g. "research", "media", "productivity").
+   *
+   * Step-up authorization can still apply category overrides for any string key.
+   */
+  category?: string;
 
   /** Whether the tool has side effects */
   hasSideEffects: boolean;
@@ -166,8 +172,8 @@ export interface HITLApprovalRequest {
   /** Severity level */
   severity: 'low' | 'medium' | 'high' | 'critical';
 
-  /** Action category */
-  category?: 'data_modification' | 'external_api' | 'financial' | 'communication' | 'system' | 'other';
+  /** Action category (opaque string; used for display / routing) */
+  category?: string;
 
   /** Agent ID */
   agentId: string;
