@@ -15,7 +15,7 @@ import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { isOllamaRunning, startOllama, detectOllamaInstall } from '../ollama/ollama-manager.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
-import { createAuthorizationManager, runToolCallingTurn, type ToolInstance } from '../openai/tool-calling.js';
+import { createAuthorizationManager, runToolCallingTurn, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 import {
   createWunderlandSeed,
@@ -131,6 +131,17 @@ export default async function cmdStart(
   const port = Number(portRaw) || 3777;
   const apiKey = process.env['OPENAI_API_KEY'] || '';
   const model = typeof flags['model'] === 'string' ? flags['model'] : (process.env['OPENAI_MODEL'] || 'gpt-4o-mini');
+
+  // OpenRouter fallback — when OPENROUTER_API_KEY is set, use it as automatic fallback
+  const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
+  const openrouterFallback: LLMProviderConfig | undefined = openrouterApiKey
+    ? {
+        apiKey: openrouterApiKey,
+        model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderland Agent' },
+      }
+    : undefined;
 
   const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
   const dangerouslySkipCommandSafety =
@@ -380,6 +391,10 @@ export default async function cmdStart(
             maxRounds: 8,
             dangerouslySkipPermissions: autoApproveToolCalls,
             askPermission: async () => false,
+            fallback: openrouterFallback,
+            onFallback: (err, provider) => {
+              console.warn(`[fallback] Primary provider failed (${err.message}), routing to ${provider}`);
+            },
           });
         } else {
           reply =
@@ -408,6 +423,9 @@ export default async function cmdStart(
   fmt.kvPair('Seed ID', seedId);
   fmt.kvPair('Model', model);
   fmt.kvPair('API Key', apiKey ? sColor('set') : wColor('not set'));
+  if (openrouterFallback) {
+    fmt.kvPair('Fallback', sColor('OpenRouter (auto)'));
+  }
   fmt.kvPair('Port', String(port));
   fmt.kvPair('Tools', `${toolMap.size} loaded`);
   fmt.kvPair('Authorization', autoApproveToolCalls ? wColor('fully autonomous (all auto-approved)') : sColor('tiered (safe tools only)'));
