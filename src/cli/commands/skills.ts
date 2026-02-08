@@ -38,7 +38,7 @@ const BUILTIN_SKILLS: SkillEntry[] = [
 async function loadCatalog(): Promise<{ entries: SkillEntry[]; source: string }> {
   try {
     // Keep this optional without forcing TS to resolve the module at build time.
-    const moduleName = '@framers/agentos-skills-registry';
+    const moduleName: string = '@framers/agentos-skills-registry';
     const registry: any = await import(moduleName);
     const catalog = await registry.getSkillsCatalog();
     const entries: SkillEntry[] = (catalog.skills.curated ?? []).map((s: any) => ({

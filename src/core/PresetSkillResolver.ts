@@ -44,8 +44,8 @@ export async function resolveSkillsByNames(skillNames: string[]): Promise<SkillS
 
   try {
     // Keep these optional without forcing TS to resolve the modules at build time.
-    const catalogModule = '@framers/agentos-skills-registry/catalog';
-    const registryModule = '@framers/agentos-skills-registry';
+    const catalogModule: string = '@framers/agentos-skills-registry/catalog';
+    const registryModule: string = '@framers/agentos-skills-registry';
     const catalog: any = await import(catalogModule);
     const registry: any = await import(registryModule);
 
