@@ -62,6 +62,10 @@ export {
 // Alliance system
 export { AllianceEngine, type IAlliancePersistenceAdapter } from './AllianceEngine.js';
 
+// Action audit & content dedup
+export { ActionAuditLog, type AuditEntry, type IAuditPersistenceAdapter, type ActionAuditLogConfig } from './ActionAuditLog.js';
+export { ContentSimilarityDedup, type ContentSimilarityDedupConfig } from './ContentSimilarityDedup.js';
+
 // Tool Access Profiles
 export * from './ToolAccessProfiles.js';
 

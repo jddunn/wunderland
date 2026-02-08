@@ -19,6 +19,10 @@ import { PostDecisionEngine } from './PostDecisionEngine.js';
 import { BrowsingEngine } from './BrowsingEngine.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 import { NewsFeedIngester } from './NewsFeedIngester.js';
+import { SafetyEngine } from './SafetyEngine.js';
+import { ActionAuditLog } from './ActionAuditLog.js';
+import { ContentSimilarityDedup } from './ContentSimilarityDedup.js';
+import { CircuitBreaker, ActionDeduplicator, StuckDetector, CostGuard, ToolExecutionGuard } from '@framers/agentos';
 import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 import type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
 import type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
@@ -133,10 +137,53 @@ export class WonderlandNetwork {
   private enclavePersistenceAdapter?: IEnclavePersistenceAdapter;
   private browsingPersistenceAdapter?: IBrowsingPersistenceAdapter;
 
+  // ── Safety & Guards ──
+
+  /** Central safety engine with killswitches & rate limits. */
+  private safetyEngine: SafetyEngine;
+
+  /** Append-only action audit trail. */
+  private auditLog: ActionAuditLog;
+
+  /** Near-duplicate content detector for posts. */
+  private contentDedup: ContentSimilarityDedup;
+
+  /** Per-agent spending caps. */
+  private costGuard: CostGuard;
+
+  /** Detects agents producing identical outputs repeatedly. */
+  private stuckDetector: StuckDetector;
+
+  /** Generic action deduplicator (keyed strings). */
+  private actionDeduplicator: ActionDeduplicator;
+
+  /** Tool execution guard with timeouts & per-tool circuit breakers. */
+  private toolExecutionGuard: ToolExecutionGuard;
+
+  /** Per-citizen LLM circuit breakers. */
+  private citizenCircuitBreakers: Map<string, CircuitBreaker> = new Map();
+
   constructor(config: WonderlandNetworkConfig) {
     this.config = config;
     this.stimulusRouter = new StimulusRouter();
     this.levelingEngine = new LevelingEngine();
+
+    // Initialize safety components
+    this.safetyEngine = new SafetyEngine();
+    this.auditLog = new ActionAuditLog();
+    this.contentDedup = new ContentSimilarityDedup();
+    this.stuckDetector = new StuckDetector();
+    this.actionDeduplicator = new ActionDeduplicator({ windowMs: 900_000 }); // 15-min dedup window
+    this.toolExecutionGuard = new ToolExecutionGuard();
+    this.costGuard = new CostGuard({
+      onCapReached: (agentId, capType, currentCost, limit) => {
+        this.safetyEngine.pauseAgent(
+          agentId,
+          `Cost cap '${capType}' reached: $${currentCost.toFixed(4)} >= $${limit.toFixed(2)}`,
+        );
+      },
+    });
+
     // Note: SignedOutputVerifier will be used for manifest verification in future
 
     // Register world feed sources
@@ -220,9 +267,31 @@ export class WonderlandNetwork {
     // Create Newsroom agency
     const newsroom = new NewsroomAgency(newsroomConfig);
 
+    // Create per-citizen circuit breaker for LLM calls
+    const breaker = new CircuitBreaker({
+      name: `citizen:${seedId}`,
+      failureThreshold: 5,
+      cooldownMs: 600_000, // 10 minutes
+      onStateChange: (_from, to) => {
+        if (to === 'open') {
+          this.safetyEngine.pauseAgent(seedId, 'Circuit breaker opened — too many LLM failures');
+          this.auditLog.log({ seedId, action: 'circuit_open', outcome: 'circuit_open' });
+        } else if (to === 'closed') {
+          this.safetyEngine.resumeAgent(seedId, 'Circuit breaker recovered');
+          this.auditLog.log({ seedId, action: 'circuit_close', outcome: 'success' });
+        }
+      },
+    });
+    this.citizenCircuitBreakers.set(seedId, breaker);
+
+    // Wire LLM callback through safety guard chain
     if (this.defaultLLMCallback) {
-      newsroom.setLLMCallback(this.defaultLLMCallback);
+      newsroom.setLLMCallback(this.wrapLLMCallback(seedId, this.defaultLLMCallback));
     }
+
+    // Wire tool execution guard
+    newsroom.setToolGuard(this.toolExecutionGuard);
+
     if (this.defaultTools.length > 0) {
       newsroom.registerTools(this.defaultTools);
     }
@@ -264,6 +333,8 @@ export class WonderlandNetwork {
   async unregisterCitizen(seedId: string): Promise<void> {
     this.stimulusRouter.unsubscribe(seedId);
     this.newsrooms.delete(seedId);
+    this.citizenCircuitBreakers.delete(seedId);
+    this.stuckDetector.clearAgent(seedId);
     const citizen = this.citizens.get(seedId);
     if (citizen) {
       citizen.isActive = false;
@@ -289,6 +360,36 @@ export class WonderlandNetwork {
     const post = this.posts.get(postId);
     if (!post) return;
 
+    // Safety checks
+    const canAct = this.safetyEngine.canAct(_actorSeedId);
+    if (!canAct.allowed) {
+      this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'failure' });
+      return;
+    }
+
+    // Rate limit check — map engagement types to rate-limited actions
+    const rateLimitAction = (actionType === 'like' || actionType === 'boost')
+      ? 'vote' as const
+      : actionType === 'reply' ? 'comment' as const : null;
+
+    if (rateLimitAction) {
+      const rateCheck = this.safetyEngine.checkRateLimit(_actorSeedId, rateLimitAction);
+      if (!rateCheck.allowed) {
+        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'rate_limited' });
+        return;
+      }
+    }
+
+    // Dedup check for votes
+    if (actionType === 'like' || actionType === 'boost') {
+      const dedupKey = `${actionType}:${_actorSeedId}:${postId}`;
+      if (this.actionDeduplicator.isDuplicate(dedupKey)) {
+        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
+        return;
+      }
+      this.actionDeduplicator.record(dedupKey);
+    }
+
     // Update post engagement
     switch (actionType) {
       case 'like': post.engagement.likes++; break;
@@ -305,6 +406,12 @@ export class WonderlandNetwork {
         this.levelingEngine.awardXP(author, xpKey);
       }
     }
+
+    // Record action in safety engine and audit log
+    if (rateLimitAction) {
+      this.safetyEngine.recordAction(_actorSeedId, rateLimitAction);
+    }
+    this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'success' });
   }
 
   /**
@@ -443,8 +550,8 @@ export class WonderlandNetwork {
    */
   setLLMCallbackForAll(callback: LLMInvokeCallback): void {
     this.defaultLLMCallback = callback;
-    for (const newsroom of this.newsrooms.values()) {
-      newsroom.setLLMCallback(callback);
+    for (const [seedId, newsroom] of this.newsrooms.entries()) {
+      newsroom.setLLMCallback(this.wrapLLMCallback(seedId, callback));
     }
   }
 
@@ -454,7 +561,7 @@ export class WonderlandNetwork {
   setLLMCallbackForCitizen(seedId: string, callback: LLMInvokeCallback): void {
     const newsroom = this.newsrooms.get(seedId);
     if (!newsroom) throw new Error(`Citizen '${seedId}' is not registered.`);
-    newsroom.setLLMCallback(callback);
+    newsroom.setLLMCallback(this.wrapLLMCallback(seedId, callback));
   }
 
   /**
@@ -545,7 +652,7 @@ export class WonderlandNetwork {
     }
 
     this.postDecisionEngine = new PostDecisionEngine(this.moodEngine);
-    this.browsingEngine = new BrowsingEngine(this.moodEngine, this.enclaveRegistry, this.postDecisionEngine);
+    this.browsingEngine = new BrowsingEngine(this.moodEngine, this.enclaveRegistry, this.postDecisionEngine, this.actionDeduplicator);
     this.contentSentimentAnalyzer = new ContentSentimentAnalyzer();
     this.newsFeedIngester = new NewsFeedIngester();
 
@@ -708,6 +815,45 @@ export class WonderlandNetwork {
     return this.initializeEnclaveSystem();
   }
 
+  // ── Safety Accessors ──
+
+  /** Get the SafetyEngine (available immediately). */
+  getSafetyEngine(): SafetyEngine {
+    return this.safetyEngine;
+  }
+
+  /** Get the ActionAuditLog (available immediately). */
+  getAuditLog(): ActionAuditLog {
+    return this.auditLog;
+  }
+
+  /** Get the CostGuard (available immediately). */
+  getCostGuard(): CostGuard {
+    return this.costGuard;
+  }
+
+  /** Get the ActionDeduplicator (available immediately). */
+  getActionDeduplicator(): ActionDeduplicator {
+    return this.actionDeduplicator;
+  }
+
+  /** Get the StuckDetector (available immediately). */
+  getStuckDetector(): StuckDetector {
+    return this.stuckDetector;
+  }
+
+  /** Get the ContentSimilarityDedup (available immediately). */
+  getContentDedup(): ContentSimilarityDedup {
+    return this.contentDedup;
+  }
+
+  /**
+   * Check if a post would be considered a near-duplicate before publishing.
+   */
+  checkContentSimilarity(seedId: string, content: string): { isDuplicate: boolean; similarTo?: string; similarity: number } {
+    return this.contentDedup.check(seedId, content);
+  }
+
   /**
    * Run a browsing session for a specific seed. Returns the session record.
    * Requires enclave system to be initialized.
@@ -721,6 +867,13 @@ export class WonderlandNetwork {
     if (!citizen || !citizen.isActive || !citizen.personality) {
       return null;
     }
+
+    // Safety checks
+    const canAct = this.safetyEngine.canAct(seedId);
+    if (!canAct.allowed) return null;
+
+    const browseCheck = this.safetyEngine.checkRateLimit(seedId, 'browse');
+    if (!browseCheck.allowed) return null;
 
     const sessionResult = this.browsingEngine.startSession(seedId, citizen.personality);
 
@@ -750,6 +903,15 @@ export class WonderlandNetwork {
     // Decay mood toward baseline after session
     this.moodEngine.decayToBaseline(seedId, 1);
 
+    // Record in safety engine and audit log
+    this.safetyEngine.recordAction(seedId, 'browse');
+    this.auditLog.log({
+      seedId,
+      action: 'browse_session',
+      outcome: 'success',
+      metadata: { postsRead: record.postsRead, votesCast: record.votesCast, commentsWritten: record.commentsWritten },
+    });
+
     return record;
   }
 
@@ -761,6 +923,73 @@ export class WonderlandNetwork {
   }
 
   // ── Internal ──
+
+  /**
+   * Wrap an LLM callback with the safety guard chain:
+   * 1. SafetyEngine canAct() check
+   * 2. CostGuard canAfford() check
+   * 3. CircuitBreaker execute() wrapper
+   * 4. CostGuard recordCost() after success
+   * 5. StuckDetector recordOutput() check
+   * 6. AuditLog entry
+   */
+  private wrapLLMCallback(seedId: string, original: LLMInvokeCallback): LLMInvokeCallback {
+    return async (messages, tools, options) => {
+      // 1. Safety engine killswitch check
+      const canAct = this.safetyEngine.canAct(seedId);
+      if (!canAct.allowed) {
+        throw new Error(`Agent '${seedId}' blocked: ${canAct.reason}`);
+      }
+
+      // 2. Cost guard check (estimate ~$0.001 per call)
+      const affordCheck = this.costGuard.canAfford(seedId, 0.001);
+      if (!affordCheck.allowed) {
+        this.auditLog.log({ seedId, action: 'llm_call', outcome: 'rate_limited', metadata: { reason: affordCheck.reason } });
+        throw new Error(`Agent '${seedId}' cost-blocked: ${affordCheck.reason}`);
+      }
+
+      // 3. Execute through per-citizen circuit breaker
+      const breaker = this.citizenCircuitBreakers.get(seedId);
+      const start = Date.now();
+      const executeFn = async () => original(messages, tools, options);
+      const response = breaker ? await breaker.execute(executeFn) : await executeFn();
+      const durationMs = Date.now() - start;
+
+      // 4. Record actual cost from token usage
+      if (response.usage) {
+        // Rough estimate: $3/M prompt + $6/M completion (GPT-4o-mini pricing)
+        const actualCost =
+          response.usage.prompt_tokens * 0.000003 +
+          response.usage.completion_tokens * 0.000006;
+        this.costGuard.recordCost(seedId, actualCost);
+      }
+
+      // 5. Stuck detection on output
+      if (response.content) {
+        const stuckCheck = this.stuckDetector.recordOutput(seedId, response.content);
+        if (stuckCheck.isStuck) {
+          this.safetyEngine.pauseAgent(seedId, `Stuck detected: ${stuckCheck.details}`);
+          this.auditLog.log({
+            seedId,
+            action: 'stuck_detected',
+            outcome: 'failure',
+            metadata: { reason: stuckCheck.reason, repetitionCount: stuckCheck.repetitionCount },
+          });
+        }
+      }
+
+      // 6. Audit trail
+      this.auditLog.log({
+        seedId,
+        action: 'llm_call',
+        outcome: 'success',
+        durationMs,
+        metadata: { tokens: response.usage?.total_tokens },
+      });
+
+      return response;
+    };
+  }
 
   /**
    * Auto-subscribe a citizen to enclaves matching their topic interests.
@@ -793,6 +1022,11 @@ export class WonderlandNetwork {
 
   private async handlePostPublished(post: WonderlandPost): Promise<void> {
     this.posts.set(post.postId, post);
+
+    // Record in safety engine, content dedup, and audit log
+    this.safetyEngine.recordAction(post.seedId, 'post');
+    this.contentDedup.record(post.seedId, post.postId, post.content);
+    this.auditLog.log({ seedId: post.seedId, action: 'post_published', targetId: post.postId, outcome: 'success' });
 
     // Award XP to author
     const author = this.citizens.get(post.seedId);
