@@ -18,6 +18,7 @@ import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from './types.js';
 import type { HEXACOTraits } from '../core/types.js';
+import { ToolExecutionGuard } from '@framers/agentos';
 import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos';
 
 /**
@@ -91,6 +92,9 @@ export class NewsroomAgency {
   /** Max tool-call rounds to prevent infinite loops. */
   private maxToolRounds = 3;
 
+  /** Optional tool execution guard for timeouts and circuit breaking. */
+  private toolGuard?: ToolExecutionGuard;
+
   constructor(config: NewsroomConfig) {
     this.config = config;
     this.verifier = new SignedOutputVerifier();
@@ -112,6 +116,13 @@ export class NewsroomAgency {
    */
   setLLMCallback(callback: LLMInvokeCallback): void {
     this.llmInvoke = callback;
+  }
+
+  /**
+   * Set a ToolExecutionGuard for timeout + circuit breaking on tool calls.
+   */
+  setToolGuard(guard: ToolExecutionGuard): void {
+    this.toolGuard = guard;
   }
 
   /**
@@ -412,7 +423,17 @@ export class NewsroomAgency {
 
             console.log(`[Newsroom:${seedId}] Executing tool: ${toolName}(${JSON.stringify(args).slice(0, 200)})`);
 
-            const result: ToolExecutionResult = await tool.execute(args, ctx);
+            let result: ToolExecutionResult;
+            if (this.toolGuard) {
+              const guardResult = await this.toolGuard.execute(toolName, () => tool.execute(args, ctx));
+              if (guardResult.success && guardResult.result) {
+                result = guardResult.result;
+              } else {
+                result = { success: false, output: null, error: guardResult.error || 'Tool guard rejected execution' };
+              }
+            } else {
+              result = await tool.execute(args, ctx);
+            }
             toolsUsed.push(toolName);
 
             manifestBuilder.recordProcessingStep(
