@@ -23,6 +23,62 @@ import {
   ToolRiskTier,
 } from '../../core/types.js';
 import type { AuthorizableTool } from '../../authorization/types.js';
+import { SpanStatusCode, context, trace } from '@opentelemetry/api';
+import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';
+
+const tracer = trace.getTracer('wunderland.cli');
+
+function emitOtelLog(opts: {
+  name: string;
+  body: string;
+  severity: SeverityNumber;
+  attributes?: Record<string, string | number | boolean>;
+}): void {
+  if (!isWunderlandOtelEnabled()) return;
+  if (!shouldExportWunderlandOtelLogs()) return;
+
+  try {
+    const logger = logs.getLogger(opts.name);
+    logger.emit({
+      severityNumber: opts.severity,
+      severityText: String(opts.severity),
+      body: opts.body,
+      attributes: opts.attributes,
+      context: context.active(),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function withSpan<T>(
+  name: string,
+  attributes: Record<string, string | number | boolean>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!isWunderlandOtelEnabled()) return fn();
+
+  return tracer.startActiveSpan(name, { attributes }, async (span) => {
+    try {
+      return await fn();
+    } catch (error) {
+      try {
+        span.recordException(error as any);
+      } catch {
+        // ignore
+      }
+      try {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error instanceof Error ? error.message : String(error) });
+      } catch {
+        // ignore
+      }
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
+}
 
 export interface ToolCallMessage {
   role: string;
@@ -218,7 +274,7 @@ export async function openaiChatWithTools(opts: {
   fallback?: LLMProviderConfig;
   /** Called when a fallback is triggered. */
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
-}): Promise<{ message: ToolCallMessage; model: string; usage: unknown }> {
+}): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
   const primary: LLMProviderConfig = {
     apiKey: opts.apiKey,
     model: opts.model,
@@ -274,115 +330,221 @@ export async function runToolCallingTurn(opts: {
   });
 
   for (let round = 0; round < rounds; round += 1) {
-    const toolDefs = opts.getToolDefs
-      ? opts.getToolDefs()
-      : buildToolDefs(opts.toolMap);
+    const turnResult = await withSpan<string | null>(
+      'wunderland.turn',
+      { round, has_tools: opts.toolMap.size > 0 },
+      async () => {
+        const toolDefs = opts.getToolDefs ? opts.getToolDefs() : buildToolDefs(opts.toolMap);
 
-    const { message } = await openaiChatWithTools({
-      apiKey: opts.apiKey,
-      model: opts.model,
-      messages: opts.messages,
-      tools: toolDefs,
-      temperature: 0.2,
-      maxTokens: 1400,
-      baseUrl: opts.baseUrl,
-      fallback: opts.fallback,
-      onFallback: opts.onFallback,
-    });
+        // LLM call span (safe metadata only; no prompt/output content).
+        let fallbackTriggered = false;
+        let fallbackProvider = '';
 
-    const toolCalls = message.tool_calls || [];
+        const llmResult = !isWunderlandOtelEnabled()
+          ? await openaiChatWithTools({
+              apiKey: opts.apiKey,
+              model: opts.model,
+              messages: opts.messages,
+              tools: toolDefs,
+              temperature: 0.2,
+              maxTokens: 1400,
+              baseUrl: opts.baseUrl,
+              fallback: opts.fallback,
+              onFallback: (primaryError, providerName) => {
+                fallbackTriggered = true;
+                fallbackProvider = providerName;
+                opts.onFallback?.(primaryError, providerName);
+              },
+            })
+          : await tracer.startActiveSpan(
+              'wunderland.llm.chat_completions',
+              { attributes: { round, tools_count: toolDefs.length } },
+              async (span) => {
+                try {
+                  const res = await openaiChatWithTools({
+                    apiKey: opts.apiKey,
+                    model: opts.model,
+                    messages: opts.messages,
+                    tools: toolDefs,
+                    temperature: 0.2,
+                    maxTokens: 1400,
+                    baseUrl: opts.baseUrl,
+                    fallback: opts.fallback,
+                    onFallback: (primaryError, providerName) => {
+                      fallbackTriggered = true;
+                      fallbackProvider = providerName;
+                      opts.onFallback?.(primaryError, providerName);
+                    },
+                  });
 
-    if (toolCalls.length === 0) {
-      const content = typeof message.content === 'string' ? message.content.trim() : '';
-      opts.messages.push({ role: 'assistant', content: content || '(no content)' });
-      return content || '';
-    }
+                  try {
+                    span.setAttribute('provider', res.provider);
+                    span.setAttribute('model', res.model);
+                    span.setAttribute('llm.fallback.used', fallbackTriggered);
+                    if (fallbackTriggered) span.setAttribute('llm.fallback.provider', fallbackProvider);
+                  } catch {
+                    // ignore
+                  }
 
-    opts.messages.push({
-      role: 'assistant',
-      content: typeof message.content === 'string' ? message.content : null,
-      tool_calls: toolCalls,
-    });
+                  // Best-effort: attach token usage as safe span attributes (no content).
+                  try {
+                    const u: any = res.usage && typeof res.usage === 'object' ? res.usage : null;
+                    const total = typeof u?.total_tokens === 'number' ? u.total_tokens : undefined;
+                    const prompt = typeof u?.prompt_tokens === 'number' ? u.prompt_tokens : undefined;
+                    const completion = typeof u?.completion_tokens === 'number' ? u.completion_tokens : undefined;
+                    if (typeof total === 'number') span.setAttribute('llm.usage.total_tokens', total);
+                    if (typeof prompt === 'number') span.setAttribute('llm.usage.prompt_tokens', prompt);
+                    if (typeof completion === 'number') span.setAttribute('llm.usage.completion_tokens', completion);
+                  } catch {
+                    // ignore
+                  }
 
-    for (const call of toolCalls) {
-      const toolName = call?.function?.name;
-      const rawArgs = call?.function?.arguments;
+                  return res;
+                } catch (error) {
+                  try {
+                    span.recordException(error as any);
+                  } catch {
+                    // ignore
+                  }
+                  try {
+                    span.setStatus({
+                      code: SpanStatusCode.ERROR,
+                      message: error instanceof Error ? error.message : String(error),
+                    });
+                  } catch {
+                    // ignore
+                  }
+                  throw error;
+                } finally {
+                  span.end();
+                }
+              },
+            );
 
-      if (!toolName || typeof rawArgs !== 'string') {
-        opts.messages.push({ role: 'tool', tool_call_id: call?.id, content: JSON.stringify({ error: 'Malformed tool call.' }) });
-        continue;
-      }
+        const { message } = llmResult;
 
-      const tool = opts.toolMap.get(toolName);
-      if (!tool) {
-        opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Tool not found: ${toolName}` }) });
-        continue;
-      }
+        const toolCalls = message.tool_calls || [];
 
-      let args: Record<string, unknown>;
-      try {
-        args = JSON.parse(rawArgs);
-      } catch {
-        opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Invalid JSON arguments for ${toolName}` }) });
-        continue;
-      }
-
-      if (opts.onToolCall) {
-        try {
-          opts.onToolCall(tool, args);
-        } catch {
-          // ignore logging hook errors
+        if (toolCalls.length === 0) {
+          const content = typeof message.content === 'string' ? message.content.trim() : '';
+          opts.messages.push({ role: 'assistant', content: content || '(no content)' });
+          return content || '';
         }
-      }
 
-      // Tiered authorization via StepUpAuthorizationManager.
-      // When autoApproveAll is set (fully autonomous), this is a no-op
-      // that immediately returns authorized. Otherwise it checks
-      // the tool's tier, category, escalation triggers, etc.
-      const authResult = await authManager.authorize({
-        tool: toAuthorizableTool(tool),
-        args,
-        context: {
-          userId: String(opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
-            ? (opts.toolContext['userContext'] as Record<string, unknown>)?.['userId'] ?? 'cli-user'
-            : 'cli-user'),
-          sessionId: String(opts.toolContext?.['gmiId'] ?? 'cli'),
-          gmiId: String(opts.toolContext?.['personaId'] ?? 'cli'),
-        },
-        timestamp: new Date(),
-      });
+        opts.messages.push({
+          role: 'assistant',
+          content: typeof message.content === 'string' ? message.content : null,
+          tool_calls: toolCalls,
+        });
 
-      if (!authResult.authorized) {
-        // Tier 3 (sync HITL) denial from the manager — fall back to
-        // interactive askPermission prompt if available.
-        if (authResult.tier === ToolRiskTier.TIER_3_SYNC_HITL && !opts.dangerouslySkipPermissions) {
-          const ok = await opts.askPermission(tool, args);
-          if (!ok) {
-            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Permission denied for tool: ${toolName}` }) });
+        for (const call of toolCalls) {
+          const toolName = call?.function?.name;
+          const rawArgs = call?.function?.arguments;
+
+          if (!toolName || typeof rawArgs !== 'string') {
+            opts.messages.push({ role: 'tool', tool_call_id: call?.id, content: JSON.stringify({ error: 'Malformed tool call.' }) });
             continue;
           }
-          // User approved interactively — proceed
-        } else {
-          opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Permission denied for tool: ${toolName}` }) });
-          continue;
+
+          const tool = opts.toolMap.get(toolName);
+          if (!tool) {
+            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Tool not found: ${toolName}` }) });
+            continue;
+          }
+
+          let args: Record<string, unknown>;
+          try {
+            args = JSON.parse(rawArgs);
+          } catch {
+            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Invalid JSON arguments for ${toolName}` }) });
+            continue;
+          }
+
+          if (opts.onToolCall) {
+            try {
+              opts.onToolCall(tool, args);
+            } catch {
+              // ignore logging hook errors
+            }
+          }
+
+          // Tiered authorization via StepUpAuthorizationManager.
+          const authResult = await authManager.authorize({
+            tool: toAuthorizableTool(tool),
+            args,
+            context: {
+              userId: String(opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
+                ? (opts.toolContext['userContext'] as Record<string, unknown>)?.['userId'] ?? 'cli-user'
+                : 'cli-user'),
+              sessionId: String(opts.toolContext?.['gmiId'] ?? 'cli'),
+              gmiId: String(opts.toolContext?.['personaId'] ?? 'cli'),
+            },
+            timestamp: new Date(),
+          });
+
+          if (!authResult.authorized) {
+            // Tier 3 (sync HITL) denial from the manager — fall back to interactive prompt if available.
+            if (authResult.tier === ToolRiskTier.TIER_3_SYNC_HITL && !opts.dangerouslySkipPermissions) {
+              const ok = await opts.askPermission(tool, args);
+              if (!ok) {
+                opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Permission denied for tool: ${toolName}` }) });
+                continue;
+              }
+              // User approved interactively — proceed
+            } else {
+              opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Permission denied for tool: ${toolName}` }) });
+              continue;
+            }
+          }
+
+          const start = Date.now();
+          let result: { success: boolean; output?: unknown; error?: string };
+          try {
+            result = await withSpan(
+              'wunderland.tool.execute',
+              {
+                tool_name: toolName,
+                tool_category: tool.category ?? '',
+                tool_has_side_effects: tool.hasSideEffects === true,
+                authorized: true,
+              },
+              async () => {
+                return await tool.execute(args, opts.toolContext);
+              },
+            );
+          } catch (err) {
+            const durationMs = Math.max(0, Date.now() - start);
+            emitOtelLog({
+              name: 'wunderland.cli',
+              body: `tool_execute_error:${toolName}`,
+              severity: SeverityNumber.ERROR,
+              attributes: { tool_name: toolName, duration_ms: durationMs, round },
+            });
+            opts.messages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: JSON.stringify({ error: `Tool threw: ${err instanceof Error ? err.message : String(err)}` }),
+            });
+            continue;
+          }
+
+          const durationMs = Math.max(0, Date.now() - start);
+          emitOtelLog({
+            name: 'wunderland.cli',
+            body: `tool_execute:${toolName}`,
+            severity: SeverityNumber.INFO,
+            attributes: { tool_name: toolName, success: result?.success === true, duration_ms: durationMs, round },
+          });
+
+          const payload = result?.success ? redactToolOutputForLLM(result.output) : { error: result?.error || 'Tool failed' };
+          opts.messages.push({ role: 'tool', tool_call_id: call.id, content: safeJsonStringify(payload, 20000) });
         }
-      }
 
-      let result: { success: boolean; output?: unknown; error?: string };
-      try {
-        result = await tool.execute(args, opts.toolContext);
-      } catch (err) {
-        opts.messages.push({
-          role: 'tool',
-          tool_call_id: call.id,
-          content: JSON.stringify({ error: `Tool threw: ${err instanceof Error ? err.message : String(err)}` }),
-        });
-        continue;
-      }
+        return null;
+      },
+    );
 
-      const payload = result?.success ? redactToolOutputForLLM(result.output) : { error: result?.error || 'Tool failed' };
-      opts.messages.push({ role: 'tool', tool_call_id: call.id, content: safeJsonStringify(payload, 20000) });
-    }
+    if (turnResult !== null) return turnResult;
   }
 
   return '';

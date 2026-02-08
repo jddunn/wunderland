@@ -266,6 +266,7 @@ describe('runToolCallingTurn (integration)', () => {
           dangerouslySkipCommandSafety: false,
           agentWorkspace: { agentId, baseDir },
         },
+        allowPackages: true,
         logger: console,
       });
 
@@ -289,6 +290,86 @@ describe('runToolCallingTurn (integration)', () => {
       expect(toolMap.has('file_read')).toBe(true);
       expect(toolMap.has('file_write')).toBe(true);
       expect(toolMap.has('list_directory')).toBe(true);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  }, 20000);
+
+  it('disallows package refs in production by default (curated names still work)', async () => {
+    const prevNodeEnv = process.env['NODE_ENV'];
+    process.env['NODE_ENV'] = 'production';
+
+    const toolMap = new Map<string, ToolInstance>();
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wunderland-workspace-'));
+    const agentId = 'agent-prod-policy-test';
+    const workspaceDir = path.join(baseDir, agentId);
+
+    try {
+      const metaTools = createSchemaOnDemandTools({
+        toolMap,
+        runtimeDefaults: {
+          workingDirectory: process.cwd(),
+          headlessBrowser: true,
+          dangerouslySkipCommandSafety: false,
+          agentWorkspace: { agentId, baseDir },
+        },
+        logger: console,
+      });
+      for (const tool of metaTools) toolMap.set(tool.name, tool);
+
+      const enable = toolMap.get('extensions_enable');
+      expect(enable).toBeTruthy();
+
+      const denied = await enable!.execute({
+        extension: '@framers/agentos-ext-cli-executor',
+        source: 'package',
+      }, {});
+
+      expect(denied.success).toBe(false);
+      expect(String(denied.error || '')).toMatch(/Package loading is disabled/i);
+
+      const allowed = await enable!.execute({
+        extension: 'cli-executor',
+        source: 'curated',
+      }, {});
+
+      expect(allowed.success).toBe(true);
+      await expect(fs.stat(workspaceDir)).resolves.toBeTruthy();
+    } finally {
+      process.env['NODE_ENV'] = prevNodeEnv;
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  }, 20000);
+
+  it('rejects unknown extension packages by default (prevents arbitrary imports)', async () => {
+    const toolMap = new Map<string, ToolInstance>();
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wunderland-workspace-'));
+    const agentId = 'agent-unknown-package-test';
+
+    try {
+      const metaTools = createSchemaOnDemandTools({
+        toolMap,
+        runtimeDefaults: {
+          workingDirectory: process.cwd(),
+          headlessBrowser: true,
+          dangerouslySkipCommandSafety: false,
+          agentWorkspace: { agentId, baseDir },
+        },
+        allowPackages: true,
+        logger: console,
+      });
+      for (const tool of metaTools) toolMap.set(tool.name, tool);
+
+      const enable = toolMap.get('extensions_enable');
+      expect(enable).toBeTruthy();
+
+      const result = await enable!.execute({
+        extension: '@wunderland-test/definitely-not-a-real-extension-pack',
+        source: 'package',
+      }, {});
+
+      expect(result.success).toBe(false);
+      expect(String(result.error || '')).toMatch(/Unknown extension package/i);
     } finally {
       await fs.rm(baseDir, { recursive: true, force: true });
     }

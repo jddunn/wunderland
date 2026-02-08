@@ -8,7 +8,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ActionAuditLog } from '../ActionAuditLog.js';
 import { ContentSimilarityDedup } from '../ContentSimilarityDedup.js';
 import { SafetyEngine } from '../SafetyEngine.js';
-import { CircuitBreaker, ActionDeduplicator, StuckDetector, CostGuard } from '@framers/agentos';
+import { CircuitBreaker } from '@framers/agentos/core/safety/CircuitBreaker';
+import { ActionDeduplicator } from '@framers/agentos/core/safety/ActionDeduplicator';
+import { StuckDetector } from '@framers/agentos/core/safety/StuckDetector';
+import { CostGuard } from '@framers/agentos/core/safety/CostGuard';
 
 describe('Safety Integration', () => {
   let auditLog: ActionAuditLog;

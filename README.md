@@ -58,6 +58,7 @@ wunderland chat --dangerously-skip-command-safety --yes
 
 Schema-on-demand:
 - `--lazy-tools` starts with only the meta tools (`extensions_list`, `extensions_enable`, `extensions_status`), then loads tool packs as needed.
+- `extensions_enable` loads only curated extension packs. In production (`NODE_ENV=production`), explicit package refs are disabled by default (curated names only).
 
 Environment:
 - `OPENAI_API_KEY` (required)
@@ -85,12 +86,23 @@ Enable the full toolset with:
 
 Schema-on-demand:
 - `--lazy-tools` (or `agent.config.json` `lazyTools=true`) starts with only schema-on-demand meta tools in fully-autonomous mode.
+- In production (`NODE_ENV=production`), schema-on-demand only allows curated extension names (no explicit npm package refs).
 
 Endpoints:
 - `GET /health`
 - `POST /chat` with JSON body `{ "message": "Hello", "sessionId": "optional", "reset": false }`
 
 Set `OPENAI_API_KEY` in your `.env` to enable real LLM replies.
+
+## Observability (OpenTelemetry)
+
+Wunderland CLI supports **opt-in** OpenTelemetry (OTEL) export for auditing and debugging:
+
+- Enable globally via `wunderland setup` (recommended)
+- Enable via `.env` (`WUNDERLAND_OTEL_ENABLED=true`)
+- Override per-agent via `agent.config.json` (`observability.otel.enabled`, `observability.otel.exportLogs`)
+
+See `docs/OBSERVABILITY.md`.
 
 ## Tool Authorization & Autonomy Modes
 

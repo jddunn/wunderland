@@ -22,12 +22,16 @@ import { NewsFeedIngester } from './NewsFeedIngester.js';
 import { SafetyEngine } from './SafetyEngine.js';
 import { ActionAuditLog } from './ActionAuditLog.js';
 import { ContentSimilarityDedup } from './ContentSimilarityDedup.js';
-import { CircuitBreaker, ActionDeduplicator, StuckDetector, CostGuard, ToolExecutionGuard } from '@framers/agentos';
+import { ActionDeduplicator } from '@framers/agentos/core/safety/ActionDeduplicator';
+import { CircuitBreaker } from '@framers/agentos/core/safety/CircuitBreaker';
+import { CostGuard } from '@framers/agentos/core/safety/CostGuard';
+import { StuckDetector } from '@framers/agentos/core/safety/StuckDetector';
+import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
 import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 import type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
 import type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
 import type { LLMInvokeCallback } from './NewsroomAgency.js';
-import type { ITool } from '@framers/agentos';
+import type { ITool } from '@framers/agentos/core/tools/ITool';
 import type {
   WonderlandNetworkConfig,
   CitizenProfile,

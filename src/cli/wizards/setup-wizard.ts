@@ -6,12 +6,13 @@
 
 import * as p from '@clack/prompts';
 import boxen from 'boxen';
-import type { GlobalFlags, WizardState, SetupMode } from '../types.js';
+import type { GlobalFlags, WizardState, SetupMode, ObservabilityPreset } from '../types.js';
 import { accent, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { updateConfig } from '../config/config-manager.js';
 import { mergeEnv } from '../config/env-manager.js';
 import { URLS } from '../constants.js';
+import { buildOtelEnvVars, describeObservabilityPreset } from '../observability/otel-config.js';
 import { runApiKeysWizard } from './api-keys-wizard.js';
 import { runChannelsWizard } from './channels-wizard.js';
 import { runPersonalityWizard } from './personality-wizard.js';
@@ -25,6 +26,7 @@ import {
 function createDefaultState(): WizardState {
   return {
     mode: 'quickstart',
+    observabilityPreset: 'off',
     apiKeys: {},
     channels: [],
     channelCredentials: {},
@@ -76,6 +78,22 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   }
   state.agentName = name;
 
+  // Step 1b: Observability (OTEL)
+  const obsPreset = await p.select<ObservabilityPreset>({
+    message: 'Enable OpenTelemetry (OTEL) for observability and auditing?',
+    options: [
+      { value: 'off', label: 'Off', hint: 'lowest overhead (default)' },
+      { value: 'otel_traces_metrics', label: 'Traces + metrics', hint: 'recommended' },
+      { value: 'otel_traces_metrics_logs', label: 'Traces + metrics + logs', hint: 'more overhead' },
+    ],
+  });
+
+  if (p.isCancel(obsPreset)) {
+    p.cancel('Setup cancelled.');
+    return;
+  }
+  state.observabilityPreset = obsPreset;
+
   // Step 2: LLM Provider Keys (both modes)
   await runApiKeysWizard(state);
   if (!state.llmProvider) {
@@ -114,6 +132,7 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   // Review
   const summary = [
     `Agent: ${accent(state.agentName)}`,
+    `Observability: ${accent(describeObservabilityPreset(state.observabilityPreset))}`,
     `LLM: ${accent(state.llmProvider || 'none')} / ${accent(state.llmModel || 'default')}`,
     state.channels.length > 0 ? `Channels: ${state.channels.map((c) => accent(c)).join(', ')}` : null,
     state.personalityPreset ? `Personality: ${accent(state.personalityPreset)}` : null,
@@ -142,7 +161,11 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   // Write config
   if (!globals.dryRun) {
     // Merge all env vars
-    const allEnvKeys: Record<string, string> = { ...state.apiKeys, ...state.toolKeys };
+    const allEnvKeys: Record<string, string> = {
+      ...buildOtelEnvVars(state.observabilityPreset),
+      ...state.apiKeys,
+      ...state.toolKeys,
+    };
     for (const [_platform, creds] of Object.entries(state.channelCredentials)) {
       Object.assign(allEnvKeys, creds);
     }
@@ -164,6 +187,7 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
       voiceProvider: state.voice?.provider,
       voiceModel: state.voice?.model,
       lastSetup: new Date().toISOString(),
+      observability: { preset: state.observabilityPreset },
     }, globals.config);
   }
 

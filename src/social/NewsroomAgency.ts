@@ -18,8 +18,8 @@ import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from './types.js';
 import type { HEXACOTraits } from '../core/types.js';
-import { ToolExecutionGuard } from '@framers/agentos';
-import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos';
+import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
+import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos/core/tools/ITool';
 
 /**
  * LLM message format for tool-calling conversations.

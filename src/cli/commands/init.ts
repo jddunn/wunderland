@@ -147,6 +147,10 @@ export default async function cmdInit(
     personality,
     systemPrompt: 'You are an autonomous agent in the Wunderland network.',
     security,
+    observability: {
+      // Opt-in OpenTelemetry (OTEL) export. Host still controls exporters/sampling via OTEL_* env vars.
+      otel: { enabled: false, exportLogs: false },
+    },
     skills: agentPreset?.suggestedSkills ?? [],
     suggestedChannels: agentPreset?.suggestedChannels ?? [],
     presetId: agentPreset?.id,
@@ -162,7 +166,23 @@ export default async function cmdInit(
 
   await writeFile(
     path.join(targetDir, '.env.example'),
-    `# Copy to .env and fill in real values\nOPENAI_API_KEY=sk-...\nOPENAI_MODEL=gpt-4o-mini\nPORT=3777\n`,
+    `# Copy to .env and fill in real values
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+PORT=3777
+
+# OBSERVABILITY (OpenTelemetry - opt-in)
+# Enable OTEL in wunderland CLI runtime (wunderland start/chat):
+# WUNDERLAND_OTEL_ENABLED=true
+# WUNDERLAND_OTEL_LOGS_ENABLED=true
+# OTEL_TRACES_EXPORTER=otlp
+# OTEL_METRICS_EXPORTER=otlp
+# OTEL_LOGS_EXPORTER=otlp
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+# OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+# OTEL_TRACES_SAMPLER=parentbased_traceidratio
+# OTEL_TRACES_SAMPLER_ARG=0.1
+`,
     'utf8',
   );
 
@@ -180,7 +200,7 @@ export default async function cmdInit(
 
   await writeFile(
     path.join(targetDir, 'README.md'),
-    `# ${config.displayName}\n\nScaffolded by the Wunderland CLI.\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { "message": "Hello", "sessionId": "local" }\n\nNotes:\n- By default, \`wunderland start\` runs in headless-safe mode (no interactive approvals).\n- Enable the full toolset with: \`wunderland start --yes\` (shell command safety checks remain on).\n- Disable shell safety checks with: \`wunderland start --dangerously-skip-command-safety --yes\` or \`wunderland start --dangerously-skip-permissions\`.\n\n## Skills\n\nAdd custom SKILL.md files to the \`skills/\` directory.\nEnable curated skills with: \`wunderland skills enable <name>\`\n`,
+    `# ${config.displayName}\n\nScaffolded by the Wunderland CLI.\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { \"message\": \"Hello\", \"sessionId\": \"local\" }\n\nNotes:\n- By default, \`wunderland start\` runs in headless-safe mode (no interactive approvals).\n- Enable the full toolset with: \`wunderland start --yes\` (shell command safety checks remain on).\n- Disable shell safety checks with: \`wunderland start --dangerously-skip-command-safety --yes\` or \`wunderland start --dangerously-skip-permissions\`.\n\n## Observability (OpenTelemetry)\n\nWunderland supports opt-in OpenTelemetry (OTEL) export for auditing.\n\n- Enable via \`agent.config.json\`: set \`observability.otel.enabled=true\`.\n- Configure exporters via OTEL env vars in \`.env\` (see \`.env.example\`).\n\n## Skills\n\nAdd custom SKILL.md files to the \`skills/\` directory.\nEnable curated skills with: \`wunderland skills enable <name>\`\n`,
     'utf8',
   );
 
