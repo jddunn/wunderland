@@ -101,10 +101,26 @@ export function createSchemaOnDemandTools(opts: {
   toolMap: Map<string, ToolInstance>;
   runtimeDefaults: SchemaOnDemandRuntimeDefaults;
   initialEnabledPackages?: string[];
+  /**
+   * Allow enabling packs by explicit npm package name (source='package' or refs
+   * starting with '@').
+   *
+   * Default: true in non-production, false in production.
+   */
+  allowPackages?: boolean;
+  /**
+   * Allow enabling unknown package names (not present in the curated catalog).
+   *
+   * Default: false.
+   */
+  allowUnknownPackages?: boolean;
   logger?: { info?: (...args: any[]) => void; warn?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }): ToolInstance[] {
   const enabledPackages = new Set<string>();
   const log = opts.logger ?? console;
+  const allowPackages =
+    typeof opts.allowPackages === 'boolean' ? opts.allowPackages : process.env['NODE_ENV'] !== 'production';
+  const allowUnknownPackages = opts.allowUnknownPackages === true;
 
   for (const pkg of opts.initialEnabledPackages ?? []) {
     if (pkg) enabledPackages.add(String(pkg));
@@ -178,6 +194,7 @@ export function createSchemaOnDemandTools(opts: {
       if (!ref) return { success: false, error: 'Missing required field: extension' };
 
       const source: 'curated' | 'package' = input.source === 'package' ? 'package' : 'curated';
+      const wantsPackage = source === 'package' || ref.startsWith('@');
       const dryRun = input.dryRun === true;
       const userOptions =
         input.options && typeof input.options === 'object' && !Array.isArray(input.options)
@@ -189,16 +206,24 @@ export function createSchemaOnDemandTools(opts: {
       let entry: ExtensionInfo | undefined;
       let packageName: string | undefined;
 
-      if (source === 'package' || ref.startsWith('@')) {
+      if (wantsPackage) {
+        if (!allowPackages) {
+          return {
+            success: false,
+            error: "Package loading is disabled (set allowPackages=true, or use source='curated' with a curated name).",
+          };
+        }
+
         packageName = ref;
         entry = catalog.find((e) => e.packageName === packageName);
+
+        if (!entry && !allowUnknownPackages) {
+          return { success: false, error: `Unknown extension package: ${packageName}` };
+        }
       } else {
         entry = catalog.find((e) => e.name === ref || e.packageName === ref);
         packageName = entry?.packageName;
-      }
-
-      if (!packageName) {
-        return { success: false, error: `Unknown extension: ${ref}` };
+        if (!packageName) return { success: false, error: `Unknown extension: ${ref}` };
       }
 
       if (dryRun) {

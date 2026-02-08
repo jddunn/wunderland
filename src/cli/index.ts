@@ -68,6 +68,7 @@ function printHelp(): void {
     ${d('--security-tier <tier>')} Security tier (dangerous/permissive/balanced/strict/paranoid)
     ${d('--dir <path>')}           Working directory (seal)
     ${d('--format <json|table>')}  Output format (list-presets, skills, models, plugins)
+	    ${d('--lazy-tools')}           Start with only schema-on-demand meta tools
 	    ${d('--force')}                Overwrite existing files
 	    ${d('--skills-dir <path>')}    Load skills from directory
 	    ${d('--no-skills')}            Disable skill loading

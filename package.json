@@ -116,8 +116,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@clack/prompts": "^0.9.1",
     "@framers/agentos": "workspace:*",
-    "@framers/agentos-extensions-registry": "workspace:*",
     "@framers/agentos-ext-cli-executor": "workspace:*",
     "@framers/agentos-ext-giphy": "workspace:*",
     "@framers/agentos-ext-image-search": "workspace:*",
@@ -125,7 +125,11 @@
     "@framers/agentos-ext-voice-synthesis": "workspace:*",
     "@framers/agentos-ext-web-browser": "workspace:*",
     "@framers/agentos-ext-web-search": "workspace:*",
-    "@clack/prompts": "^0.9.1",
+    "@framers/agentos-extensions-registry": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": "^0.201.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.59.0",
+    "@opentelemetry/sdk-node": "^0.201.1",
     "boxen": "^8.0.1",
     "cfonts": "^3.3.0",
     "chalk": "^5.4.1",
