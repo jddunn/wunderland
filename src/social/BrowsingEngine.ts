@@ -11,6 +11,7 @@ import type { HEXACOTraits } from '../core/types.js';
 import type { MoodEngine, PADState } from './MoodEngine.js';
 import type { EnclaveRegistry } from './EnclaveRegistry.js';
 import type { PostDecisionEngine, PostAction, PostAnalysis } from './PostDecisionEngine.js';
+import type { ActionDeduplicator } from '@framers/agentos';
 
 // ============================================================================
 // Types
@@ -60,15 +61,18 @@ export class BrowsingEngine {
   private moodEngine: MoodEngine;
   private registry: EnclaveRegistry;
   private decisionEngine: PostDecisionEngine;
+  private deduplicator?: ActionDeduplicator;
 
   constructor(
     moodEngine: MoodEngine,
     registry: EnclaveRegistry,
     decisionEngine: PostDecisionEngine,
+    deduplicator?: ActionDeduplicator,
   ) {
     this.moodEngine = moodEngine;
     this.registry = registry;
     this.decisionEngine = decisionEngine;
+    this.deduplicator = deduplicator;
   }
 
   /**
@@ -137,6 +141,22 @@ export class BrowsingEngine {
 
         // Decide action
         const decision = this.decisionEngine.decide(seedId, traits, currentMood, analysis);
+
+        // Dedup check for vote actions
+        if (
+          this.deduplicator &&
+          (decision.action === 'upvote' || decision.action === 'downvote')
+        ) {
+          const dedupKey = `vote:${seedId}:${postId}`;
+          if (this.deduplicator.isDuplicate(dedupKey)) {
+            // Skip duplicate vote — still count as read
+            result.actions.push({ postId, action: 'skip', enclave });
+            result.postsRead++;
+            remainingEnergy--;
+            continue;
+          }
+          this.deduplicator.record(dedupKey);
+        }
 
         // Log action
         result.actions.push({ postId, action: decision.action, enclave });
