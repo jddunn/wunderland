@@ -12,7 +12,7 @@ import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
-import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance } from '../openai/tool-calling.js';
+import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 
 // ── Command ─────────────────────────────────────────────────────────────────
@@ -32,6 +32,17 @@ export default async function cmdChat(
   }
 
   const model = typeof flags['model'] === 'string' ? flags['model'] : (process.env['OPENAI_MODEL'] || 'gpt-4o-mini');
+  // OpenRouter fallback
+  const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
+  const openrouterFallback: LLMProviderConfig | undefined = openrouterApiKey
+    ? {
+        apiKey: openrouterApiKey,
+        model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderland Agent' },
+      }
+    : undefined;
+
   const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
   const dangerouslySkipCommandSafety =
     flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
@@ -195,6 +206,7 @@ export default async function cmdChat(
   fmt.kvPair('Model', accent(model));
   fmt.kvPair('Tools', `${toolMap.size} loaded`);
   fmt.kvPair('Skills', enableSkills ? sColor('on') : muted('off'));
+  if (openrouterFallback) fmt.kvPair('Fallback', sColor('OpenRouter (auto)'));
   fmt.kvPair('Lazy Tools', lazyTools ? sColor('on') : muted('off'));
   fmt.kvPair('Authorization', autoApproveToolCalls ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)'));
   fmt.blank();
@@ -243,6 +255,10 @@ export default async function cmdChat(
       maxRounds: 8,
       dangerouslySkipPermissions: autoApproveToolCalls,
       askPermission,
+      fallback: openrouterFallback,
+      onFallback: (_err, provider) => {
+        console.log(`  ${wColor('\u26A0')} Primary provider failed, falling back to ${provider}`);
+      },
       onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
         console.log(
           `  ${tColor('\u25B6')} ${tColor(tool.name)} ${dim(truncateString(JSON.stringify(args), 120))}`
