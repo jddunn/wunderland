@@ -54,6 +54,42 @@
       "import": "./dist/scheduling/index.js",
       "types": "./dist/scheduling/index.d.ts"
     },
+    "./rag": {
+      "import": "./dist/rag/index.js",
+      "types": "./dist/rag/index.d.ts"
+    },
+    "./agency": {
+      "import": "./dist/agency/index.js",
+      "types": "./dist/agency/index.d.ts"
+    },
+    "./workflows": {
+      "import": "./dist/workflows/index.js",
+      "types": "./dist/workflows/index.d.ts"
+    },
+    "./structured": {
+      "import": "./dist/structured/index.js",
+      "types": "./dist/structured/index.d.ts"
+    },
+    "./knowledge": {
+      "import": "./dist/knowledge/index.js",
+      "types": "./dist/knowledge/index.d.ts"
+    },
+    "./planning": {
+      "import": "./dist/planning/index.js",
+      "types": "./dist/planning/index.d.ts"
+    },
+    "./evaluation": {
+      "import": "./dist/evaluation/index.js",
+      "types": "./dist/evaluation/index.d.ts"
+    },
+    "./provenance": {
+      "import": "./dist/provenance/index.js",
+      "types": "./dist/provenance/index.d.ts"
+    },
+    "./marketplace": {
+      "import": "./dist/marketplace/index.js",
+      "types": "./dist/marketplace/index.d.ts"
+    },
     "./presets": {
       "import": "./dist/core/PresetLoader.js",
       "types": "./dist/core/PresetLoader.d.ts"

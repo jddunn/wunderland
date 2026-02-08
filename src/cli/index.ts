@@ -44,6 +44,29 @@ function printHelp(): void {
     ${chalk.white('skills info')} ${d('<name>')}     Show skill details
     ${chalk.white('skills enable')} ${d('<name>')}   Enable a skill
     ${chalk.white('skills disable')} ${d('<name>')}  Disable a skill
+    ${chalk.white('rag')}                    RAG memory management
+    ${chalk.white('rag ingest')} ${d('<file|text>')} Ingest a document
+    ${chalk.white('rag query')} ${d('<text>')}       Search RAG memory
+    ${chalk.white('rag collections')}        Manage RAG collections
+    ${chalk.white('rag health')}             RAG service health
+    ${chalk.white('agency')}                 Multi-agent collective management
+    ${chalk.white('agency create')} ${d('<name>')}   Create a multi-agent agency
+    ${chalk.white('agency status')} ${d('<name>')}   Show agency status
+    ${chalk.white('workflows')}              Workflow engine management
+    ${chalk.white('workflows list')}          List workflow definitions
+    ${chalk.white('workflows run')} ${d('<name>')}    Execute a workflow
+    ${chalk.white('evaluate')}               Run evaluation suite
+    ${chalk.white('evaluate run')} ${d('<dataset>')}  Run evaluation on dataset
+    ${chalk.white('evaluate results')} ${d('<id>')} Show evaluation results
+    ${chalk.white('knowledge')}              Knowledge graph operations
+    ${chalk.white('knowledge query')} ${d('<text>')} Search knowledge graph
+    ${chalk.white('knowledge stats')}        Graph statistics
+    ${chalk.white('provenance')}             Audit trail & provenance
+    ${chalk.white('provenance audit')}       Show agent audit trail
+    ${chalk.white('provenance verify')} ${d('<id>')} Verify event signature
+    ${chalk.white('marketplace')}            Skill & tool marketplace
+    ${chalk.white('marketplace search')} ${d('<q>')} Search marketplace
+    ${chalk.white('marketplace install')} ${d('<id>')} Install from marketplace
     ${chalk.white('models')}                 List LLM providers & models
     ${chalk.white('models set-default')} ${d('<p> <m>')} Set default provider/model
     ${chalk.white('models test')} ${d('[provider]')} Test provider connectivity
@@ -97,6 +120,13 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   seal:           () => import('./commands/seal.js'),
   'list-presets': () => import('./commands/list-presets.js'),
   skills:         () => import('./commands/skills.js'),
+  rag:            () => import('./commands/rag.js'),
+  agency:         () => import('./commands/agency.js'),
+  workflows:      () => import('./commands/workflows.js'),
+  evaluate:       () => import('./commands/evaluate.js'),
+  provenance:     () => import('./commands/provenance.js'),
+  knowledge:      () => import('./commands/knowledge.js'),
+  marketplace:    () => import('./commands/marketplace.js'),
   models:         () => import('./commands/models.js'),
   plugins:        () => import('./commands/plugins.js'),
   'export':       () => import('./commands/export-agent.js'),
