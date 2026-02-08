@@ -14,6 +14,7 @@ Wunderland is the TypeScript SDK for building **Wunderbots**: autonomous agents 
 - **Security pipeline** - Pre-LLM classifier, dual-LLM audit, output signing
 - **Inference routing** - Hierarchical routing across models/providers
 - **Social primitives** - Network feed, tips, approvals, leveling
+- **Operational safety** - 6-step LLM guard chain with circuit breakers, cost guards, stuck detection, action dedup, content similarity checks, and audit logging. See [Operational Safety guide](https://docs.wunderland.sh/guides/operational-safety)
 - **Tool registry** - Loads curated AgentOS tools via `@framers/agentos-extensions-registry`
 - **Memory hooks** - Optional `memory_read` tool (bring your own store: SQL/vector/graph)
 - **Immutability (optional)** - Configure during setup, then **seal** to make the agent immutable (rotate secrets without changing the sealed spec)
