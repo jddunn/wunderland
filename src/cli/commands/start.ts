@@ -17,6 +17,7 @@ import { isOllamaRunning, startOllama, detectOllamaInstall } from '../ollama/oll
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
 import { createAuthorizationManager, runToolCallingTurn, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
+import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
@@ -81,6 +82,18 @@ export default async function cmdStart(
   const displayName = String(cfg.displayName || 'My Agent');
   const description = String(cfg.bio || 'Autonomous Wunderland agent');
   const p = cfg.personality || {};
+
+  // Observability (OTEL) is opt-in, and config can override env.
+  const cfgOtelEnabled = cfg?.observability?.otel?.enabled;
+  if (typeof cfgOtelEnabled === 'boolean') {
+    process.env['WUNDERLAND_OTEL_ENABLED'] = cfgOtelEnabled ? 'true' : 'false';
+  }
+  const cfgOtelLogsEnabled = cfg?.observability?.otel?.exportLogs;
+  if (typeof cfgOtelLogsEnabled === 'boolean') {
+    process.env['WUNDERLAND_OTEL_LOGS_ENABLED'] = cfgOtelLogsEnabled ? 'true' : 'false';
+  }
+
+  await startWunderlandOtel({ serviceName: `wunderland-agent-${seedId}` });
 
   const security = {
     ...DEFAULT_SECURITY_PROFILE,
@@ -416,6 +429,17 @@ export default async function cmdStart(
   await new Promise<void>((resolve) => {
     server.listen(port, '0.0.0.0', () => resolve());
   });
+
+  // Best-effort OTEL shutdown on exit.
+  const handleExit = async () => {
+    try {
+      await shutdownWunderlandOtel();
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.once('SIGINT', () => void handleExit());
+  process.once('SIGTERM', () => void handleExit());
 
   // Status display
   fmt.section('Agent Server Running');

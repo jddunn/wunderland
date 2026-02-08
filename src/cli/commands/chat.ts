@@ -4,6 +4,8 @@
  * @module wunderland/cli/commands/chat
  */
 
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
@@ -14,6 +16,7 @@ import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../confi
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
 import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
+import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 
 // ── Command ─────────────────────────────────────────────────────────────────
 
@@ -23,6 +26,26 @@ export default async function cmdChat(
   globals: GlobalFlags,
 ): Promise<void> {
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
+
+  // Observability (OTEL) is opt-in, and agent.config.json can override env.
+  try {
+    const configPath = path.resolve(process.cwd(), 'agent.config.json');
+    if (existsSync(configPath)) {
+      const cfg = JSON.parse(await readFile(configPath, 'utf8'));
+      const cfgOtelEnabled = cfg?.observability?.otel?.enabled;
+      if (typeof cfgOtelEnabled === 'boolean') {
+        process.env['WUNDERLAND_OTEL_ENABLED'] = cfgOtelEnabled ? 'true' : 'false';
+      }
+      const cfgOtelLogsEnabled = cfg?.observability?.otel?.exportLogs;
+      if (typeof cfgOtelLogsEnabled === 'boolean') {
+        process.env['WUNDERLAND_OTEL_LOGS_ENABLED'] = cfgOtelLogsEnabled ? 'true' : 'false';
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  await startWunderlandOtel({ serviceName: 'wunderland-chat' });
 
   const apiKey = process.env['OPENAI_API_KEY'] || '';
   if (!apiKey) {
@@ -274,6 +297,7 @@ export default async function cmdChat(
   }
 
   rl.close();
+  await shutdownWunderlandOtel();
   fmt.blank();
   fmt.ok('Session ended.');
   fmt.blank();
