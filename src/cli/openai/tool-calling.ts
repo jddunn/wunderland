@@ -136,6 +136,75 @@ export function createAuthorizationManager(opts: {
   return new StepUpAuthorizationManager(DEFAULT_STEP_UP_AUTH_CONFIG, hitlCallback);
 }
 
+/**
+ * Configuration for an LLM provider endpoint.
+ * Both OpenAI and OpenRouter use the same OpenAI-compatible chat completions API.
+ */
+export interface LLMProviderConfig {
+  apiKey: string;
+  model: string;
+  /** API base URL (without trailing slash). Defaults to OpenAI. */
+  baseUrl?: string;
+  /** Extra headers (e.g. OpenRouter's HTTP-Referer, X-Title). */
+  extraHeaders?: Record<string, string>;
+}
+
+/** Default API base URLs for known providers. */
+const PROVIDER_BASE_URLS = {
+  openai: 'https://api.openai.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+} as const;
+
+/**
+ * Determines whether an error should trigger a fallback attempt.
+ * Retryable: rate limits (429), server errors (500+), auth failures (401/403), network errors.
+ */
+function shouldFallback(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message;
+    // HTTP status codes that warrant fallback
+    if (/\b(429|500|502|503|504|401|403)\b/.test(msg)) return true;
+    // Network-level failures
+    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND/i.test(msg)) return true;
+  }
+  return false;
+}
+
+async function chatCompletionsRequest(
+  provider: LLMProviderConfig,
+  messages: Array<Record<string, unknown>>,
+  tools: Array<Record<string, unknown>>,
+  temperature: number,
+  maxTokens: number,
+): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
+  const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
+  const providerName = baseUrl.includes('openrouter') ? 'OpenRouter' : 'OpenAI';
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${provider.apiKey}`,
+      'Content-Type': 'application/json',
+      ...(provider.extraHeaders || {}),
+    },
+    body: JSON.stringify({
+      model: provider.model,
+      messages,
+      tools: tools.length > 0 ? tools : undefined,
+      tool_choice: tools.length > 0 ? 'auto' : undefined,
+      temperature,
+      max_tokens: maxTokens,
+    }),
+  });
+
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${providerName} error (${res.status}): ${text.slice(0, 300)}`);
+  const data = JSON.parse(text);
+  const msg = data?.choices?.[0]?.message;
+  if (!msg) throw new Error(`${providerName} returned an empty response.`);
+  return { message: msg, model: data?.model || provider.model, usage: data?.usage, provider: providerName };
+}
+
 export async function openaiChatWithTools(opts: {
   apiKey: string;
   model: string;
@@ -143,29 +212,31 @@ export async function openaiChatWithTools(opts: {
   tools: Array<Record<string, unknown>>;
   temperature: number;
   maxTokens: number;
+  /** Override the API base URL (e.g. for OpenRouter). */
+  baseUrl?: string;
+  /** Fallback provider to try when the primary fails with a retryable error. */
+  fallback?: LLMProviderConfig;
+  /** Called when a fallback is triggered. */
+  onFallback?: (primaryError: Error, fallbackProvider: string) => void;
 }): Promise<{ message: ToolCallMessage; model: string; usage: unknown }> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${opts.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: opts.model,
-      messages: opts.messages,
-      tools: opts.tools.length > 0 ? opts.tools : undefined,
-      tool_choice: opts.tools.length > 0 ? 'auto' : undefined,
-      temperature: opts.temperature,
-      max_tokens: opts.maxTokens,
-    }),
-  });
+  const primary: LLMProviderConfig = {
+    apiKey: opts.apiKey,
+    model: opts.model,
+    baseUrl: opts.baseUrl,
+  };
 
-  const text = await res.text();
-  if (!res.ok) throw new Error(`OpenAI error (${res.status}): ${text.slice(0, 300)}`);
-  const data = JSON.parse(text);
-  const msg = data?.choices?.[0]?.message;
-  if (!msg) throw new Error('OpenAI returned an empty response.');
-  return { message: msg, model: data?.model || opts.model, usage: data?.usage };
+  try {
+    return await chatCompletionsRequest(primary, opts.messages, opts.tools, opts.temperature, opts.maxTokens);
+  } catch (err) {
+    // If no fallback configured, or error isn't retryable, re-throw
+    if (!opts.fallback || !shouldFallback(err)) throw err;
+
+    const primaryError = err instanceof Error ? err : new Error(String(err));
+    const fallbackName = opts.fallback.baseUrl?.includes('openrouter') ? 'OpenRouter' : 'fallback';
+    opts.onFallback?.(primaryError, fallbackName);
+
+    return await chatCompletionsRequest(opts.fallback, opts.messages, opts.tools, opts.temperature, opts.maxTokens);
+  }
 }
 
 export async function runToolCallingTurn(opts: {
@@ -187,6 +258,12 @@ export async function runToolCallingTurn(opts: {
   onToolCall?: (tool: ToolInstance, args: Record<string, unknown>) => void;
   /** Optional pre-configured authorization manager. Created automatically if not provided. */
   authorizationManager?: StepUpAuthorizationManager;
+  /** Override the API base URL for the primary provider. */
+  baseUrl?: string;
+  /** Fallback provider config (e.g. OpenRouter). */
+  fallback?: LLMProviderConfig;
+  /** Called when a fallback is triggered. */
+  onFallback?: (primaryError: Error, fallbackProvider: string) => void;
 }): Promise<string> {
   const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
 
@@ -208,6 +285,9 @@ export async function runToolCallingTurn(opts: {
       tools: toolDefs,
       temperature: 0.2,
       maxTokens: 1400,
+      baseUrl: opts.baseUrl,
+      fallback: opts.fallback,
+      onFallback: opts.onFallback,
     });
 
     const toolCalls = message.tool_calls || [];
