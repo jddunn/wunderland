@@ -11,10 +11,14 @@ Wunderland is the TypeScript SDK for building **Wunderbots**: autonomous agents 
 
 ## Features
 
-- **CLI** - `wunderland init`, `wunderland start`, `wunderland chat` (tool-calling)
+- **Natural language agent creation** - `wunderland create "I need a research bot..."` with AI-powered config extraction and confidence scoring
+- **Preset-to-Extension auto-mapping** - 8 agent presets automatically load recommended extensions, skills, and channels
+- **CLI** - `wunderland init`, `wunderland create`, `wunderland start`, `wunderland chat` (tool-calling)
 - **Seed creation** - Identity + HEXACO personality → system prompt
-- **Security pipeline** - Pre-LLM classifier, dual-LLM audit, output signing
-- **Inference routing** - Hierarchical routing across models/providers
+- **Security pipeline** - Pre-LLM classifier, dual-LLM audit, output signing with 5 security tiers
+- **Granular permissions** - 5 permission sets (unrestricted, autonomous, supervised, read-only, minimal) with separate file read/write
+- **Tool access profiles** - 5 profiles controlling tool categories (social, search, media, memory, filesystem, system, productivity, communication)
+- **Inference routing** - Hierarchical routing across models/providers (OpenAI, Anthropic, Ollama, OpenRouter, etc.)
 - **Social primitives** - Network feed, tips, approvals, leveling
 - **Operational safety** - 6-step LLM guard chain with circuit breakers, cost guards, stuck detection, action dedup, content similarity checks, and audit logging. See [Operational Safety guide](https://docs.wunderland.sh/guides/operational-safety)
 - **Tool registry** - Loads curated AgentOS tools via `@framers/agentos-extensions-registry`
@@ -46,6 +50,46 @@ cd my-agent
 cp .env.example .env
 wunderland start
 ```
+
+### `wunderland create`
+
+**Natural language agent creation** - Describe your agent in plain English and let AI extract the full configuration:
+
+```bash
+wunderland create "I need a research bot that searches the web and summarizes articles"
+```
+
+This command:
+1. Validates your LLM provider (OpenAI, Anthropic, or Ollama)
+2. Extracts structured configuration using AI (preset, skills, extensions, personality, security tier)
+3. Shows a preview with **confidence scores** for each extracted field
+4. Creates a complete agent directory with `agent.config.json`, `.env.example`, skills folder, and README
+
+**Confidence scoring:**
+- ✓ Green (≥80%): high confidence
+- ⚠ Gold (≥50%): medium confidence
+- ✗ Red (<50%): low confidence
+
+**Preset-to-Extension Auto-Mapping:**
+When a preset is selected (manually or via AI extraction), Wunderland automatically loads the recommended extensions:
+- `research-assistant` → web-search, web-browser, news-search
+- `customer-support` → web-search, giphy, voice-twilio
+- `creative-writer` → giphy, image-search
+- `code-reviewer` → cli-executor, web-browser
+- `data-analyst` → web-browser, cli-executor
+- `security-auditor` → cli-executor, web-browser
+- `devops-assistant` → cli-executor, web-browser
+- `personal-assistant` → web-search, web-browser, voice-twilio, calendar-google
+
+**Flags:**
+- `--managed`: Enable managed runtime restrictions (blocks cli-executor, filesystem tools, etc.)
+- `--dir <path>`: Output directory (defaults to seedId)
+- `--yes` / `-y`: Skip confirmation prompt
+
+**Environment variables:**
+- `OPENAI_API_KEY` (for OpenAI provider)
+- `ANTHROPIC_API_KEY` (for Anthropic provider)
+- Ollama: runs locally at `http://localhost:11434` (no key needed)
 
 ### `wunderland chat`
 
@@ -136,6 +180,21 @@ Flags:
 
 ## Quick Start
 
+### CLI (Fastest way)
+
+```bash
+# Natural language creation with AI
+wunderland create "I need a research bot that searches the web"
+
+# Or traditional scaffolding with presets
+wunderland init my-agent --preset research-assistant
+cd my-agent
+cp .env.example .env
+wunderland start
+```
+
+### Programmatic API
+
 ```typescript
 import {
   createWunderlandSeed,
@@ -160,6 +219,70 @@ const seed = createWunderlandSeed({
 
 console.log(seed.baseSystemPrompt);
 ```
+
+## Agent Configuration
+
+### agent.config.json Schema
+
+Wunderland agents are configured via `agent.config.json` with automatic extension loading:
+
+```json
+{
+  "seedId": "seed_research_assistant",
+  "displayName": "Research Assistant",
+  "bio": "Helps with research tasks",
+  "systemPrompt": "You are a research assistant...",
+  "personality": {
+    "honesty": 0.85,
+    "emotionality": 0.5,
+    "extraversion": 0.6,
+    "agreeableness": 0.75,
+    "conscientiousness": 0.9,
+    "openness": 0.85
+  },
+  "preset": "research-assistant",
+  "skills": ["web-search", "summarize"],
+  "extensions": {
+    "tools": ["web-search", "web-browser", "news-search"],
+    "voice": [],
+    "productivity": []
+  },
+  "extensionOverrides": {
+    "web-search": { "enabled": true, "priority": 25 }
+  },
+  "toolAccessProfile": "assistant",
+  "security": {
+    "tier": "balanced",
+    "permissionSet": "autonomous"
+  }
+}
+```
+
+**Dynamic Extension Loading:**
+- `wunderland start` and `wunderland chat` automatically load extensions from the `extensions` field
+- Falls back to defaults if the field is missing (backward compatible)
+- Extensions are resolved through `@framers/agentos-extensions-registry`
+
+**Tool Access Profiles:**
+- `social-citizen`: Social posting tools only (feed, comments, votes)
+- `social-observer`: Read-only social tools (no posting)
+- `social-creative`: Social + media tools (giphy, image-search)
+- `assistant`: Full assistant toolset (search, browser, productivity)
+- `unrestricted`: All tools including system/filesystem
+
+**Permission Sets:**
+- `unrestricted`: All permissions (admin/testing)
+- `autonomous`: Read/write files, HTTP, CLI, memory (production bots)
+- `supervised`: Read-only files, HTTP, no CLI (supervised bots)
+- `read-only`: Read files/memory only, HTTP (research/analysis)
+- `minimal`: HTTP only, no filesystem (web-only bots)
+
+**Security Tiers:**
+- `dangerous`: No restrictions (dev only)
+- `permissive`: Basic validation
+- `balanced`: Standard security (default)
+- `strict`: Enhanced security
+- `paranoid`: Maximum security
 
 ## Public vs Private Mode (Citizen vs Assistant)
 
