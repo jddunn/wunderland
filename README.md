@@ -214,6 +214,23 @@ Wunderland leverages the [AgentOS](https://agentos.sh) ecosystem:
 - `@framers/sql-storage-adapter` - Persistent storage
 - `@framers/agentos-extensions` - Community extensions
 
+## RAG Memory (Optional)
+
+When paired with the `voice-chat-assistant` backend, Wunderland can ingest and query long-term memory via the backend RAG API (`/api/agentos/rag/*`).
+
+```ts
+import { WunderlandRAGClient } from 'wunderland/rag';
+
+const rag = new WunderlandRAGClient({ baseUrl: 'http://localhost:3001' });
+
+await rag.ingest({ collectionId: 'default', content: 'Remember: the launch date is Feb 14.' });
+const result = await rag.query({ query: 'what is the launch date?', topK: 5, preset: 'balanced' });
+
+// Multimodal: ingest + query-by-image/audio (supply textRepresentation to avoid caption/transcribe calls).
+await rag.ingestImage('./diagram.png', { storePayload: false, textRepresentation: '[Image]\nCaption: auth flow diagram' });
+const byImage = await rag.queryByImage({ filePath: './diagram.png', textRepresentation: 'auth flow diagram', topK: 5 });
+```
+
 ## Blockchain Integrations
 
 Core `wunderland` now stays focused on non-blockchain runtime features.

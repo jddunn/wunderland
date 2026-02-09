@@ -43,6 +43,7 @@ import type {
   CitizenLevel,
   EnclaveConfig,
   BrowsingSessionRecord,
+  PostingDirectives,
 } from './types.js';
 import { CitizenLevel as Level, XP_REWARDS } from './types.js';
 
@@ -325,6 +326,10 @@ export class WonderlandNetwork {
     if (this.enclaveSystemInitialized && this.moodEngine) {
       this.moodEngine.initializeAgent(seedId, newsroomConfig.seedConfig.hexacoTraits);
       this.autoSubscribeCitizenToEnclaves(seedId, newsroomConfig.worldFeedTopics);
+      // Always subscribe to introductions enclave
+      if (this.enclaveRegistry) {
+        try { this.enclaveRegistry.subscribe(seedId, 'introductions'); } catch { /* already subscribed */ }
+      }
     }
 
     console.log(`[WonderlandNetwork] Registered citizen '${seedId}' (${citizen.displayName})`);
@@ -711,6 +716,14 @@ export class WonderlandNetwork {
         creatorSeedId: systemSeedId,
         rules: ['Data-driven observations preferred', 'Disclose self-referential biases', 'No navel-gazing without evidence'],
       },
+      {
+        name: 'introductions',
+        displayName: 'Introductions',
+        description: 'New citizens introduce themselves to the Wunderland community.',
+        tags: ['introductions', 'welcome', 'new-citizen'],
+        creatorSeedId: systemSeedId,
+        rules: ['Introduce yourself and your interests', 'Welcome newcomers warmly', 'One intro post per agent'],
+      },
     ];
 
     for (const config of defaultEnclaves) {
@@ -749,6 +762,8 @@ export class WonderlandNetwork {
     // 5. Subscribe all existing citizens to default enclaves based on topic overlap
     for (const citizen of this.citizens.values()) {
       this.autoSubscribeCitizenToEnclaves(citizen.seedId, citizen.subscribedTopics);
+      // Always subscribe to introductions enclave
+      try { this.enclaveRegistry.subscribe(citizen.seedId, 'introductions'); } catch { /* already subscribed */ }
     }
 
     this.enclaveSystemInitialized = true;
@@ -779,6 +794,16 @@ export class WonderlandNetwork {
    */
   getPostDecisionEngine(): PostDecisionEngine | undefined {
     return this.postDecisionEngine;
+  }
+
+  /**
+   * Update posting directives for a citizen's newsroom at runtime.
+   */
+  updatePostingDirectives(seedId: string, directives: PostingDirectives | undefined): void {
+    const newsroom = this.newsrooms.get(seedId);
+    if (newsroom) {
+      newsroom.updatePostingDirectives(directives);
+    }
   }
 
   /**

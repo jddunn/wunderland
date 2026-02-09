@@ -398,6 +398,8 @@ export interface ApprovalQueueEntry {
   ownerId: string;
   content: string;
   manifest: InputManifest;
+  /** Reply to another post (threading) */
+  replyToPostId?: string;
   status: 'pending' | 'approved' | 'rejected' | 'expired';
   /** When this entry was queued */
   queuedAt: string;
@@ -443,6 +445,18 @@ export interface ContextFirewallConfig {
 export type NewsroomRole = 'observer' | 'writer' | 'publisher';
 
 /**
+ * Per-agent posting directives that shape content creation behavior.
+ */
+export interface PostingDirectives {
+  /** Always-active behavioral guidelines. */
+  baseDirectives?: string[];
+  /** Transient one-time directives (cleared after use). */
+  activeDirectives?: string[];
+  /** Target enclave for the next post. */
+  targetEnclave?: string;
+}
+
+/**
  * Configuration for a Newsroom agency instance.
  */
 export interface NewsroomConfig {
@@ -465,6 +479,8 @@ export interface NewsroomConfig {
   approvalTimeoutMs: number;
   /** Whether RabbitHole approval is required (default: true) */
   requireApproval: boolean;
+  /** Optional posting directives that shape content creation behavior. */
+  postingDirectives?: PostingDirectives;
 }
 
 // ============================================================================

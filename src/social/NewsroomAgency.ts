@@ -82,6 +82,7 @@ export class NewsroomAgency {
   private pendingApprovals: Map<string, ApprovalQueueEntry> = new Map();
   private postsThisHour: number = 0;
   private rateLimitResetTime: number = Date.now() + 3600000;
+  private lastProactivePostAtMs: number = 0;
 
   /** Optional LLM callback for production mode. */
   private llmInvoke?: LLMInvokeCallback;
@@ -162,11 +163,18 @@ export class NewsroomAgency {
       return null;
     }
 
+    // Track proactive cadence for cron-driven posting (prevents approval queue spam).
+    if (stimulus.payload.type === 'cron_tick' && stimulus.payload.scheduleName === 'post') {
+      this.lastProactivePostAtMs = Date.now();
+    }
+
     // Phase 2: Writer (LLM + tools if available, otherwise placeholder)
     const writerResult = await this.writerPhase(stimulus, observerResult.topic, manifestBuilder);
 
     // Phase 3: Publisher
-    const post = await this.publisherPhase(writerResult, manifestBuilder);
+    const replyToPostId =
+      stimulus.payload.type === 'agent_reply' ? stimulus.payload.replyToPostId : undefined;
+    const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId);
 
     return post;
   }
@@ -188,6 +196,7 @@ export class NewsroomAgency {
       content: entry.content,
       manifest: entry.manifest,
       status: 'published',
+      replyToPostId: entry.replyToPostId,
       createdAt: entry.queuedAt,
       publishedAt: new Date().toISOString(),
       engagement: { likes: 0, boosts: 0, replies: 0, views: 0 },
@@ -243,9 +252,54 @@ export class NewsroomAgency {
     stimulus: StimulusEvent,
     manifestBuilder: InputManifestBuilder
   ): Promise<{ shouldReact: boolean; reason: string; topic: string }> {
-    if (stimulus.priority === 'low' && Math.random() > 0.3) {
-      manifestBuilder.recordProcessingStep('OBSERVER_FILTER', 'Low priority, randomly skipped');
-      return { shouldReact: false, reason: 'Low priority filtered', topic: '' };
+    // Cron ticks are scheduling signals. Only react to the "post" schedule, and do so sparingly.
+    if (stimulus.payload.type === 'cron_tick') {
+      const scheduleName = stimulus.payload.scheduleName;
+      if (scheduleName !== 'post') {
+        manifestBuilder.recordProcessingStep(
+          'OBSERVER_FILTER',
+          `Ignored cron tick '${scheduleName}' (not a posting schedule)`
+        );
+        return { shouldReact: false, reason: `Ignored cron tick '${scheduleName}'`, topic: '' };
+      }
+
+      const minIntervalMs = this.getProactivePostIntervalMs();
+      if (minIntervalMs) {
+        const sinceLast = Date.now() - this.lastProactivePostAtMs;
+        if (sinceLast >= 0 && sinceLast < minIntervalMs) {
+          manifestBuilder.recordProcessingStep(
+            'OBSERVER_FILTER',
+            `Posting cadence not due yet (sinceLast=${sinceLast}ms, minInterval=${minIntervalMs}ms)`
+          );
+          return { shouldReact: false, reason: 'Posting cadence not due', topic: '' };
+        }
+      }
+
+      // Probability gate: treat cron ticks as "consider posting", not "must post now".
+      const chance = this.proactivePostChance(stimulus.priority);
+      if (Math.random() > chance) {
+        manifestBuilder.recordProcessingStep(
+          'OBSERVER_FILTER',
+          `Skipped proactive post tick (p=${chance.toFixed(3)})`
+        );
+        return { shouldReact: false, reason: 'Proactive post skipped', topic: '' };
+      }
+    } else if (stimulus.priority === 'low') {
+      // Non-cron low-priority stimuli are sampled aggressively to prevent spam.
+      if (Math.random() > 0.3) {
+        manifestBuilder.recordProcessingStep('OBSERVER_FILTER', 'Low priority, randomly skipped');
+        return { shouldReact: false, reason: 'Low priority filtered', topic: '' };
+      }
+    } else if (stimulus.priority === 'normal') {
+      // Normal-priority stimuli are sampled so agents react organically (not to everything).
+      const chance = this.reactiveStimulusChance(stimulus.payload.type);
+      if (Math.random() > chance) {
+        manifestBuilder.recordProcessingStep(
+          'OBSERVER_FILTER',
+          `Skipped normal stimulus '${stimulus.payload.type}' (p=${chance.toFixed(3)})`
+        );
+        return { shouldReact: false, reason: 'Sampled out', topic: '' };
+      }
     }
 
     let topic = '';
@@ -511,12 +565,47 @@ export class NewsroomAgency {
 
 ## Behavior Rules
 1. You are FULLY AUTONOMOUS. No human wrote or edited this post.
-2. React to the provided stimulus with your unique personality and perspective.
-3. Your posts appear on a public feed — keep them engaging, thoughtful, and concise.
-4. You may use tools (web search, giphy, images, news) to enrich your posts.
-5. When including images or GIFs, embed the URL in markdown format: ![description](url)
-6. Keep posts under 500 characters unless the topic truly demands more.
-7. Be authentic to your personality — don't be generic.${memoryHint}`;
+2. You may choose to stay silent. Do not spam. Only post when you have something meaningful.
+3. Assume you have limited funds and attention. Be budget-aware and conserve resources.
+4. React to the provided stimulus with your unique personality and perspective.
+5. Your posts appear on a public feed — keep them engaging, thoughtful, and concise.
+6. You may use tools (web search, giphy, images, news) to enrich your posts.
+7. When including images or GIFs, embed the URL in markdown format: ![description](url)
+8. Keep posts under 500 characters unless the topic truly demands more.
+9. Be authentic to your personality — don't be generic.${memoryHint}${this.buildDirectivesSection()}`;
+  }
+
+  /**
+   * Build the posting directives section for the system prompt.
+   */
+  private buildDirectivesSection(): string {
+    const directives = this.config.postingDirectives;
+    if (!directives) return '';
+
+    const sections: string[] = [];
+
+    if (directives.baseDirectives?.length) {
+      sections.push('\n\n## Base Directives\n' +
+        directives.baseDirectives.map((d, i) => `${i + 1}. ${d}`).join('\n'));
+    }
+
+    if (directives.activeDirectives?.length) {
+      sections.push('\n\n## Active Directives (Priority)\n' +
+        directives.activeDirectives.map((d, i) => `${i + 1}. ${d}`).join('\n'));
+    }
+
+    if (directives.targetEnclave) {
+      sections.push(`\n\nPost to the "${directives.targetEnclave}" enclave.`);
+    }
+
+    return sections.join('');
+  }
+
+  /**
+   * Update posting directives at runtime (e.g. after first post clears intro directive).
+   */
+  updatePostingDirectives(directives: import('./types.js').PostingDirectives | undefined): void {
+    this.config = { ...this.config, postingDirectives: directives };
   }
 
   /**
@@ -572,7 +661,8 @@ export class NewsroomAgency {
 
   private async publisherPhase(
     writerResult: { content: string; topic: string },
-    manifestBuilder: InputManifestBuilder
+    manifestBuilder: InputManifestBuilder,
+    replyToPostId?: string,
   ): Promise<WonderlandPost> {
     const seedId = this.config.seedConfig.seedId;
 
@@ -588,6 +678,7 @@ export class NewsroomAgency {
       content: writerResult.content,
       manifest,
       status: this.config.requireApproval ? 'pending_approval' : 'published',
+      replyToPostId,
       createdAt: now,
       publishedAt: this.config.requireApproval ? undefined : now,
       engagement: { likes: 0, boosts: 0, replies: 0, views: 0 },
@@ -602,6 +693,7 @@ export class NewsroomAgency {
         ownerId: this.config.ownerId,
         content: writerResult.content,
         manifest,
+        replyToPostId,
         status: 'pending',
         queuedAt: now,
         timeoutMs: this.config.approvalTimeoutMs,
@@ -634,4 +726,50 @@ export class NewsroomAgency {
     }
     return this.postsThisHour < this.config.maxPostsPerHour;
   }
+
+  private getProactivePostIntervalMs(): number | null {
+    if (this.config.postingCadence.type !== 'interval') return null;
+    const raw = this.config.postingCadence.value;
+    const value = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    // Hard floor so misconfigurations don't create accidental tight loops.
+    return Math.max(5 * 60_000, Math.floor(value));
+  }
+
+  private proactivePostChance(priority: StimulusEvent['priority']): number {
+    // High/breaking priorities should always go through the observer for cron-driven posting.
+    if (priority === 'breaking' || priority === 'high') return 1.0;
+
+    const traits = this.config.seedConfig.hexacoTraits;
+    const x = traits.extraversion ?? 0.5;
+    const o = traits.openness ?? 0.5;
+
+    // Hourly ticks → target ~1–3 posts/day for most agents.
+    // Base chance is low; extraversion/openness increase it slightly.
+    return clamp01(0.05 + x * 0.10 + o * 0.03);
+  }
+
+  private reactiveStimulusChance(payloadType: StimulusEvent['payload']['type']): number {
+    const traits = this.config.seedConfig.hexacoTraits;
+    const x = traits.extraversion ?? 0.5;
+    const c = traits.conscientiousness ?? 0.5;
+    const o = traits.openness ?? 0.5;
+
+    switch (payloadType) {
+      case 'tip':
+        // Tips are paid stimuli; react more often (still not always).
+        return clamp01(0.40 + x * 0.25 + c * 0.10);
+      case 'agent_reply':
+        // Replies are social; usually respond, but allow some “leave it” behavior.
+        return clamp01(0.65 + x * 0.20 + o * 0.05);
+      case 'world_feed':
+      default:
+        // World feed can be high volume; sample more aggressively.
+        return clamp01(0.12 + x * 0.18 + o * 0.06 + (1 - c) * 0.04);
+    }
+  }
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }

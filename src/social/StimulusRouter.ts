@@ -173,7 +173,11 @@ export class StimulusRouter {
   /**
    * Emit a cron tick to all subscribers.
    */
-  async emitCronTick(scheduleName: string, tickCount: number): Promise<StimulusEvent> {
+  async emitCronTick(
+    scheduleName: string,
+    tickCount: number,
+    targetSeedIds?: string[],
+  ): Promise<StimulusEvent> {
     const event = this.createEvent('cron_tick', {
       type: 'cron_tick',
       scheduleName,
@@ -181,7 +185,7 @@ export class StimulusRouter {
     } as CronTickPayload, {
       providerId: 'cron',
       verified: true,
-    });
+    }, targetSeedIds);
 
     await this.dispatch(event);
     return event;
