@@ -1,10 +1,11 @@
 /**
  * @file index.ts
- * @description Jobs system exports - agent-centric job evaluation and bidding
+ * @description Jobs system exports - agent-centric job evaluation and bidding with RAG
  */
 
 export { JobEvaluator } from './JobEvaluator.js';
 export { JobScanner } from './JobScanner.js';
+export { JobMemoryService, jobOutcomeToMemoryEntry } from './JobMemoryService.js';
 export {
   createAgentJobState,
   recordJobEvaluation,

@@ -14,6 +14,7 @@
 import type { MoodEngine, PADState } from '../social/MoodEngine.js';
 import type { HEXACOTraits } from '../core/types.js';
 import type { AgentJobState } from './AgentJobState.js';
+import type { JobMemoryService } from './JobMemoryService.js';
 
 export interface Job {
   id: string;
@@ -69,6 +70,7 @@ export class JobEvaluator {
   constructor(
     private moodEngine: MoodEngine,
     private seedId: string,
+    private jobMemory?: JobMemoryService, // Optional RAG integration
   ) {}
 
   /**
@@ -79,12 +81,13 @@ export class JobEvaluator {
    * - Workload/bandwidth
    * - Learned category preferences
    * - Dynamic rate expectations
+   * - RAG similarity to past jobs (if enabled)
    */
-  evaluateJob(
+  async evaluateJob(
     job: Job,
     agent: AgentProfile,
     state: AgentJobState,
-  ): JobEvaluationResult {
+  ): Promise<JobEvaluationResult> {
     // Get current mood
     const mood = this.moodEngine.getState(this.seedId);
     const traits = this.moodEngine.getTraits(this.seedId) || agent.hexaco;
@@ -96,16 +99,20 @@ export class JobEvaluator {
     const workloadPenalty = this.calculateWorkloadPenalty(state);
     const urgencyBonus = this.calculateUrgencyBonus(job, mood);
 
+    // RAG similarity bonus (if enabled)
+    const ragBonus = await this.calculateRagBonus(job, agent);
+
     // Weighted job score (dynamic weights based on mood)
     const dominanceFactor = (mood?.dominance ?? 0) + 1; // 0-2 range
 
     // High dominance → emphasize budget
     const jobScore =
-      0.3 * complexityFit +
+      0.25 * complexityFit +
       (0.2 + dominanceFactor * 0.1) * budgetAttractiveness +
-      0.2 * moodAlignment +
-      0.1 * urgencyBonus -
-      0.2 * workloadPenalty;
+      0.15 * moodAlignment +
+      0.1 * urgencyBonus +
+      0.15 * ragBonus - // RAG influence
+      0.15 * workloadPenalty;
 
     // Decision threshold is dynamic based on state
     const bidThreshold = this.calculateBidThreshold(state, mood);
@@ -266,6 +273,49 @@ export class JobEvaluator {
   private calculateWorkloadPenalty(state: AgentJobState): number {
     const capacity = 1 - (state.activeJobCount * 0.2); // 0-1
     return Math.max(0, 1 - capacity); // 0 = no penalty, 1 = max penalty
+  }
+
+  /**
+   * RAG similarity bonus: Learn from past job outcomes.
+   */
+  private async calculateRagBonus(job: Job, agent: AgentProfile): Promise<number> {
+    if (!this.jobMemory) {
+      return 0.5; // Neutral if RAG not available
+    }
+
+    try {
+      // Find similar past jobs
+      const similarJobs = await this.jobMemory.findSimilarJobs(
+        agent.seedId,
+        job.description,
+        {
+          topK: 5,
+          category: job.category,
+        },
+      );
+
+      if (similarJobs.length === 0) {
+        return 0.5; // No history, neutral
+      }
+
+      // Calculate success rate on similar jobs
+      const successCount = similarJobs.filter((j) => j.success).length;
+      const successRate = successCount / similarJobs.length;
+
+      // Calculate average similarity (how confident we are about the match)
+      const avgSimilarity = similarJobs.reduce((sum, j) => sum + j.similarity, 0) / similarJobs.length;
+
+      // Bonus ranges from 0 to 1:
+      // - High success rate + high similarity → 1.0 (strongly recommend)
+      // - Low success rate + high similarity → 0.0 (strongly discourage)
+      // - Low similarity → 0.5 (neutral)
+      const confidenceWeightedBonus = successRate * avgSimilarity + (1 - avgSimilarity) * 0.5;
+
+      return Math.max(0, Math.min(1, confidenceWeightedBonus));
+    } catch (error) {
+      console.warn('[JobEvaluator] RAG query failed:', error);
+      return 0.5; // Neutral on error
+    }
   }
 
   /**
