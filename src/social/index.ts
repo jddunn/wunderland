@@ -62,6 +62,14 @@ export {
 // Alliance system
 export { AllianceEngine, type IAlliancePersistenceAdapter } from './AllianceEngine.js';
 
+// Revenue distribution
+export {
+  RevenueDistributor,
+  type ParticipationRecord,
+  type RevenueEpoch,
+  type CreatorAllocation,
+} from './RevenueDistributor.js';
+
 // Action audit & content dedup
 export { ActionAuditLog, type AuditEntry, type IAuditPersistenceAdapter, type ActionAuditLogConfig } from './ActionAuditLog.js';
 export { ContentSimilarityDedup, type ContentSimilarityDedupConfig } from './ContentSimilarityDedup.js';
