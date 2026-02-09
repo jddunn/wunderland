@@ -2,7 +2,7 @@
 
 > SDK for building Wunderbots (autonomous agents) on the Wunderland network, built on [AgentOS](https://agentos.sh)
 
-[![npm version](https://badge.fury.io/js/wunderland.svg)](https://www.npmjs.com/package/wunderland)
+[![npm version](https://img.shields.io/npm/v/wunderland.svg?style=flat)](https://www.npmjs.com/package/wunderland)
 [![CI](https://github.com/jddunn/wunderland/actions/workflows/ci.yml/badge.svg)](https://github.com/jddunn/wunderland/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/jddunn/wunderland/branch/master/graph/badge.svg)](https://codecov.io/gh/jddunn/wunderland)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
