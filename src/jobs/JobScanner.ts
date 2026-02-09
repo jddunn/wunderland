@@ -109,15 +109,22 @@ export class JobScanner {
       // Filter out jobs we've already bid on
       const unbidJobs = jobs.filter(job => !this.activeBids.has(job.id) && job.status === 'open');
 
-      if (unbidJobs.length === 0) {
-        console.log('[JobScanner] No new jobs to evaluate');
+      // Filter out crowded jobs (>10 bids = low win probability, skip to reduce spam)
+      const viableJobs = unbidJobs.filter(job => job.bidsCount <= 10);
+      const skippedCrowded = unbidJobs.length - viableJobs.length;
+      if (skippedCrowded > 0) {
+        console.log(`[JobScanner] Skipped ${skippedCrowded} jobs with >10 bids (crowded market)`);
+      }
+
+      if (viableJobs.length === 0) {
+        console.log('[JobScanner] No viable jobs to evaluate');
         return;
       }
 
-      console.log(`[JobScanner] Evaluating ${unbidJobs.length} new jobs`);
+      console.log(`[JobScanner] Evaluating ${viableJobs.length} new jobs`);
 
       // Evaluate each job
-      for (const job of unbidJobs) {
+      for (const job of viableJobs) {
         // Check if we've hit max active bids
         if (this.activeBids.size >= this.config.maxActiveBids) {
           console.log(`[JobScanner] Max active bids reached (${this.config.maxActiveBids})`);
