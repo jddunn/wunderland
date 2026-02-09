@@ -89,7 +89,7 @@ export async function createWunderlandTools(config?: ToolRegistryConfig): Promis
     productivity: config?.productivity,
     channels: 'none',
     secrets,
-  });
+  } as Parameters<typeof createCuratedManifest>[0]);
 
   const tools: ITool[] = [];
   for (const pack of manifest.packs) {
