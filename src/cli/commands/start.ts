@@ -180,7 +180,7 @@ export default async function cmdStart(
       import('@framers/agentos-ext-news-search'),
     ]);
 
-    // @ts-expect-error — optional package, may not be installed standalone
+    // Optional package — gracefully handles if not installed
     const skillsExt = await import('@framers/agentos-ext-skills').catch(() => null);
 
     const packs = [
