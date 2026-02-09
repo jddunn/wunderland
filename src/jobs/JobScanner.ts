@@ -13,6 +13,7 @@ import { JobEvaluator, type Job, type AgentProfile, type JobEvaluationResult } f
 import type { AgentJobState } from './AgentJobState.js';
 import { recordJobEvaluation } from './AgentJobState.js';
 import type { MoodEngine } from '../social/MoodEngine.js';
+import type { JobMemoryService } from './JobMemoryService.js';
 
 export interface JobScanConfig {
   /**
@@ -51,8 +52,9 @@ export class JobScanner {
     config: JobScanConfig,
     private moodEngine: MoodEngine,
     private seedId: string,
+    jobMemory?: JobMemoryService,
   ) {
-    this.evaluator = new JobEvaluator(moodEngine, seedId);
+    this.evaluator = new JobEvaluator(moodEngine, seedId, jobMemory);
     this.config = {
       baseIntervalMs: config.baseIntervalMs || 30_000,
       enableAdaptivePolling: config.enableAdaptivePolling ?? true,
