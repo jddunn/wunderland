@@ -77,6 +77,206 @@ export interface SecurityTierConfig {
   riskThreshold: number;
 }
 
+/**
+ * Permission set names for declarative permission management.
+ */
+export type PermissionSetName = 'unrestricted' | 'autonomous' | 'supervised' | 'read-only' | 'minimal';
+
+/**
+ * Granular permission structure for filesystem, network, system, and data access.
+ */
+export interface GranularPermissions {
+  filesystem: {
+    read: boolean;
+    write: boolean;
+    delete: boolean;
+    execute: boolean;
+  };
+  network: {
+    httpRequests: boolean;
+    socketConnections: boolean;
+    externalApis: boolean;
+  };
+  system: {
+    cliExecution: boolean;
+    processManagement: boolean;
+    environmentAccess: boolean;
+  };
+  data: {
+    memoryRead: boolean;
+    memoryWrite: boolean;
+    credentialAccess: boolean;
+  };
+}
+
+/**
+ * Enhanced security tier configuration with granular permissions.
+ * Extends the base SecurityTierConfig with additional permission controls.
+ */
+export interface EnhancedSecurityTierConfig extends SecurityTierConfig {
+  /** Whether seeds may read from the filesystem (separate from write) */
+  allowFileRead: boolean;
+
+  /** Whether seeds may operate in full autonomous mode */
+  allowFullAutonomous: boolean;
+
+  /** Named permission set for declarative permission management */
+  permissionSet: PermissionSetName;
+
+  /** Granular permissions broken down by category */
+  permissions: GranularPermissions;
+}
+
+// ============================================================================
+// Permission Set Definitions
+// ============================================================================
+
+/**
+ * Declarative permission sets that define granular access controls.
+ * Each set represents a common security posture for different use cases.
+ */
+export const PERMISSION_SETS: Readonly<Record<PermissionSetName, GranularPermissions>> = Object.freeze({
+  /**
+   * Unrestricted — All permissions enabled.
+   * Use for: Admin/testing environments, full-trust scenarios.
+   */
+  unrestricted: Object.freeze<GranularPermissions>({
+    filesystem: {
+      read: true,
+      write: true,
+      delete: true,
+      execute: true,
+    },
+    network: {
+      httpRequests: true,
+      socketConnections: true,
+      externalApis: true,
+    },
+    system: {
+      cliExecution: true,
+      processManagement: true,
+      environmentAccess: true,
+    },
+    data: {
+      memoryRead: true,
+      memoryWrite: true,
+      credentialAccess: true,
+    },
+  }),
+
+  /**
+   * Autonomous — Read/write files, HTTP requests, CLI execution, memory access.
+   * Use for: Production autonomous bots with broad capabilities.
+   */
+  autonomous: Object.freeze<GranularPermissions>({
+    filesystem: {
+      read: true,
+      write: true,
+      delete: false,
+      execute: false,
+    },
+    network: {
+      httpRequests: true,
+      socketConnections: true,
+      externalApis: true,
+    },
+    system: {
+      cliExecution: true,
+      processManagement: false,
+      environmentAccess: false,
+    },
+    data: {
+      memoryRead: true,
+      memoryWrite: true,
+      credentialAccess: false,
+    },
+  }),
+
+  /**
+   * Supervised — Read files only, HTTP requests, NO CLI, memory read/write.
+   * Use for: Production supervised bots that need review before destructive actions.
+   */
+  supervised: Object.freeze<GranularPermissions>({
+    filesystem: {
+      read: true,
+      write: false,
+      delete: false,
+      execute: false,
+    },
+    network: {
+      httpRequests: true,
+      socketConnections: true,
+      externalApis: true,
+    },
+    system: {
+      cliExecution: false,
+      processManagement: false,
+      environmentAccess: false,
+    },
+    data: {
+      memoryRead: true,
+      memoryWrite: true,
+      credentialAccess: false,
+    },
+  }),
+
+  /**
+   * Read-only — Read files/memory only, HTTP requests, NO writes.
+   * Use for: Research/analysis bots that don't modify state.
+   */
+  'read-only': Object.freeze<GranularPermissions>({
+    filesystem: {
+      read: true,
+      write: false,
+      delete: false,
+      execute: false,
+    },
+    network: {
+      httpRequests: true,
+      socketConnections: false,
+      externalApis: false,
+    },
+    system: {
+      cliExecution: false,
+      processManagement: false,
+      environmentAccess: false,
+    },
+    data: {
+      memoryRead: true,
+      memoryWrite: false,
+      credentialAccess: false,
+    },
+  }),
+
+  /**
+   * Minimal — NO filesystem, HTTP requests only, memory read only.
+   * Use for: Web-only bots with minimal privileges.
+   */
+  minimal: Object.freeze<GranularPermissions>({
+    filesystem: {
+      read: false,
+      write: false,
+      delete: false,
+      execute: false,
+    },
+    network: {
+      httpRequests: true,
+      socketConnections: false,
+      externalApis: false,
+    },
+    system: {
+      cliExecution: false,
+      processManagement: false,
+      environmentAccess: false,
+    },
+    data: {
+      memoryRead: true,
+      memoryWrite: false,
+      credentialAccess: false,
+    },
+  }),
+});
+
 // ============================================================================
 // Tier Definitions
 // ============================================================================
@@ -87,11 +287,11 @@ export interface SecurityTierConfig {
  * Each tier is a frozen object so consumers cannot accidentally mutate the
  * shared definitions at runtime.
  */
-export const SECURITY_TIERS: Readonly<Record<SecurityTierName, SecurityTierConfig>> = Object.freeze({
+export const SECURITY_TIERS: Readonly<Record<SecurityTierName, EnhancedSecurityTierConfig>> = Object.freeze({
   // --------------------------------------------------------------------------
   // Dangerous — all protections OFF
   // --------------------------------------------------------------------------
-  dangerous: Object.freeze<SecurityTierConfig>({
+  dangerous: Object.freeze<EnhancedSecurityTierConfig>({
     name: 'dangerous',
     displayName: 'Dangerous',
     description: 'All security layers disabled. Use only for isolated testing and benchmarking.',
@@ -103,14 +303,18 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, SecurityTierConfi
     defaultToolRiskTier: ToolRiskTier.TIER_1_AUTONOMOUS,
     allowCliExecution: true,
     allowFileWrites: true,
+    allowFileRead: true,
     allowExternalApis: true,
+    allowFullAutonomous: true,
+    permissionSet: 'unrestricted',
+    permissions: PERMISSION_SETS.unrestricted,
     riskThreshold: 1.0,
   }),
 
   // --------------------------------------------------------------------------
   // Permissive — lightweight input screening
   // --------------------------------------------------------------------------
-  permissive: Object.freeze<SecurityTierConfig>({
+  permissive: Object.freeze<EnhancedSecurityTierConfig>({
     name: 'permissive',
     displayName: 'Permissive',
     description: 'Pre-LLM input classification only. Good for trusted development environments.',
@@ -125,14 +329,18 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, SecurityTierConfi
     defaultToolRiskTier: ToolRiskTier.TIER_1_AUTONOMOUS,
     allowCliExecution: true,
     allowFileWrites: true,
+    allowFileRead: true,
     allowExternalApis: true,
+    allowFullAutonomous: true,
+    permissionSet: 'autonomous',
+    permissions: PERMISSION_SETS.autonomous,
     riskThreshold: 0.9,
   }),
 
   // --------------------------------------------------------------------------
   // Balanced — recommended default
   // --------------------------------------------------------------------------
-  balanced: Object.freeze<SecurityTierConfig>({
+  balanced: Object.freeze<EnhancedSecurityTierConfig>({
     name: 'balanced',
     displayName: 'Balanced',
     description: 'Pre-LLM classification and output signing enabled. Recommended for production.',
@@ -147,14 +355,18 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, SecurityTierConfi
     defaultToolRiskTier: ToolRiskTier.TIER_2_ASYNC_REVIEW,
     allowCliExecution: true,
     allowFileWrites: false,
+    allowFileRead: true,
     allowExternalApis: true,
+    allowFullAutonomous: false,
+    permissionSet: 'supervised',
+    permissions: PERMISSION_SETS.supervised,
     riskThreshold: 0.7,
   }),
 
   // --------------------------------------------------------------------------
   // Strict — all layers ON, external actions gated
   // --------------------------------------------------------------------------
-  strict: Object.freeze<SecurityTierConfig>({
+  strict: Object.freeze<EnhancedSecurityTierConfig>({
     name: 'strict',
     displayName: 'Strict',
     description: 'All security layers enabled. External actions require review before execution.',
@@ -174,14 +386,18 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, SecurityTierConfi
     defaultToolRiskTier: ToolRiskTier.TIER_2_ASYNC_REVIEW,
     allowCliExecution: false,
     allowFileWrites: false,
+    allowFileRead: true,
     allowExternalApis: false,
+    allowFullAutonomous: false,
+    permissionSet: 'read-only',
+    permissions: PERMISSION_SETS['read-only'],
     riskThreshold: 0.5,
   }),
 
   // --------------------------------------------------------------------------
   // Paranoid — maximum security, everything requires HITL
   // --------------------------------------------------------------------------
-  paranoid: Object.freeze<SecurityTierConfig>({
+  paranoid: Object.freeze<EnhancedSecurityTierConfig>({
     name: 'paranoid',
     displayName: 'Paranoid',
     description: 'Maximum security posture. All non-trivial actions require human-in-the-loop approval.',
@@ -201,7 +417,11 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, SecurityTierConfi
     defaultToolRiskTier: ToolRiskTier.TIER_3_SYNC_HITL,
     allowCliExecution: false,
     allowFileWrites: false,
+    allowFileRead: true,
     allowExternalApis: false,
+    allowFullAutonomous: false,
+    permissionSet: 'minimal',
+    permissions: PERMISSION_SETS.minimal,
     riskThreshold: 0.3,
   }),
 });
@@ -292,4 +512,85 @@ export function createPipelineFromTier(
   };
 
   return new WunderlandSecurityPipeline(pipelineConfig, invoker);
+}
+
+/**
+ * Migrates a legacy {@link SecurityTierConfig} to the enhanced permission model.
+ *
+ * This helper auto-converts old boolean permission flags to the new granular
+ * permission structure, enabling backward compatibility with existing configs.
+ *
+ * @param oldConfig - Legacy security tier configuration.
+ * @returns Enhanced configuration with granular permissions.
+ *
+ * @example
+ * ```typescript
+ * const legacyConfig = SECURITY_TIERS.balanced; // Old format
+ * const enhanced = migrateToEnhancedPermissions(legacyConfig);
+ * console.log(enhanced.allowFileRead); // true
+ * console.log(enhanced.permissionSet); // "supervised"
+ * ```
+ */
+export function migrateToEnhancedPermissions(
+  oldConfig: SecurityTierConfig,
+): EnhancedSecurityTierConfig {
+  // Infer allowFileRead: true if allowFileWrites is true OR tier is permissive
+  const allowFileRead =
+    oldConfig.allowFileWrites ||
+    oldConfig.defaultToolRiskTier <= ToolRiskTier.TIER_2_ASYNC_REVIEW;
+
+  // Infer allowFullAutonomous: true if tier is TIER_1_AUTONOMOUS
+  const allowFullAutonomous =
+    oldConfig.defaultToolRiskTier === ToolRiskTier.TIER_1_AUTONOMOUS;
+
+  // Infer permission set from tier characteristics
+  let permissionSet: PermissionSetName;
+  if (
+    oldConfig.allowCliExecution &&
+    oldConfig.allowFileWrites &&
+    oldConfig.allowExternalApis &&
+    allowFullAutonomous
+  ) {
+    permissionSet = 'unrestricted';
+  } else if (
+    oldConfig.allowCliExecution &&
+    oldConfig.allowFileWrites &&
+    oldConfig.allowExternalApis
+  ) {
+    permissionSet = 'autonomous';
+  } else if (allowFileRead && oldConfig.allowExternalApis && !oldConfig.allowFileWrites) {
+    permissionSet = 'supervised';
+  } else if (allowFileRead && !oldConfig.allowExternalApis && !oldConfig.allowFileWrites) {
+    permissionSet = 'read-only';
+  } else {
+    permissionSet = 'minimal';
+  }
+
+  // Build granular permissions from inferred set
+  const permissions = PERMISSION_SETS[permissionSet];
+
+  return {
+    ...oldConfig,
+    allowFileRead,
+    allowFullAutonomous,
+    permissionSet,
+    permissions,
+  };
+}
+
+/**
+ * Type guard to check if a config is already enhanced.
+ *
+ * @param config - Security tier configuration to check.
+ * @returns True if config has enhanced permissions fields.
+ */
+export function isEnhancedSecurityTierConfig(
+  config: SecurityTierConfig,
+): config is EnhancedSecurityTierConfig {
+  return (
+    'allowFileRead' in config &&
+    'allowFullAutonomous' in config &&
+    'permissionSet' in config &&
+    'permissions' in config
+  );
 }

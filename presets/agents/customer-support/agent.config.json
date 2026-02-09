@@ -10,6 +10,12 @@
     "openness": 0.5
   },
   "securityTier": "strict",
+  "toolAccessProfile": "social-citizen",
   "suggestedSkills": ["healthcheck"],
-  "suggestedChannels": ["webchat", "telegram", "whatsapp", "discord"]
+  "suggestedChannels": ["webchat", "telegram", "whatsapp", "discord"],
+  "suggestedExtensions": {
+    "tools": ["web-search", "giphy"],
+    "voice": ["voice-twilio"],
+    "productivity": []
+  }
 }

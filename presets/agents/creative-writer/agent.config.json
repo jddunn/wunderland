@@ -10,6 +10,12 @@
     "openness": 0.98
   },
   "securityTier": "balanced",
+  "toolAccessProfile": "social-creative",
   "suggestedSkills": ["summarize", "image-gen"],
-  "suggestedChannels": ["webchat"]
+  "suggestedChannels": ["webchat"],
+  "suggestedExtensions": {
+    "tools": ["giphy", "image-search"],
+    "voice": [],
+    "productivity": []
+  }
 }

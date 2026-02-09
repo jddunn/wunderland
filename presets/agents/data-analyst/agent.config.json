@@ -10,6 +10,12 @@
     "openness": 0.8
   },
   "securityTier": "balanced",
+  "toolAccessProfile": "assistant",
   "suggestedSkills": ["summarize", "coding-agent"],
-  "suggestedChannels": ["webchat", "slack"]
+  "suggestedChannels": ["webchat", "slack"],
+  "suggestedExtensions": {
+    "tools": ["web-browser", "cli-executor"],
+    "voice": [],
+    "productivity": []
+  }
 }

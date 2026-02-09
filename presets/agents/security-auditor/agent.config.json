@@ -10,6 +10,12 @@
     "openness": 0.6
   },
   "securityTier": "paranoid",
+  "toolAccessProfile": "assistant",
   "suggestedSkills": ["coding-agent", "github", "healthcheck"],
-  "suggestedChannels": ["webchat"]
+  "suggestedChannels": ["webchat"],
+  "suggestedExtensions": {
+    "tools": ["cli-executor", "web-browser"],
+    "voice": [],
+    "productivity": []
+  }
 }
