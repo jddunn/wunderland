@@ -50,6 +50,8 @@ export type {
   MediaIngestInput,
   MediaIngestResult,
   MediaQueryInput,
+  MediaQueryByImageInput,
+  MediaQueryByAudioInput,
   MediaQueryResult,
   MediaAsset,
   GraphSearchInput,
