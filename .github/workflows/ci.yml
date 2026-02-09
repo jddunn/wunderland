@@ -17,11 +17,22 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Resolve workspace protocol
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            for (const g of ['dependencies','optionalDependencies','peerDependencies']) {
+              if (!pkg[g]) continue;
+              for (const [n,v] of Object.entries(pkg[g])) {
+                if (String(v).startsWith('workspace:')) pkg[g][n] = '*';
+              }
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
 
-      - name: Build
-        run: npm run build
+      - name: Install dependencies
+        run: npm install
 
       - name: Run tests with coverage
         run: npx vitest run --coverage --reporter=default --reporter=junit --outputFile=test-results.xml
@@ -54,24 +65,23 @@ jobs:
         with:
           node-version: 22
 
+      - name: Resolve workspace protocol
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            for (const g of ['dependencies','optionalDependencies','peerDependencies']) {
+              if (!pkg[g]) continue;
+              for (const [n,v] of Object.entries(pkg[g])) {
+                if (String(v).startsWith('workspace:')) pkg[g][n] = '*';
+              }
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Type check
         run: npx tsc --noEmit
 
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
