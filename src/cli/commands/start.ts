@@ -284,11 +284,15 @@ export default async function cmdStart(
         }
       }
 
-      // Optional skills extension
-      const skillsExt = await import('@framers/agentos-ext-skills').catch(() => null);
-      if (skillsExt) {
-        packs.push(skillsExt.createExtensionPack({ options: {}, logger: console }));
-        preloadedPackages.push('@framers/agentos-ext-skills');
+      // Optional skills extension (may not be installed in standalone builds)
+      try {
+        const skillsExt: any = await import(/* webpackIgnore: true */ '@framers/agentos-ext-skills');
+        if (skillsExt?.createExtensionPack) {
+          packs.push(skillsExt.createExtensionPack({ options: {}, logger: console }));
+          preloadedPackages.push('@framers/agentos-ext-skills');
+        }
+      } catch {
+        // Not available — skip silently
       }
 
       // Activate all packs
