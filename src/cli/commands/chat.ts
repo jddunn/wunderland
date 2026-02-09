@@ -90,6 +90,7 @@ export default async function cmdChat(
       import('@framers/agentos-ext-news-search'),
     ]);
 
+    // @ts-expect-error — optional package, may not be installed standalone
     const skillsExt = await import('@framers/agentos-ext-skills').catch(() => null);
 
     const packs = [
