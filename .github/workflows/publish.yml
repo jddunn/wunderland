@@ -1,19 +1,48 @@
-name: Publish to npm
+name: Publish to npm + GitHub Release
 
 on:
   push:
     branches: [master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  publish:
+  test:
+    name: Test before publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npx vitest run
+        env:
+          CI: true
+
+  publish:
+    name: Publish to npm
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+      version: ${{ steps.version.outputs.local }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
       - name: Check if version changed
@@ -31,7 +60,7 @@ jobs:
 
       - name: Build
         if: steps.version.outputs.changed == 'true'
-        run: npm install && npm run build
+        run: npm ci && npm run build
 
       - name: Publish to npm
         if: steps.version.outputs.changed == 'true'
@@ -42,3 +71,46 @@ jobs:
       - name: Skip publish
         if: steps.version.outputs.changed == 'false'
         run: echo "Version ${{ steps.version.outputs.local }} already on npm, skipping publish"
+
+  release:
+    name: Create GitHub Release
+    needs: publish
+    if: needs.publish.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          VERSION="v${{ needs.publish.outputs.version }}"
+
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+          else
+            CHANGES=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          cat > /tmp/changelog.md << MDEOF
+          ## Changes
+
+          ${CHANGES}
+
+          ---
+          Published to npm: [\`wunderland@${{ needs.publish.outputs.version }}\`](https://www.npmjs.com/package/wunderland/v/${{ needs.publish.outputs.version }})
+          MDEOF
+
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="v${{ needs.publish.outputs.version }}"
+          git tag "$VERSION" 2>/dev/null || true
+          git push origin "$VERSION" 2>/dev/null || true
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes-file /tmp/changelog.md \
+            --latest
