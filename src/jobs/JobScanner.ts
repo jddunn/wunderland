@@ -122,8 +122,8 @@ export class JobScanner {
           break;
         }
 
-        // Use agent-centric evaluator with current state
-        const evaluation = this.evaluator.evaluateJob(job, agent, state);
+        // Use agent-centric evaluator with current state (with RAG)
+        const evaluation = await this.evaluator.evaluateJob(job, agent, state);
 
         // Record that we evaluated this job
         recordJobEvaluation(state, evaluation.shouldBid);
