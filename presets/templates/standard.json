@@ -1,0 +1,39 @@
+{
+  "id": "standard",
+  "name": "Standard",
+  "description": "Balanced configuration with common tools enabled, moderate security, and webchat channel — suitable for most use cases",
+  "hexacoTraits": {
+    "honesty": 0.8,
+    "emotionality": 0.5,
+    "extraversion": 0.6,
+    "agreeableness": 0.7,
+    "conscientiousness": 0.8,
+    "openness": 0.7
+  },
+  "securityTier": "balanced",
+  "securityProfile": {
+    "enablePreLLMClassifier": true,
+    "enableDualLLMAuditor": true,
+    "enableOutputSigning": false,
+    "riskThreshold": 0.7
+  },
+  "inferenceDefaults": {
+    "provider": "ollama",
+    "primaryModel": "dolphin-llama3:8b",
+    "routerModel": "llama3.2:3b",
+    "temperature": 0.7
+  },
+  "suggestedSkills": ["web-search", "summarize", "healthcheck"],
+  "suggestedChannels": ["webchat", "telegram", "discord"],
+  "stepUpAuth": {
+    "defaultTier": 1,
+    "categoryTierOverrides": {
+      "data_modification": 2,
+      "external_api": 2,
+      "financial": 3,
+      "communication": 2,
+      "system": 3
+    },
+    "approvalTimeoutMs": 300000
+  }
+}

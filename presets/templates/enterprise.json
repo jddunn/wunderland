@@ -1,0 +1,65 @@
+{
+  "id": "enterprise",
+  "name": "Enterprise",
+  "description": "Full security configuration with strict controls, all channels enabled, audit logging, and output signing — designed for production and compliance-sensitive environments",
+  "hexacoTraits": {
+    "honesty": 0.9,
+    "emotionality": 0.4,
+    "extraversion": 0.5,
+    "agreeableness": 0.7,
+    "conscientiousness": 0.9,
+    "openness": 0.6
+  },
+  "securityTier": "strict",
+  "securityProfile": {
+    "enablePreLLMClassifier": true,
+    "enableDualLLMAuditor": true,
+    "enableOutputSigning": true,
+    "signingSecretEnvVar": "WUNDERLAND_SIGNING_SECRET",
+    "riskThreshold": 0.5
+  },
+  "inferenceDefaults": {
+    "provider": "openai",
+    "primaryModel": "gpt-4o",
+    "routerModel": "gpt-4o-mini",
+    "temperature": 0.5
+  },
+  "suggestedSkills": ["web-search", "summarize", "healthcheck", "coding-agent", "github"],
+  "suggestedChannels": ["webchat", "slack", "teams", "discord", "telegram", "whatsapp", "email"],
+  "stepUpAuth": {
+    "defaultTier": 2,
+    "categoryTierOverrides": {
+      "data_modification": 3,
+      "external_api": 2,
+      "financial": 3,
+      "communication": 2,
+      "system": 3
+    },
+    "escalationTriggers": [
+      {
+        "condition": "high_value_threshold",
+        "escalateTo": 3,
+        "parameters": { "thresholdUSD": 50 }
+      },
+      {
+        "condition": "sensitive_data_detected",
+        "escalateTo": 3
+      },
+      {
+        "condition": "irreversible_action",
+        "escalateTo": 3
+      },
+      {
+        "condition": "external_api_call",
+        "escalateTo": 2
+      }
+    ],
+    "approvalTimeoutMs": 180000
+  },
+  "auditLogging": {
+    "enabled": true,
+    "logAllInputs": true,
+    "logAllOutputs": true,
+    "retentionDays": 90
+  }
+}

@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WUNDERLAND - Logo Export System</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@500;600&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Space Mono', monospace;
+            background: #0a0a0f;
+            color: #e8e6f0;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(14, 165, 233, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(56, 189, 248, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(201, 162, 39, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .container { max-width: 1300px; margin: 0 auto; padding: 2.5rem; }
+        
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding: 4rem 0 3rem;
+            border-bottom: 1px solid rgba(14, 165, 233, 0.25);
+            position: relative;
+        }
+        
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(201, 162, 39, 0.7), transparent);
+        }
+        
+        h1 {
+            font-family: 'Syne', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 800;
+            letter-spacing: 0.2em;
+            background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 40%, #c9a227 70%, #eab308 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+        }
+        
+        .subtitle {
+            color: rgba(232, 230, 240, 0.4);
+            font-size: 0.75rem;
+            letter-spacing: 0.4em;
+            text-transform: uppercase;
+        }
+        
+        .parent-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(199, 165, 66, 0.1);
+            border: 1px solid rgba(199, 165, 66, 0.2);
+            border-radius: 100px;
+            font-size: 0.65rem;
+            letter-spacing: 0.15em;
+            color: rgba(199, 165, 66, 0.8);
+            text-transform: uppercase;
+        }
+        
+        .section {
+            background: rgba(15, 15, 25, 0.6);
+            border: 1px solid rgba(14, 165, 233, 0.15);
+            border-radius: 16px;
+            padding: 2.5rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.3), rgba(14, 165, 233, 0.3), transparent);
+        }
+        
+        h2 {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            color: #e8e6f0;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        h2::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: linear-gradient(135deg, #0ea5e9, #c9a227);
+            border-radius: 2px;
+            transform: rotate(45deg);
+        }
+        
+        h3 {
+            font-size: 0.7rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            color: rgba(232, 230, 240, 0.5);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .preview-item { text-align: center; }
+        
+        .preview-box {
+            background: linear-gradient(135deg, #0d0d15 0%, #12121f 100%);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            margin-bottom: 1rem;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .preview-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 30% 70%, rgba(14, 165, 233, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 70% 30%, rgba(56, 189, 248, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        .preview-box.light {
+            background: linear-gradient(135deg, #f8f6f2 0%, #ebe8e0 100%);
+            border-color: rgba(14, 165, 233, 0.15);
+        }
+        
+        .preview-box.light::before {
+            background: 
+                radial-gradient(circle at 30% 70%, rgba(14, 165, 233, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 70% 30%, rgba(56, 189, 248, 0.03) 0%, transparent 50%);
+        }
+        
+        .preview-label {
+            font-size: 0.65rem;
+            color: rgba(232, 230, 240, 0.4);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 0.6rem;
+            margin-top: 1.5rem;
+        }
+        
+        .download-btn {
+            background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+            color: #fff;
+            border: none;
+            padding: 0.7rem 0.875rem;
+            border-radius: 8px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .download-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .download-btn:hover::before {
+            left: 100%;
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
+        }
+        
+        .download-btn.secondary {
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            color: #e8e6f0;
+        }
+        
+        .download-btn.secondary:hover {
+            background: rgba(14, 165, 233, 0.2);
+            border-color: rgba(14, 165, 233, 0.5);
+            box-shadow: 0 5px 15px rgba(14, 165, 233, 0.2);
+        }
+        
+        .controls-section {
+            background: rgba(14, 165, 233, 0.05);
+            border: 1px solid rgba(14, 165, 233, 0.15);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            align-items: end;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .control-group label {
+            font-size: 0.65rem;
+            color: rgba(232, 230, 240, 0.5);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+        
+        .control-group input[type="text"] {
+            background: rgba(10, 10, 15, 0.8);
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            color: #e8e6f0;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+            transition: border-color 0.3s ease;
+        }
+        
+        .control-group input[type="text"]:focus {
+            outline: none;
+            border-color: #7dd3fc;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 0;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #0ea5e9;
+        }
+        
+        .checkbox-group label {
+            font-size: 0.75rem;
+            color: rgba(232, 230, 240, 0.7);
+            cursor: pointer;
+        }
+        
+        .icon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .color-palette {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .color-swatch { text-align: center; }
+        
+        .color-swatch .swatch {
+            height: 90px;
+            border-radius: 10px;
+            margin-bottom: 0.75rem;
+            border: 1px solid rgba(14, 165, 233, 0.2);
+        }
+        
+        .color-swatch .color-name {
+            font-size: 0.65rem;
+            color: rgba(232, 230, 240, 0.5);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+        
+        .color-swatch .color-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            color: #e8e6f0;
+        }
+        
+        .download-section-title {
+            font-size: 0.6rem;
+            color: rgba(232, 230, 240, 0.35);
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        
+        .font-section {
+            background: rgba(14, 165, 233, 0.05);
+            border: 1px solid rgba(14, 165, 233, 0.15);
+            border-radius: 10px;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .font-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 1.5rem;
+        }
+        
+        .font-item {
+            background: rgba(10, 10, 15, 0.6);
+            padding: 1.5rem;
+            border-radius: 10px;
+            border: 1px solid rgba(14, 165, 233, 0.1);
+        }
+        
+        .font-preview {
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            background: linear-gradient(135deg, #0ea5e9, #c9a227);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .font-item p {
+            font-size: 0.8rem;
+            color: rgba(232, 230, 240, 0.6);
+            margin-bottom: 0.5rem;
+        }
+        
+        .font-item p strong { color: #e8e6f0; }
+        
+        .css-code {
+            background: #08080d;
+            color: #38bdf8;
+            padding: 1.5rem;
+            border-radius: 10px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.8;
+            overflow-x: auto;
+            border: 1px solid rgba(14, 165, 233, 0.25);
+        }
+        
+        .usage-section {
+            background: rgba(14, 165, 233, 0.05);
+            border: 1px solid rgba(14, 165, 233, 0.15);
+            border-radius: 10px;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .usage-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        
+        .usage-item {
+            background: rgba(10, 10, 15, 0.6);
+            padding: 1.5rem;
+            border-radius: 10px;
+            border: 1px solid rgba(14, 165, 233, 0.1);
+        }
+        
+        .usage-item h3 {
+            font-family: 'Syne', sans-serif;
+            font-size: 0.75rem;
+            margin-bottom: 0.75rem;
+            margin-top: 0;
+            color: #38bdf8;
+            letter-spacing: 0.15em;
+        }
+        
+        .usage-item p {
+            font-size: 0.8rem;
+            color: rgba(232, 230, 240, 0.6);
+            line-height: 1.7;
+        }
+        
+        code {
+            background: rgba(14, 165, 233, 0.15);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            color: #38bdf8;
+        }
+        
+        .version-toggle {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .version-btn {
+            padding: 0.75rem 1.5rem;
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            background: transparent;
+            border-radius: 8px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: rgba(232, 230, 240, 0.6);
+            text-transform: uppercase;
+        }
+        
+        .version-btn.active {
+            border-color: #0ea5e9;
+            color: #e8e6f0;
+            background: rgba(14, 165, 233, 0.15);
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.2);
+        }
+        
+        .version-btn:hover:not(.active) {
+            border-color: rgba(14, 165, 233, 0.5);
+            color: #e8e6f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>WUNDERLAND</h1>
+            <p class="subtitle">Agentic AI Platform • Logo Export System</p>
+            <div class="parent-badge">
+                <svg width="14" height="14" viewBox="0 0 100 100" style="opacity: 0.8;">
+                    <path d="M 50 6 C 72 6, 90 24, 90 46 C 90 62, 78 76, 62 80 L 62 82 C 62 84, 60 86, 58 86 L 58 94 L 42 94 L 42 86 C 40 86, 38 84, 38 82 L 38 80 C 22 76, 10 62, 10 46 C 10 24, 28 6, 50 6 Z" fill="#c7a542"/>
+                </svg>
+                A Rabbit Hole Inc Platform
+            </div>
+        </header>
+
+        <!-- Primary Logo Section -->
+        <section class="section">
+            <h2>Primary Logo</h2>
+            
+            <div class="controls-section">
+                <div class="controls-grid">
+                    <div class="control-group">
+                        <label for="taglineInput">Tagline Text</label>
+                        <input type="text" id="taglineInput" value="AUTONOMOUS AGENTS" placeholder="Enter tagline..." oninput="updateTagline()">
+                    </div>
+                    <div class="control-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="includeTagline" checked onchange="updateTaglineVisibility()">
+                            <label for="includeTagline">Show tagline in logo</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="version-toggle">
+                <button class="version-btn active" onclick="setColorVersion('neon')" id="neonBtn">Neon Gradient</button>
+                <button class="version-btn" onclick="setColorVersion('monochrome')" id="monochromeBtn">Monochrome</button>
+                <button class="version-btn" onclick="setColorVersion('gold')" id="goldBtn">Heritage Gold</button>
+            </div>
+            
+            <div class="preview-grid">
+                <div class="preview-item">
+                    <div class="preview-box" id="preview1"></div>
+                    <p class="preview-label">Dark Background</p>
+                </div>
+                
+                <div class="preview-item">
+                    <div class="preview-box light" id="preview2"></div>
+                    <p class="preview-label">Light Background</p>
+                </div>
+            </div>
+            
+            <div class="download-grid">
+                <button class="download-btn" onclick="downloadSVG('primary')">Download SVG</button>
+                <button class="download-btn secondary" onclick="downloadPNG('primary', 'transparent', 1)">PNG 1x</button>
+                <button class="download-btn secondary" onclick="downloadPNG('primary', 'transparent', 2)">PNG 2x</button>
+                <button class="download-btn secondary" onclick="downloadPNG('primary', 'transparent', 4)">PNG 4x</button>
+                <button class="download-btn secondary" onclick="downloadPNG('primary', 'dark', 2)">PNG Dark BG</button>
+                <button class="download-btn secondary" onclick="downloadPNG('primary', 'light', 2)">PNG Light BG</button>
+            </div>
+        </section>
+        
+        <!-- Icon/Favicon Section -->
+        <section class="section">
+            <h2>Icon / Favicon</h2>
+            
+            <div class="icon-grid">
+                <div class="preview-item">
+                    <div class="preview-box" style="min-height: 140px; padding: 2rem;" id="iconPreview64"></div>
+                    <p class="preview-label">64×64</p>
+                </div>
+                
+                <div class="preview-item">
+                    <div class="preview-box light" style="min-height: 140px; padding: 2rem;" id="iconPreview48"></div>
+                    <p class="preview-label">48×48</p>
+                </div>
+                
+                <div class="preview-item">
+                    <div class="preview-box" style="min-height: 140px; padding: 2rem;" id="iconPreview32"></div>
+                    <p class="preview-label">32×32</p>
+                </div>
+
+                <div class="preview-item">
+                    <div class="preview-box light" style="min-height: 140px; padding: 2rem;" id="iconPreview16"></div>
+                    <p class="preview-label">16×16</p>
+                </div>
+            </div>
+            
+            <h3>Download Icons</h3>
+            
+            <div class="download-section-title">Vector Format</div>
+            <div class="download-grid">
+                <button class="download-btn" onclick="downloadSVG('icon')">Download SVG</button>
+            </div>
+            
+            <div class="download-section-title">Standard Sizes</div>
+            <div class="download-grid">
+                <button class="download-btn secondary" onclick="downloadPNG('icon', 'transparent', 16)">16×16</button>
+                <button class="download-btn secondary" onclick="downloadPNG('icon', 'transparent', 32)">32×32</button>
+                <button class="download-btn secondary" onclick="downloadPNG('icon', 'transparent', 64)">64×64</button>
+                <button class="download-btn secondary" onclick="downloadPNG('icon', 'transparent', 128)">128×128</button>
+                <button class="download-btn secondary" onclick="downloadPNG('icon', 'transparent', 256)">256×256</button>
+                <button class="download-btn secondary" onclick="downloadPNG('icon', 'transparent', 512)">512×512</button>
+            </div>
+            
+            <div class="download-section-title">With Background</div>
+            <div class="download-grid">
+                <button class="download-btn secondary" onclick="downloadPNG('icon', 'dark', 512)">512 Dark</button>
+                <button class="download-btn secondary" onclick="downloadPNG('icon', 'light', 512)">512 Light</button>
+            </div>
+        </section>
+
+        <!-- Color Palette Section -->
+        <section class="section">
+            <h2>Color Palette</h2>
+            <div class="color-palette">
+                <div class="color-swatch">
+                    <div class="swatch" style="background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%);"></div>
+                    <p class="color-name">Electric Blue</p>
+                    <p class="color-value">#0ea5e9</p>
+                </div>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: linear-gradient(135deg, #7dd3fc 0%, #bae6fd 50%, #e0f2fe 100%);"></div>
+                    <p class="color-name">Mirror Shimmer</p>
+                    <p class="color-value">#7dd3fc</p>
+                </div>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: linear-gradient(135deg, #a16207 0%, #c9a227 50%, #eab308 100%);"></div>
+                    <p class="color-name">Art Deco Gold</p>
+                    <p class="color-value">#c9a227</p>
+                </div>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: linear-gradient(135deg, #0f172a 0%, #020617 50%, #0f172a 100%);"></div>
+                    <p class="color-name">Deep Frame</p>
+                    <p class="color-value">#0f172a</p>
+                </div>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0284c7 100%);"></div>
+                    <p class="color-name">Mirror Depth</p>
+                    <p class="color-value">#075985</p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Typography Section -->
+        <section class="section">
+            <h2>Typography &amp; CSS</h2>
+            <div class="font-section">
+                <h3>Font Information</h3>
+                <div class="font-grid">
+                    <div class="font-item">
+                        <div class="font-preview">WUNDERLAND</div>
+                        <p><strong>Primary:</strong> Syne 700</p>
+                        <p><strong>Spacing:</strong> 0.12em</p>
+                        <p><strong>Style:</strong> Bold, Wide</p>
+                    </div>
+                    <div class="font-item">
+                        <div class="font-preview" style="font-family: 'Space Mono', monospace; font-weight: 400; font-size: 0.9rem; letter-spacing: 0.2em; background: none; -webkit-text-fill-color: rgba(232, 230, 240, 0.6);">AUTONOMOUS AGENTS</div>
+                        <p><strong>Secondary:</strong> Space Mono 400</p>
+                        <p><strong>Spacing:</strong> 0.15em</p>
+                        <p><strong>Use:</strong> Taglines, UI</p>
+                    </div>
+                </div>
+                
+                <h3>CSS Variables</h3>
+                <div class="css-code">:root {
+  /* Electric Blue */
+  --wl-blue: #0ea5e9;
+  --wl-blue-light: #38bdf8;
+  --wl-blue-dark: #0284c7;
+  --wl-blue-deep: #0c4a6e;
+  
+  /* Mirror/Shimmer */
+  --wl-shimmer: #7dd3fc;
+  --wl-shimmer-light: #bae6fd;
+  
+  /* Art Deco Gold */
+  --wl-gold: #c9a227;
+  --wl-gold-light: #eab308;
+  --wl-gold-dark: #a16207;
+  
+  /* Frame/Shadows */
+  --wl-frame: #0f172a;
+  --wl-frame-deep: #020617;
+  
+  /* Typography */
+  --wl-font-display: 'Syne', sans-serif;
+  --wl-font-mono: 'Space Mono', monospace;
+  
+  /* Gradients */
+  --wl-gradient-primary: linear-gradient(135deg, #0ea5e9, #38bdf8, #c9a227, #eab308);
+  --wl-gradient-mirror: linear-gradient(90deg, #0ea5e9, #7dd3fc, #fff, #eab308, #c9a227);
+}</div>
+            </div>
+        </section>
+        
+        <!-- Usage Guidelines -->
+        <section class="section">
+            <h2>Usage Guidelines</h2>
+            <div class="usage-section">
+                <div class="usage-grid">
+                    <div class="usage-item">
+                        <h3>Minimum Size</h3>
+                        <p>Logo: <code>180px</code> width<br>Icon: <code>16px</code> minimum</p>
+                    </div>
+                    <div class="usage-item">
+                        <h3>Clear Space</h3>
+                        <p>Equal to the "W" icon height on all sides</p>
+                    </div>
+                    <div class="usage-item">
+                        <h3>Dark Mode</h3>
+                        <p>Use neon gradient on dark backgrounds for maximum impact</p>
+                    </div>
+                    <div class="usage-item">
+                        <h3>Light Mode</h3>
+                        <p>Use monochrome or heritage gold on light backgrounds</p>
+                    </div>
+                    <div class="usage-item">
+                        <h3>Co-Branding</h3>
+                        <p>When used with Rabbit Hole Inc, position as subsidiary with heritage gold variant</p>
+                    </div>
+                    <div class="usage-item">
+                        <h3>Agent Avatars</h3>
+                        <p>Icon can be used as base for agent identity systems</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    
+    <script>
+        let taglineText = "AUTONOMOUS AGENTS";
+        let showTagline = true;
+        let colorVersion = 'neon';
+
+        function setColorVersion(version) {
+            colorVersion = version;
+            document.getElementById('neonBtn').classList.toggle('active', version === 'neon');
+            document.getElementById('monochromeBtn').classList.toggle('active', version === 'monochrome');
+            document.getElementById('goldBtn').classList.toggle('active', version === 'gold');
+            updatePreviews();
+        }
+
+        function getGradientDefs(id, forLight = false) {
+            if (colorVersion === 'neon') {
+                return `
+        <!-- Electric blue to gold gradient -->
+        <linearGradient id="primaryGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0ea5e9"/>
+            <stop offset="40%" stop-color="#38bdf8"/>
+            <stop offset="70%" stop-color="#c9a227"/>
+            <stop offset="100%" stop-color="#eab308"/>
+        </linearGradient>
+        
+        <!-- Electric blue solid -->
+        <linearGradient id="blueGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0284c7"/>
+            <stop offset="50%" stop-color="#0ea5e9"/>
+            <stop offset="100%" stop-color="#38bdf8"/>
+        </linearGradient>
+        
+        <!-- Gold accent -->
+        <linearGradient id="goldGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#a16207"/>
+            <stop offset="50%" stop-color="#c9a227"/>
+            <stop offset="100%" stop-color="#eab308"/>
+        </linearGradient>
+        
+        <!-- Text gradient -->
+        <linearGradient id="textGrad${id}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${forLight ? '#0369a1' : '#38bdf8'}"/>
+            <stop offset="50%" stop-color="${forLight ? '#0ea5e9' : '#7dd3fc'}"/>
+            <stop offset="100%" stop-color="${forLight ? '#a16207' : '#eab308'}"/>
+        </linearGradient>
+        
+        <!-- Mirror surface - the looking glass itself -->
+        <linearGradient id="mirrorSurface${id}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="${forLight ? '#e0f2fe' : '#0c4a6e'}" stop-opacity="0.9"/>
+            <stop offset="30%" stop-color="${forLight ? '#bae6fd' : '#075985'}" stop-opacity="0.7"/>
+            <stop offset="50%" stop-color="${forLight ? '#7dd3fc' : '#0284c7'}" stop-opacity="0.5"/>
+            <stop offset="70%" stop-color="${forLight ? '#bae6fd' : '#075985'}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${forLight ? '#e0f2fe' : '#0c4a6e'}" stop-opacity="0.15"/>
+        </linearGradient>
+        
+        <!-- Mirror shimmer line -->
+        <linearGradient id="mirrorShimmer${id}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.2"/>
+            <stop offset="30%" stop-color="#7dd3fc" stop-opacity="0.8"/>
+            <stop offset="50%" stop-color="#ffffff" stop-opacity="1"/>
+            <stop offset="70%" stop-color="#eab308" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#c9a227" stop-opacity="0.2"/>
+        </linearGradient>
+        
+        <!-- Reflection fade for mirrored W -->
+        <linearGradient id="reflectionGrad${id}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.6"/>
+            <stop offset="40%" stop-color="#0ea5e9" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#0284c7" stop-opacity="0.08"/>
+        </linearGradient>
+        
+        <!-- Dark bold frame gradient -->
+        <linearGradient id="frameGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${forLight ? '#1e3a5f' : '#0f172a'}"/>
+            <stop offset="50%" stop-color="${forLight ? '#0f2942' : '#020617'}"/>
+            <stop offset="100%" stop-color="${forLight ? '#1e3a5f' : '#0f172a'}"/>
+        </linearGradient>
+        
+        <!-- Inner frame highlight -->
+        <linearGradient id="frameHighlight${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.6"/>
+            <stop offset="50%" stop-color="#c9a227" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.6"/>
+        </linearGradient>
+        
+        <!-- Drop shadow filter -->
+        <filter id="frameShadow${id}" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/>
+        </filter>`;
+            } else if (colorVersion === 'monochrome') {
+                const color = forLight ? '#1e293b' : '#e2e8f0';
+                const colorMid = forLight ? '#334155' : '#cbd5e1';
+                const colorLight = forLight ? '#475569' : '#f1f5f9';
+                return `
+        <linearGradient id="primaryGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${color}"/>
+            <stop offset="100%" stop-color="${colorMid}"/>
+        </linearGradient>
+        <linearGradient id="blueGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${color}"/>
+            <stop offset="100%" stop-color="${color}"/>
+        </linearGradient>
+        <linearGradient id="goldGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${colorMid}"/>
+            <stop offset="100%" stop-color="${colorMid}"/>
+        </linearGradient>
+        <linearGradient id="textGrad${id}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${color}"/>
+            <stop offset="100%" stop-color="${color}"/>
+        </linearGradient>
+        <linearGradient id="mirrorSurface${id}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="${colorLight}" stop-opacity="0.5"/>
+            <stop offset="50%" stop-color="${colorMid}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${colorLight}" stop-opacity="0.1"/>
+        </linearGradient>
+        <linearGradient id="mirrorShimmer${id}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.2"/>
+            <stop offset="50%" stop-color="${colorLight}" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.2"/>
+        </linearGradient>
+        <linearGradient id="reflectionGrad${id}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.08"/>
+        </linearGradient>
+        <linearGradient id="frameGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${color}"/>
+            <stop offset="100%" stop-color="${color}"/>
+        </linearGradient>
+        <linearGradient id="frameHighlight${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${colorLight}" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="${colorLight}" stop-opacity="0.5"/>
+        </linearGradient>
+        <filter id="frameShadow${id}" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
+        </filter>`;
+            } else { // gold
+                return `
+        <linearGradient id="primaryGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#92702a"/>
+            <stop offset="50%" stop-color="#c9a227"/>
+            <stop offset="100%" stop-color="#eab308"/>
+        </linearGradient>
+        <linearGradient id="blueGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#92702a"/>
+            <stop offset="50%" stop-color="#c9a227"/>
+            <stop offset="100%" stop-color="#eab308"/>
+        </linearGradient>
+        <linearGradient id="goldGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#a16207"/>
+            <stop offset="25%" stop-color="#c9a227"/>
+            <stop offset="50%" stop-color="#fde047"/>
+            <stop offset="75%" stop-color="#c9a227"/>
+            <stop offset="100%" stop-color="#a16207"/>
+        </linearGradient>
+        <linearGradient id="textGrad${id}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="${forLight ? '#92702a' : '#c9a227'}"/>
+            <stop offset="50%" stop-color="${forLight ? '#a16207' : '#fde047'}"/>
+            <stop offset="100%" stop-color="${forLight ? '#92702a' : '#c9a227'}"/>
+        </linearGradient>
+        <linearGradient id="mirrorSurface${id}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#fef9c3" stop-opacity="0.6"/>
+            <stop offset="50%" stop-color="#fde047" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#fef9c3" stop-opacity="0.1"/>
+        </linearGradient>
+        <linearGradient id="mirrorShimmer${id}" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#c9a227" stop-opacity="0.2"/>
+            <stop offset="50%" stop-color="#fef9c3" stop-opacity="0.95"/>
+            <stop offset="100%" stop-color="#c9a227" stop-opacity="0.2"/>
+        </linearGradient>
+        <linearGradient id="reflectionGrad${id}" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#c9a227" stop-opacity="0.55"/>
+            <stop offset="100%" stop-color="#92702a" stop-opacity="0.08"/>
+        </linearGradient>
+        <linearGradient id="frameGrad${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#78350f"/>
+            <stop offset="50%" stop-color="#451a03"/>
+            <stop offset="100%" stop-color="#78350f"/>
+        </linearGradient>
+        <linearGradient id="frameHighlight${id}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#fde047" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="#eab308" stop-opacity="0.5"/>
+        </linearGradient>
+        <filter id="frameShadow${id}" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/>
+        </filter>`;
+            }
+        }
+
+        function generateIconSVG(size = 64, forLight = false) {
+            const id = `icon${size}${forLight ? 'L' : 'D'}`;
+            
+            return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        ${getGradientDefs(id, forLight)}
+    </defs>
+    
+    <!-- Outer frame with shadow - bold dark border -->
+    <polygon points="50,2 84,18 98,50 84,82 50,98 16,82 2,50 16,18" 
+             fill="url(#frameGrad${id})"
+             filter="url(#frameShadow${id})"/>
+    
+    <!-- Outer frame edge highlight -->
+    <polygon points="50,2 84,18 98,50 84,82 50,98 16,82 2,50 16,18" 
+             fill="none" 
+             stroke="url(#frameHighlight${id})" 
+             stroke-width="1.5"/>
+    
+    <!-- Inner mirror surface -->
+    <polygon points="50,10 76,22 88,50 76,78 50,90 24,78 12,50 24,22" 
+             fill="url(#mirrorSurface${id})"/>
+    
+    <!-- Inner frame border -->
+    <polygon points="50,10 76,22 88,50 76,78 50,90 24,78 12,50 24,22" 
+             fill="none" 
+             stroke="url(#blueGrad${id})" 
+             stroke-width="2"/>
+    
+    <!-- The W - main, bold -->
+    <path d="M24,28 L34,50 L50,32 L66,50 L76,28" 
+          fill="none" 
+          stroke="url(#primaryGrad${id})" 
+          stroke-width="5" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+    
+    <!-- Mirror surface line - the glass edge -->
+    <line x1="16" y1="50" x2="84" y2="50" 
+          stroke="url(#mirrorShimmer${id})" 
+          stroke-width="2.5"/>
+    
+    <!-- Reflected W - perfect mirror, fading -->
+    <path d="M24,72 L34,50 L50,68 L66,50 L76,72" 
+          fill="none" 
+          stroke="url(#reflectionGrad${id})" 
+          stroke-width="5" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+    
+    <!-- Corner accents - art deco gold -->
+    <line x1="50" y1="2" x2="50" y2="10" stroke="url(#goldGrad${id})" stroke-width="2"/>
+    <line x1="50" y1="90" x2="50" y2="98" stroke="url(#goldGrad${id})" stroke-width="2"/>
+    <line x1="2" y1="50" x2="12" y2="50" stroke="url(#goldGrad${id})" stroke-width="2"/>
+    <line x1="88" y1="50" x2="98" y2="50" stroke="url(#goldGrad${id})" stroke-width="2"/>
+</svg>`;
+        }
+
+        function generatePrimaryLogoSVG(forLight = false) {
+            const height = showTagline ? 100 : 80;
+            const id = `logo${forLight ? 'L' : 'D'}`;
+            
+            return `<svg width="460" height="${height}" viewBox="0 0 460 ${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        ${getGradientDefs(id, forLight)}
+    </defs>
+    
+    <!-- Icon -->
+    <g transform="translate(4, ${showTagline ? 8 : 4}) scale(0.72)">
+        <!-- Outer frame with shadow - bold dark border -->
+        <polygon points="50,2 84,18 98,50 84,82 50,98 16,82 2,50 16,18" 
+                 fill="url(#frameGrad${id})"
+                 filter="url(#frameShadow${id})"/>
+        
+        <!-- Outer frame edge highlight -->
+        <polygon points="50,2 84,18 98,50 84,82 50,98 16,82 2,50 16,18" 
+                 fill="none" 
+                 stroke="url(#frameHighlight${id})" 
+                 stroke-width="1.5"/>
+        
+        <!-- Inner mirror surface -->
+        <polygon points="50,10 76,22 88,50 76,78 50,90 24,78 12,50 24,22" 
+                 fill="url(#mirrorSurface${id})"/>
+        
+        <!-- Inner frame border -->
+        <polygon points="50,10 76,22 88,50 76,78 50,90 24,78 12,50 24,22" 
+                 fill="none" 
+                 stroke="url(#blueGrad${id})" 
+                 stroke-width="2"/>
+        
+        <!-- The W - main, bold -->
+        <path d="M24,28 L34,50 L50,32 L66,50 L76,28" 
+              fill="none" 
+              stroke="url(#primaryGrad${id})" 
+              stroke-width="5" 
+              stroke-linecap="round" 
+              stroke-linejoin="round"/>
+        
+        <!-- Mirror surface line -->
+        <line x1="16" y1="50" x2="84" y2="50" 
+              stroke="url(#mirrorShimmer${id})" 
+              stroke-width="2.5"/>
+        
+        <!-- Reflected W -->
+        <path d="M24,72 L34,50 L50,68 L66,50 L76,72" 
+              fill="none" 
+              stroke="url(#reflectionGrad${id})" 
+              stroke-width="5" 
+              stroke-linecap="round" 
+              stroke-linejoin="round"/>
+        
+        <!-- Corner accents -->
+        <line x1="50" y1="2" x2="50" y2="10" stroke="url(#goldGrad${id})" stroke-width="2"/>
+        <line x1="50" y1="90" x2="50" y2="98" stroke="url(#goldGrad${id})" stroke-width="2"/>
+        <line x1="2" y1="50" x2="12" y2="50" stroke="url(#goldGrad${id})" stroke-width="2"/>
+        <line x1="88" y1="50" x2="98" y2="50" stroke="url(#goldGrad${id})" stroke-width="2"/>
+    </g>
+    
+    <!-- WUNDERLAND text -->
+    <text x="82" y="${showTagline ? 46 : 44}" 
+          font-family="Syne, -apple-system, sans-serif" 
+          font-size="38" 
+          font-weight="700" 
+          fill="url(#textGrad${id})" 
+          letter-spacing="5">WUNDERLAND</text>
+    
+    ${showTagline ? `<!-- Tagline -->
+    <text x="84" y="68" 
+          font-family="Space Mono, monospace" 
+          font-size="10" 
+          font-weight="400"
+          fill="${forLight ? 'rgba(14, 165, 233, 0.7)' : 'rgba(125, 211, 252, 0.6)'}" 
+          letter-spacing="3">${escapeHtml(taglineText)}</text>
+    
+    <!-- Rabbit Hole Inc badge -->
+    <g transform="translate(82, 78)">
+        <rect x="0" y="0" width="130" height="16" rx="2" fill="${forLight ? 'rgba(199, 165, 66, 0.12)' : 'rgba(199, 165, 66, 0.15)'}"/>
+        <rect x="0" y="0" width="130" height="16" rx="2" fill="none" stroke="${forLight ? 'rgba(199, 165, 66, 0.35)' : 'rgba(199, 165, 66, 0.3)'}" stroke-width="0.75"/>
+        <text x="12" y="11" 
+              font-family="Space Mono, monospace" 
+              font-size="7" 
+              font-weight="400"
+              fill="${forLight ? 'rgba(161, 98, 7, 0.9)' : 'rgba(234, 179, 8, 0.85)'}" 
+              letter-spacing="1.5">RABBIT HOLE INC</text>
+    </g>` : ''}
+</svg>`;
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        function updatePreviews() {
+            document.getElementById('preview1').innerHTML = generatePrimaryLogoSVG(false);
+            document.getElementById('preview2').innerHTML = generatePrimaryLogoSVG(true);
+            document.getElementById('iconPreview64').innerHTML = generateIconSVG(64, false);
+            document.getElementById('iconPreview48').innerHTML = generateIconSVG(48, true);
+            document.getElementById('iconPreview32').innerHTML = generateIconSVG(32, false);
+            document.getElementById('iconPreview16').innerHTML = generateIconSVG(16, true);
+        }
+
+        function updateTagline() {
+            taglineText = document.getElementById('taglineInput').value || "AUTONOMOUS AGENTS";
+            updatePreviews();
+        }
+
+        function updateTaglineVisibility() {
+            showTagline = document.getElementById('includeTagline').checked;
+            updatePreviews();
+        }
+
+        function downloadSVG(type) {
+            const svgContent = type === 'primary' 
+                ? `<?xml version="1.0" encoding="UTF-8"?>\n` + generatePrimaryLogoSVG()
+                : `<?xml version="1.0" encoding="UTF-8"?>\n` + generateIconSVG(100);
+            
+            const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `wunderland-${type}-${colorVersion}.svg`;
+            a.click();
+        }
+
+        function downloadPNG(type, background, size) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            const forLight = background === 'light';
+            const svgContent = type === 'primary'
+                ? `<?xml version="1.0" encoding="UTF-8"?>\n` + generatePrimaryLogoSVG(forLight)
+                : `<?xml version="1.0" encoding="UTF-8"?>\n` + generateIconSVG(100, forLight);
+            
+            const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            
+            img.onload = function() {
+                if (type === 'primary') {
+                    canvas.width = 460 * size;
+                    canvas.height = (showTagline ? 100 : 80) * size;
+                } else {
+                    canvas.width = size;
+                    canvas.height = size;
+                }
+                
+                if (background === 'dark') {
+                    ctx.fillStyle = '#0a0a0f';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                } else if (background === 'light') {
+                    ctx.fillStyle = '#f8f6f2';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
+                
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                canvas.toBlob(function(pngBlob) {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(pngBlob);
+                    a.download = type === 'primary' 
+                        ? `wunderland-logo-${colorVersion}-${background}-${size}x.png`
+                        : `wunderland-icon-${colorVersion}-${background}-${size}.png`;
+                    a.click();
+                }, 'image/png');
+                
+                URL.revokeObjectURL(url);
+            };
+            
+            img.src = url;
+        }
+
+        updatePreviews();
+    </script>
+</body>
+</html>

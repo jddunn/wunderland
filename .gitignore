@@ -1,0 +1,8 @@
+dist/
+node_modules/
+
+# Build artifacts (outDir is dist/)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
