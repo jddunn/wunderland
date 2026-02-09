@@ -10,6 +10,12 @@
     "openness": 0.7
   },
   "securityTier": "balanced",
+  "toolAccessProfile": "assistant",
   "suggestedSkills": ["weather", "apple-notes", "apple-reminders", "summarize"],
-  "suggestedChannels": ["telegram", "whatsapp", "webchat"]
+  "suggestedChannels": ["telegram", "whatsapp", "webchat"],
+  "suggestedExtensions": {
+    "tools": ["web-search", "web-browser"],
+    "voice": ["voice-twilio"],
+    "productivity": ["calendar-google"]
+  }
 }
