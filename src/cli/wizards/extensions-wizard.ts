@@ -322,8 +322,9 @@ async function fetchCatalog(): Promise<CatalogItem[]> {
       if (!ext.available) continue;
 
       let category: 'tool' | 'voice' | 'productivity' = 'tool';
-      if (ext.category === 'voice') category = 'voice';
-      else if (ext.category === 'productivity') category = 'productivity';
+      const extCat = ext.category as string;
+      if (extCat === 'voice') category = 'voice';
+      else if (extCat === 'productivity') category = 'productivity';
 
       catalog.push({
         id: ext.name,
