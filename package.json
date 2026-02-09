@@ -139,8 +139,7 @@
     "uuid": "^9.0.0"
   },
   "optionalDependencies": {
-    "@framers/agentos-ext-skills": "workspace:*",
-    "@framers/agentos-skills-registry": "workspace:*"
+    "@framers/agentos-ext-skills": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
