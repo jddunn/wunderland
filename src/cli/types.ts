@@ -21,6 +21,14 @@ export interface CliConfig {
   channels?: string[];
   /** Enabled tool categories. */
   tools?: string[];
+  /** Selected extensions (from extensions wizard). */
+  extensions?: {
+    tools?: string[];
+    voice?: string[];
+    productivity?: string[];
+  };
+  /** Selected skills (from extensions wizard). */
+  skills?: string[];
   /** Security settings. */
   security?: {
     preLlmClassifier?: boolean;
@@ -111,6 +119,14 @@ export interface WizardState {
   };
   /** Agent name. */
   agentName: string;
+  /** Selected extensions. */
+  extensions?: {
+    tools?: string[];
+    voice?: string[];
+    productivity?: string[];
+  };
+  /** Selected skills. */
+  skills?: string[];
 }
 
 // ── Observability ──────────────────────────────────────────────────────────

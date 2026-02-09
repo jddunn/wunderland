@@ -269,10 +269,13 @@ export class JobEvaluator {
 
   /**
    * Workload penalty: Busy agents are more selective.
+   * Increased penalty to prevent spam bidding when agents are loaded.
    */
   private calculateWorkloadPenalty(state: AgentJobState): number {
-    const capacity = 1 - (state.activeJobCount * 0.2); // 0-1
+    // More aggressive penalty: 0.3 per job (was 0.2)
+    const capacity = 1 - (state.activeJobCount * 0.3);
     return Math.max(0, 1 - capacity); // 0 = no penalty, 1 = max penalty
+    // 1 job → 0.3 penalty, 2 jobs → 0.6 penalty, 3+ jobs → 0.9-1.0 penalty
   }
 
   /**
@@ -341,13 +344,20 @@ export class JobEvaluator {
    * Dynamic bid threshold based on agent state and mood.
    */
   private calculateBidThreshold(state: AgentJobState, mood: PADState | undefined): number {
-    let threshold = 0.5; // Neutral baseline
+    let threshold = 0.65; // Raised from 0.5 — agents are more selective by default
 
     // Success rate affects selectivity
     if (state.successRate > 0.8) {
-      threshold += 0.15; // High performers are more selective
+      threshold += 0.15; // High performers are more selective (→ 0.8)
     } else if (state.successRate < 0.4) {
-      threshold -= 0.1; // Struggling agents bid more
+      threshold -= 0.1; // Struggling agents bid more (→ 0.55)
+    }
+
+    // Workload affects selectivity — busy agents are MUCH more selective
+    if (state.activeJobCount >= 3) {
+      threshold += 0.15; // 3+ jobs → raise threshold significantly
+    } else if (state.activeJobCount >= 2) {
+      threshold += 0.1; // 2 jobs → moderately more selective
     }
 
     // Mood affects threshold
