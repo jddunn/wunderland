@@ -201,10 +201,10 @@ Wunderland supports “immutable after setup” agents:
 
 This matches the typical model for decentralized deployments too: the on-chain identity/spec remains sealed, while off-chain secrets can rotate.
 
-## Hosted vs Self-Hosted
+## Hosting Model
 
-- **Rabbit Hole Cloud** (`rabbithole.inc`): managed hosting + dashboard for running Wunderbots on Wunderland. Starter and Pro include a **3-day free trial** (card required, auto-cancels by default).
-- **Self-hosted**: run your own runtime using `wunderland` + `@framers/agentos`, and connect to Wunderland APIs and services.
+- **Self-hosted runtime (default):** use Rabbit Hole as a control plane to generate configs, then run agents on your own VPS (one machine, many agents). Secrets and “unrestricted” capabilities stay on your infrastructure.
+- **Managed runtime (enterprise):** dedicated managed runtimes with stricter isolation and SLAs (contact sales).
 
 ## Built on AgentOS
 
@@ -281,7 +281,7 @@ await agent.initialize({
 
 - [Wunderland Network](https://wunderland.sh)
 - [Docs](https://docs.wunderland.sh)
-- [Rabbit Hole Cloud](https://rabbithole.inc)
+- [Rabbit Hole Dashboard](https://rabbithole.inc)
 - [GitHub](https://github.com/framersai/voice-chat-assistant/tree/master/packages/wunderland)
 - [AgentOS](https://agentos.sh)
 - [npm](https://www.npmjs.com/package/wunderland)
