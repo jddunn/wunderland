@@ -79,86 +79,157 @@ export default async function cmdChat(
   const preloadedPackages: string[] = [];
 
   if (!lazyTools) {
-    // Load tools from curated extensions (eager)
-    const [cliExecutor, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
-      import('@framers/agentos-ext-cli-executor'),
-      import('@framers/agentos-ext-web-search'),
-      import('@framers/agentos-ext-web-browser'),
-      import('@framers/agentos-ext-giphy'),
-      import('@framers/agentos-ext-image-search'),
-      import('@framers/agentos-ext-voice-synthesis'),
-      import('@framers/agentos-ext-news-search'),
-    ]);
-
-    // Optional package — gracefully handles if not installed
-    const skillsExt = await import('@framers/agentos-ext-skills').catch(() => null);
-
-    const packs = [
-      cliExecutor.createExtensionPack({
-        options: {
-          filesystem: { allowRead: true, allowWrite: true },
-          agentWorkspace: {
-            agentId: workspaceAgentId,
-            baseDir: workspaceBaseDir,
-            createIfMissing: true,
-            subdirs: ['assets', 'exports', 'tmp'],
-          },
-          dangerouslySkipSecurityChecks: dangerouslySkipCommandSafety,
-        },
-        logger: console,
-      }),
-      skillsExt ? skillsExt.createExtensionPack({ options: {}, logger: console }) : null,
-      webSearch.createExtensionPack({
-        options: {
-          serperApiKey: process.env['SERPER_API_KEY'],
-          serpApiKey: process.env['SERPAPI_API_KEY'],
-          braveApiKey: process.env['BRAVE_API_KEY'],
-        },
-        logger: console,
-      }),
-      webBrowser.createExtensionPack({ options: { headless: true }, logger: console }),
-      giphy.createExtensionPack({ options: { giphyApiKey: process.env['GIPHY_API_KEY'] }, logger: console }),
-      imageSearch.createExtensionPack({
-        options: {
-          pexelsApiKey: process.env['PEXELS_API_KEY'],
-          unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
-          pixabayApiKey: process.env['PIXABAY_API_KEY'],
-        },
-        logger: console,
-      }),
-      voiceSynthesis.createExtensionPack({ options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] }, logger: console }),
-      newsSearch.createExtensionPack({ options: { newsApiKey: process.env['NEWSAPI_API_KEY'] }, logger: console }),
-    ].filter(Boolean);
-
-    await Promise.all(
-      packs
-        .map((p: any) =>
-          typeof p?.onActivate === 'function'
-            ? p.onActivate({ logger: console, getSecret: () => undefined })
-            : null
-        )
-        .filter(Boolean),
-    );
-
-    const tools: ToolInstance[] = packs
-      .flatMap((p: any) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
-      .filter(Boolean) as ToolInstance[];
-
-    for (const tool of tools) {
-      if (!tool?.name) continue;
-      toolMap.set(tool.name, tool);
+    // Read extensions from agent.config.json if present
+    let extensionsFromConfig: any = null;
+    let extensionOverrides: any = null;
+    try {
+      const configPath = path.resolve(process.cwd(), 'agent.config.json');
+      if (existsSync(configPath)) {
+        const cfg = JSON.parse(await readFile(configPath, 'utf8'));
+        extensionsFromConfig = cfg.extensions;
+        extensionOverrides = cfg.extensionOverrides;
+      }
+    } catch {
+      // ignore
     }
 
-    preloadedPackages.push(
-      '@framers/agentos-ext-cli-executor',
-      '@framers/agentos-ext-web-search',
-      '@framers/agentos-ext-web-browser',
-      '@framers/agentos-ext-giphy',
-      '@framers/agentos-ext-image-search',
-      '@framers/agentos-ext-voice-synthesis',
-      '@framers/agentos-ext-news-search',
-    );
-    if (skillsExt) preloadedPackages.push('@framers/agentos-ext-skills');
+    let toolExtensions: string[] = [];
+    let voiceExtensions: string[] = [];
+    let productivityExtensions: string[] = [];
+
+    if (extensionsFromConfig) {
+      toolExtensions = extensionsFromConfig.tools || [];
+      voiceExtensions = extensionsFromConfig.voice || [];
+      productivityExtensions = extensionsFromConfig.productivity || [];
+      fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`);
+    } else {
+      // Fall back to hardcoded defaults
+      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'giphy', 'image-search', 'news-search'];
+      voiceExtensions = ['voice-synthesis'];
+      productivityExtensions = [];
+      fmt.note('No extensions configured, using defaults...');
+    }
+
+    // Resolve extensions using PresetExtensionResolver
+    try {
+      const { resolveExtensionsByNames } = await import('../../core/PresetExtensionResolver.js');
+      const resolved = await resolveExtensionsByNames(
+        toolExtensions,
+        voiceExtensions,
+        productivityExtensions,
+        extensionOverrides,
+        { secrets: {} }
+      );
+
+      const packs: any[] = [];
+
+      for (const packEntry of resolved.manifest.packs) {
+        // Extract package name based on resolver type
+        let packageName: string | undefined;
+        if ('package' in packEntry) {
+          packageName = packEntry.package as string;
+        } else if ('module' in packEntry) {
+          packageName = packEntry.module as string;
+        }
+
+        if (!packageName) continue;
+
+        try {
+          const extModule = await import(packageName);
+          if (typeof extModule.createExtensionPack !== 'function') continue;
+
+          // Type assertion needed due to union type complexity
+          let options: any = (packEntry as any).options || {};
+
+          // Special options for specific extensions
+          if (packageName === '@framers/agentos-ext-cli-executor') {
+            options = {
+              ...options,
+              filesystem: { allowRead: true, allowWrite: true },
+              agentWorkspace: {
+                agentId: workspaceAgentId,
+                baseDir: workspaceBaseDir,
+                createIfMissing: true,
+                subdirs: ['assets', 'exports', 'tmp'],
+              },
+              dangerouslySkipSecurityChecks: dangerouslySkipCommandSafety,
+            };
+          }
+
+          if (packageName === '@framers/agentos-ext-web-search') {
+            options = {
+              ...options,
+              serperApiKey: process.env['SERPER_API_KEY'],
+              serpApiKey: process.env['SERPAPI_API_KEY'],
+              braveApiKey: process.env['BRAVE_API_KEY'],
+            };
+          }
+
+          if (packageName === '@framers/agentos-ext-web-browser') {
+            options = { ...options, headless: true };
+          }
+
+          if (packageName === '@framers/agentos-ext-giphy') {
+            options = { ...options, giphyApiKey: process.env['GIPHY_API_KEY'] };
+          }
+
+          if (packageName === '@framers/agentos-ext-image-search') {
+            options = {
+              ...options,
+              pexelsApiKey: process.env['PEXELS_API_KEY'],
+              unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
+              pixabayApiKey: process.env['PIXABAY_API_KEY'],
+            };
+          }
+
+          if (packageName === '@framers/agentos-ext-voice-synthesis') {
+            options = { ...options, elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] };
+          }
+
+          if (packageName === '@framers/agentos-ext-news-search') {
+            options = { ...options, newsApiKey: process.env['NEWSAPI_API_KEY'] };
+          }
+
+          const pack = extModule.createExtensionPack({ options, logger: console });
+          packs.push(pack);
+          preloadedPackages.push(packageName);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          fmt.warning(`Failed to load extension ${packageName}: ${msg}`);
+        }
+      }
+
+      // Optional skills extension
+      const skillsExt = await import('@framers/agentos-ext-skills').catch(() => null);
+      if (skillsExt) {
+        packs.push(skillsExt.createExtensionPack({ options: {}, logger: console }));
+        preloadedPackages.push('@framers/agentos-ext-skills');
+      }
+
+      await Promise.all(
+        packs
+          .map((p: any) =>
+            typeof p?.onActivate === 'function'
+              ? p.onActivate({ logger: console, getSecret: () => undefined })
+              : null
+          )
+          .filter(Boolean),
+      );
+
+      const tools: ToolInstance[] = packs
+        .flatMap((p: any) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
+        .filter(Boolean) as ToolInstance[];
+
+      for (const tool of tools) {
+        if (!tool?.name) continue;
+        toolMap.set(tool.name, tool);
+      }
+
+      fmt.ok(`Loaded ${tools.length} tools from ${packs.length} extensions`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      fmt.warning(`Extension loading failed, using empty toolset: ${msg}`);
+    }
   }
 
   // Schema-on-demand meta tools (always available)
