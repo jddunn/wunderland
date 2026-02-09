@@ -1,0 +1,151 @@
+{
+  "name": "wunderland",
+  "version": "0.2.0",
+  "description": "AI-powered personal assistant framework built on AgentOS - adaptive agents with HEXACO personality, multi-channel communication, hierarchical inference, and human-in-the-loop security",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./core": {
+      "import": "./dist/core/index.js",
+      "types": "./dist/core/index.d.ts"
+    },
+    "./security": {
+      "import": "./dist/security/index.js",
+      "types": "./dist/security/index.d.ts"
+    },
+    "./inference": {
+      "import": "./dist/inference/index.js",
+      "types": "./dist/inference/index.d.ts"
+    },
+    "./authorization": {
+      "import": "./dist/authorization/index.js",
+      "types": "./dist/authorization/index.d.ts"
+    },
+    "./browser": {
+      "import": "./dist/browser/index.js",
+      "types": "./dist/browser/index.d.ts"
+    },
+    "./pairing": {
+      "import": "./dist/pairing/index.js",
+      "types": "./dist/pairing/index.d.ts"
+    },
+    "./skills": {
+      "import": "./dist/skills/index.js",
+      "types": "./dist/skills/index.d.ts"
+    },
+    "./social": {
+      "import": "./dist/social/index.js",
+      "types": "./dist/social/index.d.ts"
+    },
+    "./guardrails": {
+      "import": "./dist/guardrails/CitizenModeGuardrail.js",
+      "types": "./dist/guardrails/CitizenModeGuardrail.d.ts"
+    },
+    "./tools": {
+      "import": "./dist/tools/index.js",
+      "types": "./dist/tools/index.d.ts"
+    },
+    "./scheduling": {
+      "import": "./dist/scheduling/index.js",
+      "types": "./dist/scheduling/index.d.ts"
+    },
+    "./presets": {
+      "import": "./dist/core/PresetLoader.js",
+      "types": "./dist/core/PresetLoader.d.ts"
+    },
+    "./presets/*.json": {
+      "import": "./presets/*.json"
+    }
+  },
+  "files": [
+    "dist",
+    "bin",
+    "presets"
+  ],
+  "bin": {
+    "wunderland": "bin/wunderland.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:security": "vitest run --reporter=verbose src/security",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "agent",
+    "agentos",
+    "chatbot",
+    "telegram",
+    "discord",
+    "slack",
+    "whatsapp",
+    "personal-assistant",
+    "ai-agent",
+    "llm",
+    "automation",
+    "hexaco",
+    "personality",
+    "hitl",
+    "human-in-the-loop"
+  ],
+  "author": {
+    "name": "jdunnfive",
+    "url": "https://github.com/jddunn"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/framersai/voice-chat-assistant/tree/master/packages/wunderland",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/framersai/voice-chat-assistant.git",
+    "directory": "packages/wunderland"
+  },
+  "bugs": {
+    "url": "https://github.com/framersai/voice-chat-assistant/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "@framers/agentos": "workspace:*",
+    "@framers/agentos-ext-cli-executor": "workspace:*",
+    "@framers/agentos-ext-giphy": "workspace:*",
+    "@framers/agentos-ext-image-search": "workspace:*",
+    "@framers/agentos-ext-news-search": "workspace:*",
+    "@framers/agentos-ext-voice-synthesis": "workspace:*",
+    "@framers/agentos-ext-web-browser": "workspace:*",
+    "@framers/agentos-ext-web-search": "workspace:*",
+    "@framers/agentos-extensions-registry": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": "^0.201.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.59.0",
+    "@opentelemetry/sdk-node": "^0.201.1",
+    "boxen": "^8.0.1",
+    "cfonts": "^3.3.0",
+    "chalk": "^5.4.1",
+    "gradient-string": "^3.0.0",
+    "nanospinner": "^1.2.2",
+    "playwright-core": "^1.58.1",
+    "uuid": "^9.0.0"
+  },
+  "optionalDependencies": {
+    "@framers/agentos-ext-skills": "workspace:*",
+    "@framers/agentos-skills-registry": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.3.0"
+  }
+}
