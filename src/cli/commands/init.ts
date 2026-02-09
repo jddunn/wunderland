@@ -153,6 +153,9 @@ export default async function cmdInit(
     },
     skills: agentPreset?.suggestedSkills ?? [],
     suggestedChannels: agentPreset?.suggestedChannels ?? [],
+    extensions: (agentPreset as any)?.suggestedExtensions,
+    extensionOverrides: (agentPreset as any)?.extensionOverrides,
+    toolAccessProfile: (agentPreset as any)?.toolAccessProfile,
     presetId: agentPreset?.id,
     skillsDir: './skills',
   };
@@ -218,6 +221,16 @@ PORT=3777
     }
     if (agentPreset.suggestedChannels.length > 0) {
       fmt.kvPair('Channels', agentPreset.suggestedChannels.join(', '));
+    }
+    const presetExtensions = (agentPreset as any)?.suggestedExtensions;
+    if (presetExtensions) {
+      const extensionParts: string[] = [];
+      if (presetExtensions.tools?.length) extensionParts.push(`tools: ${presetExtensions.tools.join(', ')}`);
+      if (presetExtensions.voice?.length) extensionParts.push(`voice: ${presetExtensions.voice.join(', ')}`);
+      if (presetExtensions.productivity?.length) extensionParts.push(`productivity: ${presetExtensions.productivity.join(', ')}`);
+      if (extensionParts.length > 0) {
+        fmt.kvPair('Extensions', extensionParts.join('; '));
+      }
     }
   } else {
     const presetKey = presetFlag?.toUpperCase().replace(/-/g, '_');

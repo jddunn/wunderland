@@ -25,6 +25,7 @@ function printHelp(): void {
   ${c('Commands:')}
     ${chalk.white('setup')}                  Interactive onboarding wizard
     ${chalk.white('init')} ${d('<dir>')}             Scaffold a new Wunderbot project
+    ${chalk.white('create')} ${d('[description]')}   Create agent from natural language
     ${chalk.white('start')}                  Start local agent server
     ${chalk.white('chat')}                   Interactive terminal assistant
     ${chalk.white('doctor')}                 Health check: keys, tools, connectivity
@@ -44,6 +45,11 @@ function printHelp(): void {
     ${chalk.white('skills info')} ${d('<name>')}     Show skill details
     ${chalk.white('skills enable')} ${d('<name>')}   Enable a skill
     ${chalk.white('skills disable')} ${d('<name>')}  Disable a skill
+    ${chalk.white('extensions')}             Manage agent extensions
+    ${chalk.white('extensions list')}         List available extensions
+    ${chalk.white('extensions info')} ${d('<name>')} Show extension details
+    ${chalk.white('extensions enable')} ${d('<name>')} Enable an extension
+    ${chalk.white('extensions disable')} ${d('<name>')} Disable an extension
     ${chalk.white('rag')}                    RAG memory management
     ${chalk.white('rag ingest')} ${d('<file|text>')} Ingest a document
     ${chalk.white('rag query')} ${d('<text>')}       Search RAG memory
@@ -109,6 +115,7 @@ function printHelp(): void {
 const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Promise<void> }>> = {
   setup:          () => import('./commands/setup.js'),
   init:           () => import('./commands/init.js'),
+  create:         () => import('./commands/create.js'),
   start:          () => import('./commands/start.js'),
   chat:           () => import('./commands/chat.js'),
   doctor:         () => import('./commands/doctor.js'),
@@ -120,6 +127,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   seal:           () => import('./commands/seal.js'),
   'list-presets': () => import('./commands/list-presets.js'),
   skills:         () => import('./commands/skills.js'),
+  extensions:     () => import('./commands/extensions.js'),
   rag:            () => import('./commands/rag.js'),
   agency:         () => import('./commands/agency.js'),
   workflows:      () => import('./commands/workflows.js'),
