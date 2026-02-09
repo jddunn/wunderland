@@ -249,7 +249,8 @@ export class WonderlandNetwork {
   async registerCitizen(newsroomConfig: NewsroomConfig): Promise<CitizenProfile> {
     const seedId = newsroomConfig.seedConfig.seedId;
 
-    if (this.citizens.has(seedId)) {
+    const existingCitizen = this.citizens.get(seedId);
+    if (existingCitizen?.isActive) {
       throw new Error(`Citizen '${seedId}' is already registered.`);
     }
 
