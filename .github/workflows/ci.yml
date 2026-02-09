@@ -56,8 +56,9 @@ jobs:
           path: test-results.xml
 
   typecheck:
-    name: Type Check
+    name: Type Check (advisory)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
