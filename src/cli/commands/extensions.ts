@@ -45,10 +45,11 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
     const available = await getAvailableExtensions();
 
     // Group by category
-    const tools = available.filter((e) => e.category === 'tool' || e.category === 'integration');
-    const voice = available.filter((e) => e.category === 'voice');
-    const productivity = available.filter((e) => e.category === 'productivity');
-    const channels = available.filter((e) => e.category === 'channel');
+    const cat = (e: { category: string }) => e.category;
+    const tools = available.filter((e) => cat(e) === 'tool' || cat(e) === 'integration');
+    const voice = available.filter((e) => cat(e) === 'voice');
+    const productivity = available.filter((e) => cat(e) === 'productivity');
+    const channels = available.filter((e) => cat(e) === 'channel');
 
     const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
 
