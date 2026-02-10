@@ -22,6 +22,14 @@ export interface JobScanConfig {
   baseIntervalMs?: number;
 
   /**
+   * Randomized delay before the first scan to avoid stampeding herds on startup.
+   * Set to 0 to disable (useful for tests).
+   *
+   * Default: 30000ms (capped by the computed polling interval).
+   */
+  startupJitterMs?: number;
+
+  /**
    * Enable adaptive polling based on mood + traits
    */
   enableAdaptivePolling?: boolean;
@@ -45,8 +53,9 @@ export interface JobScanConfig {
 export class JobScanner {
   private evaluator: JobEvaluator;
   private config: Required<JobScanConfig>;
-  private intervalId?: ReturnType<typeof setInterval>;
+  private timerId?: ReturnType<typeof setTimeout>;
   private activeBids: Set<string> = new Set();
+  private stopped = true;
 
   constructor(
     config: JobScanConfig,
@@ -57,6 +66,7 @@ export class JobScanner {
     this.evaluator = new JobEvaluator(moodEngine, seedId, jobMemory);
     this.config = {
       baseIntervalMs: config.baseIntervalMs || 30_000,
+      startupJitterMs: config.startupJitterMs ?? 30_000,
       enableAdaptivePolling: config.enableAdaptivePolling ?? true,
       maxActiveBids: config.maxActiveBids || 5,
       jobsApiUrl: config.jobsApiUrl,
@@ -68,33 +78,54 @@ export class JobScanner {
    * Start scanning for jobs
    */
   start(agent: AgentProfile, state: AgentJobState): void {
-    if (this.intervalId) {
+    if (this.timerId) {
       console.warn('[JobScanner] Already running');
       return;
     }
+    this.stopped = false;
 
-    // Calculate polling interval based on agent personality + mood
-    const pollingIntervalMs = this.calculatePollingInterval(agent);
+    // Calculate initial polling interval based on agent personality + mood
+    const pollingIntervalMs = this.jitteredIntervalMs(agent);
 
     console.log(`[JobScanner] Starting scan for agent ${agent.seedId} (interval: ${pollingIntervalMs}ms)`);
 
-    // Initial scan
-    void this.scanJobs(agent, state);
-
-    // Set up periodic scanning
-    this.intervalId = setInterval(() => {
-      void this.scanJobs(agent, state);
-    }, pollingIntervalMs);
+    // Initial scan (with a little chaos to avoid stampeding herds on startup)
+    const startupJitterMs = Math.max(0, Math.floor(this.config.startupJitterMs));
+    const initialDelayMs =
+      startupJitterMs > 0 ? Math.floor(Math.random() * Math.min(startupJitterMs, pollingIntervalMs)) : 0;
+    this.timerId = setTimeout(() => {
+      void this.scanAndReschedule(agent, state);
+    }, initialDelayMs);
   }
 
   /**
    * Stop scanning
    */
   stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = undefined;
+    this.stopped = true;
+    if (this.timerId) {
+      clearTimeout(this.timerId);
+      this.timerId = undefined;
       console.log('[JobScanner] Stopped');
+    }
+  }
+
+  /**
+   * Perform a single scan cycle, then schedule the next one.
+   */
+  private async scanAndReschedule(agent: AgentProfile, state: AgentJobState): Promise<void> {
+    try {
+      await this.scanJobs(agent, state);
+    } finally {
+      if (this.stopped) {
+        this.timerId = undefined;
+        return;
+      }
+      // Recompute interval each tick so mood changes can influence cadence.
+      const nextIntervalMs = this.jitteredIntervalMs(agent);
+      this.timerId = setTimeout(() => {
+        void this.scanAndReschedule(agent, state);
+      }, nextIntervalMs);
     }
   }
 
@@ -206,6 +237,18 @@ export class JobScanner {
     return Math.floor(this.config.baseIntervalMs * multiplier);
   }
 
+  private jitteredIntervalMs(agent: AgentProfile): number {
+    const base = this.calculatePollingInterval(agent);
+    const openness = agent.hexaco.openness ?? 0.5;
+
+    // Higher openness → more exploratory cadence (more randomness).
+    const jitterPct = 0.05 + 0.25 * Math.min(1, Math.max(0, openness));
+    const jitter = (Math.random() * 2 - 1) * base * jitterPct;
+
+    // Keep scans from getting too aggressive even for highly extraverted agents.
+    return Math.max(7_500, Math.floor(base + jitter));
+  }
+
   /**
    * Mark a job bid as completed/rejected (remove from active set)
    */
@@ -219,7 +262,7 @@ export class JobScanner {
    */
   getStatus(): { isRunning: boolean; activeBids: number; maxBids: number } {
     return {
-      isRunning: !!this.intervalId,
+      isRunning: !!this.timerId,
       activeBids: this.activeBids.size,
       maxBids: this.config.maxActiveBids,
     };

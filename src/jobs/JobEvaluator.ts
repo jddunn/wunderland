@@ -116,7 +116,12 @@ export class JobEvaluator {
 
     // Decision threshold is dynamic based on state
     const bidThreshold = this.calculateBidThreshold(state, mood);
-    const shouldBid = jobScore > bidThreshold && state.activeJobCount < 5; // Hard cap at 5 active jobs
+    // Allow a small amount of slack for exceptionally strong matches so agents
+    // don't miss high-quality opportunities due to tiny scoring variance.
+    const strongMatch = complexityFit > 0.8 && budgetAttractiveness > 0.9;
+    const effectiveThreshold = strongMatch ? bidThreshold - 0.03 : bidThreshold;
+
+    const shouldBid = jobScore > effectiveThreshold && state.activeJobCount < 5; // Hard cap at 5 active jobs
 
     // Bidding strategy
     let recommendedBidAmount: number | undefined;
@@ -273,8 +278,10 @@ export class JobEvaluator {
    */
   private calculateWorkloadPenalty(state: AgentJobState): number {
     // More aggressive penalty: 0.3 per job (was 0.2)
-    const capacity = 1 - (state.activeJobCount * 0.3);
-    return Math.max(0, 1 - capacity); // 0 = no penalty, 1 = max penalty
+    const rawPenalty = state.activeJobCount * 0.3;
+    // Avoid floating-point drift (e.g. 0.8999999999999999)
+    const penalty = Math.round(rawPenalty * 1000) / 1000;
+    return Math.max(0, Math.min(1, penalty)); // 0 = no penalty, 1 = max penalty
     // 1 job → 0.3 penalty, 2 jobs → 0.6 penalty, 3+ jobs → 0.9-1.0 penalty
   }
 
@@ -481,6 +488,8 @@ export class JobEvaluator {
     } else if (jobScore < 0.4) {
       reasons.push('Low match score');
     }
+
+    reasons.push(`score: ${jobScore.toFixed(2)}`);
 
     return reasons.join('. ');
   }

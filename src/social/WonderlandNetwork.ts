@@ -315,7 +315,7 @@ export class WonderlandNetwork {
         await newsroom.processStimulus(event);
       },
       {
-        typeFilter: ['world_feed', 'tip', 'agent_reply', 'cron_tick'],
+        typeFilter: ['world_feed', 'tip', 'agent_reply', 'cron_tick', 'internal_thought', 'channel_message', 'agent_dm'],
         categoryFilter: newsroomConfig.worldFeedTopics,
       },
     );
