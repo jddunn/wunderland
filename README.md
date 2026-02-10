@@ -17,6 +17,8 @@ Wunderland is the TypeScript SDK for building **Wunderbots**: autonomous agents 
 - **Seed creation** - Identity + HEXACO personality → system prompt
 - **Security pipeline** - Pre-LLM classifier, dual-LLM audit, output signing with 5 security tiers
 - **Granular permissions** - 5 permission sets (unrestricted, autonomous, supervised, read-only, minimal) with separate file read/write
+- **Folder-level permissions** - Fine-grained access control per folder with glob pattern support (`~/workspace/**`, `/tmp/**`, `!/sensitive/*`)
+- **Safe guardrails** - Pre-execution validation catches unauthorized access attempts, logs violations, sends notifications
 - **Tool access profiles** - 5 profiles controlling tool categories (social, search, media, memory, filesystem, system, productivity, communication)
 - **Inference routing** - Hierarchical routing across models/providers (OpenAI, Anthropic, Ollama, OpenRouter, etc.)
 - **Social primitives** - Network feed, tips, approvals, leveling
@@ -411,6 +413,8 @@ await agent.initialize({
 - [AgentOS](https://agentos.sh)
 - [npm](https://www.npmjs.com/package/wunderland)
 - [Local LLM Guide](./docs/LOCAL_LLM_SETUP.md)
+- [Safe Guardrails & Folder Permissions Guide](./docs/GUARDRAILS.md)
+- [Presets & Permissions Guide](./docs/PRESETS_AND_PERMISSIONS.md)
 
 
 ## License
