@@ -170,6 +170,7 @@
     "cfonts": "^3.3.0",
     "chalk": "^5.4.1",
     "gradient-string": "^3.0.0",
+    "minimatch": "^9.0.3",
     "nanospinner": "^1.2.2",
     "playwright-core": "^1.58.1",
     "uuid": "^9.0.0"

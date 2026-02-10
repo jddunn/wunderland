@@ -21,6 +21,8 @@
 import { WunderlandSecurityPipeline } from './WunderlandSecurityPipeline.js';
 import type { SecurityPipelineConfig } from './types.js';
 import { ToolRiskTier } from '../core/types.js';
+import type { FolderPermissionConfig } from './FolderPermissions.js';
+import { createDefaultFolderConfig } from './FolderPermissions.js';
 
 // ============================================================================
 // Types
@@ -125,6 +127,9 @@ export interface EnhancedSecurityTierConfig extends SecurityTierConfig {
 
   /** Granular permissions broken down by category */
   permissions: GranularPermissions;
+
+  /** Default folder-level permissions for this security tier */
+  defaultFolderPermissions?: FolderPermissionConfig;
 }
 
 // ============================================================================
@@ -309,6 +314,7 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, EnhancedSecurityT
     permissionSet: 'unrestricted',
     permissions: PERMISSION_SETS.unrestricted,
     riskThreshold: 1.0,
+    defaultFolderPermissions: createDefaultFolderConfig('dangerous'),
   }),
 
   // --------------------------------------------------------------------------
@@ -335,6 +341,7 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, EnhancedSecurityT
     permissionSet: 'autonomous',
     permissions: PERMISSION_SETS.autonomous,
     riskThreshold: 0.9,
+    defaultFolderPermissions: createDefaultFolderConfig('permissive'),
   }),
 
   // --------------------------------------------------------------------------
@@ -361,6 +368,7 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, EnhancedSecurityT
     permissionSet: 'supervised',
     permissions: PERMISSION_SETS.supervised,
     riskThreshold: 0.7,
+    defaultFolderPermissions: createDefaultFolderConfig('balanced'),
   }),
 
   // --------------------------------------------------------------------------
@@ -392,6 +400,7 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, EnhancedSecurityT
     permissionSet: 'read-only',
     permissions: PERMISSION_SETS['read-only'],
     riskThreshold: 0.5,
+    defaultFolderPermissions: createDefaultFolderConfig('strict'),
   }),
 
   // --------------------------------------------------------------------------
@@ -423,6 +432,7 @@ export const SECURITY_TIERS: Readonly<Record<SecurityTierName, EnhancedSecurityT
     permissionSet: 'minimal',
     permissions: PERMISSION_SETS.minimal,
     riskThreshold: 0.3,
+    defaultFolderPermissions: createDefaultFolderConfig('paranoid'),
   }),
 });
 
