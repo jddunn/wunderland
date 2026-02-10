@@ -34,7 +34,11 @@ describe('CLI Guardrails E2E', () => {
       try {
         const { default: cmdInit } = await import('../cli/commands/init.js');
 
-        await cmdInit(['test-agent'], { 'security-tier': 'balanced' }, { yes: true, verbose: false });
+        await cmdInit(
+          [path.join('.test-cli-guardrails', 'test-agent')],
+          { 'security-tier': 'balanced' },
+          { yes: true, verbose: false },
+        );
 
         // Verify folder permissions are in config
         const configPath = path.join(TEST_AGENT_DIR, 'agent.config.json');
@@ -179,7 +183,11 @@ describe('CLI Guardrails E2E', () => {
         const { default: cmdInit } = await import('../cli/commands/init.js');
 
         const agentName = 'legacy-compat-agent';
-        await cmdInit([agentName], {}, { yes: true, verbose: false });
+        await cmdInit(
+          [path.join('.test-cli-guardrails', agentName)],
+          {},
+          { yes: true, verbose: false },
+        );
 
         const configPath = path.join(TEST_DIR, agentName, 'agent.config.json');
         expect(existsSync(configPath)).toBe(true);

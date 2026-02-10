@@ -128,16 +128,16 @@ export default async function cmdInit(
     }
   }
 
-  const tierConfig = securityTierName ? getSecurityTier(securityTierName) : undefined;
-  const security = tierConfig
-    ? {
-        tier: tierConfig.name,
-        preLLMClassifier: tierConfig.pipelineConfig.enablePreLLM,
-        dualLLMAudit: tierConfig.pipelineConfig.enableDualLLMAudit,
-        outputSigning: tierConfig.pipelineConfig.enableOutputSigning,
-        riskThreshold: tierConfig.riskThreshold,
-      }
-    : { preLLMClassifier: true, dualLLMAudit: true, outputSigning: true };
+  // Default to a safe, production-ready tier when not explicitly specified.
+  const resolvedTierName: SecurityTierName = securityTierName ?? 'balanced';
+  const tierConfig = getSecurityTier(resolvedTierName);
+  const security = {
+    tier: tierConfig.name,
+    preLLMClassifier: tierConfig.pipelineConfig.enablePreLLM,
+    dualLLMAudit: tierConfig.pipelineConfig.enableDualLLMAudit,
+    outputSigning: tierConfig.pipelineConfig.enableOutputSigning,
+    riskThreshold: tierConfig.riskThreshold,
+  };
 
   // ── Build config ───────────────────────────────────────────────────────
   const config: Record<string, unknown> = {

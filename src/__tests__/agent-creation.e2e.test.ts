@@ -150,14 +150,14 @@ describe('Agent Creation E2E Flow', () => {
       // Step 8: Verify config file content
       const savedConfig = JSON.parse(
         await readFile(path.join(TEST_AGENT_DIR, 'agent.config.json'), 'utf8')
-      );
+	      );
 
-      expect(savedConfig.displayName).toBe('Research Bot');
-      expect(savedConfig.preset Id).toBe('research-assistant');
-      expect(savedConfig.skills).toContain('web-search');
-      expect(savedConfig.extensions.tools).toContain('web-search');
-      expect(savedConfig.toolAccessProfile).toBe('assistant');
-      expect(savedConfig.security.tier).toBe('balanced');
+	      expect(savedConfig.displayName).toBe('Research Bot');
+	      expect(savedConfig.presetId).toBe('research-assistant');
+	      expect(savedConfig.skills).toContain('web-search');
+	      expect(savedConfig.extensions.tools).toContain('web-search');
+	      expect(savedConfig.toolAccessProfile).toBe('assistant');
+	      expect(savedConfig.security.tier).toBe('balanced');
 
       // Step 9: Validate that the config can be loaded and used
       const reloadedConfig = savedConfig;
