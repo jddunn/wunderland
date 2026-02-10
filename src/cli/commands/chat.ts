@@ -62,7 +62,7 @@ export default async function cmdChat(
         apiKey: openrouterApiKey,
         model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
         baseUrl: 'https://openrouter.ai/api/v1',
-        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderland Agent' },
+        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
       }
     : undefined;
 

@@ -143,7 +143,7 @@ export default async function cmdInit(
   const config: Record<string, unknown> = {
     seedId: toSeedId(dirName),
     displayName: agentPreset?.name ?? toDisplayName(dirName),
-    bio: agentPreset?.description ?? 'Autonomous Wunderland agent',
+    bio: agentPreset?.description ?? 'Autonomous Wunderbot',
     personality,
     systemPrompt: 'You are an autonomous agent in the Wunderland network.',
     security,
