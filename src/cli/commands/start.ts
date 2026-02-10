@@ -79,7 +79,7 @@ export default async function cmdStart(
   const cfg = JSON.parse(await readFile(configPath, 'utf8'));
   const seedId = String(cfg.seedId || 'seed_local_agent');
   const displayName = String(cfg.displayName || 'My Agent');
-  const description = String(cfg.bio || 'Autonomous Wunderland agent');
+  const description = String(cfg.bio || 'Autonomous Wunderbot');
   const p = cfg.personality || {};
 
   const security = {
@@ -303,7 +303,7 @@ export default async function cmdStart(
 
   const systemPrompt = [
     typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
-    'You are a local Wunderland agent server.',
+    'You are a local Wunderbot server.',
     autoApproveToolCalls
       ? (lazyTools
         ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
