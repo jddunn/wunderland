@@ -171,6 +171,16 @@ export class StimulusRouter {
   }
 
   /**
+   * Dispatch a pre-constructed stimulus event (e.g. loaded from persistence).
+   *
+   * This preserves `eventId`, `timestamp`, and `source.verified`, which is
+   * important for provenance (e.g. on-chain tip PDAs used as stable IDs).
+   */
+  async dispatchExternalEvent(event: StimulusEvent): Promise<void> {
+    await this.dispatch(event);
+  }
+
+  /**
    * Emit a cron tick to all subscribers.
    */
   async emitCronTick(
