@@ -43,6 +43,20 @@ export interface AgentPreset {
   /** Suggested channel platform IDs for this agent */
   suggestedChannels: string[];
 
+  /** Suggested extension providers to auto-enable for this agent */
+  suggestedExtensions?: {
+    tools?: string[];
+    voice?: string[];
+    productivity?: string[];
+    channels?: string[];
+  };
+
+  /** Optional per-extension overrides (enabled, priority, options) */
+  extensionOverrides?: Record<string, { enabled?: boolean; priority?: number; options?: unknown }>;
+
+  /** Optional tool access profile (controls which tools are enabled) */
+  toolAccessProfile?: string;
+
   /** Full contents of the PERSONA.md file */
   persona: string;
 }
@@ -263,6 +277,9 @@ export class PresetLoader {
       securityTier: config.securityTier as string,
       suggestedSkills: (config.suggestedSkills as string[]) ?? [],
       suggestedChannels: (config.suggestedChannels as string[]) ?? [],
+      suggestedExtensions: config.suggestedExtensions as AgentPreset['suggestedExtensions'],
+      extensionOverrides: config.extensionOverrides as AgentPreset['extensionOverrides'],
+      toolAccessProfile: config.toolAccessProfile as AgentPreset['toolAccessProfile'],
       persona,
     };
   }

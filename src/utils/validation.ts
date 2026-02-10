@@ -171,7 +171,8 @@ export function validateExtensionName(name: string): boolean {
   }
 
   // Must be lowercase kebab-case (letters, numbers, hyphens only)
-  const kebabCasePattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+  // Must start with a letter (reject "123-start-with-number")
+  const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
   return kebabCasePattern.test(name);
 }
 
@@ -195,7 +196,7 @@ export function validateSkillName(name: string): boolean {
   }
 
   // Must be lowercase kebab-case (letters, numbers, hyphens only)
-  const kebabCasePattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+  const kebabCasePattern = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
   return kebabCasePattern.test(name);
 }
 
@@ -279,48 +280,51 @@ export function validateAgentConfig(config: any): {
   }
 
   // Validate preset if provided
-  if (config.preset && !validatePreset(config.preset)) {
-    errors.push(`Invalid preset: ${config.preset}`);
+  const preset = (config.preset ?? config.presetId) as unknown;
+  if (typeof preset === 'string' && preset && !validatePreset(preset)) {
+    errors.push(`Invalid preset: ${preset}`);
   }
 
   // Validate security tier if provided
-  if (config.securityTier && !validateSecurityTier(config.securityTier)) {
-    errors.push(`Invalid security tier: ${config.securityTier}`);
+  const securityTier = (config.securityTier ?? config.security?.tier) as unknown;
+  if (typeof securityTier === 'string' && securityTier && !validateSecurityTier(securityTier)) {
+    errors.push(`Invalid securityTier: ${securityTier}`);
   }
 
   // Validate permission set if provided
   if (config.permissionSet && !validatePermissionSet(config.permissionSet)) {
-    errors.push(`Invalid permission set: ${config.permissionSet}`);
+    errors.push(`Invalid permissionSet: ${config.permissionSet}`);
   }
 
   // Validate tool access profile if provided
   if (config.toolAccessProfile && !validateToolAccessProfile(config.toolAccessProfile)) {
-    errors.push(`Invalid tool access profile: ${config.toolAccessProfile}`);
+    errors.push(`Invalid toolAccessProfile: ${config.toolAccessProfile}`);
   }
 
   // Validate execution mode if provided
   if (config.executionMode && !validateExecutionMode(config.executionMode)) {
-    errors.push(`Invalid execution mode: ${config.executionMode}`);
+    errors.push(`Invalid executionMode: ${config.executionMode}`);
   }
 
   // Validate extension names if provided
-  if (config.suggestedExtensions) {
-    if (config.suggestedExtensions.tools) {
-      for (const tool of config.suggestedExtensions.tools) {
+  const extensions = config.extensions ?? config.suggestedExtensions;
+  if (extensions) {
+    if (extensions.tools) {
+      for (const tool of extensions.tools) {
         if (!validateExtensionName(tool)) {
           errors.push(`Invalid tool extension name: ${tool}`);
         }
       }
     }
-    if (config.suggestedExtensions.voice) {
-      for (const voice of config.suggestedExtensions.voice) {
+    if (extensions.voice) {
+      for (const voice of extensions.voice) {
         if (!validateExtensionName(voice)) {
           errors.push(`Invalid voice extension name: ${voice}`);
         }
       }
     }
-    if (config.suggestedExtensions.productivity) {
-      for (const prod of config.suggestedExtensions.productivity) {
+    if (extensions.productivity) {
+      for (const prod of extensions.productivity) {
         if (!validateExtensionName(prod)) {
           errors.push(`Invalid productivity extension name: ${prod}`);
         }

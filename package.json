@@ -94,6 +94,9 @@
       "import": "./dist/core/PresetLoader.js",
       "types": "./dist/core/PresetLoader.d.ts"
     },
+    "./presets/agents/*/agent.config.json": {
+      "import": "./presets/agents/*/agent.config.json"
+    },
     "./presets/*.json": {
       "import": "./presets/*.json"
     }

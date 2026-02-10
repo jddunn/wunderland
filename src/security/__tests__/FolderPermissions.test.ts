@@ -59,11 +59,10 @@ describe('FolderPermissions', () => {
       expect(matchesGlob('/home/user/.hidden', '/home/user/*')).toBe(true);
     });
 
-    it('should handle negation patterns', () => {
-      // Negation pattern should return opposite
-      expect(matchesGlob('/sensitive/data.txt', '!/sensitive/*')).toBe(false);
-      expect(matchesGlob('/public/data.txt', '!/sensitive/*')).toBe(true);
-      expect(matchesGlob('/sensitive/subdir/file.txt', '!/sensitive/**')).toBe(false);
+    it('should treat ! patterns as deny markers (match underlying pattern)', () => {
+      expect(matchesGlob('/sensitive/data.txt', '!/sensitive/*')).toBe(true);
+      expect(matchesGlob('/public/data.txt', '!/sensitive/*')).toBe(false);
+      expect(matchesGlob('/sensitive/subdir/file.txt', '!/sensitive/**')).toBe(true);
     });
 
     it('should expand ~ in patterns', () => {
@@ -230,7 +229,7 @@ describe('FolderPermissions', () => {
       expect(result.warnings?.some((w) => w.includes('duplicate'))).toBe(true);
     });
 
-    it('should warn about negation patterns without positive match', () => {
+    it('should not warn about standalone deny rules', () => {
       const config: FolderPermissionConfig = {
         defaultPolicy: 'deny',
         inheritFromTier: true,
@@ -240,7 +239,8 @@ describe('FolderPermissions', () => {
       };
 
       const result = validateFolderConfig(config);
-      expect(result.warnings?.some((w) => w.includes('negation pattern'))).toBe(true);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toBeUndefined();
     });
   });
 
