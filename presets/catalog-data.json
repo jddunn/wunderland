@@ -1,0 +1,1168 @@
+{
+  "SKILLS_CATALOG": [
+    {
+      "name": "web-search",
+      "displayName": "Web Search",
+      "description": "Search the web for up-to-date information, news, documentation, and answers to questions.",
+      "category": "information",
+      "tags": [
+        "search",
+        "web",
+        "research",
+        "information-retrieval",
+        "news",
+        "documentation"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [
+        "web-search"
+      ],
+      "skillPath": "registry/curated/web-search/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "weather",
+      "displayName": "Weather Lookup",
+      "description": "Look up current weather conditions, forecasts, and severe weather alerts for any location worldwide.",
+      "category": "information",
+      "tags": [
+        "weather",
+        "forecast",
+        "climate",
+        "location"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [
+        "web-search"
+      ],
+      "skillPath": "registry/curated/weather/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "summarize",
+      "displayName": "Text / URL Summarization",
+      "description": "Summarize text content, web pages, documents, and long-form articles into concise, structured summaries.",
+      "category": "information",
+      "tags": [
+        "summarization",
+        "text-processing",
+        "tldr",
+        "reading",
+        "content-analysis"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [
+        "web-search"
+      ],
+      "skillPath": "registry/curated/summarize/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "github",
+      "displayName": "GitHub (gh CLI)",
+      "description": "Manage GitHub repositories, issues, pull requests, releases, and Actions workflows using the gh CLI.",
+      "category": "developer-tools",
+      "tags": [
+        "github",
+        "git",
+        "issues",
+        "pull-requests",
+        "ci-cd",
+        "code-review"
+      ],
+      "requiredSecrets": [
+        "github.token"
+      ],
+      "requiredTools": [],
+      "skillPath": "registry/curated/github/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "coding-agent",
+      "displayName": "Coding Agent",
+      "description": "Write, review, debug, refactor, and explain code across multiple programming languages and frameworks.",
+      "category": "developer-tools",
+      "tags": [
+        "coding",
+        "programming",
+        "code-review",
+        "debugging",
+        "refactoring",
+        "development"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [
+        "filesystem"
+      ],
+      "skillPath": "registry/curated/coding-agent/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "git",
+      "displayName": "Git",
+      "description": "Work with Git repositories from the command line — inspect history, create branches, commit changes, and resolve conflicts.",
+      "category": "developer-tools",
+      "tags": [
+        "git",
+        "version-control",
+        "vcs",
+        "branching",
+        "commits"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [],
+      "skillPath": "registry/curated/git/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "slack-helper",
+      "displayName": "Slack Helper",
+      "description": "Manage Slack workspaces, channels, messages, and integrations through the Slack API.",
+      "category": "communication",
+      "tags": [
+        "slack",
+        "messaging",
+        "workspace",
+        "notifications",
+        "team-chat"
+      ],
+      "requiredSecrets": [
+        "slack.bot_token",
+        "slack.app_token"
+      ],
+      "requiredTools": [],
+      "skillPath": "registry/curated/slack-helper/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "discord-helper",
+      "displayName": "Discord Helper",
+      "description": "Manage Discord servers, channels, roles, and messages through the Discord API.",
+      "category": "communication",
+      "tags": [
+        "discord",
+        "messaging",
+        "server",
+        "moderation",
+        "community"
+      ],
+      "requiredSecrets": [
+        "discord.bot_token"
+      ],
+      "requiredTools": [],
+      "skillPath": "registry/curated/discord-helper/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "notion",
+      "displayName": "Notion",
+      "description": "Read, create, and manage pages, databases, and content blocks in Notion workspaces.",
+      "category": "productivity",
+      "tags": [
+        "notion",
+        "wiki",
+        "database",
+        "notes",
+        "project-management",
+        "knowledge-base"
+      ],
+      "requiredSecrets": [
+        "notion.api_key"
+      ],
+      "requiredTools": [],
+      "skillPath": "registry/curated/notion/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "obsidian",
+      "displayName": "Obsidian Vault",
+      "description": "Read, create, and manage notes, links, and metadata in Obsidian vaults via the local filesystem.",
+      "category": "productivity",
+      "tags": [
+        "obsidian",
+        "markdown",
+        "notes",
+        "knowledge-graph",
+        "zettelkasten",
+        "pkm"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [
+        "filesystem"
+      ],
+      "skillPath": "registry/curated/obsidian/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "trello",
+      "displayName": "Trello",
+      "description": "Manage Trello boards, lists, cards, checklists, and team workflows via the Trello API.",
+      "category": "productivity",
+      "tags": [
+        "trello",
+        "kanban",
+        "project-management",
+        "boards",
+        "tasks",
+        "workflow"
+      ],
+      "requiredSecrets": [
+        "trello.api_key",
+        "trello.token"
+      ],
+      "requiredTools": [],
+      "skillPath": "registry/curated/trello/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "apple-notes",
+      "displayName": "Apple Notes",
+      "description": "Create, read, search, and manage notes in Apple Notes using AppleScript and macOS automation.",
+      "category": "productivity",
+      "tags": [
+        "apple-notes",
+        "macos",
+        "notes",
+        "applescript",
+        "automation"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [
+        "filesystem"
+      ],
+      "skillPath": "registry/curated/apple-notes/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "apple-reminders",
+      "displayName": "Apple Reminders",
+      "description": "Create, manage, and query reminders and lists in Apple Reminders using AppleScript and macOS automation.",
+      "category": "productivity",
+      "tags": [
+        "apple-reminders",
+        "macos",
+        "reminders",
+        "tasks",
+        "applescript",
+        "automation"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [
+        "filesystem"
+      ],
+      "skillPath": "registry/curated/apple-reminders/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "healthcheck",
+      "displayName": "Health Check Monitor",
+      "description": "Monitor health and availability of systems, services, APIs, and infrastructure endpoints.",
+      "category": "devops",
+      "tags": [
+        "monitoring",
+        "health",
+        "uptime",
+        "infrastructure",
+        "diagnostics",
+        "status"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [
+        "web-search"
+      ],
+      "skillPath": "registry/curated/healthcheck/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "spotify-player",
+      "displayName": "Spotify Player",
+      "description": "Control Spotify playback, manage playlists, search music, and get recommendations via the Spotify API.",
+      "category": "media",
+      "tags": [
+        "spotify",
+        "music",
+        "playback",
+        "playlists",
+        "streaming",
+        "audio"
+      ],
+      "requiredSecrets": [
+        "spotify.client_id",
+        "spotify.client_secret",
+        "spotify.refresh_token"
+      ],
+      "requiredTools": [],
+      "skillPath": "registry/curated/spotify-player/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "whisper-transcribe",
+      "displayName": "Whisper Transcription",
+      "description": "Transcribe audio and video files to text using OpenAI Whisper or compatible speech-to-text APIs.",
+      "category": "media",
+      "tags": [
+        "transcription",
+        "whisper",
+        "speech-to-text",
+        "audio",
+        "stt",
+        "voice"
+      ],
+      "requiredSecrets": [
+        "openai.api_key"
+      ],
+      "requiredTools": [
+        "filesystem"
+      ],
+      "skillPath": "registry/curated/whisper-transcribe/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "1password",
+      "displayName": "1Password Vault",
+      "description": "Query and retrieve items from 1Password vaults using the 1Password CLI for secure credential access.",
+      "category": "security",
+      "tags": [
+        "1password",
+        "passwords",
+        "secrets",
+        "vault",
+        "credentials",
+        "security"
+      ],
+      "requiredSecrets": [],
+      "requiredTools": [],
+      "skillPath": "registry/curated/1password/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    },
+    {
+      "name": "image-gen",
+      "displayName": "AI Image Generation",
+      "description": "Generate images from text prompts using AI image generation APIs like DALL-E, Stable Diffusion, or Midjourney.",
+      "category": "creative",
+      "tags": [
+        "image-generation",
+        "ai-art",
+        "dall-e",
+        "stable-diffusion",
+        "creative",
+        "visual"
+      ],
+      "requiredSecrets": [
+        "openai.api_key"
+      ],
+      "requiredTools": [],
+      "skillPath": "registry/curated/image-gen/SKILL.md",
+      "namespace": "wunderland",
+      "source": "curated"
+    }
+  ],
+  "CHANNEL_CATALOG": [
+    {
+      "packageName": "@framers/agentos-ext-channel-telegram",
+      "name": "channel-telegram",
+      "category": "channel",
+      "platform": "telegram",
+      "displayName": "Telegram",
+      "description": "Telegram Bot API via grammY — supports text, images, inline keyboards, groups.",
+      "sdkPackage": "grammy",
+      "requiredSecrets": [
+        "telegram.botToken"
+      ],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-whatsapp",
+      "name": "channel-whatsapp",
+      "category": "channel",
+      "platform": "whatsapp",
+      "displayName": "WhatsApp",
+      "description": "WhatsApp Web bridge via Baileys — supports text, images, documents, voice notes.",
+      "sdkPackage": "@whiskeysockets/baileys",
+      "requiredSecrets": [
+        "whatsapp.sessionData"
+      ],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-discord",
+      "name": "channel-discord",
+      "category": "channel",
+      "platform": "discord",
+      "displayName": "Discord",
+      "description": "Discord bot via discord.js — supports text, embeds, threads, reactions, buttons.",
+      "sdkPackage": "discord.js",
+      "requiredSecrets": [
+        "discord.botToken"
+      ],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-slack",
+      "name": "channel-slack",
+      "category": "channel",
+      "platform": "slack",
+      "displayName": "Slack",
+      "description": "Slack workspace integration via Bolt — supports text, blocks, threads, reactions.",
+      "sdkPackage": "@slack/bolt",
+      "requiredSecrets": [
+        "slack.botToken",
+        "slack.appToken"
+      ],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-webchat",
+      "name": "channel-webchat",
+      "category": "channel",
+      "platform": "webchat",
+      "displayName": "WebChat",
+      "description": "Browser-based chat widget via Socket.IO — embeds in any website.",
+      "sdkPackage": "socket.io",
+      "requiredSecrets": [],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-signal",
+      "name": "channel-signal",
+      "category": "channel",
+      "platform": "signal",
+      "displayName": "Signal",
+      "description": "Signal messenger via signal-cli — end-to-end encrypted messaging.",
+      "sdkPackage": "signal-cli",
+      "requiredSecrets": [
+        "signal.phoneNumber"
+      ],
+      "defaultPriority": 40,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-imessage",
+      "name": "channel-imessage",
+      "category": "channel",
+      "platform": "imessage",
+      "displayName": "iMessage",
+      "description": "iMessage bridge via BlueBubbles — macOS server required.",
+      "sdkPackage": "bluebubbles-node",
+      "requiredSecrets": [
+        "imessage.serverUrl",
+        "imessage.password"
+      ],
+      "defaultPriority": 40,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-google-chat",
+      "name": "channel-google-chat",
+      "category": "channel",
+      "platform": "google-chat",
+      "displayName": "Google Chat",
+      "description": "Google Workspace Chat via Cloud API — supports cards and threads.",
+      "sdkPackage": "@google-cloud/chat",
+      "requiredSecrets": [
+        "googlechat.serviceAccount"
+      ],
+      "defaultPriority": 40,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-teams",
+      "name": "channel-teams",
+      "category": "channel",
+      "platform": "teams",
+      "displayName": "Microsoft Teams",
+      "description": "Microsoft Teams bot via Teams AI library — supports adaptive cards.",
+      "sdkPackage": "@microsoft/teams-ai",
+      "requiredSecrets": [
+        "teams.appId",
+        "teams.appPassword"
+      ],
+      "defaultPriority": 40,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-matrix",
+      "name": "channel-matrix",
+      "category": "channel",
+      "platform": "matrix",
+      "displayName": "Matrix",
+      "description": "Matrix/Element via matrix-js-sdk — decentralized, federated messaging.",
+      "sdkPackage": "matrix-js-sdk",
+      "requiredSecrets": [
+        "matrix.homeserverUrl",
+        "matrix.accessToken"
+      ],
+      "defaultPriority": 30,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-zalo",
+      "name": "channel-zalo",
+      "category": "channel",
+      "platform": "zalo",
+      "displayName": "Zalo",
+      "description": "Zalo Official Account API — popular in Vietnam.",
+      "sdkPackage": "zalo-api",
+      "requiredSecrets": [
+        "zalo.appId",
+        "zalo.secretKey"
+      ],
+      "defaultPriority": 30,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-email",
+      "name": "channel-email",
+      "category": "channel",
+      "platform": "email",
+      "displayName": "Email",
+      "description": "Email messaging via nodemailer (SMTP) + imap-simple (IMAP).",
+      "sdkPackage": "nodemailer",
+      "requiredSecrets": [
+        "email.smtpHost",
+        "email.smtpUser",
+        "email.smtpPassword"
+      ],
+      "defaultPriority": 30,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-sms",
+      "name": "channel-sms",
+      "category": "channel",
+      "platform": "sms",
+      "displayName": "SMS",
+      "description": "SMS messaging via Twilio — text-only, worldwide reach.",
+      "sdkPackage": "twilio",
+      "requiredSecrets": [
+        "twilio.accountSid",
+        "twilio.authToken",
+        "twilio.phoneNumber"
+      ],
+      "defaultPriority": 30,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-nostr",
+      "name": "channel-nostr",
+      "category": "channel",
+      "platform": "nostr",
+      "displayName": "Nostr",
+      "description": "Nostr relay messaging via nostr-tools — decentralized, censorship-resistant protocol.",
+      "sdkPackage": "nostr-tools",
+      "requiredSecrets": [
+        "nostr.privateKey"
+      ],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-twitch",
+      "name": "channel-twitch",
+      "category": "channel",
+      "platform": "twitch",
+      "displayName": "Twitch",
+      "description": "Twitch IRC chat via tmi.js — supports chat messages, commands, whispers.",
+      "sdkPackage": "tmi.js",
+      "requiredSecrets": [
+        "twitch.oauthToken",
+        "twitch.channel"
+      ],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-line",
+      "name": "channel-line",
+      "category": "channel",
+      "platform": "line",
+      "displayName": "LINE",
+      "description": "LINE Messaging API — supports text, images, flex messages, rich menus.",
+      "sdkPackage": "@line/bot-sdk",
+      "requiredSecrets": [
+        "line.channelAccessToken",
+        "line.channelSecret"
+      ],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-feishu",
+      "name": "channel-feishu",
+      "category": "channel",
+      "platform": "feishu",
+      "displayName": "Feishu / Lark",
+      "description": "Feishu (Lark) bot via official SDK — supports text, cards, interactive messages.",
+      "sdkPackage": "@larksuiteoapi/node-sdk",
+      "requiredSecrets": [
+        "feishu.appId",
+        "feishu.appSecret"
+      ],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-mattermost",
+      "name": "channel-mattermost",
+      "category": "channel",
+      "platform": "mattermost",
+      "displayName": "Mattermost",
+      "description": "Mattermost self-hosted chat via official client — supports text, threads, reactions.",
+      "sdkPackage": "@mattermost/client",
+      "requiredSecrets": [
+        "mattermost.url",
+        "mattermost.token"
+      ],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-nextcloud",
+      "name": "channel-nextcloud",
+      "category": "channel",
+      "platform": "nextcloud-talk",
+      "displayName": "NextCloud Talk",
+      "description": "NextCloud Talk bot API — self-hosted, privacy-focused team messaging.",
+      "sdkPackage": "nextcloud-talk-bot",
+      "requiredSecrets": [
+        "nextcloud.url",
+        "nextcloud.token"
+      ],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-tlon",
+      "name": "channel-tlon",
+      "category": "channel",
+      "platform": "tlon",
+      "displayName": "Tlon (Urbit)",
+      "description": "Tlon / Urbit messaging — peer-to-peer, identity-sovereign communication.",
+      "sdkPackage": "tlon-api",
+      "requiredSecrets": [
+        "tlon.shipUrl",
+        "tlon.code"
+      ],
+      "defaultPriority": 20,
+      "available": false
+    }
+  ],
+  "PROVIDER_CATALOG": [
+    {
+      "packageName": "@framers/agentos-ext-provider-openai",
+      "name": "provider-openai",
+      "category": "integration",
+      "providerId": "openai",
+      "displayName": "OpenAI",
+      "description": "OpenAI API — GPT-4o, GPT-4.1, o-series reasoning models.",
+      "requiredSecrets": [
+        "openai.apiKey"
+      ],
+      "defaultPriority": 100,
+      "available": false,
+      "defaultModel": "gpt-4o",
+      "smallModel": "gpt-4o-mini",
+      "apiBaseUrl": "https://api.openai.com/v1"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-anthropic",
+      "name": "provider-anthropic",
+      "category": "integration",
+      "providerId": "anthropic",
+      "displayName": "Anthropic",
+      "description": "Anthropic API — Claude Sonnet, Haiku, and Opus models.",
+      "requiredSecrets": [
+        "anthropic.apiKey"
+      ],
+      "defaultPriority": 100,
+      "available": false,
+      "defaultModel": "claude-sonnet-4-5-20250929",
+      "smallModel": "claude-haiku-4-5-20251001",
+      "apiBaseUrl": "https://api.anthropic.com"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-ollama",
+      "name": "provider-ollama",
+      "category": "integration",
+      "providerId": "ollama",
+      "displayName": "Ollama",
+      "description": "Ollama local inference — run open-weight models (Llama, Mistral, etc.) on your own hardware.",
+      "requiredSecrets": [],
+      "defaultPriority": 90,
+      "available": false,
+      "defaultModel": "llama3",
+      "smallModel": "llama3.2:3b",
+      "apiBaseUrl": "http://127.0.0.1:11434/v1"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-bedrock",
+      "name": "provider-bedrock",
+      "category": "integration",
+      "providerId": "bedrock",
+      "displayName": "AWS Bedrock",
+      "description": "AWS Bedrock — managed access to Anthropic Claude, Meta Llama, and other foundation models via AWS SDK.",
+      "requiredSecrets": [
+        "aws.accessKeyId",
+        "aws.secretAccessKey",
+        "aws.region"
+      ],
+      "defaultPriority": 80,
+      "available": false,
+      "defaultModel": "anthropic.claude-sonnet",
+      "smallModel": "anthropic.claude-haiku"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-gemini",
+      "name": "provider-gemini",
+      "category": "integration",
+      "providerId": "gemini",
+      "displayName": "Google Gemini",
+      "description": "Google Gemini API — Gemini 2.0 Flash, Pro, and multimodal models.",
+      "requiredSecrets": [
+        "gemini.apiKey"
+      ],
+      "defaultPriority": 90,
+      "available": false,
+      "defaultModel": "gemini-2.0-flash",
+      "smallModel": "gemini-2.0-flash-lite",
+      "apiBaseUrl": "https://generativelanguage.googleapis.com"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-github-copilot",
+      "name": "provider-github-copilot",
+      "category": "integration",
+      "providerId": "github-copilot",
+      "displayName": "GitHub Copilot",
+      "description": "GitHub Copilot Chat API — uses your existing Copilot subscription for model access.",
+      "requiredSecrets": [
+        "github.copilotToken"
+      ],
+      "defaultPriority": 70,
+      "available": false,
+      "defaultModel": "gpt-4o",
+      "smallModel": "gpt-4o-mini",
+      "apiBaseUrl": "https://api.githubcopilot.com"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-cloudflare-ai",
+      "name": "provider-cloudflare-ai",
+      "category": "integration",
+      "providerId": "cloudflare-ai",
+      "displayName": "Cloudflare AI Gateway",
+      "description": "Cloudflare AI Gateway — proxy and observe requests to any upstream provider with caching and rate limiting.",
+      "requiredSecrets": [
+        "cloudflare.accountId",
+        "cloudflare.apiToken"
+      ],
+      "defaultPriority": 60,
+      "available": false,
+      "defaultModel": "(configurable)",
+      "smallModel": "(configurable)"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-minimax",
+      "name": "provider-minimax",
+      "category": "integration",
+      "providerId": "minimax",
+      "displayName": "Minimax",
+      "description": "Minimax API — MiniMax-M2.1 and VL-01 vision-language models.",
+      "requiredSecrets": [
+        "minimax.apiKey"
+      ],
+      "defaultPriority": 60,
+      "available": false,
+      "defaultModel": "MiniMax-M2.1",
+      "smallModel": "MiniMax-VL-01",
+      "apiBaseUrl": "https://api.minimax.chat/v1"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-qwen",
+      "name": "provider-qwen",
+      "category": "integration",
+      "providerId": "qwen",
+      "displayName": "Qwen",
+      "description": "Alibaba Qwen API — Qwen-Max, Qwen-Turbo, and Qwen-VL models.",
+      "requiredSecrets": [
+        "qwen.apiKey"
+      ],
+      "defaultPriority": 60,
+      "available": false,
+      "defaultModel": "qwen-max",
+      "smallModel": "qwen-turbo",
+      "apiBaseUrl": "https://portal.qwen.ai/v1"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-moonshot",
+      "name": "provider-moonshot",
+      "category": "integration",
+      "providerId": "moonshot",
+      "displayName": "Moonshot",
+      "description": "Moonshot AI (Kimi) API — long-context models with strong multilingual support.",
+      "requiredSecrets": [
+        "moonshot.apiKey"
+      ],
+      "defaultPriority": 60,
+      "available": false,
+      "defaultModel": "kimi-k2.5",
+      "smallModel": "kimi-k2-instant",
+      "apiBaseUrl": "https://api.moonshot.ai/v1"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-xiaomi-mimo",
+      "name": "provider-xiaomi-mimo",
+      "category": "integration",
+      "providerId": "xiaomi-mimo",
+      "displayName": "Xiaomi Mimo",
+      "description": "Xiaomi Mimo API — Mimo-v2-Flash model with Anthropic-compatible endpoint.",
+      "requiredSecrets": [
+        "xiaomi.apiKey"
+      ],
+      "defaultPriority": 50,
+      "available": false,
+      "defaultModel": "mimo-v2-flash",
+      "smallModel": "mimo-v2-flash",
+      "apiBaseUrl": "https://api.xiaomimimo.com/anthropic"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-venice",
+      "name": "provider-venice",
+      "category": "integration",
+      "providerId": "venice",
+      "displayName": "Venice",
+      "description": "Venice AI — privacy-focused inference with no data retention, supports open-weight models.",
+      "requiredSecrets": [
+        "venice.apiKey"
+      ],
+      "defaultPriority": 50,
+      "available": false,
+      "defaultModel": "venice-default",
+      "smallModel": "venice-fast",
+      "apiBaseUrl": "https://api.venice.ai/v1"
+    },
+    {
+      "packageName": "@framers/agentos-ext-provider-openrouter",
+      "name": "provider-openrouter",
+      "category": "integration",
+      "providerId": "openrouter",
+      "displayName": "OpenRouter",
+      "description": "OpenRouter — unified API gateway to 200+ models from multiple providers with automatic fallback.",
+      "requiredSecrets": [
+        "openrouter.apiKey"
+      ],
+      "defaultPriority": 80,
+      "available": false,
+      "defaultModel": "auto",
+      "smallModel": "auto",
+      "apiBaseUrl": "https://openrouter.ai/api/v1"
+    }
+  ],
+  "TOOL_CATALOG": [
+    {
+      "packageName": "@framers/agentos-ext-auth",
+      "name": "auth",
+      "category": "tool",
+      "displayName": "Authentication",
+      "description": "User authentication and session management tools.",
+      "requiredSecrets": [],
+      "defaultPriority": 10,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-web-search",
+      "name": "web-search",
+      "category": "tool",
+      "displayName": "Web Search",
+      "description": "Web search using DuckDuckGo by default; optional Serper/Brave API key for enhanced results.",
+      "requiredSecrets": [],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-web-browser",
+      "name": "web-browser",
+      "category": "tool",
+      "displayName": "Web Browser",
+      "description": "Headless browser for page fetching and scraping.",
+      "requiredSecrets": [],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-telegram",
+      "name": "telegram",
+      "category": "integration",
+      "displayName": "Telegram (Legacy)",
+      "description": "Legacy Telegram bot integration (tool-based, pre-channel system).",
+      "requiredSecrets": [
+        "telegram.botToken"
+      ],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-cli-executor",
+      "name": "cli-executor",
+      "category": "tool",
+      "displayName": "CLI Executor",
+      "description": "Execute shell commands in a controlled agent workspace (recommended self-hosted).",
+      "requiredSecrets": [],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-giphy",
+      "name": "giphy",
+      "category": "tool",
+      "displayName": "Giphy",
+      "description": "Search and share GIFs via the Giphy API.",
+      "requiredSecrets": [],
+      "defaultPriority": 30,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-image-search",
+      "name": "image-search",
+      "category": "tool",
+      "displayName": "Image Search",
+      "description": "Search for images via web APIs.",
+      "requiredSecrets": [],
+      "defaultPriority": 30,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-voice-synthesis",
+      "name": "voice-synthesis",
+      "category": "tool",
+      "displayName": "Voice Synthesis",
+      "description": "Text-to-speech synthesis via ElevenLabs or similar.",
+      "requiredSecrets": [],
+      "defaultPriority": 30,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-news-search",
+      "name": "news-search",
+      "category": "tool",
+      "displayName": "News Search",
+      "description": "Search recent news articles.",
+      "requiredSecrets": [],
+      "defaultPriority": 30,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-skills",
+      "name": "skills",
+      "category": "tool",
+      "displayName": "Skills Registry",
+      "description": "Discover and enable curated SKILL.md prompt modules.",
+      "requiredSecrets": [],
+      "defaultPriority": 15,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-voice-twilio",
+      "name": "voice-twilio",
+      "category": "voice",
+      "displayName": "Twilio Voice",
+      "description": "Phone call integration via Twilio — outbound/inbound calls, TwiML, media streams.",
+      "requiredSecrets": [
+        "twilio.accountSid",
+        "twilio.authToken"
+      ],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-voice-telnyx",
+      "name": "voice-telnyx",
+      "category": "voice",
+      "displayName": "Telnyx Voice",
+      "description": "Phone call integration via Telnyx Call Control v2 — SIP, FQDN routing.",
+      "requiredSecrets": [
+        "telnyx.apiKey",
+        "telnyx.connectionId"
+      ],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-voice-plivo",
+      "name": "voice-plivo",
+      "category": "voice",
+      "displayName": "Plivo Voice",
+      "description": "Phone call integration via Plivo Voice API — outbound calls, XML responses.",
+      "requiredSecrets": [
+        "plivo.authId",
+        "plivo.authToken"
+      ],
+      "defaultPriority": 50,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-calendar-google",
+      "name": "calendar-google",
+      "category": "productivity",
+      "displayName": "Google Calendar",
+      "description": "Google Calendar API — event CRUD, free/busy queries, multi-calendar support.",
+      "requiredSecrets": [
+        "google.clientId",
+        "google.clientSecret",
+        "google.refreshToken"
+      ],
+      "defaultPriority": 40,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-email-gmail",
+      "name": "email-gmail",
+      "category": "productivity",
+      "displayName": "Gmail",
+      "description": "Gmail API — send, read, search, reply to emails, manage labels.",
+      "requiredSecrets": [
+        "google.clientId",
+        "google.clientSecret",
+        "google.refreshToken"
+      ],
+      "defaultPriority": 40,
+      "available": false
+    }
+  ],
+  "VOICE_CATALOG": [
+    {
+      "id": "openai:alloy",
+      "provider": "openai",
+      "voiceId": "alloy",
+      "name": "Alloy",
+      "gender": "neutral",
+      "description": "Neutral, balanced voice"
+    },
+    {
+      "id": "openai:echo",
+      "provider": "openai",
+      "voiceId": "echo",
+      "name": "Echo",
+      "gender": "male",
+      "description": "Warm, conversational male voice"
+    },
+    {
+      "id": "openai:fable",
+      "provider": "openai",
+      "voiceId": "fable",
+      "name": "Fable",
+      "gender": "neutral",
+      "description": "Storytelling, expressive voice"
+    },
+    {
+      "id": "openai:onyx",
+      "provider": "openai",
+      "voiceId": "onyx",
+      "name": "Onyx",
+      "gender": "male",
+      "description": "Deep, authoritative male voice"
+    },
+    {
+      "id": "openai:nova",
+      "provider": "openai",
+      "voiceId": "nova",
+      "name": "Nova",
+      "gender": "female",
+      "description": "Clear, friendly female voice",
+      "isDefault": true
+    },
+    {
+      "id": "openai:shimmer",
+      "provider": "openai",
+      "voiceId": "shimmer",
+      "name": "Shimmer",
+      "gender": "female",
+      "description": "Soft, gentle female voice"
+    },
+    {
+      "id": "elevenlabs:rachel",
+      "provider": "elevenlabs",
+      "voiceId": "21m00Tcm4TlvDq8ikWAM",
+      "name": "Rachel",
+      "gender": "female",
+      "description": "Calm, clear American female",
+      "isDefault": true
+    },
+    {
+      "id": "elevenlabs:domi",
+      "provider": "elevenlabs",
+      "voiceId": "AZnzlk1XvdvUeBnXmlld",
+      "name": "Domi",
+      "gender": "female",
+      "description": "Strong, assertive female"
+    },
+    {
+      "id": "elevenlabs:bella",
+      "provider": "elevenlabs",
+      "voiceId": "EXAVITQu4vr4xnSDxMaL",
+      "name": "Bella",
+      "gender": "female",
+      "description": "Soft, warm female"
+    },
+    {
+      "id": "elevenlabs:antoni",
+      "provider": "elevenlabs",
+      "voiceId": "ErXwobaYiN019PkySvjV",
+      "name": "Antoni",
+      "gender": "male",
+      "description": "Well-rounded male"
+    },
+    {
+      "id": "elevenlabs:josh",
+      "provider": "elevenlabs",
+      "voiceId": "TxGEqnHWrfWFTfGW9XjX",
+      "name": "Josh",
+      "gender": "male",
+      "description": "Young, dynamic male"
+    },
+    {
+      "id": "elevenlabs:arnold",
+      "provider": "elevenlabs",
+      "voiceId": "VR6AewLTigWG4xSOukaG",
+      "name": "Arnold",
+      "gender": "male",
+      "description": "Crisp, narrative male"
+    },
+    {
+      "id": "elevenlabs:adam",
+      "provider": "elevenlabs",
+      "voiceId": "pNInz6obpgDQGcFmaJgB",
+      "name": "Adam",
+      "gender": "male",
+      "description": "Deep, professional male"
+    },
+    {
+      "id": "elevenlabs:sam",
+      "provider": "elevenlabs",
+      "voiceId": "yoZ06aMxZJJ28mfd3POQ",
+      "name": "Sam",
+      "gender": "male",
+      "description": "Youthful male"
+    }
+  ]
+}
