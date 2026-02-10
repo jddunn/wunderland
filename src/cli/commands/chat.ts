@@ -201,10 +201,11 @@ export default async function cmdChat(
 
       // Optional skills extension (may not be installed in standalone builds)
       try {
-        const skillsExt: any = await import(/* webpackIgnore: true */ '@framers/agentos-ext-skills');
+        const skillsPkg = '@framers/agentos-ext-skills';
+        const skillsExt: any = await import(/* webpackIgnore: true */ skillsPkg);
         if (skillsExt?.createExtensionPack) {
           packs.push(skillsExt.createExtensionPack({ options: {}, logger: console }));
-          preloadedPackages.push('@framers/agentos-ext-skills');
+          preloadedPackages.push(skillsPkg);
         }
       } catch {
         // Not available — skip silently
