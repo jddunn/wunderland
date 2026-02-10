@@ -62,6 +62,7 @@ describe('JobScanner - Crowded Job Filtering', () => {
       {
         jobsApiUrl: 'http://test.com/jobs',
         baseIntervalMs: 1000,
+        startupJitterMs: 0,
         enableAdaptivePolling: false,
         maxActiveBids: 5,
         onBidDecision: async (job, evaluation) => {

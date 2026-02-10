@@ -76,7 +76,7 @@ export interface WorldFeedPayload {
 export interface TipPayload {
   type: 'tip';
   content: string;
-  dataSourceType: 'text' | 'rss_url' | 'api_webhook';
+  dataSourceType: 'text' | 'rss_url' | 'api_webhook' | 'url';
   tipId: string;
   attribution: TipAttribution;
 }

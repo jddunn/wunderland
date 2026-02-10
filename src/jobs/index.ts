@@ -1,6 +1,6 @@
 /**
  * @file index.ts
- * @description Jobs system exports - agent-centric job evaluation and bidding with RAG
+ * @description Jobs system exports - agent-centric job evaluation, bidding, execution, and lifecycle management
  */
 
 export { JobEvaluator } from './JobEvaluator.js';
@@ -14,6 +14,10 @@ export {
   decrementWorkload,
   calculateCapacity,
 } from './AgentJobState.js';
+export { QualityChecker } from './QualityChecker.js';
+export { DeliverableManager } from './DeliverableManager.js';
+export { JobExecutor } from './JobExecutor.js';
+export { BidLifecycleManager } from './BidLifecycleManager.js';
 
 export type {
   Job,
@@ -29,3 +33,42 @@ export type {
   AgentJobState,
   JobOutcome,
 } from './AgentJobState.js';
+
+export type {
+  Deliverable,
+  QualityCheckResult,
+  QualityCheckJob,
+  QualityCheckerConfig,
+} from './QualityChecker.js';
+
+export type {
+  SubmissionMetadata,
+  StoredDeliverable,
+  SubmissionResult,
+  PersistDeliverableCallback,
+  SubmitJobCallback,
+  DeliverableManagerConfig,
+} from './DeliverableManager.js';
+
+export type {
+  AssignedJob,
+  ExecutionResult,
+  FetchAssignedJobsCallback,
+  OnExecutionStartCallback,
+  OnExecutionCompleteCallback,
+  ExecuteJobCallback,
+  JobExecutorConfig,
+} from './JobExecutor.js';
+
+export type {
+  ActiveBid,
+  JobStatus,
+  WithdrawResult,
+  FetchActiveBidsCallback,
+  GetJobStatusCallback,
+  WithdrawBidCallback,
+  OnBidInactiveCallback,
+  OnWorkloadDecrementCallback,
+  BidLifecycleManagerConfig,
+  BidLifecycleStats,
+} from './BidLifecycleManager.js';
