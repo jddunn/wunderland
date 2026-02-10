@@ -80,7 +80,7 @@ export default async function cmdStart(
   const cfg = JSON.parse(await readFile(configPath, 'utf8'));
   const seedId = String(cfg.seedId || 'seed_local_agent');
   const displayName = String(cfg.displayName || 'My Agent');
-  const description = String(cfg.bio || 'Autonomous Wunderland agent');
+  const description = String(cfg.bio || 'Autonomous Wunderbot');
   const p = cfg.personality || {};
 
   // Observability (OTEL) is opt-in, and config can override env.
@@ -93,7 +93,7 @@ export default async function cmdStart(
     process.env['WUNDERLAND_OTEL_LOGS_ENABLED'] = cfgOtelLogsEnabled ? 'true' : 'false';
   }
 
-  await startWunderlandOtel({ serviceName: `wunderland-agent-${seedId}` });
+  await startWunderlandOtel({ serviceName: `wunderbot-${seedId}` });
 
   const security = {
     ...DEFAULT_SECURITY_PROFILE,
@@ -152,7 +152,7 @@ export default async function cmdStart(
         apiKey: openrouterApiKey,
         model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
         baseUrl: 'https://openrouter.ai/api/v1',
-        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderland Agent' },
+        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
       }
     : undefined;
 
@@ -400,7 +400,7 @@ export default async function cmdStart(
 
   const systemPrompt = [
     typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
-    'You are a local Wunderland agent server.',
+    'You are a local Wunderbot server.',
     autoApproveToolCalls
       ? (lazyTools
         ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'

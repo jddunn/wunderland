@@ -87,7 +87,7 @@ async function runTest(name: string, fn: () => Promise<any>) {
 // ─── Main ───
 async function main() {
   console.log('═══════════════════════════════════════════════════════');
-  console.log('  Wunderland Agent Tool Integration Tests');
+  console.log('  Wunderbot Tool Integration Tests');
   console.log('═══════════════════════════════════════════════════════\n');
 
   // Show availability

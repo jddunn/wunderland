@@ -33,7 +33,7 @@ WUNDERLAND_OTEL_ENABLED=true
 WUNDERLAND_OTEL_LOGS_ENABLED=true
 
 # Standard OTEL exporters and endpoints (example: local OTLP/HTTP collector)
-OTEL_SERVICE_NAME=my-wunderland-agent
+OTEL_SERVICE_NAME=my-wunderbot
 OTEL_TRACES_EXPORTER=otlp
 OTEL_METRICS_EXPORTER=otlp
 # OTEL_LOGS_EXPORTER=otlp
@@ -87,4 +87,3 @@ Point your agent at `http://localhost:4318` (OTLP/HTTP) and then route to your b
 - Keep OTEL **off** by default unless you need auditing/production debugging.
 - Prefer sampling (`OTEL_TRACES_SAMPLER=parentbased_traceidratio`) for high-volume workloads.
 - Enable OTEL log export only when you want a unified OTLP pipeline for logs (otherwise ship stdout logs separately).
-
