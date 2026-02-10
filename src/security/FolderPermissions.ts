@@ -93,22 +93,21 @@ export function expandTilde(filepath: string): string {
  * Supports:
  * - ** (recursive match)
  * - * (single level match)
- * - ! (negation)
+ * - ! (deny marker; matches the underlying pattern)
  * - ~ (home directory)
  *
  * @param filePath - Absolute file path to check
- * @param pattern - Glob pattern (may include negation !)
+ * @param pattern - Glob pattern (may include leading "!" to visually indicate a deny rule)
  * @returns True if path matches pattern
  *
  * @example
  * matchesGlob("/home/user/workspace/file.txt", "/home/user/**") → true
  * matchesGlob("/home/user/file.txt", "~/workspace/*") → false
- * matchesGlob("/sensitive/data.txt", "!/sensitive/*") → false (negation)
+ * matchesGlob("/sensitive/data.txt", "!/sensitive/*") → true (deny marker matches underlying pattern)
  */
 export function matchesGlob(filePath: string, pattern: string): boolean {
-  // 1. Handle negation patterns (!/sensitive/*)
-  const isNegation = pattern.startsWith('!');
-  const cleanPattern = isNegation ? pattern.slice(1) : pattern;
+  // 1. Strip deny marker prefix (!/sensitive/* -> /sensitive/*)
+  const cleanPattern = pattern.startsWith('!') ? pattern.slice(1) : pattern;
 
   // 2. Expand tilde to home directory
   const expandedPath = path.resolve(expandTilde(filePath));
@@ -120,9 +119,7 @@ export function matchesGlob(filePath: string, pattern: string): boolean {
     noglobstar: false, // Support **
     matchBase: false, // Don't match basename only
   });
-
-  // 4. Apply negation logic
-  return isNegation ? !matches : matches;
+  return matches;
 }
 
 /**
@@ -277,16 +274,23 @@ export function validateFolderConfig(config: FolderPermissionConfig): Validation
       errors.push(`Rule ${i}: invalid glob pattern ${rule.pattern}: ${err}`);
     }
 
-    // Warn if negation pattern appears before positive pattern
+    // Warn if a deny rule is likely shadowed by earlier allow rules.
     if (rule.pattern.startsWith('!')) {
-      const basePattern = rule.pattern.slice(1);
-      const hasPositiveBefore = config.rules
-        .slice(0, i)
-        .some((r) => r.pattern === basePattern || matchesGlob(expandTilde(basePattern), r.pattern));
+      const denyPattern = rule.pattern.slice(1);
+      const denyExpanded = expandTilde(denyPattern);
+      const shadowingAllow = config.rules.slice(0, i).some((earlier) => {
+        if (earlier.pattern.startsWith('!')) return false;
+        const earlierExpanded = expandTilde(earlier.pattern);
+        return (
+          earlierExpanded === denyExpanded ||
+          (earlierExpanded.includes('**') &&
+            denyExpanded.startsWith(earlierExpanded.replace('/**', '')))
+        );
+      });
 
-      if (!hasPositiveBefore) {
+      if (shadowingAllow) {
         warnings.push(
-          `Rule ${i}: negation pattern ${rule.pattern} appears before any matching positive pattern. It may never match.`
+          `Rule ${i}: deny pattern ${rule.pattern} may be shadowed by an earlier allow rule. With "first match wins", place deny rules before broader allow patterns.`
         );
       }
     }
@@ -295,10 +299,15 @@ export function validateFolderConfig(config: FolderPermissionConfig): Validation
     for (let j = i + 1; j < config.rules.length; j++) {
       const laterRule = config.rules[j];
 
+      const rulePattern = rule.pattern.startsWith('!') ? rule.pattern.slice(1) : rule.pattern;
+      const laterPattern = laterRule.pattern.startsWith('!')
+        ? laterRule.pattern.slice(1)
+        : laterRule.pattern;
+
       // Simple overlap check: if patterns are identical or one is subset of other
       if (
-        rule.pattern === laterRule.pattern ||
-        (rule.pattern.includes('**') && laterRule.pattern.startsWith(rule.pattern.replace('/**', '')))
+        rulePattern === laterPattern ||
+        (rulePattern.includes('**') && laterPattern.startsWith(rulePattern.replace('/**', '')))
       ) {
         if (rule.read !== laterRule.read || rule.write !== laterRule.write) {
           warnings.push(

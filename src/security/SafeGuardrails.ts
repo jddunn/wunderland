@@ -13,6 +13,7 @@
 import * as path from 'node:path';
 import {
   checkFolderAccess,
+  expandTilde,
   type FolderPermissionConfig,
 } from './FolderPermissions.js';
 import type { GranularPermissions } from './SecurityTiers.js';
@@ -99,7 +100,8 @@ const TOOL_PATH_ARGUMENTS: Record<string, string[]> = {
   file_read: ['file_path', 'path', 'filePath'],
   file_write: ['file_path', 'path', 'destination', 'filePath'],
   list_directory: ['directory', 'path', 'dir'],
-  shell_execute: ['command'], // Special: parse command for paths
+  // shell_execute is handled specially (parse command tokens for paths).
+  shell_execute: [],
 
   // Extension tools
   git_clone: ['target_directory', 'destination', 'targetDirectory'],
@@ -285,8 +287,13 @@ export class SafeGuardrails {
       paths.push(...extractedPaths);
     }
 
-    // Always resolve to absolute paths
-    return paths.map((p) => path.resolve(p));
+    const normalized = paths
+      .map((p) => (typeof p === 'string' ? p.trim() : ''))
+      .filter(Boolean)
+      .map((p) => path.resolve(expandTilde(p)));
+
+    // Deduplicate
+    return Array.from(new Set(normalized));
   }
 
   /**
