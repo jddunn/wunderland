@@ -26,8 +26,25 @@ import type { AuthorizableTool } from '../../authorization/types.js';
 import { SpanStatusCode, context, trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';
+import { SafeGuardrails } from '../../security/SafeGuardrails.js';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 const tracer = trace.getTracer('wunderland.cli');
+
+// Initialize Safe Guardrails (singleton)
+let _guardrails: SafeGuardrails | undefined;
+function getGuardrails(): SafeGuardrails {
+  if (!_guardrails) {
+    _guardrails = new SafeGuardrails({
+      auditLogPath: path.join(os.homedir(), '.wunderland', 'security', 'violations.log'),
+      notificationWebhooks: process.env.WUNDERLAND_VIOLATION_WEBHOOKS?.split(',') || [],
+      enableAuditLogging: true,
+      enableNotifications: true,
+    });
+  }
+  return _guardrails;
+}
 
 function emitOtelLog(opts: {
   name: string;
@@ -509,6 +526,27 @@ export async function runToolCallingTurn(opts: {
                 authorized: true,
               },
               async () => {
+                // NEW: Safe Guardrails validation
+                const guardrails = getGuardrails();
+                const guardrailsCheck = await guardrails.validateBeforeExecution({
+                  toolId: tool.name,
+                  toolName: tool.name,
+                  args,
+                  agentId: (opts.toolContext.gmiId || opts.toolContext.personaId || 'cli-agent') as string,
+                  userId: (opts.toolContext.userContext as any)?.userId,
+                  sessionId: opts.toolContext.sessionId as string | undefined,
+                  tool: tool as any,
+                });
+
+                if (!guardrailsCheck.allowed) {
+                  return {
+                    success: false,
+                    error: guardrailsCheck.reason,
+                    output: { violations: guardrailsCheck.violations },
+                  };
+                }
+
+                // Original execution continues if guardrails pass
                 return await tool.execute(args, opts.toolContext);
               },
             );

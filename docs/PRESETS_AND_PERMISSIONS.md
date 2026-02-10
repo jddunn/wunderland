@@ -9,6 +9,7 @@ This guide covers Wunderland's preset system, permission model, tool access prof
 - [Permission Sets](#permission-sets)
 - [Tool Access Profiles](#tool-access-profiles)
 - [Security Tiers](#security-tiers)
+- [Folder-Level Permissions](#folder-level-permissions)
 - [Configuration Examples](#configuration-examples)
 
 ## Agent Presets
@@ -455,6 +456,190 @@ Security tiers control the LLM security pipeline configuration:
 - ✅ Circuit breakers
 - ✅ Cost guards
 - **Risk threshold:** 0.1
+
+---
+
+## Folder-Level Permissions
+
+Folder-level permissions provide fine-grained access control for agent filesystem operations. Each agent can have custom folder access rules with glob pattern support.
+
+### Overview
+
+Traditional permission sets (unrestricted, autonomous, supervised, etc.) provide coarse-grained filesystem access (all-or-nothing). Folder permissions allow you to specify:
+
+- **Which folders** an agent can access
+- **What operations** (read vs write) are allowed per folder
+- **Glob patterns** for flexible path matching
+
+### Folder Access Rule
+
+```typescript
+interface FolderAccessRule {
+  pattern: string;        // Glob pattern: /home/user/**, ~/workspace/*, !/sensitive/*
+  read: boolean;          // Read permission
+  write: boolean;         // Write permission (create, modify, delete)
+  description?: string;   // Optional description for audit logs
+}
+```
+
+### Example Rules
+
+```json
+{
+  "pattern": "~/workspace/**",
+  "read": true,
+  "write": true,
+  "description": "Full access to agent workspace"
+}
+```
+
+```json
+{
+  "pattern": "/var/log/**",
+  "read": true,
+  "write": false,
+  "description": "Read-only access to logs"
+}
+```
+
+```json
+{
+  "pattern": "!/home/user/.ssh/*",
+  "read": false,
+  "write": false,
+  "description": "Block SSH keys"
+}
+```
+
+### Glob Pattern Support
+
+**Supported patterns:**
+- `*` - Match single level: `/home/user/*` matches `/home/user/file.txt` but NOT `/home/user/subdir/file.txt`
+- `**` - Match recursively: `/home/**` matches all files under `/home` at any depth
+- `!` - Negation: `!/sensitive/*` blocks all files under `/sensitive`
+- `~` - Home directory: `~/workspace/**` expands to `/home/user/workspace/**`
+
+### Configuration Structure
+
+```typescript
+interface FolderPermissionConfig {
+  defaultPolicy: 'allow' | 'deny';  // Default when no rule matches
+  rules: FolderAccessRule[];        // Ordered list (first match wins)
+  inheritFromTier: boolean;         // Inherit security tier's filesystem permissions as fallback
+}
+```
+
+### Security Tier Defaults
+
+Each security tier includes default folder permissions:
+
+#### Dangerous
+```json
+{
+  "defaultPolicy": "allow",
+  "inheritFromTier": false,
+  "rules": []
+}
+```
+Allow everything (testing only).
+
+#### Permissive
+```json
+{
+  "defaultPolicy": "allow",
+  "inheritFromTier": true,
+  "rules": [
+    { "pattern": "!/etc/**", "read": false, "write": false, "description": "Block system config" },
+    { "pattern": "!/root/**", "read": false, "write": false, "description": "Block root home" }
+  ]
+}
+```
+Allow most access except critical system paths.
+
+#### Balanced (Recommended)
+```json
+{
+  "defaultPolicy": "deny",
+  "inheritFromTier": true,
+  "rules": [
+    { "pattern": "~/workspace/**", "read": true, "write": true, "description": "Agent workspace" },
+    { "pattern": "/tmp/**", "read": true, "write": true, "description": "Temp files" },
+    { "pattern": "/var/log/**", "read": true, "write": false, "description": "Read-only logs" }
+  ]
+}
+```
+Deny by default, allow specific safe paths.
+
+#### Strict
+```json
+{
+  "defaultPolicy": "deny",
+  "inheritFromTier": true,
+  "rules": [
+    { "pattern": "~/workspace/**", "read": true, "write": true },
+    { "pattern": "/tmp/agents/**", "read": true, "write": true }
+  ]
+}
+```
+Minimal access.
+
+#### Paranoid
+```json
+{
+  "defaultPolicy": "deny",
+  "inheritFromTier": true,
+  "rules": [
+    { "pattern": "~/workspace/**", "read": true, "write": true, "description": "Agent workspace only" }
+  ]
+}
+```
+Workspace only.
+
+### Agent-Specific Overrides
+
+Override tier defaults in `agent.config.json`:
+
+```json
+{
+  "seedId": "seed_research_assistant",
+  "security": {
+    "tier": "balanced",
+    "folderPermissions": {
+      "defaultPolicy": "deny",
+      "inheritFromTier": true,
+      "rules": [
+        { "pattern": "~/workspace/**", "read": true, "write": true },
+        { "pattern": "~/Documents/research/**", "read": true, "write": false },
+        { "pattern": "/data/public/**", "read": true, "write": false }
+      ]
+    }
+  }
+}
+```
+
+### Safe Guardrails
+
+The Safe Guardrails system enforces folder permissions by validating tool calls before execution:
+
+1. **Pre-execution validation**: Checks every filesystem tool call
+2. **Path extraction**: Extracts file paths from tool arguments (including shell commands)
+3. **Permission checking**: Validates paths against folder permission rules
+4. **Violation logging**: Logs denied access attempts to `~/.wunderland/security/violations.log`
+5. **Notifications**: Sends webhooks/emails for high-severity violations
+
+**Supported tools:**
+- `file_read`, `file_write`, `file_append`, `file_delete`
+- `list_directory`
+- `shell_execute` (parses commands like `rm -rf /path`)
+- Extension tools: `git_clone`, `obsidian_read`, `apple_notes_save`
+
+**Violation severity levels:**
+- **Critical**: System paths (`/etc`, `/root`, `passwd`, `shadow`)
+- **High**: System paths (`/usr`, `/var`) or sensitive data (`.ssh`, `.aws`)
+- **Medium**: Write operations
+- **Low**: Read operations
+
+For detailed information on guardrails configuration, audit logging, and notifications, see the **[Safe Guardrails Guide](./GUARDRAILS.md)**.
 
 ---
 
