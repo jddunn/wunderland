@@ -14,6 +14,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
+import { SafeGuardrails } from '../security/SafeGuardrails.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from './types.js';
@@ -96,6 +97,10 @@ export class NewsroomAgency {
   /** Optional tool execution guard for timeouts and circuit breaking. */
   private toolGuard?: ToolExecutionGuard;
 
+  /** Optional SafeGuardrails for filesystem/path sandboxing. */
+  private guardrails?: SafeGuardrails;
+  private guardrailsWorkingDirectory?: string;
+
   constructor(config: NewsroomConfig) {
     this.config = config;
     this.verifier = new SignedOutputVerifier();
@@ -124,6 +129,14 @@ export class NewsroomAgency {
    */
   setToolGuard(guard: ToolExecutionGuard): void {
     this.toolGuard = guard;
+  }
+
+  /**
+   * Set SafeGuardrails for pre-execution filesystem/path validation.
+   */
+  setGuardrails(guardrails: SafeGuardrails, opts?: { workingDirectory?: string }): void {
+    this.guardrails = guardrails;
+    this.guardrailsWorkingDirectory = opts?.workingDirectory;
   }
 
   /**
@@ -476,6 +489,36 @@ export class NewsroomAgency {
             };
 
             console.log(`[Newsroom:${seedId}] Executing tool: ${toolName}(${JSON.stringify(args).slice(0, 200)})`);
+
+            // Safe Guardrails preflight validation (filesystem + shell paths).
+            if (this.guardrails) {
+              const check = await this.guardrails.validateBeforeExecution({
+                toolId: tool.name,
+                toolName: tool.name,
+                args,
+                agentId: seedId,
+                userId: this.config.ownerId,
+                sessionId: stimulus.eventId,
+                workingDirectory: this.guardrailsWorkingDirectory,
+                tool: tool as any,
+              });
+
+              if (!check.allowed) {
+                manifestBuilder.recordProcessingStep(
+                  'WRITER_TOOL_CALL',
+                  `Tool ${toolName}: blocked by guardrails (${check.reason || 'denied'})`,
+                );
+                messages.push({
+                  role: 'tool',
+                  content: JSON.stringify({
+                    error: check.reason || `Tool '${toolName}' blocked by guardrails`,
+                    violations: check.violations,
+                  }),
+                  tool_call_id: toolCall.id,
+                });
+                continue;
+              }
+            }
 
             let result: ToolExecutionResult;
             if (this.toolGuard) {

@@ -9,49 +9,143 @@ import * as p from '@clack/prompts';
 import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor, dim, warn } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
-import { extractAgentConfig, validateApiKeySetup } from '../../ai/NaturalLanguageAgentBuilder.js';
+import { loadDotEnvIntoProcessUpward, mergeEnv } from '../config/env-manager.js';
+import { runInitLlmStep } from '../wizards/init-llm-step.js';
+import { openaiChatWithTools, type LLMProviderConfig } from '../openai/tool-calling.js';
+import { SECURITY_TIERS, getSecurityTier, isValidSecurityTier, type SecurityTierName } from '../../security/SecurityTiers.js';
+import { extractAgentConfig } from '../../ai/NaturalLanguageAgentBuilder.js';
 import type { ExtractedAgentConfig } from '../../ai/NaturalLanguageAgentBuilder.js';
+
+function buildEnvExample(opts: { llmProvider?: string; llmModel?: string }): string {
+  const provider = typeof opts.llmProvider === 'string' ? opts.llmProvider.trim().toLowerCase() : 'openai';
+  const model = typeof opts.llmModel === 'string' && opts.llmModel.trim() ? opts.llmModel.trim() : 'gpt-4o-mini';
+
+  const lines: string[] = ['# Copy to .env and fill in real values'];
+
+  if (provider === 'openai') lines.push('OPENAI_API_KEY=sk-...');
+  else if (provider === 'openrouter') lines.push('OPENROUTER_API_KEY=...');
+  else if (provider === 'anthropic') lines.push('ANTHROPIC_API_KEY=...');
+  else if (provider === 'ollama') lines.push('# Ollama: no API key needed');
+  else lines.push(`# Provider "${provider}" not supported by CLI runtime`);
+
+  lines.push(`OPENAI_MODEL=${model}`);
+  lines.push('PORT=3777', '');
+
+  lines.push(
+    '# OBSERVABILITY (OpenTelemetry - opt-in)',
+    '# Enable OTEL in wunderland CLI runtime (wunderland start/chat):',
+    '# WUNDERLAND_OTEL_ENABLED=true',
+    '# WUNDERLAND_OTEL_LOGS_ENABLED=true',
+    '# OTEL_TRACES_EXPORTER=otlp',
+    '# OTEL_METRICS_EXPORTER=otlp',
+    '# OTEL_LOGS_EXPORTER=otlp',
+    '# OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318',
+    '# OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf',
+    '# OTEL_TRACES_SAMPLER=parentbased_traceidratio',
+    '# OTEL_TRACES_SAMPLER_ARG=0.1',
+    '',
+  );
+
+  return lines.join('\n');
+}
 
 /**
  * Create an LLM invoker for the configured provider.
- * TODO: This is a placeholder — integrate with actual LLM service.
  */
-async function createLLMInvoker(): Promise<(prompt: string) => Promise<string>> {
-  // Check for OpenAI API key
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (openaiKey && validateApiKeySetup('openai', openaiKey)) {
-    // TODO: Use actual OpenAI client
-    return async (_prompt: string): Promise<string> => {
-      throw new Error('OpenAI integration not yet implemented. Coming soon!');
-    };
+async function createLLMInvoker(globals: GlobalFlags): Promise<{ invoker: (prompt: string) => Promise<string>; provider: string; model: string }> {
+  // Reuse the init wizard step so provider/model selection is consistent.
+  const llm = await runInitLlmStep({ nonInteractive: globals.yes === true });
+  if (!llm) {
+    throw new Error(
+      'No LLM provider configured. Set an API key in your environment (e.g. OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY),\n' +
+      'or run `wunderland init <dir>` to configure a project.',
+    );
   }
 
-  // Check for Anthropic API key
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (anthropicKey && validateApiKeySetup('anthropic', anthropicKey)) {
-    // TODO: Use actual Anthropic client
-    return async (_prompt: string): Promise<string> => {
-      throw new Error('Anthropic integration not yet implemented. Coming soon!');
-    };
+  // Ensure freshly-entered keys are available for this process and persisted globally.
+  for (const [k, v] of Object.entries(llm.apiKeys)) {
+    if (v) process.env[k] = v;
+  }
+  if (Object.keys(llm.apiKeys).length > 0) {
+    await mergeEnv(llm.apiKeys, globals.config);
   }
 
-  // Check for Ollama
-  try {
-    // TODO: Check if Ollama is running
-    return async (_prompt: string): Promise<string> => {
-      throw new Error('Ollama integration not yet implemented. Coming soon!');
+  const provider = llm.llmProvider;
+  const model = llm.llmModel;
+
+  if (provider === 'anthropic') {
+    const apiKey = process.env['ANTHROPIC_API_KEY'] || '';
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required for Anthropic provider.');
+
+    const invoker = async (prompt: string): Promise<string> => {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 2048,
+          temperature: 0.1,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Anthropic error (${res.status}): ${text.slice(0, 300)}`);
+      const data = JSON.parse(text);
+      const blocks = Array.isArray(data?.content) ? data.content : [];
+      const out = blocks.find((b: any) => b?.type === 'text')?.text;
+      if (typeof out !== 'string') throw new Error('Anthropic returned an empty response.');
+      return out;
     };
-  } catch {
-    // Ollama not available
+
+    return { invoker, provider, model };
   }
 
-  throw new Error(
-    'No LLM provider configured. Please set one of:\n' +
-      '  - OPENAI_API_KEY (for OpenAI)\n' +
-      '  - ANTHROPIC_API_KEY (for Anthropic)\n' +
-      '  - Run local Ollama instance (https://ollama.ai/)\n\n' +
-      'Run `wunderland api-keys` to configure.'
-  );
+  // Everything else uses OpenAI-compatible chat completions.
+  const openaiBaseUrl =
+    provider === 'openrouter' ? 'https://openrouter.ai/api/v1'
+    : provider === 'ollama' ? 'http://localhost:11434/v1'
+    : undefined;
+
+  const apiKey =
+    provider === 'openrouter' ? (process.env['OPENROUTER_API_KEY'] || '')
+    : provider === 'ollama' ? 'ollama'
+    : (process.env['OPENAI_API_KEY'] || '');
+
+  if (!apiKey && provider !== 'ollama') {
+    throw new Error(`${provider.toUpperCase()} API key is missing.`);
+  }
+
+  const fallback: LLMProviderConfig | undefined =
+    provider === 'openai' && process.env['OPENROUTER_API_KEY']
+      ? {
+          apiKey: process.env['OPENROUTER_API_KEY'] || '',
+          model: 'auto',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
+        }
+      : undefined;
+
+  const invoker = async (prompt: string): Promise<string> => {
+    const { message } = await openaiChatWithTools({
+      apiKey,
+      model,
+      baseUrl: openaiBaseUrl,
+      fallback,
+      messages: [{ role: 'user', content: prompt }],
+      tools: [],
+      temperature: 0.1,
+      maxTokens: 2200,
+    });
+    const content = typeof message.content === 'string' ? message.content : '';
+    if (!content.trim()) throw new Error('LLM returned an empty response.');
+    return content;
+  };
+
+  return { invoker, provider, model };
 }
 
 /**
@@ -62,6 +156,8 @@ export default async function cmdCreate(
   flags: Record<string, string | boolean>,
   globals: GlobalFlags,
 ): Promise<void> {
+  await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
+
   p.intro(accent('Natural Language Agent Creator'));
 
   // ── Step 1: Get description ─────────────────────────────────────────────
@@ -90,8 +186,13 @@ export default async function cmdCreate(
   fmt.section('Validating LLM provider...');
 
   let llmInvoker: (prompt: string) => Promise<string>;
+  let llmProvider = '';
+  let llmModel = '';
   try {
-    llmInvoker = await createLLMInvoker();
+    const res = await createLLMInvoker(globals);
+    llmInvoker = res.invoker;
+    llmProvider = res.provider;
+    llmModel = res.model;
     fmt.ok('LLM provider configured.');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -202,6 +303,13 @@ export default async function cmdCreate(
   }
 
   // Build agent.config.json
+  const securityTier: SecurityTierName = extracted.securityTier && isValidSecurityTier(extracted.securityTier)
+    ? extracted.securityTier
+    : 'balanced';
+  const tierConfig = getSecurityTier(securityTier);
+  const permissionSetDefault = SECURITY_TIERS[securityTier].permissionSet;
+  const wrapToolOutputs = securityTier !== 'dangerous';
+
   const config: Record<string, unknown> = {
     seedId: extracted.seedId,
     displayName: extracted.displayName,
@@ -209,14 +317,20 @@ export default async function cmdCreate(
     systemPrompt: extracted.systemPrompt ?? 'You are an autonomous agent in the Wunderland network.',
     personality: extracted.personality,
     security: {
-      tier: extracted.securityTier,
-      preLLMClassifier: true,
-      dualLLMAudit: true,
-      outputSigning: true,
+      tier: securityTier,
+      preLLMClassifier: tierConfig.pipelineConfig.enablePreLLM,
+      dualLLMAudit: tierConfig.pipelineConfig.enableDualLLMAudit,
+      outputSigning: tierConfig.pipelineConfig.enableOutputSigning,
+      riskThreshold: tierConfig.riskThreshold,
+      wrapToolOutputs,
     },
+    permissionSet: extracted.permissionSet ?? permissionSetDefault,
+    executionMode: extracted.executionMode ?? 'human-dangerous',
     observability: {
       otel: { enabled: false, exportLogs: false },
     },
+    llmProvider,
+    llmModel,
     skills: extracted.skills ?? [],
     extensions: extracted.extensions,
     suggestedChannels: extracted.channels ?? [],
@@ -235,23 +349,7 @@ export default async function cmdCreate(
 
     await writeFile(
       path.join(targetDir, '.env.example'),
-      `# Copy to .env and fill in real values
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-PORT=3777
-
-# OBSERVABILITY (OpenTelemetry - opt-in)
-# Enable OTEL in wunderland CLI runtime (wunderland start/chat):
-# WUNDERLAND_OTEL_ENABLED=true
-# WUNDERLAND_OTEL_LOGS_ENABLED=true
-# OTEL_TRACES_EXPORTER=otlp
-# OTEL_METRICS_EXPORTER=otlp
-# OTEL_LOGS_EXPORTER=otlp
-# OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-# OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-# OTEL_TRACES_SAMPLER=parentbased_traceidratio
-# OTEL_TRACES_SAMPLER_ARG=0.1
-`,
+      buildEnvExample({ llmProvider, llmModel }),
       'utf8',
     );
 
@@ -264,7 +362,7 @@ PORT=3777
 
     await writeFile(
       path.join(targetDir, 'README.md'),
-      `# ${config.displayName}\n\nCreated via natural language agent builder.\n\n**Original description:** "${description}"\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { \"message\": \"Hello\", \"sessionId\": \"local\" }\n`,
+      `# ${config.displayName}\n\nCreated via natural language agent builder.\n\n**Original description:** "${description}"\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { \"message\": \"Hello\", \"sessionId\": \"local\" }\n- HITL UI: http://localhost:3777/hitl\n`,
       'utf8',
     );
   } catch (err) {

@@ -38,6 +38,8 @@
  * ```
  */
 
+import { createRequire } from 'node:module';
+
 // Core exports
 export * from './core/index.js';
 
@@ -149,6 +151,8 @@ export { PairingManager } from './pairing/PairingManager.js';
 // Scheduling (modeled after OpenClaw)
 export { CronScheduler } from './scheduling/CronScheduler.js';
 
-// Version info
-export const VERSION = '0.2.0';
-export const PACKAGE_NAME = 'wunderland';
+// Version info (read from package.json at runtime)
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { name: string; version: string };
+export const VERSION = pkg.version;
+export const PACKAGE_NAME = pkg.name;

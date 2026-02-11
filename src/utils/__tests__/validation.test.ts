@@ -10,6 +10,7 @@ import {
   validateToolAccessProfile,
   validatePermissionSet,
   validateExecutionMode,
+  validateTurnApprovalMode,
   validateExtensionName,
   validateSkillName,
   validateHexacoTraits,
@@ -96,6 +97,20 @@ describe('Validation Utilities', () => {
       expect(validateExecutionMode('invalid')).toBe(false);
       expect(validateExecutionMode('AUTONOMOUS')).toBe(false);
       expect(validateExecutionMode('')).toBe(false);
+    });
+  });
+
+  describe('validateTurnApprovalMode', () => {
+    it('should validate correct turn approval modes', () => {
+      expect(validateTurnApprovalMode('off')).toBe(true);
+      expect(validateTurnApprovalMode('after-each-round')).toBe(true);
+      expect(validateTurnApprovalMode('after-each-turn')).toBe(true);
+    });
+
+    it('should reject invalid turn approval modes', () => {
+      expect(validateTurnApprovalMode('invalid')).toBe(false);
+      expect(validateTurnApprovalMode('OFF')).toBe(false);
+      expect(validateTurnApprovalMode('')).toBe(false);
     });
   });
 
@@ -326,6 +341,18 @@ describe('Validation Utilities', () => {
       const result = validateAgentConfig(config);
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.includes('executionMode'))).toBe(true);
+    });
+
+    it('should validate hitl.turnApprovalMode', () => {
+      const config = {
+        seedId: 'seed_test_agent',
+        displayName: 'Test Agent',
+        hitl: { turnApprovalMode: 'invalid' },
+      };
+
+      const result = validateAgentConfig(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('hitl.turnApprovalMode'))).toBe(true);
     });
   });
 });

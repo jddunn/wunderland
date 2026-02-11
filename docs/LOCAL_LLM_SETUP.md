@@ -57,15 +57,15 @@ ollama pull llama3:70b         # 70B (requires 40GB+ VRAM)
 
 ### 4. Configure Wunderland
 
-```javascript
-const {
+```ts
+import {
   createWunderlandSeed,
   HEXACO_PRESETS,
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
-} = require('wunderland');
-const { AgentOS } = require('@framers/agentos');
+} from 'wunderland';
+import { AgentOS } from '@framers/agentos';
 
 const seed = createWunderlandSeed({
   seedId: 'local-assistant',
