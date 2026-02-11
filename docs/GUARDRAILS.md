@@ -196,7 +196,12 @@ Default: Write (safer to assume write when uncertain)
 
 ## Security Tier Integration
 
-Each security tier includes default folder permissions that serve as a baseline for all agents using that tier.
+The SDK ships tier-aligned folder permission presets (see `createDefaultFolderConfig()` in `wunderland/security/FolderPermissions`).
+
+In the CLI runtime (`wunderland chat` / `wunderland start`):
+
+- If `security.folderPermissions` is **unset**, a conservative default sandbox is applied at runtime (agent workspace only). This default is not written into `agent.config.json`.
+- If you set `security.folderPermissions.inheritFromTier=true`, the guardrails fall back to the agent’s **permission set / tier filesystem flags** when a path is unmatched and `defaultPolicy='deny'`.
 
 ### Tier Default Folder Permissions
 
@@ -272,7 +277,6 @@ Agents can override their security tier's default folder permissions in `agent.c
   "displayName": "Research Assistant",
   "security": {
     "tier": "balanced",
-    "permissionSet": "autonomous",
     "folderPermissions": {
       "defaultPolicy": "deny",
       "inheritFromTier": true,
@@ -282,7 +286,8 @@ Agents can override their security tier's default folder permissions in `agent.c
         { "pattern": "/data/public/**", "read": true, "write": false }
       ]
     }
-  }
+  },
+  "permissionSet": "autonomous"
 }
 ```
 
@@ -415,7 +420,6 @@ const guardrails = new SafeGuardrails({
   "displayName": "Development Agent",
   "security": {
     "tier": "permissive",
-    "permissionSet": "autonomous",
     "folderPermissions": {
       "defaultPolicy": "allow",
       "inheritFromTier": true,
@@ -425,7 +429,8 @@ const guardrails = new SafeGuardrails({
         { "pattern": "~/.ssh/**", "read": false, "write": false }
       ]
     }
-  }
+  },
+  "permissionSet": "autonomous"
 }
 ```
 
@@ -437,7 +442,6 @@ const guardrails = new SafeGuardrails({
   "displayName": "Research Agent",
   "security": {
     "tier": "balanced",
-    "permissionSet": "supervised",
     "folderPermissions": {
       "defaultPolicy": "deny",
       "inheritFromTier": true,
@@ -448,7 +452,8 @@ const guardrails = new SafeGuardrails({
         { "pattern": "/tmp/research-*/**", "read": true, "write": true, "description": "Temp research files" }
       ]
     }
-  }
+  },
+  "permissionSet": "supervised"
 }
 ```
 
@@ -460,7 +465,6 @@ const guardrails = new SafeGuardrails({
   "displayName": "Secure Agent",
   "security": {
     "tier": "paranoid",
-    "permissionSet": "minimal",
     "folderPermissions": {
       "defaultPolicy": "deny",
       "inheritFromTier": false,
@@ -468,7 +472,8 @@ const guardrails = new SafeGuardrails({
         { "pattern": "~/workspace/allowed/**", "read": true, "write": true, "description": "Allowed workspace only" }
       ]
     }
-  }
+  },
+  "permissionSet": "minimal"
 }
 ```
 

@@ -243,8 +243,8 @@ export async function extractAgentConfig(
     // Call LLM
     const response = await llmInvoker(finalPrompt);
 
-    // Parse JSON response
-    const extracted = JSON.parse(response) as ExtractedAgentConfig;
+    // Parse JSON response (robust to code fences / leading text)
+    const extracted = parseJsonFromLLMResponse<ExtractedAgentConfig>(response);
 
     // Validate preset if specified
     const validPresets = [
@@ -321,6 +321,43 @@ export async function extractAgentConfig(
   } catch (err) {
     throw new Error(`Failed to extract config: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+function parseJsonFromLLMResponse<T>(raw: string): T {
+  const text = String(raw ?? '').trim();
+  if (!text) throw new Error('LLM returned an empty response');
+
+  // 1) Direct JSON
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // continue
+  }
+
+  // 2) ```json fenced blocks
+  const fenceMatch = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(text);
+  if (fenceMatch?.[1]) {
+    const fenced = fenceMatch[1].trim();
+    try {
+      return JSON.parse(fenced) as T;
+    } catch {
+      // continue
+    }
+  }
+
+  // 3) Best-effort: first {...} span
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if (first !== -1 && last !== -1 && last > first) {
+    const candidate = text.slice(first, last + 1);
+    try {
+      return JSON.parse(candidate) as T;
+    } catch {
+      // fall through
+    }
+  }
+
+  throw new Error('LLM did not return valid JSON');
 }
 
 /**
