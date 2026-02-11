@@ -63,9 +63,6 @@ export async function runInitLlmStep(): Promise<InitLlmResult | null> {
 
   // ── Prompt for key if none collected ───────────────────────────────────────
   if (Object.keys(apiKeys).length === 0) {
-    // Check Ollama availability
-    const ollamaAvailable = !!LLM_PROVIDERS.find((p) => p.id === 'ollama');
-
     const providerOptions = LLM_PROVIDERS.map((prov) => ({
       value: prov.id,
       label: prov.label,
