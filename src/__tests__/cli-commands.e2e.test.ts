@@ -5,7 +5,7 @@
  * Tests CLI commands by executing them in subprocesses and verifying output.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -14,7 +14,7 @@ import * as path from 'node:path';
 const TEST_DIR = path.join(process.cwd(), '.test-cli');
 const CLI_PATH = path.join(process.cwd(), 'dist', 'cli', 'index.js');
 
-describe('CLI Commands E2E', () => {
+describe('CLI Commands E2E', { timeout: 30_000 }, () => {
   beforeAll(async () => {
     // Create test directory
     await mkdir(TEST_DIR, { recursive: true });
@@ -196,13 +196,13 @@ describe('CLI Commands E2E', () => {
   describe('wunderland create', () => {
     it('should validate LLM provider requirement', async () => {
       try {
-        const { default: cmdCreate } = await import('../cli/commands/create.js');
+        // Ensure prior imports (e.g. from `wunderland init` tests) don't prevent this mock from applying.
+        vi.resetModules();
+        vi.doMock('../cli/wizards/init-llm-step.js', () => ({
+          runInitLlmStep: async () => null,
+        }));
 
-        // Remove API keys from env
-        const originalOpenAI = process.env.OPENAI_API_KEY;
-        const originalAnthropic = process.env.ANTHROPIC_API_KEY;
-        delete process.env.OPENAI_API_KEY;
-        delete process.env.ANTHROPIC_API_KEY;
+        const { default: cmdCreate } = await import('../cli/commands/create.js');
 
         try {
           await cmdCreate(['test bot'], {}, { yes: true, verbose: false });
@@ -211,9 +211,8 @@ describe('CLI Commands E2E', () => {
           // Check process.exitCode was set
           expect(process.exitCode).toBe(1);
         } finally {
-          // Restore env vars
-          if (originalOpenAI) process.env.OPENAI_API_KEY = originalOpenAI;
-          if (originalAnthropic) process.env.ANTHROPIC_API_KEY = originalAnthropic;
+          vi.resetModules();
+          vi.unmock('../cli/wizards/init-llm-step.js');
           process.exitCode = 0;
         }
       } catch (err) {

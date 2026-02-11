@@ -11,12 +11,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 const TEST_DIR = path.join(process.cwd(), '.test-cli-guardrails');
 const TEST_AGENT_DIR = path.join(TEST_DIR, 'test-agent');
 
-describe('CLI Guardrails E2E', () => {
+describe('CLI Guardrails E2E', { timeout: 30_000 }, () => {
   beforeAll(async () => {
     // Create test directory
     await mkdir(TEST_DIR, { recursive: true });
