@@ -27,11 +27,16 @@ import { CircuitBreaker } from '@framers/agentos/core/safety/CircuitBreaker';
 import { CostGuard } from '@framers/agentos/core/safety/CostGuard';
 import { StuckDetector } from '@framers/agentos/core/safety/StuckDetector';
 import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
+import { SafeGuardrails } from '../security/SafeGuardrails.js';
+import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
 import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 import type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
 import type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
 import type { LLMInvokeCallback } from './NewsroomAgency.js';
 import type { ITool } from '@framers/agentos/core/tools/ITool';
+import { resolveAgentWorkspaceBaseDir, resolveAgentWorkspaceDir } from '@framers/agentos';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import type {
   WonderlandNetworkConfig,
   CitizenProfile,
@@ -165,6 +170,12 @@ export class WonderlandNetwork {
   /** Tool execution guard with timeouts & per-tool circuit breakers. */
   private toolExecutionGuard: ToolExecutionGuard;
 
+  /** Safe guardrails for folder-level filesystem sandboxing. */
+  private guardrails: SafeGuardrails;
+
+  /** Base directory for per-agent sandbox workspaces. */
+  private readonly workspaceBaseDir: string;
+
   /** Per-citizen LLM circuit breakers. */
   private citizenCircuitBreakers: Map<string, CircuitBreaker> = new Map();
 
@@ -187,6 +198,17 @@ export class WonderlandNetwork {
           `Cost cap '${capType}' reached: $${currentCost.toFixed(4)} >= $${limit.toFixed(2)}`,
         );
       },
+    });
+
+    this.workspaceBaseDir = resolveAgentWorkspaceBaseDir();
+    this.guardrails = new SafeGuardrails({
+      notificationWebhooks: (process.env.WUNDERLAND_VIOLATION_WEBHOOKS || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      requireFolderPermissionsForFilesystemTools: true,
+      enableAuditLogging: true,
+      enableNotifications: true,
     });
 
     // Note: SignedOutputVerifier will be used for manifest verification in future
@@ -272,6 +294,8 @@ export class WonderlandNetwork {
 
     // Create Newsroom agency
     const newsroom = new NewsroomAgency(newsroomConfig);
+    const workspaceDir = await this.configureCitizenWorkspaceSandbox(seedId);
+    newsroom.setGuardrails(this.guardrails, { workingDirectory: workspaceDir });
 
     // Create per-citizen circuit breaker for LLM calls
     const breaker = new CircuitBreaker({
@@ -335,6 +359,36 @@ export class WonderlandNetwork {
 
     console.log(`[WonderlandNetwork] Registered citizen '${seedId}' (${citizen.displayName})`);
     return citizen;
+  }
+
+  private async configureCitizenWorkspaceSandbox(seedId: string): Promise<string> {
+    const workspaceDir = resolveAgentWorkspaceDir(seedId, this.workspaceBaseDir);
+
+    // Ensure workspace exists (best-effort).
+    try {
+      await fs.mkdir(workspaceDir, { recursive: true });
+      await fs.mkdir(path.join(workspaceDir, 'assets'), { recursive: true });
+      await fs.mkdir(path.join(workspaceDir, 'exports'), { recursive: true });
+      await fs.mkdir(path.join(workspaceDir, 'tmp'), { recursive: true });
+    } catch {
+      // Ignore FS errors; guardrails will still restrict paths.
+    }
+
+    const folderPermissions: FolderPermissionConfig = {
+      defaultPolicy: 'deny',
+      inheritFromTier: false,
+      rules: [
+        {
+          pattern: path.join(workspaceDir, '**'),
+          read: true,
+          write: true,
+          description: 'Agent workspace (sandbox)',
+        },
+      ],
+    };
+
+    this.guardrails.setFolderPermissions(seedId, folderPermissions);
+    return workspaceDir;
   }
 
   /**

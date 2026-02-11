@@ -28,6 +28,7 @@ function printHelp(): void {
     ${chalk.white('create')} ${d('[description]')}   Create agent from natural language
     ${chalk.white('start')}                  Start local agent server
     ${chalk.white('chat')}                   Interactive terminal assistant
+    ${chalk.white('hitl')}                   Watch/resolve approvals & checkpoints
     ${chalk.white('doctor')}                 Health check: keys, tools, connectivity
     ${chalk.white('channels')}               List configured channels
     ${chalk.white('channels add')}           Add a channel interactively
@@ -85,7 +86,7 @@ function printHelp(): void {
     ${d('--help, -h')}             Show help
     ${d('--version, -v')}          Show version
     ${d('--quiet, -q')}            Suppress banner
-    ${d('--yes, -y')}              Auto-approve tool calls (headless)
+    ${d('--yes, -y')}              Auto-approve tool calls (fully autonomous)
     ${d('--no-color')}             Disable colors (also: NO_COLOR env)
     ${d('--dry-run')}              Preview without writing
     ${d('--config <path>')}        Config directory path
@@ -118,6 +119,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   create:         () => import('./commands/create.js'),
   start:          () => import('./commands/start.js'),
   chat:           () => import('./commands/chat.js'),
+  hitl:           () => import('./commands/hitl.js'),
   doctor:         () => import('./commands/doctor.js'),
   channels:       () => import('./commands/channels.js'),
   config:         () => import('./commands/config-cmd.js'),
@@ -139,6 +141,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   plugins:        () => import('./commands/plugins.js'),
   'export':       () => import('./commands/export-agent.js'),
   'import':       () => import('./commands/import-agent.js'),
+  'ollama-setup': () => import('./commands/ollama-setup.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */

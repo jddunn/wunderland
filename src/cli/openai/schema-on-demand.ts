@@ -8,6 +8,7 @@
 import { getAvailableExtensions, type ExtensionInfo } from '@framers/agentos-extensions-registry';
 
 import type { ToolInstance } from './tool-calling.js';
+import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from '../security/runtime-policy.js';
 
 type ExtensionsListOutput = {
   curated: ExtensionInfo[];
@@ -31,6 +32,7 @@ type ExtensionsEnableOutput = {
   reason?: string;
   toolsAdded: string[];
   toolsUpdated: string[];
+  toolsBlockedByPolicy?: string[];
 };
 
 export type SchemaOnDemandRuntimeDefaults = {
@@ -187,7 +189,7 @@ export function createSchemaOnDemandTools(opts: {
       },
       additionalProperties: false,
     },
-    execute: async (args): Promise<{ success: boolean; output?: unknown; error?: string }> => {
+    execute: async (args, toolContext): Promise<{ success: boolean; output?: unknown; error?: string }> => {
       const input = (args ?? {}) as Partial<ExtensionsEnableInput>;
 
       const ref = typeof input.extension === 'string' ? input.extension.trim() : '';
@@ -310,6 +312,32 @@ export function createSchemaOnDemandTools(opts: {
 
       enabledPackages.add(packageName);
 
+      let toolsBlockedByPolicy: string[] | undefined;
+      // Enforce permission set + tool access profile after dynamic extension loads.
+      try {
+        const permissionSet = (toolContext && typeof (toolContext as any).permissionSet === 'string')
+          ? String((toolContext as any).permissionSet)
+          : '';
+        const toolAccessProfileRaw = (toolContext && typeof (toolContext as any).toolAccessProfile === 'string')
+          ? String((toolContext as any).toolAccessProfile)
+          : '';
+        if (permissionSet && toolAccessProfileRaw) {
+          const filtered = filterToolMapByPolicy({
+            toolMap: opts.toolMap,
+            toolAccessProfile: normalizeToolAccessProfile(toolAccessProfileRaw),
+            permissions: getPermissionsForSet(permissionSet as any),
+          });
+          opts.toolMap.clear();
+          for (const [k, v] of filtered.toolMap.entries()) opts.toolMap.set(k, v);
+
+          toolsBlockedByPolicy = [...toolsAdded, ...toolsUpdated]
+            .filter((t) => !opts.toolMap.has(t))
+            .sort();
+        }
+      } catch {
+        // Best-effort only; if filtering fails, keep loaded tools.
+      }
+
       const out: ExtensionsEnableOutput = {
         extension: ref,
         source,
@@ -318,6 +346,7 @@ export function createSchemaOnDemandTools(opts: {
         loaded: true,
         toolsAdded: toolsAdded.sort(),
         toolsUpdated: toolsUpdated.sort(),
+        ...(toolsBlockedByPolicy && toolsBlockedByPolicy.length > 0 ? { toolsBlockedByPolicy } : null),
       };
 
       return { success: true, output: out };

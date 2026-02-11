@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="460" height="100" viewBox="0 0 460 100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        
+        <linearGradient id="primaryGradlogoD" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#92702a"/>
+            <stop offset="50%" stop-color="#c9a227"/>
+            <stop offset="100%" stop-color="#eab308"/>
+        </linearGradient>
+        <linearGradient id="blueGradlogoD" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#92702a"/>
+            <stop offset="50%" stop-color="#c9a227"/>
+            <stop offset="100%" stop-color="#eab308"/>
+        </linearGradient>
+        <linearGradient id="goldGradlogoD" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#a16207"/>
+            <stop offset="25%" stop-color="#c9a227"/>
+            <stop offset="50%" stop-color="#fde047"/>
+            <stop offset="75%" stop-color="#c9a227"/>
+            <stop offset="100%" stop-color="#a16207"/>
+        </linearGradient>
+        <linearGradient id="textGradlogoD" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#c9a227"/>
+            <stop offset="50%" stop-color="#fde047"/>
+            <stop offset="100%" stop-color="#c9a227"/>
+        </linearGradient>
+        <linearGradient id="mirrorSurfacelogoD" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#fef9c3" stop-opacity="0.6"/>
+            <stop offset="50%" stop-color="#fde047" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#fef9c3" stop-opacity="0.1"/>
+        </linearGradient>
+        <linearGradient id="mirrorShimmerlogoD" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#c9a227" stop-opacity="0.2"/>
+            <stop offset="50%" stop-color="#fef9c3" stop-opacity="0.95"/>
+            <stop offset="100%" stop-color="#c9a227" stop-opacity="0.2"/>
+        </linearGradient>
+        <linearGradient id="reflectionGradlogoD" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#c9a227" stop-opacity="0.55"/>
+            <stop offset="100%" stop-color="#92702a" stop-opacity="0.08"/>
+        </linearGradient>
+        <linearGradient id="frameGradlogoD" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#78350f"/>
+            <stop offset="50%" stop-color="#451a03"/>
+            <stop offset="100%" stop-color="#78350f"/>
+        </linearGradient>
+        <linearGradient id="frameHighlightlogoD" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#fde047" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="#eab308" stop-opacity="0.5"/>
+        </linearGradient>
+        <filter id="frameShadowlogoD" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/>
+        </filter>
+    </defs>
+    <g transform="translate(4, 8) scale(0.72)">
+        <polygon points="50,2 84,18 98,50 84,82 50,98 16,82 2,50 16,18"
+                 fill="url(#frameGradlogoD)"
+                 filter="url(#frameShadowlogoD)"/>
+        <polygon points="50,2 84,18 98,50 84,82 50,98 16,82 2,50 16,18"
+                 fill="none"
+                 stroke="url(#frameHighlightlogoD)"
+                 stroke-width="1.5"/>
+        <polygon points="50,10 76,22 88,50 76,78 50,90 24,78 12,50 24,22"
+                 fill="url(#mirrorSurfacelogoD)"/>
+        <polygon points="50,10 76,22 88,50 76,78 50,90 24,78 12,50 24,22"
+                 fill="none"
+                 stroke="url(#blueGradlogoD)"
+                 stroke-width="2"/>
+        <path d="M24,28 L34,50 L50,32 L66,50 L76,28"
+              fill="none"
+              stroke="url(#primaryGradlogoD)"
+              stroke-width="5"
+              stroke-linecap="round"
+              stroke-linejoin="round"/>
+        <line x1="16" y1="50" x2="84" y2="50"
+              stroke="url(#mirrorShimmerlogoD)"
+              stroke-width="2.5"/>
+        <path d="M24,72 L34,50 L50,68 L66,50 L76,72"
+              fill="none"
+              stroke="url(#reflectionGradlogoD)"
+              stroke-width="5"
+              stroke-linecap="round"
+              stroke-linejoin="round"/>
+        <line x1="50" y1="2" x2="50" y2="10" stroke="url(#goldGradlogoD)" stroke-width="2"/>
+        <line x1="50" y1="90" x2="50" y2="98" stroke="url(#goldGradlogoD)" stroke-width="2"/>
+        <line x1="2" y1="50" x2="12" y2="50" stroke="url(#goldGradlogoD)" stroke-width="2"/>
+        <line x1="88" y1="50" x2="98" y2="50" stroke="url(#goldGradlogoD)" stroke-width="2"/>
+    </g>
+    <text x="82" y="46"
+          font-family="Syne, -apple-system, sans-serif"
+          font-size="38"
+          font-weight="700"
+          fill="url(#textGradlogoD)"
+          letter-spacing="5">WUNDERLAND</text>
+    <text x="84" y="68"
+          font-family="Space Mono, monospace"
+          font-size="10"
+          font-weight="400"
+          fill="rgba(125, 211, 252, 0.6)"
+          letter-spacing="3">AUTONOMOUS AGENTS</text>
+    <g transform="translate(82, 78)">
+        <rect x="0" y="0" width="130" height="16" rx="2" fill="rgba(199, 165, 66, 0.15)"/>
+        <rect x="0" y="0" width="130" height="16" rx="2" fill="none" stroke="rgba(199, 165, 66, 0.3)" stroke-width="0.75"/>
+        <text x="12" y="11"
+              font-family="Space Mono, monospace"
+              font-size="7"
+              font-weight="400"
+              fill="rgba(234, 179, 8, 0.85)"
+              letter-spacing="1.5">RABBIT HOLE INC</text>
+    </g>
+</svg>

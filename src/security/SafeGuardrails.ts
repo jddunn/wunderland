@@ -40,6 +40,11 @@ export interface GuardrailsRequest {
   agentId: string;
   userId?: string;
   sessionId?: string;
+  /**
+   * Optional working directory used to resolve relative filesystem paths.
+   * When omitted, relative paths are resolved against `process.cwd()`.
+   */
+  workingDirectory?: string;
   tool?: ITool; // Full tool metadata
 }
 
@@ -90,6 +95,14 @@ export interface SafeGuardrailsConfig {
 
   /** Enable notifications (default: true for high/critical) */
   enableNotifications?: boolean;
+
+  /**
+   * When true, filesystem-affecting tools are denied unless folder permissions
+   * have been explicitly configured for the agent via {@link setFolderPermissions}.
+   *
+   * Default: false (legacy behavior = allow when unconfigured).
+   */
+  requireFolderPermissionsForFilesystemTools?: boolean;
 }
 
 /**
@@ -101,7 +114,7 @@ const TOOL_PATH_ARGUMENTS: Record<string, string[]> = {
   file_write: ['file_path', 'path', 'destination', 'filePath'],
   list_directory: ['directory', 'path', 'dir'],
   // shell_execute is handled specially (parse command tokens for paths).
-  shell_execute: [],
+  shell_execute: ['cwd'],
 
   // Extension tools
   git_clone: ['target_directory', 'destination', 'targetDirectory'],
@@ -173,6 +186,13 @@ export class SafeGuardrails {
   }
 
   /**
+   * Check whether folder permissions have been configured for an agent.
+   */
+  hasFolderPermissions(agentId: string): boolean {
+    return this.folderPermissions.has(agentId);
+  }
+
+  /**
    * Set security tier permissions for an agent
    */
   setTierPermissions(agentId: string, permissions: GranularPermissions['filesystem']): void {
@@ -184,21 +204,39 @@ export class SafeGuardrails {
    * Returns validation result with allow/deny + reason
    */
   async validateBeforeExecution(request: GuardrailsRequest): Promise<GuardrailsResult> {
-    // 1. Get agent's folder permissions
-    const folderConfig = this.folderPermissions.get(request.agentId);
-    if (!folderConfig) {
-      // No folder restrictions configured - allow by default
-      return { allowed: true };
-    }
-
-    // 2. Check if tool requires filesystem access
+    // 1. Check if tool requires filesystem access
     if (!this.isFilesystemTool(request.toolId)) {
       // Not a filesystem tool, skip validation
       return { allowed: true };
     }
 
+    // 2. Get agent's folder permissions
+    const folderConfig = this.folderPermissions.get(request.agentId);
+    if (!folderConfig) {
+      // Legacy behavior: allow by default when unconfigured.
+      if (this.config.requireFolderPermissionsForFilesystemTools) {
+        return {
+          allowed: false,
+          reason: `Folder access denied: no folderPermissions configured for agent '${request.agentId}'`,
+          violations: [
+            {
+              timestamp: new Date(),
+              agentId: request.agentId,
+              userId: request.userId,
+              toolId: request.toolId,
+              operation: request.toolName,
+              attemptedPath: undefined,
+              reason: 'No folderPermissions configured for agent',
+              severity: 'high',
+            },
+          ],
+        };
+      }
+      return { allowed: true };
+    }
+
     // 3. Extract file paths from arguments
-    const paths = this.extractFilePaths(request.toolId, request.args);
+    const paths = this.extractFilePaths(request.toolId, request.args, request.workingDirectory);
     if (paths.length === 0) {
       // No paths found - allow (may be a safe command)
       return { allowed: true };
@@ -270,7 +308,11 @@ export class SafeGuardrails {
   /**
    * Extract file paths from tool arguments
    */
-  private extractFilePaths(toolId: string, args: Record<string, unknown>): string[] {
+  private extractFilePaths(
+    toolId: string,
+    args: Record<string, unknown>,
+    workingDirectory?: string,
+  ): string[] {
     const pathKeys = TOOL_PATH_ARGUMENTS[toolId] || [];
     const paths: string[] = [];
 
@@ -287,10 +329,18 @@ export class SafeGuardrails {
       paths.push(...extractedPaths);
     }
 
+    const baseDir = typeof workingDirectory === 'string' && workingDirectory.trim()
+      ? path.resolve(expandTilde(workingDirectory.trim()))
+      : process.cwd();
+
     const normalized = paths
       .map((p) => (typeof p === 'string' ? p.trim() : ''))
       .filter(Boolean)
-      .map((p) => path.resolve(expandTilde(p)));
+      .map((p) => {
+        const expanded = expandTilde(p);
+        if (path.isAbsolute(expanded)) return path.resolve(expanded);
+        return path.resolve(baseDir, expanded);
+      });
 
     // Deduplicate
     return Array.from(new Set(normalized));

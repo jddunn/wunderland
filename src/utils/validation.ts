@@ -58,6 +58,11 @@ export const VALID_PERMISSION_SETS: ReadonlyArray<PermissionSetName> = [
  */
 export const VALID_EXECUTION_MODES = ['autonomous', 'human-all', 'human-dangerous'] as const;
 
+/**
+ * Valid HITL turn-approval modes
+ */
+export const VALID_TURN_APPROVAL_MODES = ['off', 'after-each-round', 'after-each-turn'] as const;
+
 // ============================================================================
 // Type Guards
 // ============================================================================
@@ -149,6 +154,15 @@ export function validateExecutionMode(
   mode: string,
 ): mode is (typeof VALID_EXECUTION_MODES)[number] {
   return VALID_EXECUTION_MODES.includes(mode as any);
+}
+
+/**
+ * Check if a string is a valid HITL turn-approval mode.
+ */
+export function validateTurnApprovalMode(
+  mode: string,
+): mode is (typeof VALID_TURN_APPROVAL_MODES)[number] {
+  return VALID_TURN_APPROVAL_MODES.includes(mode as any);
 }
 
 /**
@@ -304,6 +318,16 @@ export function validateAgentConfig(config: any): {
   // Validate execution mode if provided
   if (config.executionMode && !validateExecutionMode(config.executionMode)) {
     errors.push(`Invalid executionMode: ${config.executionMode}`);
+  }
+
+  // Validate HITL config if provided
+  if (config.hitl && typeof config.hitl === 'object' && !Array.isArray(config.hitl)) {
+    if (typeof config.hitl.secret !== 'undefined' && typeof config.hitl.secret !== 'string') {
+      errors.push('Invalid hitl.secret: must be a string');
+    }
+    if (config.hitl.turnApprovalMode && !validateTurnApprovalMode(config.hitl.turnApprovalMode)) {
+      errors.push(`Invalid hitl.turnApprovalMode: ${config.hitl.turnApprovalMode}`);
+    }
   }
 
   // Validate extension names if provided

@@ -9,6 +9,9 @@ import { LLM_PROVIDERS } from '../constants.js';
 import { accent } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 
+const TOOL_CALLING_PROVIDER_IDS = new Set(['openai', 'anthropic', 'openrouter', 'ollama']);
+const SUPPORTED_LLM_PROVIDERS = LLM_PROVIDERS.filter((p) => TOOL_CALLING_PROVIDER_IDS.has(p.id));
+
 export interface InitLlmResult {
   /** Collected API keys: envVar → value */
   apiKeys: Record<string, string>;
@@ -18,24 +21,67 @@ export interface InitLlmResult {
   llmModel: string;
 }
 
+export interface InitLlmStepOptions {
+  /**
+   * When true, do not prompt. Uses detected env keys (if present) and
+   * selects a recommended provider/model automatically.
+   *
+   * If no keys are detected, returns `null`.
+   */
+  nonInteractive?: boolean;
+}
+
+function choosePreferredProviderId(detectedProviderIds: string[]): string {
+  const preferredOrder = ['openai', 'anthropic', 'openrouter', 'ollama'];
+  for (const id of preferredOrder) {
+    if (detectedProviderIds.includes(id)) return id;
+  }
+  return detectedProviderIds[0] || 'openai';
+}
+
 /**
  * Interactive LLM configuration step for `wunderland init`.
  * Returns collected keys + provider/model, or `null` if the user cancelled.
  */
-export async function runInitLlmStep(): Promise<InitLlmResult | null> {
+export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<InitLlmResult | null> {
   fmt.section('LLM Configuration');
 
   const apiKeys: Record<string, string> = {};
   let selectedProvider: string | undefined;
+  const nonInteractive = opts.nonInteractive === true || !process.stdin.isTTY || !process.stdout.isTTY;
 
   // ── Detect existing env vars ───────────────────────────────────────────────
   const detected: { id: string; label: string; envVar: string; value: string }[] = [];
-  for (const prov of LLM_PROVIDERS) {
+  for (const prov of SUPPORTED_LLM_PROVIDERS) {
     if (!prov.envVar) continue; // Ollama — no key needed
     const val = process.env[prov.envVar];
     if (val) {
       detected.push({ id: prov.id, label: prov.label, envVar: prov.envVar, value: val });
     }
+  }
+
+  if (nonInteractive) {
+    if (detected.length === 0) {
+      fmt.note('No API keys detected in environment. Skipping LLM setup (non-interactive).');
+      return null;
+    }
+
+    for (const d of detected) {
+      apiKeys[d.envVar] = d.value;
+    }
+
+    selectedProvider = choosePreferredProviderId(detected.map((d) => d.id));
+    const provDef = SUPPORTED_LLM_PROVIDERS.find((p) => p.id === selectedProvider);
+    const selectedModel = (provDef?.models?.[0] as string | undefined) || 'gpt-4o-mini';
+
+    fmt.blank();
+    fmt.ok(`Provider: ${accent(selectedProvider)}  Model: ${accent(selectedModel)}`);
+
+    return {
+      apiKeys,
+      llmProvider: selectedProvider,
+      llmModel: selectedModel,
+    };
   }
 
   if (detected.length > 0) {
@@ -63,7 +109,7 @@ export async function runInitLlmStep(): Promise<InitLlmResult | null> {
 
   // ── Prompt for key if none collected ───────────────────────────────────────
   if (Object.keys(apiKeys).length === 0) {
-    const providerOptions = LLM_PROVIDERS.map((prov) => ({
+    const providerOptions = SUPPORTED_LLM_PROVIDERS.map((prov) => ({
       value: prov.id,
       label: prov.label,
       hint: prov.id === 'ollama' ? 'local, no key needed' : undefined,
@@ -77,7 +123,7 @@ export async function runInitLlmStep(): Promise<InitLlmResult | null> {
     if (p.isCancel(chosenProvider)) return null;
     selectedProvider = chosenProvider as string;
 
-    const provDef = LLM_PROVIDERS.find((p) => p.id === selectedProvider);
+    const provDef = SUPPORTED_LLM_PROVIDERS.find((p) => p.id === selectedProvider);
     if (provDef && provDef.envVar) {
       const key = await p.password({
         message: `${provDef.label} API Key:`,
@@ -123,7 +169,7 @@ export async function runInitLlmStep(): Promise<InitLlmResult | null> {
 
   // ── Select model ──────────────────────────────────────────────────────────
   let selectedModel = '';
-  const provDef = LLM_PROVIDERS.find((p) => p.id === selectedProvider);
+  const provDef = SUPPORTED_LLM_PROVIDERS.find((p) => p.id === selectedProvider);
 
   if (provDef && provDef.models.length > 0) {
     const modelOptions = provDef.models.map((m, i) => ({

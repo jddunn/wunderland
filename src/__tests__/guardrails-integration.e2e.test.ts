@@ -438,8 +438,7 @@ describe('Guardrails Integration E2E', () => {
 
       guardrails.setFolderPermissions(agentId, folderConfig);
 
-      const now = new Date();
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
       // Generate violation
       await guardrails.validateBeforeExecution({
@@ -448,6 +447,8 @@ describe('Guardrails Integration E2E', () => {
         args: { file_path: '/etc/passwd' },
         agentId,
       });
+
+      const now = new Date();
 
       // Query: Recent violations (should include our violation)
       const recentViolations = await auditLogger.queryViolations({
