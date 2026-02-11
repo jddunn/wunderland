@@ -157,6 +157,7 @@
   "dependencies": {
     "@clack/prompts": "^0.9.1",
     "@framers/agentos": "workspace:*",
+    "@framers/sql-storage-adapter": "workspace:*",
     "@framers/agentos-ext-cli-executor": "workspace:*",
     "@framers/agentos-ext-giphy": "workspace:*",
     "@framers/agentos-ext-image-search": "workspace:*",
