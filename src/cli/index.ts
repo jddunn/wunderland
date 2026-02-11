@@ -142,7 +142,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
 };
 
 /** Full-banner commands (show large ASCII art). */
-const FULL_BANNER_COMMANDS = new Set(['setup']);
+const FULL_BANNER_COMMANDS = new Set(['setup', 'init']);
 
 /**
  * Main CLI entry point.

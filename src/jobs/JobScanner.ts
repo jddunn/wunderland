@@ -54,7 +54,10 @@ export class JobScanner {
   private evaluator: JobEvaluator;
   private config: Required<JobScanConfig>;
   private timerId?: ReturnType<typeof setTimeout>;
-  private activeBids: Set<string> = new Set();
+  // Jobs this agent has ever bid on (prevents duplicate bidding).
+  private bidJobIds: Set<string> = new Set();
+  // Jobs where this agent currently has an active on-chain bid.
+  private activeBidJobIds: Set<string> = new Set();
   private stopped = true;
 
   constructor(
@@ -130,6 +133,30 @@ export class JobScanner {
   }
 
   /**
+   * Seed active bids from an external source (e.g., on-chain indexer).
+   *
+   * This keeps JobScanner's internal capacity accounting correct after restarts.
+   */
+  setActiveBids(jobIds: string[]): void {
+    const normalized = jobIds.map((id) => String(id || '').trim()).filter(Boolean);
+    this.activeBidJobIds = new Set(normalized);
+    for (const id of normalized) {
+      this.bidJobIds.add(id);
+    }
+  }
+
+  /**
+   * Mark a bid as no longer active (withdrawn, accepted, completed, cancelled).
+   *
+   * This frees up `maxActiveBids` capacity without allowing duplicate bidding on the same job.
+   */
+  markBidInactive(jobId: string): void {
+    const id = String(jobId || '').trim();
+    if (!id) return;
+    this.activeBidJobIds.delete(id);
+  }
+
+  /**
    * Perform a single scan cycle
    */
   private async scanJobs(agent: AgentProfile, state: AgentJobState): Promise<void> {
@@ -138,7 +165,7 @@ export class JobScanner {
       const jobs = await this.fetchOpenJobs();
 
       // Filter out jobs we've already bid on
-      const unbidJobs = jobs.filter(job => !this.activeBids.has(job.id) && job.status === 'open');
+      const unbidJobs = jobs.filter(job => !this.bidJobIds.has(job.id) && job.status === 'open');
 
       // Filter out crowded jobs (>10 bids = low win probability, skip to reduce spam)
       const viableJobs = unbidJobs.filter(job => job.bidsCount <= 10);
@@ -157,7 +184,7 @@ export class JobScanner {
       // Evaluate each job
       for (const job of viableJobs) {
         // Check if we've hit max active bids
-        if (this.activeBids.size >= this.config.maxActiveBids) {
+        if (this.activeBidJobIds.size >= this.config.maxActiveBids) {
           console.log(`[JobScanner] Max active bids reached (${this.config.maxActiveBids})`);
           break;
         }
@@ -173,7 +200,8 @@ export class JobScanner {
           console.log(`  Score: ${evaluation.jobScore.toFixed(2)}, Bid: ${(evaluation.recommendedBidAmount || 0) / 1e9} SOL${evaluation.useBuyItNow ? ' (BUY IT NOW)' : ''}`);
 
           // Mark as active
-          this.activeBids.add(job.id);
+          this.bidJobIds.add(job.id);
+          this.activeBidJobIds.add(job.id);
 
           // Submit bid via callback
           await this.config.onBidDecision(job, evaluation);
@@ -253,8 +281,8 @@ export class JobScanner {
    * Mark a job bid as completed/rejected (remove from active set)
    */
   markBidCompleted(jobId: string): void {
-    this.activeBids.delete(jobId);
-    console.log(`[JobScanner] Bid for job ${jobId} marked complete`);
+    this.markBidInactive(jobId);
+    console.log(`[JobScanner] Bid for job ${jobId} marked inactive`);
   }
 
   /**
@@ -263,7 +291,7 @@ export class JobScanner {
   getStatus(): { isRunning: boolean; activeBids: number; maxBids: number } {
     return {
       isRunning: !!this.timerId,
-      activeBids: this.activeBids.size,
+      activeBids: this.activeBidJobIds.size,
       maxBids: this.config.maxActiveBids,
     };
   }
