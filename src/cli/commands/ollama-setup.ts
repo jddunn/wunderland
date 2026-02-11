@@ -111,9 +111,22 @@ export default async function ollamaSetup(
   const autoYes = globals.yes || flags.yes === true;
   const skipPull = flags['skip-pull'] === true;
   const forceTier = typeof flags.tier === 'string' ? flags.tier : null;
+  // Positional arg can specify a model to pull directly (e.g. `wunderland ollama-setup mistral`)
+  const requestedModel = args.length > 0 ? args[0] : null;
 
   section('Ollama Setup — Offline-First Agent Configuration');
   blank();
+
+  // Show current configuration state
+  try {
+    const currentConfig = await loadConfig(globals.config);
+    if (currentConfig?.llmProvider === 'ollama') {
+      note(`Current config: provider=${accent('ollama')} model=${accent(currentConfig.llmModel || 'default')}`);
+    }
+  } catch {
+    // No existing config — fresh setup
+  }
+
   note('This command will:');
   note('  1. Detect or install Ollama on your system');
   note('  2. Analyze your hardware (RAM, GPU) for optimal model selection');
@@ -173,7 +186,7 @@ export default async function ollamaSetup(
   blank();
 
   // Step 3: Optionally override tier
-  let recommendation = result.recommendation;
+  let recommendation: ModelRecommendation = result.recommendation;
   if (forceTier && ['low', 'mid', 'high'].includes(forceTier)) {
     const { recommendModels, detectSystemSpecs } = await import('../ollama/ollama-manager.js');
     const specs = await detectSystemSpecs();
@@ -185,6 +198,12 @@ export default async function ollamaSetup(
     };
     recommendation = recommendModels(fakeSpecs);
     note(`Tier overridden to ${accent(forceTier)}`);
+  }
+
+  // Step 3b: If a model was provided as a positional arg, override the primary model
+  if (requestedModel) {
+    recommendation = { ...recommendation, primary: requestedModel };
+    note(`Primary model overridden to ${accent(requestedModel)} (from CLI argument)`);
   }
 
   // Step 4: Pull models
