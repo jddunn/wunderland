@@ -1,6 +1,6 @@
 {
   "name": "wunderland",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "AI-powered personal assistant framework built on AgentOS - adaptive agents with HEXACO personality, multi-channel communication, hierarchical inference, and human-in-the-loop security",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
