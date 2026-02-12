@@ -21,6 +21,14 @@ export interface CliConfig {
   channels?: string[];
   /** Enabled tool categories. */
   tools?: string[];
+  /** Selected extensions (from extensions wizard). */
+  extensions?: {
+    tools?: string[];
+    voice?: string[];
+    productivity?: string[];
+  };
+  /** Selected skills (from extensions wizard). */
+  skills?: string[];
   /** Security settings. */
   security?: {
     preLlmClassifier?: boolean;
@@ -36,6 +44,12 @@ export interface CliConfig {
   linkedAccount?: string;
   /** Timestamp of last setup. */
   lastSetup?: string;
+
+  /** Observability preferences (OTEL). */
+  observability?: {
+    /** Wizard-selected preset. */
+    preset?: ObservabilityPreset;
+  };
 }
 
 /** Parsed CLI arguments. */
@@ -72,6 +86,8 @@ export type SetupMode = 'quickstart' | 'advanced';
 /** Wizard state accumulated across steps. */
 export interface WizardState {
   mode: SetupMode;
+  /** Observability preset (OpenTelemetry). */
+  observabilityPreset: ObservabilityPreset;
   /** LLM provider keys collected. */
   apiKeys: Record<string, string>;
   /** Selected LLM provider. */
@@ -103,7 +119,19 @@ export interface WizardState {
   };
   /** Agent name. */
   agentName: string;
+  /** Selected extensions. */
+  extensions?: {
+    tools?: string[];
+    voice?: string[];
+    productivity?: string[];
+  };
+  /** Selected skills. */
+  skills?: string[];
 }
+
+// ── Observability ──────────────────────────────────────────────────────────
+
+export type ObservabilityPreset = 'off' | 'otel_traces_metrics' | 'otel_traces_metrics_logs';
 
 // ── Secret Definition (from extension-secrets.json) ─────────────────────────
 
