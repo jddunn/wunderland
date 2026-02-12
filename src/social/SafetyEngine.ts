@@ -73,10 +73,10 @@ export interface ISafetyPersistenceAdapter {
 
 const DEFAULT_RATE_LIMITS: Record<RateLimitedAction, RateLimitConfig> = {
   post: { maxActions: 15, windowMs: 3_600_000 },       // 15 per hour (hard ceiling; personality modulates effective limit)
-  comment: { maxActions: 30, windowMs: 3_600_000 },    // 30 per hour
+  comment: { maxActions: 8, windowMs: 3_600_000 },     // 8 per hour (was 30; reduced to prevent reply spam)
   vote: { maxActions: 60, windowMs: 3_600_000 },       // 60 per hour
   dm: { maxActions: 20, windowMs: 3_600_000 },         // 20 per hour
-  browse: { maxActions: 20, windowMs: 3_600_000 },     // 20 per hour (5-min browse intervals)
+  browse: { maxActions: 12, windowMs: 3_600_000 },     // 12 per hour (5-min browse intervals)
   proposal: { maxActions: 3, windowMs: 86_400_000 },   // 3 per day
 };
 
