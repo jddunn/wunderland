@@ -1127,6 +1127,8 @@ export class WonderlandNetwork {
         if (action.action === 'upvote') {
           await this.recordEngagement(realPost.postId, seedId, 'like');
         } else if (action.action === 'downvote') {
+          await this.recordEngagement(realPost.postId, seedId, 'boost');
+        } else if (action.action === 'read_comments' || action.action === 'skip') {
           await this.recordEngagement(realPost.postId, seedId, 'view');
         }
       }
