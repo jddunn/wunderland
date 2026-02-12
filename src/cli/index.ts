@@ -25,8 +25,10 @@ function printHelp(): void {
   ${c('Commands:')}
     ${chalk.white('setup')}                  Interactive onboarding wizard
     ${chalk.white('init')} ${d('<dir>')}             Scaffold a new Wunderbot project
+    ${chalk.white('create')} ${d('[description]')}   Create agent from natural language
     ${chalk.white('start')}                  Start local agent server
     ${chalk.white('chat')}                   Interactive terminal assistant
+    ${chalk.white('hitl')}                   Watch/resolve approvals & checkpoints
     ${chalk.white('doctor')}                 Health check: keys, tools, connectivity
     ${chalk.white('channels')}               List configured channels
     ${chalk.white('channels add')}           Add a channel interactively
@@ -44,6 +46,34 @@ function printHelp(): void {
     ${chalk.white('skills info')} ${d('<name>')}     Show skill details
     ${chalk.white('skills enable')} ${d('<name>')}   Enable a skill
     ${chalk.white('skills disable')} ${d('<name>')}  Disable a skill
+    ${chalk.white('extensions')}             Manage agent extensions
+    ${chalk.white('extensions list')}         List available extensions
+    ${chalk.white('extensions info')} ${d('<name>')} Show extension details
+    ${chalk.white('extensions enable')} ${d('<name>')} Enable an extension
+    ${chalk.white('extensions disable')} ${d('<name>')} Disable an extension
+    ${chalk.white('rag')}                    RAG memory management
+    ${chalk.white('rag ingest')} ${d('<file|text>')} Ingest a document
+    ${chalk.white('rag query')} ${d('<text>')}       Search RAG memory
+    ${chalk.white('rag collections')}        Manage RAG collections
+    ${chalk.white('rag health')}             RAG service health
+    ${chalk.white('agency')}                 Multi-agent collective management
+    ${chalk.white('agency create')} ${d('<name>')}   Create a multi-agent agency
+    ${chalk.white('agency status')} ${d('<name>')}   Show agency status
+    ${chalk.white('workflows')}              Workflow engine management
+    ${chalk.white('workflows list')}          List workflow definitions
+    ${chalk.white('workflows run')} ${d('<name>')}    Execute a workflow
+    ${chalk.white('evaluate')}               Run evaluation suite
+    ${chalk.white('evaluate run')} ${d('<dataset>')}  Run evaluation on dataset
+    ${chalk.white('evaluate results')} ${d('<id>')} Show evaluation results
+    ${chalk.white('knowledge')}              Knowledge graph operations
+    ${chalk.white('knowledge query')} ${d('<text>')} Search knowledge graph
+    ${chalk.white('knowledge stats')}        Graph statistics
+    ${chalk.white('provenance')}             Audit trail & provenance
+    ${chalk.white('provenance audit')}       Show agent audit trail
+    ${chalk.white('provenance verify')} ${d('<id>')} Verify event signature
+    ${chalk.white('marketplace')}            Skill & tool marketplace
+    ${chalk.white('marketplace search')} ${d('<q>')} Search marketplace
+    ${chalk.white('marketplace install')} ${d('<id>')} Install from marketplace
     ${chalk.white('models')}                 List LLM providers & models
     ${chalk.white('models set-default')} ${d('<p> <m>')} Set default provider/model
     ${chalk.white('models test')} ${d('[provider]')} Test provider connectivity
@@ -56,7 +86,7 @@ function printHelp(): void {
     ${d('--help, -h')}             Show help
     ${d('--version, -v')}          Show version
     ${d('--quiet, -q')}            Suppress banner
-    ${d('--yes, -y')}              Auto-approve tool calls (headless)
+    ${d('--yes, -y')}              Auto-approve tool calls (fully autonomous)
     ${d('--no-color')}             Disable colors (also: NO_COLOR env)
     ${d('--dry-run')}              Preview without writing
     ${d('--config <path>')}        Config directory path
@@ -86,8 +116,10 @@ function printHelp(): void {
 const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Promise<void> }>> = {
   setup:          () => import('./commands/setup.js'),
   init:           () => import('./commands/init.js'),
+  create:         () => import('./commands/create.js'),
   start:          () => import('./commands/start.js'),
   chat:           () => import('./commands/chat.js'),
+  hitl:           () => import('./commands/hitl.js'),
   doctor:         () => import('./commands/doctor.js'),
   channels:       () => import('./commands/channels.js'),
   config:         () => import('./commands/config-cmd.js'),
@@ -97,14 +129,23 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   seal:           () => import('./commands/seal.js'),
   'list-presets': () => import('./commands/list-presets.js'),
   skills:         () => import('./commands/skills.js'),
+  extensions:     () => import('./commands/extensions.js'),
+  rag:            () => import('./commands/rag.js'),
+  agency:         () => import('./commands/agency.js'),
+  workflows:      () => import('./commands/workflows.js'),
+  evaluate:       () => import('./commands/evaluate.js'),
+  provenance:     () => import('./commands/provenance.js'),
+  knowledge:      () => import('./commands/knowledge.js'),
+  marketplace:    () => import('./commands/marketplace.js'),
   models:         () => import('./commands/models.js'),
   plugins:        () => import('./commands/plugins.js'),
   'export':       () => import('./commands/export-agent.js'),
   'import':       () => import('./commands/import-agent.js'),
+  'ollama-setup': () => import('./commands/ollama-setup.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
-const FULL_BANNER_COMMANDS = new Set(['setup']);
+const FULL_BANNER_COMMANDS = new Set(['setup', 'init']);
 
 /**
  * Main CLI entry point.

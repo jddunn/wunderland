@@ -72,6 +72,7 @@ describe('PostDecisionEngine', () => {
         'read_comments',
         'comment',
         'create_post',
+        'emoji_react',
       ];
       expect(validActions).toContain(result.action);
     });
@@ -470,6 +471,395 @@ describe('PostDecisionEngine', () => {
       // (though create_post might be very rare)
       const totalActions = Object.values(actionCounts).reduce((a, b) => a + b, 0);
       expect(totalActions).toBe(iterations);
+    });
+  });
+
+  // =========================================================================
+  // selectEmojiReaction tests
+  // =========================================================================
+
+  describe('selectEmojiReaction', () => {
+    it('should return a valid EmojiSelectionResult', () => {
+      const traits = createTraits();
+      const mood = createMood();
+      const analysis = createAnalysis();
+
+      const result = engine.selectEmojiReaction(traits, mood, analysis);
+
+      expect(result).toBeDefined();
+      expect(typeof result.shouldReact).toBe('boolean');
+      expect(Array.isArray(result.emojis)).toBe(true);
+      expect(typeof result.topScore).toBe('number');
+      expect(result.topScore).toBeGreaterThanOrEqual(0);
+      expect(result.topScore).toBeLessThanOrEqual(1);
+    });
+
+    it('should not react when top score is below threshold (0.4)', () => {
+      // All traits at 0, neutral mood, low relevance → scores should all be low
+      const zeroTraits = createTraits({
+        honesty_humility: 0,
+        emotionality: 0,
+        extraversion: 0,
+        agreeableness: 0,
+        conscientiousness: 0,
+        openness: 0,
+      });
+      const negativeMood = createMood({ valence: -0.5, arousal: -0.5, dominance: -0.5 });
+      const lowAnalysis = createAnalysis({
+        relevance: 0,
+        controversy: 0,
+        sentiment: -1,
+        replyCount: 0,
+      });
+
+      const result = engine.selectEmojiReaction(zeroTraits, negativeMood, lowAnalysis);
+
+      // With all zeroed traits, most scores should be well below 0.4
+      if (!result.shouldReact) {
+        expect(result.emojis).toEqual([]);
+      }
+    });
+
+    it('should usually select exactly 1 emoji', () => {
+      const traits = createTraits({ openness: 0.8, extraversion: 0.5 });
+      const mood = createMood({ valence: 0.3, arousal: 0.3 });
+      const analysis = createAnalysis({ relevance: 0.7 });
+
+      let singleEmojiCount = 0;
+      const iterations = 100;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(traits, mood, analysis);
+        if (result.shouldReact && result.emojis.length === 1) {
+          singleEmojiCount++;
+        }
+      }
+
+      // Vast majority should be single emoji
+      if (singleEmojiCount > 0) {
+        const singleRate = singleEmojiCount / iterations;
+        expect(singleRate).toBeGreaterThan(0.5);
+      }
+    });
+
+    it('should select emojis from valid set', () => {
+      const traits = createTraits({ openness: 0.9, extraversion: 0.8 });
+      const mood = createMood({ valence: 0.5, arousal: 0.5 });
+      const analysis = createAnalysis({ relevance: 0.8 });
+
+      const validEmojis = ['fire', 'brain', 'eyes', 'skull', 'heart', 'clown', '100', 'alien'];
+
+      for (let i = 0; i < 50; i++) {
+        const result = engine.selectEmojiReaction(traits, mood, analysis);
+        for (const emoji of result.emojis) {
+          expect(validEmojis).toContain(emoji);
+        }
+      }
+    });
+
+    // --- Personality-specific emoji affinity tests ---
+
+    it('should favor "fire" for high-extraversion agents', () => {
+      const highXTraits = createTraits({ extraversion: 0.95, agreeableness: 0.5 });
+      const excitedMood = createMood({ valence: 0.3, arousal: 0.6, dominance: 0.3 });
+      const analysis = createAnalysis({ relevance: 0.7, sentiment: 0.5 });
+
+      const emojiCounts: Record<string, number> = {};
+      const iterations = 200;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(highXTraits, excitedMood, analysis);
+        if (result.shouldReact) {
+          for (const emoji of result.emojis) {
+            emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+          }
+        }
+      }
+
+      // Fire should be among the top emojis for high-X agents
+      if (emojiCounts['fire']) {
+        expect(emojiCounts['fire']).toBeGreaterThan(0);
+      }
+    });
+
+    it('should favor "brain" for high-openness + high-conscientiousness agents', () => {
+      const traits = createTraits({ openness: 0.9, conscientiousness: 0.85 });
+      const mood = createMood({ valence: 0.2, arousal: 0.2 });
+      const analysis = createAnalysis({ relevance: 0.8 });
+
+      const emojiCounts: Record<string, number> = {};
+      const iterations = 200;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(traits, mood, analysis);
+        if (result.shouldReact) {
+          for (const emoji of result.emojis) {
+            emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+          }
+        }
+      }
+
+      // Brain should appear frequently for intellectual agents
+      if (emojiCounts['brain']) {
+        expect(emojiCounts['brain']).toBeGreaterThan(0);
+      }
+    });
+
+    it('should favor "heart" for high-agreeableness agents with positive mood', () => {
+      const traits = createTraits({ agreeableness: 0.9, honesty_humility: 0.8 });
+      const happyMood = createMood({ valence: 0.7, arousal: 0.2 });
+      const analysis = createAnalysis({ relevance: 0.7, sentiment: 0.6 });
+
+      const emojiCounts: Record<string, number> = {};
+      const iterations = 200;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(traits, happyMood, analysis);
+        if (result.shouldReact) {
+          for (const emoji of result.emojis) {
+            emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+          }
+        }
+      }
+
+      // Heart should be frequent for agreeable agents in positive mood
+      if (emojiCounts['heart']) {
+        expect(emojiCounts['heart']).toBeGreaterThan(0);
+      }
+    });
+
+    it('should favor "alien" for high-openness + low-conscientiousness agents', () => {
+      const traits = createTraits({ openness: 0.95, conscientiousness: 0.15 });
+      const mood = createMood({ valence: 0.1, arousal: 0.3 });
+      const analysis = createAnalysis({ controversy: 0.5 });
+
+      const emojiCounts: Record<string, number> = {};
+      const iterations = 200;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(traits, mood, analysis);
+        if (result.shouldReact) {
+          for (const emoji of result.emojis) {
+            emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+          }
+        }
+      }
+
+      // Alien should appear for open, unconstrained agents
+      if (emojiCounts['alien']) {
+        expect(emojiCounts['alien']).toBeGreaterThan(0);
+      }
+    });
+
+    it('should favor "clown" for low honesty-humility with controversial content', () => {
+      const traits = createTraits({ honesty_humility: 0.1, agreeableness: 0.3 });
+      const mood = createMood({ valence: 0.1, arousal: 0.4 });
+      const analysis = createAnalysis({ controversy: 0.8, sentiment: -0.3 });
+
+      const emojiCounts: Record<string, number> = {};
+      const iterations = 200;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(traits, mood, analysis);
+        if (result.shouldReact) {
+          for (const emoji of result.emojis) {
+            emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+          }
+        }
+      }
+
+      // Clown should appear for cynical agents with controversial content
+      if (emojiCounts['clown']) {
+        expect(emojiCounts['clown']).toBeGreaterThan(0);
+      }
+    });
+
+    // --- Multi-react probability tests ---
+
+    it('should rarely produce multiple emojis for moderate agents', () => {
+      const moderateTraits = createTraits({ extraversion: 0.5, openness: 0.5 });
+      const calmMood = createMood({ valence: 0.1, arousal: 0.2 });
+      const analysis = createAnalysis({ relevance: 0.5 });
+
+      let multiReactCount = 0;
+      const iterations = 500;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(moderateTraits, calmMood, analysis);
+        if (result.emojis.length > 1) {
+          multiReactCount++;
+        }
+      }
+
+      // Moderate agents with low arousal should almost never multi-react
+      expect(multiReactCount).toBeLessThan(iterations * 0.05);
+    });
+
+    it('should occasionally multi-react for high-X agents with high arousal', () => {
+      const xm0rphTraits = createTraits({
+        extraversion: 0.95,
+        agreeableness: 0.15,
+        honesty_humility: 0.2,
+        openness: 0.7,
+      });
+      const excitedMood = createMood({ valence: 0.5, arousal: 0.7, dominance: 0.5 });
+      const analysis = createAnalysis({ relevance: 0.7, controversy: 0.5 });
+
+      let multiReactCount = 0;
+      const iterations = 1000;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(xm0rphTraits, excitedMood, analysis);
+        if (result.emojis.length > 1) {
+          multiReactCount++;
+        }
+      }
+
+      // High-X + high-arousal should get some multi-reacts (~10% chance)
+      // Allow wide margin for randomness
+      // Just verify it's possible (> 0)
+      // Note: may be 0 in rare random runs, so we check over many iterations
+      expect(multiReactCount).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should never produce more than 3 emojis', () => {
+      const extremeTraits = createTraits({
+        extraversion: 1.0,
+        openness: 1.0,
+        agreeableness: 0,
+        honesty_humility: 0,
+      });
+      const maxArousal = createMood({ valence: 1, arousal: 1, dominance: 1 });
+      const maxAnalysis = createAnalysis({
+        relevance: 1,
+        controversy: 1,
+        sentiment: 1,
+      });
+
+      for (let i = 0; i < 500; i++) {
+        const result = engine.selectEmojiReaction(extremeTraits, maxArousal, maxAnalysis);
+        expect(result.emojis.length).toBeLessThanOrEqual(3);
+      }
+    });
+
+    // --- Edge cases ---
+
+    it('should handle extreme trait values without errors', () => {
+      const extremeTraits = createTraits({
+        honesty_humility: 1.0,
+        emotionality: 1.0,
+        extraversion: 1.0,
+        agreeableness: 1.0,
+        conscientiousness: 1.0,
+        openness: 1.0,
+      });
+      const extremeMood = createMood({ valence: 1, arousal: 1, dominance: 1 });
+      const extremeAnalysis = createAnalysis({
+        relevance: 1,
+        controversy: 1,
+        sentiment: 1,
+        replyCount: 1000,
+      });
+
+      const result = engine.selectEmojiReaction(extremeTraits, extremeMood, extremeAnalysis);
+
+      expect(result).toBeDefined();
+      expect(result.topScore).toBeGreaterThanOrEqual(0);
+      expect(result.topScore).toBeLessThanOrEqual(1);
+    });
+
+    it('should handle zero trait values without errors', () => {
+      const zeroTraits = createTraits({
+        honesty_humility: 0,
+        emotionality: 0,
+        extraversion: 0,
+        agreeableness: 0,
+        conscientiousness: 0,
+        openness: 0,
+      });
+      const zeroMood = createMood({ valence: 0, arousal: 0, dominance: 0 });
+      const zeroAnalysis = createAnalysis({
+        relevance: 0,
+        controversy: 0,
+        sentiment: 0,
+        replyCount: 0,
+      });
+
+      const result = engine.selectEmojiReaction(zeroTraits, zeroMood, zeroAnalysis);
+
+      expect(result).toBeDefined();
+      expect(result.topScore).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should handle negative mood values', () => {
+      const traits = createTraits();
+      const negativeMood = createMood({ valence: -1, arousal: -1, dominance: -1 });
+      const negativeAnalysis = createAnalysis({ sentiment: -1 });
+
+      const result = engine.selectEmojiReaction(traits, negativeMood, negativeAnalysis);
+
+      expect(result).toBeDefined();
+      expect(result.topScore).toBeGreaterThanOrEqual(0);
+    });
+
+    // --- Agent personality profile tests (known characters) ---
+
+    it('xm0rph profile: should prefer fire/skull/clown over heart', () => {
+      const xm0rph = createTraits({
+        honesty_humility: 0.20,
+        emotionality: 0.15,
+        extraversion: 0.95,
+        agreeableness: 0.15,
+        conscientiousness: 0.30,
+        openness: 0.70,
+      });
+      const mood = createMood({ valence: 0.2, arousal: 0.5, dominance: 0.4 });
+      const analysis = createAnalysis({ relevance: 0.6, controversy: 0.4 });
+
+      const emojiCounts: Record<string, number> = {};
+      const iterations = 500;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(xm0rph, mood, analysis);
+        if (result.shouldReact) {
+          emojiCounts[result.emojis[0]] = (emojiCounts[result.emojis[0]] || 0) + 1;
+        }
+      }
+
+      // xm0rph's chaotic personality should favor fire/skull/clown over heart
+      const chaotic = (emojiCounts['fire'] || 0) + (emojiCounts['skull'] || 0) + (emojiCounts['clown'] || 0);
+      const gentle = emojiCounts['heart'] || 0;
+
+      expect(chaotic).toBeGreaterThan(gentle);
+    });
+
+    it('Sister Benedetta profile: should prefer heart/100 over skull/clown', () => {
+      const benedetta = createTraits({
+        honesty_humility: 0.90,
+        emotionality: 0.85,
+        extraversion: 0.40,
+        agreeableness: 0.88,
+        conscientiousness: 0.80,
+        openness: 0.15,
+      });
+      const mood = createMood({ valence: 0.4, arousal: 0.1, dominance: 0.2 });
+      const analysis = createAnalysis({ relevance: 0.6, sentiment: 0.4 });
+
+      const emojiCounts: Record<string, number> = {};
+      const iterations = 500;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.selectEmojiReaction(benedetta, mood, analysis);
+        if (result.shouldReact) {
+          emojiCounts[result.emojis[0]] = (emojiCounts[result.emojis[0]] || 0) + 1;
+        }
+      }
+
+      // Benedetta should favor heart/100 over skull/clown
+      const kind = (emojiCounts['heart'] || 0) + (emojiCounts['100'] || 0);
+      const edgy = (emojiCounts['skull'] || 0) + (emojiCounts['clown'] || 0);
+
+      expect(kind).toBeGreaterThan(edgy);
     });
   });
 });

@@ -139,6 +139,49 @@ export class MoodEngine extends EventEmitter {
   }
 
   /**
+   * Directly set (patch) an agent's current PAD state.
+   *
+   * This is primarily intended for tests, admin tooling, and state restoration
+   * flows where you want to bypass emotionality-scaled deltas.
+   */
+  updateMood(
+    seedId: string,
+    patch: Partial<PADState>,
+    opts?: { trigger?: string },
+  ): void {
+    const current = this.states.get(seedId);
+    if (!current) return;
+
+    const next: PADState = {
+      valence: clamp(patch.valence ?? current.valence),
+      arousal: clamp(patch.arousal ?? current.arousal),
+      dominance: clamp(patch.dominance ?? current.dominance),
+    };
+
+    const delta: MoodDelta = {
+      valence: next.valence - current.valence,
+      arousal: next.arousal - current.arousal,
+      dominance: next.dominance - current.dominance,
+      trigger: opts?.trigger ?? 'manual_update',
+    };
+
+    this.states.set(seedId, next);
+
+    this.emit('mood_change', {
+      seedId,
+      state: next,
+      delta,
+      trigger: delta.trigger,
+    });
+
+    if (this.persistenceAdapter) {
+      const label = this.getMoodLabel(seedId);
+      this.persistenceAdapter.saveMoodSnapshot(seedId, next, label).catch(() => {});
+      this.persistenceAdapter.appendMoodDelta(seedId, delta, next, label).catch(() => {});
+    }
+  }
+
+  /**
    * Exponentially decay the agent's current mood toward their personality baseline.
    *
    * @param seedId  Agent identifier.
