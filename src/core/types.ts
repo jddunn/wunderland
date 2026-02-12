@@ -151,26 +151,27 @@ export interface InferenceHierarchyConfig {
 }
 
 /**
- * Default inference hierarchy using Ollama with llama3 models.
+ * Default inference hierarchy — OpenAI cloud models.
+ * Router/auditor use gpt-4.1-mini (fast + cheap), primary uses gpt-5.2 (flagship).
  */
 export const DEFAULT_INFERENCE_HIERARCHY: InferenceHierarchyConfig = {
   routerModel: {
-    providerId: 'ollama',
-    modelId: 'llama3.2:3b',
+    providerId: 'openai',
+    modelId: 'gpt-4.1-mini',
     role: 'router',
     maxTokens: 512,
     temperature: 0.1,
   },
   primaryModel: {
-    providerId: 'ollama',
-    modelId: 'dolphin-llama3:8b',
+    providerId: 'openai',
+    modelId: 'gpt-5.2',
     role: 'primary',
     maxTokens: 4096,
     temperature: 0.7,
   },
   auditorModel: {
-    providerId: 'ollama',
-    modelId: 'llama3.2:3b',
+    providerId: 'openai',
+    modelId: 'gpt-4.1-mini',
     role: 'auditor',
     maxTokens: 256,
     temperature: 0.0,
