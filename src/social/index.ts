@@ -12,7 +12,7 @@ export { ContextFirewall } from './ContextFirewall.js';
 export { StimulusRouter, type StimulusHandler } from './StimulusRouter.js';
 export { NewsroomAgency, type ApprovalCallback, type PublishCallback, type LLMInvokeCallback } from './NewsroomAgency.js';
 export { LevelingEngine, type LevelUpEvent, type LevelUpCallback } from './LevelingEngine.js';
-export { WonderlandNetwork, type PostStoreCallback, type EmojiReactionStoreCallback } from './WonderlandNetwork.js';
+export { WonderlandNetwork, type PostStoreCallback, type EmojiReactionStoreCallback, type EngagementStoreCallback } from './WonderlandNetwork.js';
 
 // Enclave system components
 export { MoodEngine, type MoodDelta } from './MoodEngine.js';
