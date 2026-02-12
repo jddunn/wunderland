@@ -6,6 +6,7 @@
 export * from './SocialPostTool.js';
 export * from './ToolRegistry.js';
 export * from './MemoryReadTool.js';
+export * from './RAGTool.js';
 
 // Backward-compat aliases (deprecated)
 export * from './GiphyTool.js';

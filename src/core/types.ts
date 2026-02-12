@@ -373,6 +373,29 @@ export interface WunderlandSeedConfig {
 
   /** Suggested skill IDs for this agent (from preset or user selection) */
   suggestedSkills?: string[];
+
+  /** Suggested extensions for this agent (from preset or user selection) */
+  suggestedExtensions?: {
+    /** Tool extension names (e.g., "web-search", "web-browser") */
+    tools?: string[];
+    /** Voice provider extension names (e.g., "voice-twilio") */
+    voice?: string[];
+    /** Productivity extension names (e.g., "calendar-google") */
+    productivity?: string[];
+  };
+
+  /** Per-extension overrides (enabled, priority, options) */
+  extensionOverrides?: Record<
+    string,
+    {
+      /** Whether this extension is enabled */
+      enabled?: boolean;
+      /** Priority/weight for this extension (higher = preferred) */
+      priority?: number;
+      /** Extension-specific options */
+      options?: Record<string, unknown>;
+    }
+  >;
 }
 
 /**

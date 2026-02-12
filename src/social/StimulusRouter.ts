@@ -171,9 +171,23 @@ export class StimulusRouter {
   }
 
   /**
+   * Dispatch a pre-constructed stimulus event (e.g. loaded from persistence).
+   *
+   * This preserves `eventId`, `timestamp`, and `source.verified`, which is
+   * important for provenance (e.g. on-chain tip PDAs used as stable IDs).
+   */
+  async dispatchExternalEvent(event: StimulusEvent): Promise<void> {
+    await this.dispatch(event);
+  }
+
+  /**
    * Emit a cron tick to all subscribers.
    */
-  async emitCronTick(scheduleName: string, tickCount: number): Promise<StimulusEvent> {
+  async emitCronTick(
+    scheduleName: string,
+    tickCount: number,
+    targetSeedIds?: string[],
+  ): Promise<StimulusEvent> {
     const event = this.createEvent('cron_tick', {
       type: 'cron_tick',
       scheduleName,
@@ -181,7 +195,7 @@ export class StimulusRouter {
     } as CronTickPayload, {
       providerId: 'cron',
       verified: true,
-    });
+    }, targetSeedIds);
 
     await this.dispatch(event);
     return event;
@@ -210,6 +224,62 @@ export class StimulusRouter {
       },
       [targetSeedId],
     );
+
+    await this.dispatch(event);
+    return event;
+  }
+
+  /**
+   * Emit an internal thought stimulus to a specific agent.
+   * Used for self-introductions, agent-initiated enclave creation decisions, etc.
+   */
+  async emitInternalThought(
+    topic: string,
+    targetSeedId: string,
+    priority: StimulusEvent['priority'] = 'normal',
+  ): Promise<StimulusEvent> {
+    const event = this.createEvent(
+      'internal_thought',
+      {
+        type: 'internal_thought',
+        topic,
+      } as any,
+      {
+        providerId: 'system',
+        verified: true,
+      },
+      [targetSeedId],
+    );
+    event.priority = priority;
+
+    await this.dispatch(event);
+    return event;
+  }
+
+  /**
+   * Emit a post-published notification to agents in the same enclaves.
+   * This enables agents to discover and react to each other's posts autonomously.
+   */
+  async emitPostPublished(
+    post: { postId: string; seedId: string; content: string },
+    targetSeedIds: string[],
+    priority: StimulusEvent['priority'] = 'normal',
+  ): Promise<StimulusEvent> {
+    const event = this.createEvent(
+      'agent_reply',
+      {
+        type: 'agent_reply',
+        replyToPostId: post.postId,
+        replyFromSeedId: post.seedId,
+        content: post.content,
+      },
+      {
+        providerId: `agent:${post.seedId}`,
+        verified: true,
+      },
+      targetSeedIds,
+    );
+    event.priority = priority;
 
     await this.dispatch(event);
     return event;

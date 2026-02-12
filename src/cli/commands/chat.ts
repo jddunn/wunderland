@@ -4,6 +4,8 @@
  * @module wunderland/cli/commands/chat
  */
 
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
@@ -12,8 +14,21 @@ import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
-import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance } from '../openai/tool-calling.js';
+import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
+import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
+import {
+  filterToolMapByPolicy,
+  getPermissionsForSet,
+  normalizeRuntimePolicy,
+} from '../security/runtime-policy.js';
+import { createEnvSecretResolver } from '../security/env-secrets.js';
+import {
+  createWunderlandSeed,
+  DEFAULT_INFERENCE_HIERARCHY,
+  DEFAULT_SECURITY_PROFILE,
+  DEFAULT_STEP_UP_AUTH_CONFIG,
+} from '../../core/index.js';
 
 // ── Command ─────────────────────────────────────────────────────────────────
 
@@ -21,21 +36,105 @@ export default async function cmdChat(
   _args: string[],
   flags: Record<string, string | boolean>,
   globals: GlobalFlags,
-): Promise<void> {
+  ): Promise<void> {
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
-  const apiKey = process.env['OPENAI_API_KEY'] || '';
-  if (!apiKey) {
-    fmt.errorBlock('Missing API key', 'OPENAI_API_KEY is required for `wunderland chat`.');
+  const configPath = path.resolve(process.cwd(), 'agent.config.json');
+  let cfg: any | null = null;
+
+  // Observability (OTEL) is opt-in, and agent.config.json can override env.
+  try {
+    if (existsSync(configPath)) {
+      cfg = JSON.parse(await readFile(configPath, 'utf8'));
+      const cfgOtelEnabled = cfg?.observability?.otel?.enabled;
+      if (typeof cfgOtelEnabled === 'boolean') {
+        process.env['WUNDERLAND_OTEL_ENABLED'] = cfgOtelEnabled ? 'true' : 'false';
+      }
+      const cfgOtelLogsEnabled = cfg?.observability?.otel?.exportLogs;
+      if (typeof cfgOtelLogsEnabled === 'boolean') {
+        process.env['WUNDERLAND_OTEL_LOGS_ENABLED'] = cfgOtelLogsEnabled ? 'true' : 'false';
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  await startWunderlandOtel({ serviceName: 'wunderland-chat' });
+
+  const policy = normalizeRuntimePolicy(cfg || {});
+  const permissions = getPermissionsForSet(policy.permissionSet);
+  const turnApprovalMode = (() => {
+    const raw = (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl))
+      ? (cfg.hitl as any).turnApprovalMode ?? (cfg.hitl as any).turnApproval
+      : undefined;
+    const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (v === 'after-each-turn') return 'after-each-turn';
+    if (v === 'after-each-round') return 'after-each-round';
+    return 'off';
+  })();
+
+  const providerFlag = typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
+  const providerFromConfig = typeof cfg?.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
+  const providerId = (flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai')).toLowerCase();
+  if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic']).has(providerId)) {
+    fmt.errorBlock(
+      'Unsupported LLM provider',
+      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic`,
+    );
     process.exitCode = 1;
     return;
   }
 
-  const model = typeof flags['model'] === 'string' ? flags['model'] : (process.env['OPENAI_MODEL'] || 'gpt-4o-mini');
+  const modelFromConfig = typeof cfg?.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
+  const model = typeof flags['model'] === 'string'
+    ? String(flags['model'])
+    : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o-mini'));
+
+  // OpenRouter fallback (OpenAI provider only)
+  const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
+  const openrouterFallback: LLMProviderConfig | undefined = openrouterApiKey
+    ? {
+        apiKey: openrouterApiKey,
+        model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
+      }
+    : undefined;
+
+  const llmBaseUrl =
+    providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
+    : providerId === 'ollama' ? 'http://localhost:11434/v1'
+    : undefined;
+  const llmApiKey =
+    providerId === 'openrouter' ? openrouterApiKey
+    : providerId === 'ollama' ? 'ollama'
+    : providerId === 'openai' ? (process.env['OPENAI_API_KEY'] || '')
+    : providerId === 'anthropic' ? (process.env['ANTHROPIC_API_KEY'] || '')
+    : (process.env['OPENAI_API_KEY'] || '');
+
+  const canUseLLM =
+    providerId === 'ollama'
+      ? true
+      : providerId === 'openrouter'
+        ? !!openrouterApiKey
+        : providerId === 'anthropic'
+          ? !!process.env['ANTHROPIC_API_KEY']
+          : !!llmApiKey || !!openrouterFallback;
+
+  if (!canUseLLM) {
+    fmt.errorBlock(
+      'Missing API key',
+      'Configure an LLM provider in agent.config.json, or set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY, or use Ollama.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
   const dangerouslySkipCommandSafety =
     flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
-  const autoApproveToolCalls = globals.yes || dangerouslySkipPermissions;
+  const autoApproveToolCalls =
+    globals.yes || dangerouslySkipPermissions || policy.executionMode === 'autonomous';
   const enableSkills = flags['no-skills'] !== true;
   const lazyTools = flags['lazy-tools'] === true;
   const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
@@ -45,86 +144,178 @@ export default async function cmdChat(
   const preloadedPackages: string[] = [];
 
   if (!lazyTools) {
-    // Load tools from curated extensions (eager)
-    const [cliExecutor, webSearch, webBrowser, giphy, imageSearch, voiceSynthesis, newsSearch] = await Promise.all([
-      import('@framers/agentos-ext-cli-executor'),
-      import('@framers/agentos-ext-web-search'),
-      import('@framers/agentos-ext-web-browser'),
-      import('@framers/agentos-ext-giphy'),
-      import('@framers/agentos-ext-image-search'),
-      import('@framers/agentos-ext-voice-synthesis'),
-      import('@framers/agentos-ext-news-search'),
-    ]);
-
-    const skillsExtModule: string = '@framers/agentos-ext-skills';
-    const skillsExt = await import(skillsExtModule).catch(() => null);
-
-    const packs = [
-      cliExecutor.createExtensionPack({
-        options: {
-          filesystem: { allowRead: true, allowWrite: true },
-          agentWorkspace: {
-            agentId: workspaceAgentId,
-            baseDir: workspaceBaseDir,
-            createIfMissing: true,
-            subdirs: ['assets', 'exports', 'tmp'],
-          },
-          dangerouslySkipSecurityChecks: dangerouslySkipCommandSafety,
-        },
-        logger: console,
-      }),
-      skillsExt ? skillsExt.createExtensionPack({ options: {}, logger: console }) : null,
-      webSearch.createExtensionPack({
-        options: {
-          serperApiKey: process.env['SERPER_API_KEY'],
-          serpApiKey: process.env['SERPAPI_API_KEY'],
-          braveApiKey: process.env['BRAVE_API_KEY'],
-        },
-        logger: console,
-      }),
-      webBrowser.createExtensionPack({ options: { headless: true }, logger: console }),
-      giphy.createExtensionPack({ options: { giphyApiKey: process.env['GIPHY_API_KEY'] }, logger: console }),
-      imageSearch.createExtensionPack({
-        options: {
-          pexelsApiKey: process.env['PEXELS_API_KEY'],
-          unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
-          pixabayApiKey: process.env['PIXABAY_API_KEY'],
-        },
-        logger: console,
-      }),
-      voiceSynthesis.createExtensionPack({ options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] }, logger: console }),
-      newsSearch.createExtensionPack({ options: { newsApiKey: process.env['NEWSAPI_API_KEY'] }, logger: console }),
-    ].filter(Boolean);
-
-    await Promise.all(
-      packs
-        .map((p: any) =>
-          typeof p?.onActivate === 'function'
-            ? p.onActivate({ logger: console, getSecret: () => undefined })
-            : null
-        )
-        .filter(Boolean),
-    );
-
-    const tools: ToolInstance[] = packs
-      .flatMap((p: any) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
-      .filter(Boolean) as ToolInstance[];
-
-    for (const tool of tools) {
-      if (!tool?.name) continue;
-      toolMap.set(tool.name, tool);
+    // Read extensions from agent.config.json if present
+    let extensionsFromConfig: any = null;
+    let extensionOverrides: any = null;
+    let configSecrets: any = null;
+    try {
+      const configPath = path.resolve(process.cwd(), 'agent.config.json');
+      if (existsSync(configPath)) {
+        const cfg = JSON.parse(await readFile(configPath, 'utf8'));
+        extensionsFromConfig = cfg.extensions;
+        extensionOverrides = cfg.extensionOverrides;
+        configSecrets = cfg.secrets;
+      }
+    } catch {
+      // ignore
     }
 
-    preloadedPackages.push(
-      '@framers/agentos-ext-cli-executor',
-      '@framers/agentos-ext-web-search',
-      '@framers/agentos-ext-web-browser',
-      '@framers/agentos-ext-giphy',
-      '@framers/agentos-ext-image-search',
-      '@framers/agentos-ext-voice-synthesis',
-      '@framers/agentos-ext-news-search',
-    );
-    if (skillsExt) preloadedPackages.push('@framers/agentos-ext-skills');
+    let toolExtensions: string[] = [];
+    let voiceExtensions: string[] = [];
+    let productivityExtensions: string[] = [];
+
+    if (extensionsFromConfig) {
+      toolExtensions = extensionsFromConfig.tools || [];
+      voiceExtensions = extensionsFromConfig.voice || [];
+      productivityExtensions = extensionsFromConfig.productivity || [];
+      fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`);
+    } else {
+      // Fall back to hardcoded defaults
+      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'giphy', 'image-search', 'news-search'];
+      voiceExtensions = ['voice-synthesis'];
+      productivityExtensions = [];
+      fmt.note('No extensions configured, using defaults...');
+    }
+
+    // Resolve extensions using PresetExtensionResolver
+    try {
+      const { resolveExtensionsByNames } = await import('../../core/PresetExtensionResolver.js');
+      const configOverrides = (extensionOverrides && typeof extensionOverrides === 'object')
+        ? (extensionOverrides as Record<string, any>)
+        : {};
+
+      const runtimeOverrides: Record<string, any> = {
+        'cli-executor': {
+          options: {
+            filesystem: { allowRead: permissions.filesystem.read, allowWrite: permissions.filesystem.write },
+            agentWorkspace: {
+              agentId: workspaceAgentId,
+              baseDir: workspaceBaseDir,
+              createIfMissing: true,
+              subdirs: ['assets', 'exports', 'tmp'],
+            },
+            dangerouslySkipSecurityChecks: dangerouslySkipCommandSafety,
+          },
+        },
+        'web-search': {
+          options: {
+            serperApiKey: process.env['SERPER_API_KEY'],
+            serpApiKey: process.env['SERPAPI_API_KEY'],
+            braveApiKey: process.env['BRAVE_API_KEY'],
+          },
+        },
+        'web-browser': { options: { headless: true } },
+        giphy: { options: { giphyApiKey: process.env['GIPHY_API_KEY'] } },
+        'image-search': {
+          options: {
+            pexelsApiKey: process.env['PEXELS_API_KEY'],
+            unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
+            pixabayApiKey: process.env['PIXABAY_API_KEY'],
+          },
+        },
+        'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
+        'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
+      };
+
+      function mergeOverride(base: any, extra: any): any {
+        const out = { ...(base || {}), ...(extra || {}) };
+        if ((base && base.options) || (extra && extra.options)) {
+          out.options = { ...(base?.options || {}), ...(extra?.options || {}) };
+        }
+        return out;
+      }
+
+      const mergedOverrides: Record<string, any> = { ...configOverrides };
+      for (const [name, override] of Object.entries(runtimeOverrides)) {
+        mergedOverrides[name] = mergeOverride(configOverrides[name], override);
+      }
+
+      const cfgSecrets = (configSecrets && typeof configSecrets === 'object' && !Array.isArray(configSecrets))
+        ? (configSecrets as Record<string, string>)
+        : undefined;
+      const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
+      const secrets = new Proxy<Record<string, string>>({} as any, {
+        get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
+      });
+
+      const resolved = await resolveExtensionsByNames(
+        toolExtensions,
+        voiceExtensions,
+        productivityExtensions,
+        mergedOverrides,
+        { secrets: secrets as any }
+      );
+
+      const packs: any[] = [];
+
+      for (const packEntry of resolved.manifest.packs) {
+        try {
+          if ((packEntry as any)?.enabled === false) continue;
+
+          if (typeof (packEntry as any)?.factory === 'function') {
+            const pack = await (packEntry as any).factory();
+            if (pack) {
+              packs.push(pack);
+              if (typeof pack?.name === 'string') preloadedPackages.push(pack.name);
+            }
+            continue;
+          }
+
+          let packageName: string | undefined;
+          if ('package' in (packEntry as any)) packageName = (packEntry as any).package as string;
+          else if ('module' in (packEntry as any)) packageName = (packEntry as any).module as string;
+          if (!packageName) continue;
+
+          const extModule = await import(packageName);
+          const factory = extModule.createExtensionPack ?? extModule.default?.createExtensionPack ?? extModule.default;
+          if (typeof factory !== 'function') continue;
+
+          const options: any = (packEntry as any).options || {};
+          const pack = await factory({ options, logger: console, getSecret });
+          packs.push(pack);
+          if (typeof pack?.name === 'string') preloadedPackages.push(pack.name);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          fmt.warning(`Failed to load extension pack: ${msg}`);
+        }
+      }
+
+      // Optional skills extension (may not be installed in standalone builds)
+      try {
+        const skillsPkg = '@framers/agentos-ext-skills';
+        const skillsExt: any = await import(/* webpackIgnore: true */ skillsPkg);
+        if (skillsExt?.createExtensionPack) {
+          packs.push(skillsExt.createExtensionPack({ options: {}, logger: console, getSecret }));
+          preloadedPackages.push(skillsPkg);
+        }
+      } catch {
+        // Not available — skip silently
+      }
+
+      await Promise.all(
+        packs
+          .map((p: any) =>
+            typeof p?.onActivate === 'function'
+              ? p.onActivate({ logger: console, getSecret })
+              : null
+          )
+          .filter(Boolean),
+      );
+
+      const tools: ToolInstance[] = packs
+        .flatMap((p: any) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
+        .filter(Boolean) as ToolInstance[];
+
+      for (const tool of tools) {
+        if (!tool?.name) continue;
+        toolMap.set(tool.name, tool);
+      }
+
+      fmt.ok(`Loaded ${tools.length} tools from ${packs.length} extensions`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      fmt.warning(`Extension loading failed, using empty toolset: ${msg}`);
+    }
   }
 
   // Schema-on-demand meta tools (always available)
@@ -140,6 +331,18 @@ export default async function cmdChat(
     logger: console,
   })) {
     toolMap.set(tool.name, tool);
+  }
+
+  // Enforce tool access profile + permission set (agent.config.json only).
+  // For generic `wunderland chat` without a project config, keep legacy behavior.
+  if (cfg) {
+    const filtered = filterToolMapByPolicy({
+      toolMap,
+      toolAccessProfile: policy.toolAccessProfile,
+      permissions,
+    });
+    toolMap.clear();
+    for (const [k, v] of filtered.toolMap.entries()) toolMap.set(k, v);
   }
 
   // Skills — load from filesystem dirs + config-declared skills
@@ -174,8 +377,34 @@ export default async function cmdChat(
     skillsPrompt = parts.filter(Boolean).join('\n\n');
   }
 
+  const seedId = cfg?.seedId ? String(cfg.seedId) : `seed_chat_${Date.now()}`;
+  const displayName = cfg?.displayName ? String(cfg.displayName) : 'Wunderland CLI';
+  const bio = cfg?.bio ? String(cfg.bio) : 'Interactive terminal assistant';
+  const personality = cfg?.personality || {};
+  const seed = createWunderlandSeed({
+    seedId,
+    name: displayName,
+    description: bio,
+    hexacoTraits: {
+      honesty_humility: Number.isFinite(personality.honesty) ? personality.honesty : 0.8,
+      emotionality: Number.isFinite(personality.emotionality) ? personality.emotionality : 0.5,
+      extraversion: Number.isFinite(personality.extraversion) ? personality.extraversion : 0.6,
+      agreeableness: Number.isFinite(personality.agreeableness) ? personality.agreeableness : 0.7,
+      conscientiousness: Number.isFinite(personality.conscientiousness) ? personality.conscientiousness : 0.8,
+      openness: Number.isFinite(personality.openness) ? personality.openness : 0.7,
+    },
+    baseSystemPrompt: typeof cfg?.systemPrompt === 'string' ? cfg.systemPrompt : undefined,
+    securityProfile: DEFAULT_SECURITY_PROFILE,
+    inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
+    stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
+  });
+
   const systemPrompt = [
+    typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
     'You are Wunderland CLI, an interactive terminal assistant.',
+    cfg
+      ? `Execution mode: ${policy.executionMode}. Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}.`
+      : '',
     lazyTools
       ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
       : 'Tools are preloaded, and you can also use extensions_enable to load additional packs on demand.',
@@ -187,27 +416,59 @@ export default async function cmdChat(
   ].filter(Boolean).join('\n\n');
 
   const sessionId = `wunderland-cli-${Date.now()}`;
-  const toolContext = { gmiId: sessionId, personaId: sessionId, userContext: { userId: process.env['USER'] || 'local-user' } };
+  const toolContext = {
+    gmiId: sessionId,
+    personaId: seedId,
+    userContext: { userId: process.env['USER'] || 'local-user' },
+    agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
+    interactiveSession: true,
+    ...(cfg ? {
+      permissionSet: policy.permissionSet,
+      securityTier: policy.securityTier,
+      executionMode: policy.executionMode,
+      toolAccessProfile: policy.toolAccessProfile,
+      wrapToolOutputs: policy.wrapToolOutputs,
+      turnApprovalMode,
+    } : null),
+    ...(cfg && policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
+  };
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
 
   fmt.section('Interactive Chat');
+  fmt.kvPair('Provider', accent(providerId));
   fmt.kvPair('Model', accent(model));
   fmt.kvPair('Tools', `${toolMap.size} loaded`);
   fmt.kvPair('Skills', enableSkills ? sColor('on') : muted('off'));
+  if (providerId === 'openai' && openrouterFallback) fmt.kvPair('Fallback', sColor('OpenRouter (auto)'));
   fmt.kvPair('Lazy Tools', lazyTools ? sColor('on') : muted('off'));
   fmt.kvPair('Authorization', autoApproveToolCalls ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)'));
+  if (turnApprovalMode !== 'off') fmt.kvPair('Turn Checkpoints', sColor(turnApprovalMode));
   fmt.blank();
   fmt.note(`Type ${accent('/help')} for commands, ${accent('/exit')} to quit`);
   fmt.blank();
 
   const askPermission = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
     const preview = safeJsonStringify(args, 800);
-    const q = `  ${wColor('\u26A0')} Allow ${tColor(tool.name)} (side effects)?\n${dim(preview)}\n  ${muted('[y/N]')} `;
+    const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
+    const q = `  ${wColor('\u26A0')} Allow ${tColor(tool.name)} (${effectLabel})?\n${dim(preview)}\n  ${muted('[y/N]')} `;
     const answer = (await rl.question(q)).trim().toLowerCase();
     return answer === 'y' || answer === 'yes';
   };
+
+  const askCheckpoint = turnApprovalMode === 'off'
+    ? undefined
+    : async (info: { round: number; toolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> }): Promise<boolean> => {
+        const summary = info.toolCalls.map((c) => {
+          const effect = c.hasSideEffects ? 'side effects' : 'read-only';
+          const preview = safeJsonStringify(c.args, 600);
+          return `- ${c.toolName} (${effect}): ${preview}`;
+        }).join('\n');
+        const q = `  ${wColor('\u26A0')} Checkpoint after round ${info.round}.\n${dim(summary || '(no tool calls)')}\n  ${muted('Continue? [y/N]')} `;
+        const answer = (await rl.question(q)).trim().toLowerCase();
+        return answer === 'y' || answer === 'yes';
+      };
 
   for (;;) {
     const line = await rl.question(`  ${accent('\u276F')} `);
@@ -236,7 +497,8 @@ export default async function cmdChat(
     messages.push({ role: 'user', content: input });
 
     const reply = await runToolCallingTurn({
-      apiKey,
+      providerId,
+      apiKey: llmApiKey,
       model,
       messages,
       toolMap,
@@ -244,6 +506,12 @@ export default async function cmdChat(
       maxRounds: 8,
       dangerouslySkipPermissions: autoApproveToolCalls,
       askPermission,
+      askCheckpoint,
+      baseUrl: llmBaseUrl,
+      fallback: providerId === 'openai' ? openrouterFallback : undefined,
+      onFallback: (_err, provider) => {
+        console.log(`  ${wColor('\u26A0')} Primary provider failed, falling back to ${provider}`);
+      },
       onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
         console.log(
           `  ${tColor('\u25B6')} ${tColor(tool.name)} ${dim(truncateString(JSON.stringify(args), 120))}`
@@ -259,6 +527,7 @@ export default async function cmdChat(
   }
 
   rl.close();
+  await shutdownWunderlandOtel();
   fmt.blank();
   fmt.ok('Session ended.');
   fmt.blank();
