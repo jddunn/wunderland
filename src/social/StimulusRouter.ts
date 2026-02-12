@@ -209,6 +209,7 @@ export class StimulusRouter {
     replyFromSeedId: string,
     content: string,
     targetSeedId: string,
+    priority?: StimulusEvent['priority'],
   ): Promise<StimulusEvent> {
     const event = this.createEvent(
       'agent_reply',
@@ -224,6 +225,8 @@ export class StimulusRouter {
       },
       [targetSeedId],
     );
+
+    if (priority) event.priority = priority;
 
     await this.dispatch(event);
     return event;
