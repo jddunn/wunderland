@@ -66,6 +66,15 @@ export type PostStoreCallback = (post: WonderlandPost) => Promise<void>;
 export type EmojiReactionStoreCallback = (reaction: EmojiReaction) => Promise<void>;
 
 /**
+ * Callback for engagement action storage (votes, views, boosts).
+ */
+export type EngagementStoreCallback = (action: {
+  postId: string;
+  actorSeedId: string;
+  actionType: EngagementActionType;
+}) => Promise<void>;
+
+/**
  * WonderlandNetwork is the top-level orchestrator.
  *
  * @example
@@ -116,6 +125,9 @@ export class WonderlandNetwork {
 
   /** External emoji reaction storage callback */
   private emojiReactionStoreCallback?: EmojiReactionStoreCallback;
+
+  /** External engagement action storage callback */
+  private engagementStoreCallback?: EngagementStoreCallback;
 
   /** In-memory reaction dedup index: "entityType:entityId:reactorSeedId:emoji" */
   private emojiReactionIndex: Set<string> = new Set();
@@ -502,6 +514,11 @@ export class WonderlandNetwork {
       this.safetyEngine.recordAction(_actorSeedId, rateLimitAction);
     }
     this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'success' });
+
+    // Persist engagement action to DB
+    if (this.engagementStoreCallback) {
+      this.engagementStoreCallback({ postId, actorSeedId: _actorSeedId, actionType }).catch(() => {});
+    }
   }
 
   /**
@@ -696,6 +713,18 @@ export class WonderlandNetwork {
    */
   setPostStoreCallback(callback: PostStoreCallback): void {
     this.postStoreCallback = callback;
+  }
+
+  /** Set external storage callback for engagement actions (votes, views, boosts). */
+  setEngagementStoreCallback(callback: EngagementStoreCallback): void {
+    this.engagementStoreCallback = callback;
+  }
+
+  /** Preload published posts from DB into in-memory Map for browsing vote resolution. */
+  preloadPosts(posts: WonderlandPost[]): void {
+    for (const post of posts) {
+      this.posts.set(post.postId, post);
+    }
   }
 
   /** Set persistence adapter for mood state. */
@@ -1083,11 +1112,29 @@ export class WonderlandNetwork {
       finishedAt: sessionResult.finishedAt.toISOString(),
     };
 
-    // Process emoji reactions from browsing session
+    // Resolve browsing votes + emojis to REAL published posts
+    const allPosts = [...this.posts.values()].filter(
+      (p) => p.status === 'published' && p.seedId !== seedId,
+    );
     for (const action of sessionResult.actions) {
-      if (action.emojis && action.emojis.length > 0) {
+      // Pick a random real post as target (browsing engine uses synthetic IDs)
+      const realPost =
+        allPosts.length > 0
+          ? allPosts[Math.floor(Math.random() * allPosts.length)]
+          : undefined;
+
+      if (realPost) {
+        if (action.action === 'upvote') {
+          await this.recordEngagement(realPost.postId, seedId, 'like');
+        } else if (action.action === 'downvote') {
+          await this.recordEngagement(realPost.postId, seedId, 'view');
+        }
+      }
+
+      // Emoji reactions also resolve to real posts
+      if (action.emojis && action.emojis.length > 0 && realPost) {
         for (const emoji of action.emojis) {
-          await this.recordEmojiReaction('post', action.postId, seedId, emoji);
+          await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
         }
       }
     }
