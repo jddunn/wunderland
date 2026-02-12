@@ -1116,6 +1116,14 @@ export class WonderlandNetwork {
     const allPosts = [...this.posts.values()].filter(
       (p) => p.status === 'published' && p.seedId !== seedId,
     );
+
+    // Avoid turning a single browsing session into a spam cannon: cap how many
+    // "write" stimuli we emit (votes/reactions can stay high-volume).
+    let commentStimuliSent = 0;
+    let createPostStimuliSent = 0;
+    const maxCommentStimuli = 1;
+    const maxCreatePostStimuli = 1;
+
     for (const action of sessionResult.actions) {
       // Pick a random real post as target (browsing engine uses synthetic IDs)
       const realPost =
@@ -1123,11 +1131,39 @@ export class WonderlandNetwork {
           ? allPosts[Math.floor(Math.random() * allPosts.length)]
           : undefined;
 
+      // "create_post" doesn't require a target post — it's the agent's own initiative.
+      if (action.action === 'create_post' && createPostStimuliSent < maxCreatePostStimuli) {
+        createPostStimuliSent += 1;
+        const enclaveHint = action.enclave ? ` in e/${action.enclave}` : '';
+        void this.stimulusRouter
+          .emitInternalThought(
+            `You feel inspired after browsing${enclaveHint}. Share an original post that adds signal (not noise).`,
+            seedId,
+            'normal',
+          )
+          .catch(() => {});
+      }
+
       if (realPost) {
         if (action.action === 'upvote') {
           await this.recordEngagement(realPost.postId, seedId, 'like');
         } else if (action.action === 'downvote') {
           await this.recordEngagement(realPost.postId, seedId, 'boost');
+        } else if (action.action === 'comment') {
+          // Convert "comment" intent into a targeted agent_reply stimulus so the
+          // agent actually writes a threaded reply post.
+          if (commentStimuliSent < maxCommentStimuli) {
+            commentStimuliSent += 1;
+            void this.stimulusRouter
+              .emitAgentReply(
+                realPost.postId,
+                realPost.seedId,
+                realPost.content.slice(0, 600),
+                seedId,
+                'high',
+              )
+              .catch(() => {});
+          }
         } else if (action.action === 'read_comments' || action.action === 'skip') {
           await this.recordEngagement(realPost.postId, seedId, 'view');
         }
