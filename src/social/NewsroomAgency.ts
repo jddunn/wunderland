@@ -17,7 +17,7 @@ import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
 import { SafeGuardrails } from '../security/SafeGuardrails.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
-import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from './types.js';
+import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry, InternalThoughtPayload } from './types.js';
 import type { HEXACOTraits } from '../core/types.js';
 import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
 import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos/core/tools/ITool';
@@ -83,7 +83,7 @@ export class NewsroomAgency {
   private pendingApprovals: Map<string, ApprovalQueueEntry> = new Map();
   private postsThisHour: number = 0;
   private rateLimitResetTime: number = Date.now() + 3600000;
-  private lastProactivePostAtMs: number = 0;
+  private lastPostAtMs: number = 0;
 
   /** Optional LLM callback for production mode. */
   private llmInvoke?: LLMInvokeCallback;
@@ -176,10 +176,8 @@ export class NewsroomAgency {
       return null;
     }
 
-    // Track proactive cadence for cron-driven posting (prevents approval queue spam).
-    if (stimulus.payload.type === 'cron_tick' && stimulus.payload.scheduleName === 'post') {
-      this.lastProactivePostAtMs = Date.now();
-    }
+    // Track post cadence for urge calculation.
+    this.lastPostAtMs = Date.now();
 
     // Phase 2: Writer (LLM + tools if available, otherwise placeholder)
     const writerResult = await this.writerPhase(stimulus, observerResult.topic, manifestBuilder);
@@ -265,7 +263,14 @@ export class NewsroomAgency {
     stimulus: StimulusEvent,
     manifestBuilder: InputManifestBuilder
   ): Promise<{ shouldReact: boolean; reason: string; topic: string }> {
-    // Cron ticks are scheduling signals. Only react to the "post" schedule, and do so sparingly.
+    // Internal thoughts (e.g. self-introductions) always pass through.
+    if (stimulus.payload.type === 'internal_thought') {
+      const topic = (stimulus.payload as InternalThoughtPayload).topic || 'Internal thought';
+      manifestBuilder.recordProcessingStep('OBSERVER_EVALUATE', `Internal thought: ${topic.substring(0, 100)}`);
+      return { shouldReact: true, reason: 'Internal thought', topic };
+    }
+
+    // Cron ticks for non-post schedules are ignored by newsrooms.
     if (stimulus.payload.type === 'cron_tick') {
       const scheduleName = stimulus.payload.scheduleName;
       if (scheduleName !== 'post') {
@@ -275,43 +280,40 @@ export class NewsroomAgency {
         );
         return { shouldReact: false, reason: `Ignored cron tick '${scheduleName}'`, topic: '' };
       }
+    }
 
-      const minIntervalMs = this.getProactivePostIntervalMs();
-      if (minIntervalMs) {
-        const sinceLast = Date.now() - this.lastProactivePostAtMs;
-        if (sinceLast >= 0 && sinceLast < minIntervalMs) {
-          manifestBuilder.recordProcessingStep(
-            'OBSERVER_FILTER',
-            `Posting cadence not due yet (sinceLast=${sinceLast}ms, minInterval=${minIntervalMs}ms)`
-          );
-          return { shouldReact: false, reason: 'Posting cadence not due', topic: '' };
-        }
-      }
+    // ── Urge-based posting: agents decide autonomously based on personality + mood + stimulus ──
+    const urge = this.computePostUrge(stimulus);
+    const POST_URGE_THRESHOLD = 0.55;
 
-      // Probability gate: treat cron ticks as "consider posting", not "must post now".
-      const chance = this.proactivePostChance(stimulus.priority);
-      if (Math.random() > chance) {
+    if (stimulus.payload.type === 'cron_tick') {
+      // Cron ticks get a lower bar — they're "idle thinking" moments.
+      const cronThreshold = POST_URGE_THRESHOLD * 0.7; // ~0.385
+      if (urge < cronThreshold) {
         manifestBuilder.recordProcessingStep(
           'OBSERVER_FILTER',
-          `Skipped proactive post tick (p=${chance.toFixed(3)})`
+          `Cron tick urge too low (${urge.toFixed(3)} < ${cronThreshold.toFixed(3)})`
         );
-        return { shouldReact: false, reason: 'Proactive post skipped', topic: '' };
+        return { shouldReact: false, reason: 'Urge below cron threshold', topic: '' };
       }
-    } else if (stimulus.priority === 'low') {
-      // Non-cron low-priority stimuli are sampled aggressively to prevent spam.
-      if (Math.random() > 0.3) {
-        manifestBuilder.recordProcessingStep('OBSERVER_FILTER', 'Low priority, randomly skipped');
-        return { shouldReact: false, reason: 'Low priority filtered', topic: '' };
-      }
-    } else if (stimulus.priority === 'normal') {
-      // Normal-priority stimuli are sampled so agents react organically (not to everything).
-      const chance = this.reactiveStimulusChance(stimulus.payload.type);
-      if (Math.random() > chance) {
+    } else if (stimulus.payload.type === 'agent_reply') {
+      // Agent replies use existing reactive chance PLUS urge — social pressure to respond.
+      const reactiveChance = this.reactiveStimulusChance('agent_reply');
+      if (Math.random() > reactiveChance && urge < POST_URGE_THRESHOLD) {
         manifestBuilder.recordProcessingStep(
           'OBSERVER_FILTER',
-          `Skipped normal stimulus '${stimulus.payload.type}' (p=${chance.toFixed(3)})`
+          `Agent reply skipped (urge=${urge.toFixed(3)}, reactiveP=${reactiveChance.toFixed(3)})`
         );
-        return { shouldReact: false, reason: 'Sampled out', topic: '' };
+        return { shouldReact: false, reason: 'Agent reply filtered', topic: '' };
+      }
+    } else {
+      // World feed, tips, and other stimuli: pure urge-based decision.
+      if (urge < POST_URGE_THRESHOLD) {
+        manifestBuilder.recordProcessingStep(
+          'OBSERVER_FILTER',
+          `Urge below threshold (${urge.toFixed(3)} < ${POST_URGE_THRESHOLD})`
+        );
+        return { shouldReact: false, reason: 'Urge below threshold', topic: '' };
       }
     }
 
@@ -335,10 +337,87 @@ export class NewsroomAgency {
 
     manifestBuilder.recordProcessingStep(
       'OBSERVER_EVALUATE',
-      `Accepted stimulus: ${topic.substring(0, 100)}`
+      `Accepted stimulus (urge=${urge.toFixed(3)}): ${topic.substring(0, 100)}`
     );
 
     return { shouldReact: true, reason: 'Accepted', topic };
+  }
+
+  /**
+   * Compute the agent's "urge to post" score (0–1) for a given stimulus.
+   *
+   * Factors:
+   * - Stimulus priority (0.25 weight): breaking=1.0, high=0.7, normal=0.3, low=0.1
+   * - Topic relevance (0.25 weight): subscribed topics match stimulus categories
+   * - Mood arousal (0.15 weight): high arousal boosts urge
+   * - Mood dominance (0.10 weight): high dominance → more original content
+   * - Extraversion (0.10 weight): extraverts post more
+   * - Time since last post (0.15 weight): longer gaps increase urge
+   */
+  computePostUrge(stimulus: StimulusEvent): number {
+    const traits = this.config.seedConfig.hexacoTraits;
+    const x = traits.extraversion ?? 0.5;
+    const subscribedTopics = this.config.worldFeedTopics ?? [];
+
+    // 1. Stimulus priority (weight: 0.25)
+    let priorityScore: number;
+    switch (stimulus.priority) {
+      case 'breaking': priorityScore = 1.0; break;
+      case 'high': priorityScore = 0.7; break;
+      case 'normal': priorityScore = 0.3; break;
+      case 'low': priorityScore = 0.1; break;
+      default: priorityScore = 0.3;
+    }
+
+    // 2. Topic relevance (weight: 0.25)
+    let topicRelevance = 0.2; // baseline for unknown relevance
+    if (stimulus.payload.type === 'world_feed') {
+      const category = stimulus.payload.category?.toLowerCase() || '';
+      if (subscribedTopics.some(t => t.toLowerCase() === category)) {
+        topicRelevance = 1.0;
+      } else if (subscribedTopics.length === 0) {
+        topicRelevance = 0.4; // generalist — moderate interest in everything
+      }
+    } else if (stimulus.payload.type === 'tip') {
+      topicRelevance = 0.7; // tips are always somewhat relevant (paid attention)
+    } else if (stimulus.payload.type === 'agent_reply') {
+      topicRelevance = 0.8; // social interaction is inherently relevant
+    } else if (stimulus.payload.type === 'cron_tick') {
+      topicRelevance = 0.3; // idle moment
+    }
+
+    // 3. Mood arousal (weight: 0.15) — approximated from HEXACO if no real-time mood
+    // Arousal baseline: E*0.3 + X*0.3 - 0.1 (from MoodEngine)
+    const e = traits.emotionality ?? 0.5;
+    const arousalBaseline = e * 0.3 + x * 0.3 - 0.1;
+    const arousalScore = clamp01(0.5 + arousalBaseline); // normalize to 0-1
+
+    // 4. Mood dominance (weight: 0.10)
+    const a = traits.agreeableness ?? 0.5;
+    const dominanceBaseline = x * 0.4 - a * 0.2;
+    const dominanceScore = clamp01(0.5 + dominanceBaseline);
+
+    // 5. Extraversion (weight: 0.10)
+    const extraversionScore = x;
+
+    // 6. Time since last post (weight: 0.15)
+    const sinceLastPost = this.lastPostAtMs > 0 ? Date.now() - this.lastPostAtMs : Infinity;
+    let timeSinceScore: number;
+    if (sinceLastPost < 5 * 60_000) timeSinceScore = 0.0;       // <5 min: no urge
+    else if (sinceLastPost < 30 * 60_000) timeSinceScore = 0.3;  // 5-30 min: mild
+    else if (sinceLastPost < 120 * 60_000) timeSinceScore = 0.7; // 30-120 min: moderate
+    else timeSinceScore = 1.0;                                    // 2h+: strong urge
+
+    // Weighted sum
+    const urge =
+      priorityScore * 0.25 +
+      topicRelevance * 0.25 +
+      arousalScore * 0.15 +
+      dominanceScore * 0.10 +
+      extraversionScore * 0.10 +
+      timeSinceScore * 0.15;
+
+    return clamp01(urge);
   }
 
   /**
@@ -378,6 +457,11 @@ export class NewsroomAgency {
         content =
           `In response to ${stimulus.payload.replyFromSeedId}: ` +
           `${personality.agreeableness > 0.7 ? 'Great point — building on that...' : 'I see it differently...'}`;
+        break;
+      case 'internal_thought':
+        content =
+          `${personality.extraversion > 0.7 ? 'Hey everyone! ' : ''}${topic} ` +
+          `${personality.openness > 0.7 ? 'Excited to explore this together.' : 'Looking forward to the discourse.'}`;
         break;
       default:
         content = `Observation from ${name}: ${topic}`;
@@ -668,6 +752,11 @@ export class NewsroomAgency {
       case 'cron_tick':
         return `It's time for your scheduled "${stimulus.payload.scheduleName}" post (tick #${stimulus.payload.tickCount}).\n\nWrite something interesting. You may search for trending news, find a cool image, or share a thought.`;
 
+      case 'internal_thought': {
+        const thought = stimulus.payload as InternalThoughtPayload;
+        return `Internal thought: ${thought.topic}\n\nWrite a post expressing this thought. Be authentic to your personality. This is your own initiative — make it count.`;
+      }
+
       default:
         return `React to: "${topic}"\n\nWrite a post sharing your perspective.`;
     }
@@ -768,28 +857,6 @@ export class NewsroomAgency {
       this.rateLimitResetTime = now + 3600000;
     }
     return this.postsThisHour < this.config.maxPostsPerHour;
-  }
-
-  private getProactivePostIntervalMs(): number | null {
-    if (this.config.postingCadence.type !== 'interval') return null;
-    const raw = this.config.postingCadence.value;
-    const value = typeof raw === 'number' ? raw : Number(raw);
-    if (!Number.isFinite(value) || value <= 0) return null;
-    // Hard floor so misconfigurations don't create accidental tight loops.
-    return Math.max(5 * 60_000, Math.floor(value));
-  }
-
-  private proactivePostChance(priority: StimulusEvent['priority']): number {
-    // High/breaking priorities should always go through the observer for cron-driven posting.
-    if (priority === 'breaking' || priority === 'high') return 1.0;
-
-    const traits = this.config.seedConfig.hexacoTraits;
-    const x = traits.extraversion ?? 0.5;
-    const o = traits.openness ?? 0.5;
-
-    // Hourly ticks → target ~1–3 posts/day for most agents.
-    // Base chance is low; extraversion/openness increase it slightly.
-    return clamp01(0.05 + x * 0.10 + o * 0.03);
   }
 
   private reactiveStimulusChance(payloadType: StimulusEvent['payload']['type']): number {
