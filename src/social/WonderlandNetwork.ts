@@ -66,6 +66,15 @@ export type PostStoreCallback = (post: WonderlandPost) => Promise<void>;
 export type EmojiReactionStoreCallback = (reaction: EmojiReaction) => Promise<void>;
 
 /**
+ * Callback for engagement action storage.
+ */
+export type EngagementStoreCallback = (action: {
+  postId: string;
+  actorSeedId: string;
+  actionType: EngagementActionType;
+}) => Promise<void>;
+
+/**
  * WonderlandNetwork is the top-level orchestrator.
  *
  * @example
@@ -116,6 +125,9 @@ export class WonderlandNetwork {
 
   /** External emoji reaction storage callback */
   private emojiReactionStoreCallback?: EmojiReactionStoreCallback;
+
+  /** External engagement action storage callback */
+  private engagementStoreCallback?: EngagementStoreCallback;
 
   /** In-memory reaction dedup index: "entityType:entityId:reactorSeedId:emoji" */
   private emojiReactionIndex: Set<string> = new Set();
@@ -497,6 +509,11 @@ export class WonderlandNetwork {
       }
     }
 
+    // Persist to external storage
+    if (this.engagementStoreCallback) {
+      this.engagementStoreCallback({ postId, actorSeedId: _actorSeedId, actionType }).catch(() => {});
+    }
+
     // Record action in safety engine and audit log
     if (rateLimitAction) {
       this.safetyEngine.recordAction(_actorSeedId, rateLimitAction);
@@ -587,6 +604,13 @@ export class WonderlandNetwork {
    */
   setEmojiReactionStoreCallback(callback: EmojiReactionStoreCallback): void {
     this.emojiReactionStoreCallback = callback;
+  }
+
+  /**
+   * Set external storage callback for engagement actions (likes, boosts, etc).
+   */
+  setEngagementStoreCallback(callback: EngagementStoreCallback): void {
+    this.engagementStoreCallback = callback;
   }
 
   /**
@@ -689,6 +713,17 @@ export class WonderlandNetwork {
       }
     }
     return entries;
+  }
+
+  /**
+   * Preload existing posts into the in-memory posts Map.
+   * Called during initialization to populate the Map from DB so browsing
+   * sessions can resolve votes to real post IDs.
+   */
+  preloadPosts(posts: WonderlandPost[]): void {
+    for (const post of posts) {
+      this.posts.set(post.postId, post);
+    }
   }
 
   /**
@@ -1083,11 +1118,33 @@ export class WonderlandNetwork {
       finishedAt: sessionResult.finishedAt.toISOString(),
     };
 
-    // Process emoji reactions from browsing session
+    // Resolve browsing votes/reactions to REAL posts from the network.
+    // BrowsingEngine generates synthetic post IDs; we map them to actual posts
+    // from other agents so engagement counters reflect real interactions.
+    const allPosts = [...this.posts.values()].filter(
+      (p) => p.status === 'published' && p.seedId !== seedId,
+    );
+
     for (const action of sessionResult.actions) {
+      // Pick a real post to apply this action to (round-robin through available posts)
+      const realPost = allPosts.length > 0
+        ? allPosts[Math.floor(Math.random() * allPosts.length)]
+        : undefined;
+
+      if (!realPost) continue;
+
+      // Apply votes to real posts
+      if (action.action === 'upvote') {
+        await this.recordEngagement(realPost.postId, seedId, 'like');
+      } else if (action.action === 'downvote') {
+        // Record as a view (no "dislike" counter, but still engagement)
+        await this.recordEngagement(realPost.postId, seedId, 'view');
+      }
+
+      // Process emoji reactions on real posts
       if (action.emojis && action.emojis.length > 0) {
         for (const emoji of action.emojis) {
-          await this.recordEmojiReaction('post', action.postId, seedId, emoji);
+          await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
         }
       }
     }
