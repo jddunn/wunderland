@@ -72,11 +72,11 @@ export interface ISafetyPersistenceAdapter {
 // ============================================================================
 
 const DEFAULT_RATE_LIMITS: Record<RateLimitedAction, RateLimitConfig> = {
-  post: { maxActions: 10, windowMs: 3_600_000 },       // 10 per hour
+  post: { maxActions: 15, windowMs: 3_600_000 },       // 15 per hour (hard ceiling; personality modulates effective limit)
   comment: { maxActions: 30, windowMs: 3_600_000 },    // 30 per hour
   vote: { maxActions: 60, windowMs: 3_600_000 },       // 60 per hour
   dm: { maxActions: 20, windowMs: 3_600_000 },         // 20 per hour
-  browse: { maxActions: 12, windowMs: 3_600_000 },     // 12 per hour (~5min intervals)
+  browse: { maxActions: 20, windowMs: 3_600_000 },     // 20 per hour (5-min browse intervals)
   proposal: { maxActions: 3, windowMs: 86_400_000 },   // 3 per day
 };
 
@@ -388,6 +388,48 @@ export class SafetyEngine extends EventEmitter {
    */
   getRateLimits(): Map<RateLimitedAction, RateLimitConfig> {
     return new Map(this.rateLimits);
+  }
+
+  /**
+   * Check if an agent is in a burst pattern (too many posts in a short window).
+   * If 3+ posts in the last 10 minutes, signals a 20-minute cooldown.
+   *
+   * @param seedId  Agent to check.
+   * @returns Whether the agent is in burst cooldown, with optional cooldown remaining.
+   */
+  checkBurstCooldown(seedId: string): { inCooldown: boolean; cooldownRemainingMs: number } {
+    const key = `${seedId}:post`;
+    const now = Date.now();
+    const tenMinAgo = now - 10 * 60_000;
+    const timestamps = (this.actionTimestamps.get(key) ?? []).filter(t => t > tenMinAgo);
+
+    if (timestamps.length >= 3) {
+      // Enforce 20-min cooldown from the most recent post in the burst.
+      const lastPost = timestamps[timestamps.length - 1]!;
+      const cooldownEnd = lastPost + 20 * 60_000;
+      const remaining = cooldownEnd - now;
+      if (remaining > 0) {
+        return { inCooldown: true, cooldownRemainingMs: remaining };
+      }
+    }
+    return { inCooldown: false, cooldownRemainingMs: 0 };
+  }
+
+  /**
+   * Compute a personality-modulated effective post rate limit for an agent.
+   *
+   * - Base rate: 5 posts/hour
+   * - Extraversion bonus: +X*5 posts/hour (high-X agents can post up to 10/hour)
+   * - Hard ceiling: 15/hour (from DEFAULT_RATE_LIMITS)
+   *
+   * @param extraversion  Agent's extraversion trait (0-1).
+   * @returns Effective maxActions per hour for posting.
+   */
+  getPersonalityModulatedPostLimit(extraversion: number): number {
+    const base = 5;
+    const bonus = Math.round(extraversion * 5);
+    const hardLimit = this.rateLimits.get('post')?.maxActions ?? 15;
+    return Math.min(base + bonus, hardLimit);
   }
 
   // ============================================================================

@@ -230,6 +230,62 @@ export class StimulusRouter {
   }
 
   /**
+   * Emit an internal thought stimulus to a specific agent.
+   * Used for self-introductions, agent-initiated enclave creation decisions, etc.
+   */
+  async emitInternalThought(
+    topic: string,
+    targetSeedId: string,
+    priority: StimulusEvent['priority'] = 'normal',
+  ): Promise<StimulusEvent> {
+    const event = this.createEvent(
+      'internal_thought',
+      {
+        type: 'internal_thought',
+        topic,
+      } as any,
+      {
+        providerId: 'system',
+        verified: true,
+      },
+      [targetSeedId],
+    );
+    event.priority = priority;
+
+    await this.dispatch(event);
+    return event;
+  }
+
+  /**
+   * Emit a post-published notification to agents in the same enclaves.
+   * This enables agents to discover and react to each other's posts autonomously.
+   */
+  async emitPostPublished(
+    post: { postId: string; seedId: string; content: string },
+    targetSeedIds: string[],
+    priority: StimulusEvent['priority'] = 'normal',
+  ): Promise<StimulusEvent> {
+    const event = this.createEvent(
+      'agent_reply',
+      {
+        type: 'agent_reply',
+        replyToPostId: post.postId,
+        replyFromSeedId: post.seedId,
+        content: post.content,
+      },
+      {
+        providerId: `agent:${post.seedId}`,
+        verified: true,
+      },
+      targetSeedIds,
+    );
+    event.priority = priority;
+
+    await this.dispatch(event);
+    return event;
+  }
+
+  /**
    * Ingest an inbound message from an external messaging channel.
    * The message is routed to the target agent as a `channel_message` stimulus.
    *

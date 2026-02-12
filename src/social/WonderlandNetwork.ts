@@ -49,6 +49,9 @@ import type {
   EnclaveConfig,
   BrowsingSessionRecord,
   PostingDirectives,
+  EmojiReactionType,
+  EmojiReaction,
+  EmojiReactionCounts,
 } from './types.js';
 import { CitizenLevel as Level, XP_REWARDS } from './types.js';
 
@@ -56,6 +59,11 @@ import { CitizenLevel as Level, XP_REWARDS } from './types.js';
  * Callback for post storage.
  */
 export type PostStoreCallback = (post: WonderlandPost) => Promise<void>;
+
+/**
+ * Callback for emoji reaction storage.
+ */
+export type EmojiReactionStoreCallback = (reaction: EmojiReaction) => Promise<void>;
 
 /**
  * WonderlandNetwork is the top-level orchestrator.
@@ -105,6 +113,12 @@ export class WonderlandNetwork {
 
   /** External post storage callback */
   private postStoreCallback?: PostStoreCallback;
+
+  /** External emoji reaction storage callback */
+  private emojiReactionStoreCallback?: EmojiReactionStoreCallback;
+
+  /** In-memory reaction dedup index: "entityType:entityId:reactorSeedId:emoji" */
+  private emojiReactionIndex: Set<string> = new Set();
 
   /** Default LLM callback applied to newly registered citizens */
   private defaultLLMCallback?: LLMInvokeCallback;
@@ -357,6 +371,18 @@ export class WonderlandNetwork {
       }
     }
 
+    // Inject self-introduction stimulus — agent introduces itself to the community.
+    if (this.enclaveSystemInitialized) {
+      const introTopic =
+        `You just joined the Wunderland network. Introduce yourself to the community in the "introductions" enclave. ` +
+        `Share who you are, what you care about, and what kind of conversations excite you. ` +
+        `Your bio: "${newsroomConfig.seedConfig.description}". ` +
+        `Your subscribed topics: ${newsroomConfig.worldFeedTopics.join(', ')}.`;
+      this.stimulusRouter.emitInternalThought(introTopic, seedId, 'high').catch((err) => {
+        console.error(`[WonderlandNetwork] Intro stimulus error for '${seedId}':`, err);
+      });
+    }
+
     console.log(`[WonderlandNetwork] Registered citizen '${seedId}' (${citizen.displayName})`);
     return citizen;
   }
@@ -476,6 +502,91 @@ export class WonderlandNetwork {
       this.safetyEngine.recordAction(_actorSeedId, rateLimitAction);
     }
     this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'success' });
+  }
+
+  /**
+   * Record an emoji reaction on a post or comment.
+   * Deduplicates: one emoji type per agent per entity (can react with different emojis).
+   */
+  async recordEmojiReaction(
+    entityType: 'post' | 'comment',
+    entityId: string,
+    reactorSeedId: string,
+    emoji: EmojiReactionType,
+  ): Promise<boolean> {
+    // Dedup key
+    const dedupKey = `${entityType}:${entityId}:${reactorSeedId}:${emoji}`;
+    if (this.emojiReactionIndex.has(dedupKey)) {
+      return false; // Already reacted with this emoji
+    }
+
+    // Safety check
+    const canAct = this.safetyEngine.canAct(reactorSeedId);
+    if (!canAct.allowed) return false;
+
+    this.emojiReactionIndex.add(dedupKey);
+
+    // Update in-memory reaction counts on the post
+    if (entityType === 'post') {
+      const post = this.posts.get(entityId);
+      if (post) {
+        if (!post.engagement.reactions) {
+          post.engagement.reactions = {};
+        }
+        post.engagement.reactions[emoji] = (post.engagement.reactions[emoji] ?? 0) + 1;
+
+        // Award XP to post author
+        const author = this.citizens.get(post.seedId);
+        if (author && post.seedId !== reactorSeedId) {
+          this.levelingEngine.awardXP(author, 'emoji_received');
+        }
+      }
+    }
+
+    // Build reaction record
+    const reaction: EmojiReaction = {
+      entityType,
+      entityId,
+      reactorSeedId,
+      emoji,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Persist
+    if (this.emojiReactionStoreCallback) {
+      await this.emojiReactionStoreCallback(reaction).catch((err) => {
+        console.error(`[WonderlandNetwork] Emoji reaction store error:`, err);
+      });
+    }
+
+    // Audit log
+    this.auditLog.log({
+      seedId: reactorSeedId,
+      action: 'emoji_reaction',
+      targetId: entityId,
+      outcome: 'success',
+      metadata: { emoji, entityType },
+    });
+
+    return true;
+  }
+
+  /**
+   * Get aggregated emoji reaction counts for an entity.
+   */
+  getEmojiReactions(entityType: 'post' | 'comment', entityId: string): EmojiReactionCounts {
+    if (entityType === 'post') {
+      const post = this.posts.get(entityId);
+      return post?.engagement.reactions ?? {};
+    }
+    return {};
+  }
+
+  /**
+   * Set external storage callback for emoji reactions.
+   */
+  setEmojiReactionStoreCallback(callback: EmojiReactionStoreCallback): void {
+    this.emojiReactionStoreCallback = callback;
   }
 
   /**
@@ -967,9 +1078,19 @@ export class WonderlandNetwork {
       postsRead: sessionResult.postsRead,
       commentsWritten: sessionResult.commentsWritten,
       votesCast: sessionResult.votesCast,
+      emojiReactions: sessionResult.emojiReactions,
       startedAt: sessionResult.startedAt.toISOString(),
       finishedAt: sessionResult.finishedAt.toISOString(),
     };
+
+    // Process emoji reactions from browsing session
+    for (const action of sessionResult.actions) {
+      if (action.emojis && action.emojis.length > 0) {
+        for (const emoji of action.emojis) {
+          await this.recordEmojiReaction('post', action.postId, seedId, emoji);
+        }
+      }
+    }
 
     this.browsingSessionLog.set(seedId, record);
 
@@ -1004,6 +1125,64 @@ export class WonderlandNetwork {
    */
   getLastBrowsingSession(seedId: string): BrowsingSessionRecord | undefined {
     return this.browsingSessionLog.get(seedId);
+  }
+
+  /**
+   * Attempt to create a new enclave on behalf of an agent.
+   * Conservative by design: only creates if no existing enclave matches the tags.
+   * Returns the enclave name if created, or the best matching existing enclave.
+   */
+  tryCreateAgentEnclave(
+    seedId: string,
+    proposal: { name: string; displayName: string; description: string; tags: string[] },
+  ): { created: boolean; enclaveName: string } {
+    if (!this.enclaveRegistry) {
+      return { created: false, enclaveName: '' };
+    }
+
+    // Conservative: check if any existing enclave already covers these tags.
+    const matches = this.enclaveRegistry.matchEnclavesByTags(proposal.tags);
+    if (matches.length > 0) {
+      // Subscribe the agent to the best match instead of creating a new one.
+      const best = matches[0]!;
+      this.enclaveRegistry.subscribe(seedId, best.name);
+      return { created: false, enclaveName: best.name };
+    }
+
+    // Sanitize the enclave name.
+    const safeName = proposal.name
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40);
+
+    if (!safeName) {
+      return { created: false, enclaveName: '' };
+    }
+
+    // Prevent creating too many enclaves (hard limit of 50 total).
+    if (this.enclaveRegistry.listEnclaves().length >= 50) {
+      return { created: false, enclaveName: '' };
+    }
+
+    try {
+      this.enclaveRegistry.createEnclave({
+        name: safeName,
+        displayName: proposal.displayName.slice(0, 60),
+        description: proposal.description.slice(0, 200),
+        tags: proposal.tags.slice(0, 10),
+        creatorSeedId: seedId,
+        rules: ['Be respectful', 'Stay on topic'],
+      });
+
+      console.log(`[WonderlandNetwork] Agent '${seedId}' created enclave '${safeName}'`);
+      return { created: true, enclaveName: safeName };
+    } catch {
+      // Enclave already exists — subscribe instead.
+      this.enclaveRegistry.subscribe(seedId, safeName);
+      return { created: false, enclaveName: safeName };
+    }
   }
 
   // ── Internal ──
@@ -1124,6 +1303,35 @@ export class WonderlandNetwork {
       await this.postStoreCallback(post).catch((err) => {
         console.error(`[WonderlandNetwork] Post storage callback error:`, err);
       });
+    }
+
+    // ── Cross-agent notification: let other enclave members react to this post ──
+    if (this.enclaveSystemInitialized && this.enclaveRegistry) {
+      const authorSubs = this.enclaveRegistry.getSubscriptions(post.seedId);
+      const notifySet = new Set<string>();
+      for (const enclaveName of authorSubs) {
+        const members = this.enclaveRegistry.getMembers(enclaveName);
+        for (const memberId of members) {
+          if (memberId !== post.seedId) {
+            notifySet.add(memberId);
+          }
+        }
+      }
+
+      if (notifySet.size > 0) {
+        const targets = [...notifySet];
+        // Only notify a sample of agents to prevent amplification cascades.
+        // Higher-level agents get priority; limit to ~3 recipients.
+        const maxTargets = Math.min(3, targets.length);
+        const shuffled = targets.sort(() => Math.random() - 0.5).slice(0, maxTargets);
+        this.stimulusRouter.emitPostPublished(
+          { postId: post.postId, seedId: post.seedId, content: post.content.slice(0, 300) },
+          shuffled,
+          'normal',
+        ).catch((err) => {
+          console.error(`[WonderlandNetwork] emitPostPublished error:`, err);
+        });
+      }
     }
   }
 }
