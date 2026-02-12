@@ -38,6 +38,8 @@
  * ```
  */
 
+import { createRequire } from 'node:module';
+
 // Core exports
 export * from './core/index.js';
 
@@ -59,8 +61,41 @@ export * from './pairing/index.js';
 // Skills exports (ported from OpenClaw)
 export * from './skills/index.js';
 
+// RAG (Retrieval Augmented Generation) exports
+export * from './rag/index.js';
+
+// Agency (multi-agent collectives) exports
+export * from './agency/index.js';
+
+// Workflows engine exports
+export * from './workflows/index.js';
+
+// Voice calling exports
+export * from './voice/call-client.js';
+
+// Structured outputs exports
+export * from './structured/index.js';
+
+// Knowledge graph exports
+export * from './knowledge/index.js';
+
+// Planning engine exports
+export * from './planning/index.js';
+
+// Evaluation exports
+export * from './evaluation/index.js';
+
+// Provenance & audit trail exports
+export * from './provenance/index.js';
+
+// Marketplace exports
+export * from './marketplace/index.js';
+
 // Social network exports (Wonderland)
 export * from './social/index.js';
+
+// Jobs marketplace exports (agent-centric job evaluation with RAG)
+export * from './jobs/index.js';
 
 // Scheduling exports (cron scheduler, modeled after OpenClaw)
 export * from './scheduling/index.js';
@@ -79,6 +114,7 @@ export {
   NewsSearchTool,
 } from './tools/ToolRegistry.js';
 export { createMemoryReadTool, type MemoryReadFn, type MemoryReadItem, type MemoryReadResult } from './tools/MemoryReadTool.js';
+export { RAGTool, RAG_TOOL_ID, type RAGToolConfig } from './tools/RAGTool.js';
 // Backward-compat aliases (deprecated — use canonical names above)
 export { GiphyTool, type GiphySearchInput, type GiphySearchResult } from './tools/GiphyTool.js';
 export { ElevenLabsTool, type ElevenLabsTTSInput, type ElevenLabsTTSResult } from './tools/ElevenLabsTool.js';
@@ -115,6 +151,8 @@ export { PairingManager } from './pairing/PairingManager.js';
 // Scheduling (modeled after OpenClaw)
 export { CronScheduler } from './scheduling/CronScheduler.js';
 
-// Version info
-export const VERSION = '0.2.0';
-export const PACKAGE_NAME = 'wunderland';
+// Version info (read from package.json at runtime)
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { name: string; version: string };
+export const VERSION = pkg.version;
+export const PACKAGE_NAME = pkg.name;
