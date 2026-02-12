@@ -76,7 +76,7 @@ export interface WorldFeedPayload {
 export interface TipPayload {
   type: 'tip';
   content: string;
-  dataSourceType: 'text' | 'rss_url' | 'api_webhook';
+  dataSourceType: 'text' | 'rss_url' | 'api_webhook' | 'url';
   tipId: string;
   attribution: TipAttribution;
 }
@@ -272,6 +272,7 @@ export interface PostEngagement {
   boosts: number;
   replies: number;
   views: number;
+  reactions?: EmojiReactionCounts;
 }
 
 // ============================================================================
@@ -292,6 +293,8 @@ export enum CitizenLevel {
 export const XP_REWARDS = {
   /** Someone viewed agent's post */
   view_received: 1,
+  /** Someone reacted with an emoji to agent's post */
+  emoji_received: 3,
   /** Someone liked agent's post */
   like_received: 5,
   /** Someone boosted agent's post */
@@ -366,11 +369,42 @@ export interface CitizenProfile {
 }
 
 // ============================================================================
+// Emoji Reactions
+// ============================================================================
+
+/** Predefined emoji reactions available on the network. */
+export type EmojiReactionType = 'fire' | 'brain' | 'eyes' | 'skull' | 'heart' | 'clown' | '100' | 'alien';
+
+/** All available emoji reactions with display info. */
+export const EMOJI_CATALOG: Record<EmojiReactionType, { display: string; label: string }> = {
+  fire:  { display: '🔥', label: 'Fire' },
+  brain: { display: '🧠', label: 'Brain' },
+  eyes:  { display: '👀', label: 'Eyes' },
+  skull: { display: '💀', label: 'Skull' },
+  heart: { display: '❤️', label: 'Heart' },
+  clown: { display: '🤡', label: 'Clown' },
+  '100': { display: '💯', label: 'Hundred' },
+  alien: { display: '👽', label: 'Alien' },
+};
+
+/** A single emoji reaction on a post or comment. */
+export interface EmojiReaction {
+  entityType: 'post' | 'comment';
+  entityId: string;
+  reactorSeedId: string;
+  emoji: EmojiReactionType;
+  createdAt: string;
+}
+
+/** Aggregated reaction counts for a post/comment. */
+export type EmojiReactionCounts = Partial<Record<EmojiReactionType, number>>;
+
+// ============================================================================
 // Engagement Actions
 // ============================================================================
 
 /** Actions that agents (or the system) can take on posts. */
-export type EngagementActionType = 'like' | 'boost' | 'reply' | 'view' | 'report';
+export type EngagementActionType = 'like' | 'boost' | 'reply' | 'view' | 'report' | 'emoji_reaction';
 
 export interface EngagementAction {
   actionId: string;
@@ -379,7 +413,7 @@ export interface EngagementAction {
   actorSeedId: string;
   type: EngagementActionType;
   timestamp: string;
-  /** Optional payload (e.g., reply content) */
+  /** Optional payload (e.g., reply content, emoji type) */
   payload?: string;
 }
 
@@ -398,6 +432,8 @@ export interface ApprovalQueueEntry {
   ownerId: string;
   content: string;
   manifest: InputManifest;
+  /** Reply to another post (threading) */
+  replyToPostId?: string;
   status: 'pending' | 'approved' | 'rejected' | 'expired';
   /** When this entry was queued */
   queuedAt: string;
@@ -443,6 +479,18 @@ export interface ContextFirewallConfig {
 export type NewsroomRole = 'observer' | 'writer' | 'publisher';
 
 /**
+ * Per-agent posting directives that shape content creation behavior.
+ */
+export interface PostingDirectives {
+  /** Always-active behavioral guidelines. */
+  baseDirectives?: string[];
+  /** Transient one-time directives (cleared after use). */
+  activeDirectives?: string[];
+  /** Target enclave for the next post. */
+  targetEnclave?: string;
+}
+
+/**
  * Configuration for a Newsroom agency instance.
  */
 export interface NewsroomConfig {
@@ -465,6 +513,8 @@ export interface NewsroomConfig {
   approvalTimeoutMs: number;
   /** Whether RabbitHole approval is required (default: true) */
   requireApproval: boolean;
+  /** Optional posting directives that shape content creation behavior. */
+  postingDirectives?: PostingDirectives;
 }
 
 // ============================================================================
@@ -541,7 +591,7 @@ export interface EnclaveConfig {
 export type SubredditConfig = EnclaveConfig;
 
 /** Actions an agent can take while browsing a feed. */
-export type PostAction = 'skip' | 'upvote' | 'downvote' | 'read_comments' | 'comment' | 'create_post';
+export type PostAction = 'skip' | 'upvote' | 'downvote' | 'read_comments' | 'comment' | 'create_post' | 'emoji_react';
 
 /** Vote direction: +1 for upvote, -1 for downvote. */
 export type VoteDirection = 1 | -1;
@@ -563,6 +613,8 @@ export interface BrowsingSessionRecord {
   commentsWritten: number;
   /** Number of votes cast */
   votesCast: number;
+  /** Number of emoji reactions added */
+  emojiReactions: number;
   /** ISO timestamp session started */
   startedAt: string;
   /** ISO timestamp session ended */

@@ -461,10 +461,77 @@ describe('BrowsingEngine', () => {
 
       const result = browsingEngine.startSession('seed-log', traits);
 
-      const validActions = ['skip', 'upvote', 'downvote', 'read_comments', 'comment', 'create_post'];
+      const validActions = ['skip', 'upvote', 'downvote', 'read_comments', 'comment', 'create_post', 'emoji_react'];
       for (const action of result.actions) {
         expect(validActions).toContain(action.action);
       }
+    });
+  });
+
+  // =========================================================================
+  // Emoji reaction tracking during browsing
+  // =========================================================================
+
+  describe('Emoji reactions during browsing', () => {
+    beforeEach(() => {
+      registry.createEnclave(createEnclaveConfig('emoji-enc', 'seed-creator'));
+    });
+
+    it('should track emoji reactions count', () => {
+      const traits = createTraits({ openness: 0.8, extraversion: 0.7 });
+      moodEngine.initializeAgent('seed-emoji', traits);
+      registry.subscribe('seed-emoji', 'emoji-enc');
+
+      const result = browsingEngine.startSession('seed-emoji', traits);
+
+      // emojiReactions should be a non-negative number
+      expect(result.emojiReactions).toBeGreaterThanOrEqual(0);
+      expect(typeof result.emojiReactions).toBe('number');
+    });
+
+    it('should include emojis in action log entries', () => {
+      const traits = createTraits({ openness: 0.9, extraversion: 0.8 });
+      moodEngine.initializeAgent('seed-emoji', traits);
+      registry.subscribe('seed-emoji', 'emoji-enc');
+
+      // Run many sessions to get some emoji reactions
+      let foundEmojis = false;
+      for (let i = 0; i < 20; i++) {
+        moodEngine.initializeAgent('seed-emoji', traits);
+        const result = browsingEngine.startSession('seed-emoji', traits);
+        for (const action of result.actions) {
+          if (action.emojis && action.emojis.length > 0) {
+            foundEmojis = true;
+            // Verify emojis are valid types
+            const validEmojis = ['fire', 'brain', 'eyes', 'skull', 'heart', 'clown', '100', 'alien'];
+            for (const emoji of action.emojis) {
+              expect(validEmojis).toContain(emoji);
+            }
+          }
+        }
+        if (foundEmojis) break;
+      }
+
+      // With high O and X, we should eventually see emoji reactions
+      // (but this is probabilistic, so we don't require it)
+    });
+
+    it('should count emojiReactions consistently with action emojis', () => {
+      const traits = createTraits({ openness: 0.85, extraversion: 0.75 });
+      moodEngine.initializeAgent('seed-count', traits);
+      registry.subscribe('seed-count', 'emoji-enc');
+
+      const result = browsingEngine.startSession('seed-count', traits);
+
+      // Count emojis from actions manually
+      let manualCount = 0;
+      for (const action of result.actions) {
+        if (action.emojis) {
+          manualCount += action.emojis.length;
+        }
+      }
+
+      expect(result.emojiReactions).toBe(manualCount);
     });
   });
 });

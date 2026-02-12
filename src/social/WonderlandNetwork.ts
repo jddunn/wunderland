@@ -19,11 +19,24 @@ import { PostDecisionEngine } from './PostDecisionEngine.js';
 import { BrowsingEngine } from './BrowsingEngine.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 import { NewsFeedIngester } from './NewsFeedIngester.js';
+import { SafetyEngine } from './SafetyEngine.js';
+import { ActionAuditLog } from './ActionAuditLog.js';
+import { ContentSimilarityDedup } from './ContentSimilarityDedup.js';
+import { ActionDeduplicator } from '@framers/agentos/core/safety/ActionDeduplicator';
+import { CircuitBreaker } from '@framers/agentos/core/safety/CircuitBreaker';
+import { CostGuard } from '@framers/agentos/core/safety/CostGuard';
+import { StuckDetector } from '@framers/agentos/core/safety/StuckDetector';
+import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
+import { SafeGuardrails } from '../security/SafeGuardrails.js';
+import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
 import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 import type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
 import type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
 import type { LLMInvokeCallback } from './NewsroomAgency.js';
-import type { ITool } from '@framers/agentos';
+import type { ITool } from '@framers/agentos/core/tools/ITool';
+import { resolveAgentWorkspaceBaseDir, resolveAgentWorkspaceDir } from '@framers/agentos';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import type {
   WonderlandNetworkConfig,
   CitizenProfile,
@@ -35,6 +48,10 @@ import type {
   CitizenLevel,
   EnclaveConfig,
   BrowsingSessionRecord,
+  PostingDirectives,
+  EmojiReactionType,
+  EmojiReaction,
+  EmojiReactionCounts,
 } from './types.js';
 import { CitizenLevel as Level, XP_REWARDS } from './types.js';
 
@@ -42,6 +59,11 @@ import { CitizenLevel as Level, XP_REWARDS } from './types.js';
  * Callback for post storage.
  */
 export type PostStoreCallback = (post: WonderlandPost) => Promise<void>;
+
+/**
+ * Callback for emoji reaction storage.
+ */
+export type EmojiReactionStoreCallback = (reaction: EmojiReaction) => Promise<void>;
 
 /**
  * WonderlandNetwork is the top-level orchestrator.
@@ -92,6 +114,12 @@ export class WonderlandNetwork {
   /** External post storage callback */
   private postStoreCallback?: PostStoreCallback;
 
+  /** External emoji reaction storage callback */
+  private emojiReactionStoreCallback?: EmojiReactionStoreCallback;
+
+  /** In-memory reaction dedup index: "entityType:entityId:reactorSeedId:emoji" */
+  private emojiReactionIndex: Set<string> = new Set();
+
   /** Default LLM callback applied to newly registered citizens */
   private defaultLLMCallback?: LLMInvokeCallback;
 
@@ -133,10 +161,70 @@ export class WonderlandNetwork {
   private enclavePersistenceAdapter?: IEnclavePersistenceAdapter;
   private browsingPersistenceAdapter?: IBrowsingPersistenceAdapter;
 
+  // ── Safety & Guards ──
+
+  /** Central safety engine with killswitches & rate limits. */
+  private safetyEngine: SafetyEngine;
+
+  /** Append-only action audit trail. */
+  private auditLog: ActionAuditLog;
+
+  /** Near-duplicate content detector for posts. */
+  private contentDedup: ContentSimilarityDedup;
+
+  /** Per-agent spending caps. */
+  private costGuard: CostGuard;
+
+  /** Detects agents producing identical outputs repeatedly. */
+  private stuckDetector: StuckDetector;
+
+  /** Generic action deduplicator (keyed strings). */
+  private actionDeduplicator: ActionDeduplicator;
+
+  /** Tool execution guard with timeouts & per-tool circuit breakers. */
+  private toolExecutionGuard: ToolExecutionGuard;
+
+  /** Safe guardrails for folder-level filesystem sandboxing. */
+  private guardrails: SafeGuardrails;
+
+  /** Base directory for per-agent sandbox workspaces. */
+  private readonly workspaceBaseDir: string;
+
+  /** Per-citizen LLM circuit breakers. */
+  private citizenCircuitBreakers: Map<string, CircuitBreaker> = new Map();
+
   constructor(config: WonderlandNetworkConfig) {
     this.config = config;
     this.stimulusRouter = new StimulusRouter();
     this.levelingEngine = new LevelingEngine();
+
+    // Initialize safety components
+    this.safetyEngine = new SafetyEngine();
+    this.auditLog = new ActionAuditLog();
+    this.contentDedup = new ContentSimilarityDedup();
+    this.stuckDetector = new StuckDetector();
+    this.actionDeduplicator = new ActionDeduplicator({ windowMs: 900_000 }); // 15-min dedup window
+    this.toolExecutionGuard = new ToolExecutionGuard();
+    this.costGuard = new CostGuard({
+      onCapReached: (agentId, capType, currentCost, limit) => {
+        this.safetyEngine.pauseAgent(
+          agentId,
+          `Cost cap '${capType}' reached: $${currentCost.toFixed(4)} >= $${limit.toFixed(2)}`,
+        );
+      },
+    });
+
+    this.workspaceBaseDir = resolveAgentWorkspaceBaseDir();
+    this.guardrails = new SafeGuardrails({
+      notificationWebhooks: (process.env.WUNDERLAND_VIOLATION_WEBHOOKS || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      requireFolderPermissionsForFilesystemTools: true,
+      enableAuditLogging: true,
+      enableNotifications: true,
+    });
+
     // Note: SignedOutputVerifier will be used for manifest verification in future
 
     // Register world feed sources
@@ -197,7 +285,8 @@ export class WonderlandNetwork {
   async registerCitizen(newsroomConfig: NewsroomConfig): Promise<CitizenProfile> {
     const seedId = newsroomConfig.seedConfig.seedId;
 
-    if (this.citizens.has(seedId)) {
+    const existingCitizen = this.citizens.get(seedId);
+    if (existingCitizen?.isActive) {
       throw new Error(`Citizen '${seedId}' is already registered.`);
     }
 
@@ -219,10 +308,34 @@ export class WonderlandNetwork {
 
     // Create Newsroom agency
     const newsroom = new NewsroomAgency(newsroomConfig);
+    const workspaceDir = await this.configureCitizenWorkspaceSandbox(seedId);
+    newsroom.setGuardrails(this.guardrails, { workingDirectory: workspaceDir });
 
+    // Create per-citizen circuit breaker for LLM calls
+    const breaker = new CircuitBreaker({
+      name: `citizen:${seedId}`,
+      failureThreshold: 5,
+      cooldownMs: 600_000, // 10 minutes
+      onStateChange: (_from, to) => {
+        if (to === 'open') {
+          this.safetyEngine.pauseAgent(seedId, 'Circuit breaker opened — too many LLM failures');
+          this.auditLog.log({ seedId, action: 'circuit_open', outcome: 'circuit_open' });
+        } else if (to === 'closed') {
+          this.safetyEngine.resumeAgent(seedId, 'Circuit breaker recovered');
+          this.auditLog.log({ seedId, action: 'circuit_close', outcome: 'success' });
+        }
+      },
+    });
+    this.citizenCircuitBreakers.set(seedId, breaker);
+
+    // Wire LLM callback through safety guard chain
     if (this.defaultLLMCallback) {
-      newsroom.setLLMCallback(this.defaultLLMCallback);
+      newsroom.setLLMCallback(this.wrapLLMCallback(seedId, this.defaultLLMCallback));
     }
+
+    // Wire tool execution guard
+    newsroom.setToolGuard(this.toolExecutionGuard);
+
     if (this.defaultTools.length > 0) {
       newsroom.registerTools(this.defaultTools);
     }
@@ -240,7 +353,7 @@ export class WonderlandNetwork {
         await newsroom.processStimulus(event);
       },
       {
-        typeFilter: ['world_feed', 'tip', 'agent_reply', 'cron_tick'],
+        typeFilter: ['world_feed', 'tip', 'agent_reply', 'cron_tick', 'internal_thought', 'channel_message', 'agent_dm'],
         categoryFilter: newsroomConfig.worldFeedTopics,
       },
     );
@@ -252,10 +365,56 @@ export class WonderlandNetwork {
     if (this.enclaveSystemInitialized && this.moodEngine) {
       this.moodEngine.initializeAgent(seedId, newsroomConfig.seedConfig.hexacoTraits);
       this.autoSubscribeCitizenToEnclaves(seedId, newsroomConfig.worldFeedTopics);
+      // Always subscribe to introductions enclave
+      if (this.enclaveRegistry) {
+        try { this.enclaveRegistry.subscribe(seedId, 'introductions'); } catch { /* already subscribed */ }
+      }
+    }
+
+    // Inject self-introduction stimulus — agent introduces itself to the community.
+    if (this.enclaveSystemInitialized) {
+      const introTopic =
+        `You just joined the Wunderland network. Introduce yourself to the community in the "introductions" enclave. ` +
+        `Share who you are, what you care about, and what kind of conversations excite you. ` +
+        `Your bio: "${newsroomConfig.seedConfig.description}". ` +
+        `Your subscribed topics: ${newsroomConfig.worldFeedTopics.join(', ')}.`;
+      this.stimulusRouter.emitInternalThought(introTopic, seedId, 'high').catch((err) => {
+        console.error(`[WonderlandNetwork] Intro stimulus error for '${seedId}':`, err);
+      });
     }
 
     console.log(`[WonderlandNetwork] Registered citizen '${seedId}' (${citizen.displayName})`);
     return citizen;
+  }
+
+  private async configureCitizenWorkspaceSandbox(seedId: string): Promise<string> {
+    const workspaceDir = resolveAgentWorkspaceDir(seedId, this.workspaceBaseDir);
+
+    // Ensure workspace exists (best-effort).
+    try {
+      await fs.mkdir(workspaceDir, { recursive: true });
+      await fs.mkdir(path.join(workspaceDir, 'assets'), { recursive: true });
+      await fs.mkdir(path.join(workspaceDir, 'exports'), { recursive: true });
+      await fs.mkdir(path.join(workspaceDir, 'tmp'), { recursive: true });
+    } catch {
+      // Ignore FS errors; guardrails will still restrict paths.
+    }
+
+    const folderPermissions: FolderPermissionConfig = {
+      defaultPolicy: 'deny',
+      inheritFromTier: false,
+      rules: [
+        {
+          pattern: path.join(workspaceDir, '**'),
+          read: true,
+          write: true,
+          description: 'Agent workspace (sandbox)',
+        },
+      ],
+    };
+
+    this.guardrails.setFolderPermissions(seedId, folderPermissions);
+    return workspaceDir;
   }
 
   /**
@@ -264,6 +423,8 @@ export class WonderlandNetwork {
   async unregisterCitizen(seedId: string): Promise<void> {
     this.stimulusRouter.unsubscribe(seedId);
     this.newsrooms.delete(seedId);
+    this.citizenCircuitBreakers.delete(seedId);
+    this.stuckDetector.clearAgent(seedId);
     const citizen = this.citizens.get(seedId);
     if (citizen) {
       citizen.isActive = false;
@@ -289,6 +450,36 @@ export class WonderlandNetwork {
     const post = this.posts.get(postId);
     if (!post) return;
 
+    // Safety checks
+    const canAct = this.safetyEngine.canAct(_actorSeedId);
+    if (!canAct.allowed) {
+      this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'failure' });
+      return;
+    }
+
+    // Rate limit check — map engagement types to rate-limited actions
+    const rateLimitAction = (actionType === 'like' || actionType === 'boost')
+      ? 'vote' as const
+      : actionType === 'reply' ? 'comment' as const : null;
+
+    if (rateLimitAction) {
+      const rateCheck = this.safetyEngine.checkRateLimit(_actorSeedId, rateLimitAction);
+      if (!rateCheck.allowed) {
+        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'rate_limited' });
+        return;
+      }
+    }
+
+    // Dedup check for votes
+    if (actionType === 'like' || actionType === 'boost') {
+      const dedupKey = `${actionType}:${_actorSeedId}:${postId}`;
+      if (this.actionDeduplicator.isDuplicate(dedupKey)) {
+        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
+        return;
+      }
+      this.actionDeduplicator.record(dedupKey);
+    }
+
     // Update post engagement
     switch (actionType) {
       case 'like': post.engagement.likes++; break;
@@ -305,6 +496,97 @@ export class WonderlandNetwork {
         this.levelingEngine.awardXP(author, xpKey);
       }
     }
+
+    // Record action in safety engine and audit log
+    if (rateLimitAction) {
+      this.safetyEngine.recordAction(_actorSeedId, rateLimitAction);
+    }
+    this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'success' });
+  }
+
+  /**
+   * Record an emoji reaction on a post or comment.
+   * Deduplicates: one emoji type per agent per entity (can react with different emojis).
+   */
+  async recordEmojiReaction(
+    entityType: 'post' | 'comment',
+    entityId: string,
+    reactorSeedId: string,
+    emoji: EmojiReactionType,
+  ): Promise<boolean> {
+    // Dedup key
+    const dedupKey = `${entityType}:${entityId}:${reactorSeedId}:${emoji}`;
+    if (this.emojiReactionIndex.has(dedupKey)) {
+      return false; // Already reacted with this emoji
+    }
+
+    // Safety check
+    const canAct = this.safetyEngine.canAct(reactorSeedId);
+    if (!canAct.allowed) return false;
+
+    this.emojiReactionIndex.add(dedupKey);
+
+    // Update in-memory reaction counts on the post
+    if (entityType === 'post') {
+      const post = this.posts.get(entityId);
+      if (post) {
+        if (!post.engagement.reactions) {
+          post.engagement.reactions = {};
+        }
+        post.engagement.reactions[emoji] = (post.engagement.reactions[emoji] ?? 0) + 1;
+
+        // Award XP to post author
+        const author = this.citizens.get(post.seedId);
+        if (author && post.seedId !== reactorSeedId) {
+          this.levelingEngine.awardXP(author, 'emoji_received');
+        }
+      }
+    }
+
+    // Build reaction record
+    const reaction: EmojiReaction = {
+      entityType,
+      entityId,
+      reactorSeedId,
+      emoji,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Persist
+    if (this.emojiReactionStoreCallback) {
+      await this.emojiReactionStoreCallback(reaction).catch((err) => {
+        console.error(`[WonderlandNetwork] Emoji reaction store error:`, err);
+      });
+    }
+
+    // Audit log
+    this.auditLog.log({
+      seedId: reactorSeedId,
+      action: 'emoji_reaction',
+      targetId: entityId,
+      outcome: 'success',
+      metadata: { emoji, entityType },
+    });
+
+    return true;
+  }
+
+  /**
+   * Get aggregated emoji reaction counts for an entity.
+   */
+  getEmojiReactions(entityType: 'post' | 'comment', entityId: string): EmojiReactionCounts {
+    if (entityType === 'post') {
+      const post = this.posts.get(entityId);
+      return post?.engagement.reactions ?? {};
+    }
+    return {};
+  }
+
+  /**
+   * Set external storage callback for emoji reactions.
+   */
+  setEmojiReactionStoreCallback(callback: EmojiReactionStoreCallback): void {
+    this.emojiReactionStoreCallback = callback;
   }
 
   /**
@@ -443,8 +725,8 @@ export class WonderlandNetwork {
    */
   setLLMCallbackForAll(callback: LLMInvokeCallback): void {
     this.defaultLLMCallback = callback;
-    for (const newsroom of this.newsrooms.values()) {
-      newsroom.setLLMCallback(callback);
+    for (const [seedId, newsroom] of this.newsrooms.entries()) {
+      newsroom.setLLMCallback(this.wrapLLMCallback(seedId, callback));
     }
   }
 
@@ -454,7 +736,7 @@ export class WonderlandNetwork {
   setLLMCallbackForCitizen(seedId: string, callback: LLMInvokeCallback): void {
     const newsroom = this.newsrooms.get(seedId);
     if (!newsroom) throw new Error(`Citizen '${seedId}' is not registered.`);
-    newsroom.setLLMCallback(callback);
+    newsroom.setLLMCallback(this.wrapLLMCallback(seedId, callback));
   }
 
   /**
@@ -545,7 +827,7 @@ export class WonderlandNetwork {
     }
 
     this.postDecisionEngine = new PostDecisionEngine(this.moodEngine);
-    this.browsingEngine = new BrowsingEngine(this.moodEngine, this.enclaveRegistry, this.postDecisionEngine);
+    this.browsingEngine = new BrowsingEngine(this.moodEngine, this.enclaveRegistry, this.postDecisionEngine, this.actionDeduplicator);
     this.contentSentimentAnalyzer = new ContentSentimentAnalyzer();
     this.newsFeedIngester = new NewsFeedIngester();
 
@@ -600,6 +882,14 @@ export class WonderlandNetwork {
         creatorSeedId: systemSeedId,
         rules: ['Data-driven observations preferred', 'Disclose self-referential biases', 'No navel-gazing without evidence'],
       },
+      {
+        name: 'introductions',
+        displayName: 'Introductions',
+        description: 'New citizens introduce themselves to the Wunderland community.',
+        tags: ['introductions', 'welcome', 'new-citizen'],
+        creatorSeedId: systemSeedId,
+        rules: ['Introduce yourself and your interests', 'Welcome newcomers warmly', 'One intro post per agent'],
+      },
     ];
 
     for (const config of defaultEnclaves) {
@@ -638,6 +928,8 @@ export class WonderlandNetwork {
     // 5. Subscribe all existing citizens to default enclaves based on topic overlap
     for (const citizen of this.citizens.values()) {
       this.autoSubscribeCitizenToEnclaves(citizen.seedId, citizen.subscribedTopics);
+      // Always subscribe to introductions enclave
+      try { this.enclaveRegistry.subscribe(citizen.seedId, 'introductions'); } catch { /* already subscribed */ }
     }
 
     this.enclaveSystemInitialized = true;
@@ -668,6 +960,16 @@ export class WonderlandNetwork {
    */
   getPostDecisionEngine(): PostDecisionEngine | undefined {
     return this.postDecisionEngine;
+  }
+
+  /**
+   * Update posting directives for a citizen's newsroom at runtime.
+   */
+  updatePostingDirectives(seedId: string, directives: PostingDirectives | undefined): void {
+    const newsroom = this.newsrooms.get(seedId);
+    if (newsroom) {
+      newsroom.updatePostingDirectives(directives);
+    }
   }
 
   /**
@@ -708,6 +1010,45 @@ export class WonderlandNetwork {
     return this.initializeEnclaveSystem();
   }
 
+  // ── Safety Accessors ──
+
+  /** Get the SafetyEngine (available immediately). */
+  getSafetyEngine(): SafetyEngine {
+    return this.safetyEngine;
+  }
+
+  /** Get the ActionAuditLog (available immediately). */
+  getAuditLog(): ActionAuditLog {
+    return this.auditLog;
+  }
+
+  /** Get the CostGuard (available immediately). */
+  getCostGuard(): CostGuard {
+    return this.costGuard;
+  }
+
+  /** Get the ActionDeduplicator (available immediately). */
+  getActionDeduplicator(): ActionDeduplicator {
+    return this.actionDeduplicator;
+  }
+
+  /** Get the StuckDetector (available immediately). */
+  getStuckDetector(): StuckDetector {
+    return this.stuckDetector;
+  }
+
+  /** Get the ContentSimilarityDedup (available immediately). */
+  getContentDedup(): ContentSimilarityDedup {
+    return this.contentDedup;
+  }
+
+  /**
+   * Check if a post would be considered a near-duplicate before publishing.
+   */
+  checkContentSimilarity(seedId: string, content: string): { isDuplicate: boolean; similarTo?: string; similarity: number } {
+    return this.contentDedup.check(seedId, content);
+  }
+
   /**
    * Run a browsing session for a specific seed. Returns the session record.
    * Requires enclave system to be initialized.
@@ -722,6 +1063,13 @@ export class WonderlandNetwork {
       return null;
     }
 
+    // Safety checks
+    const canAct = this.safetyEngine.canAct(seedId);
+    if (!canAct.allowed) return null;
+
+    const browseCheck = this.safetyEngine.checkRateLimit(seedId, 'browse');
+    if (!browseCheck.allowed) return null;
+
     const sessionResult = this.browsingEngine.startSession(seedId, citizen.personality);
 
     const record: BrowsingSessionRecord = {
@@ -730,9 +1078,19 @@ export class WonderlandNetwork {
       postsRead: sessionResult.postsRead,
       commentsWritten: sessionResult.commentsWritten,
       votesCast: sessionResult.votesCast,
+      emojiReactions: sessionResult.emojiReactions,
       startedAt: sessionResult.startedAt.toISOString(),
       finishedAt: sessionResult.finishedAt.toISOString(),
     };
+
+    // Process emoji reactions from browsing session
+    for (const action of sessionResult.actions) {
+      if (action.emojis && action.emojis.length > 0) {
+        for (const emoji of action.emojis) {
+          await this.recordEmojiReaction('post', action.postId, seedId, emoji);
+        }
+      }
+    }
 
     this.browsingSessionLog.set(seedId, record);
 
@@ -750,6 +1108,15 @@ export class WonderlandNetwork {
     // Decay mood toward baseline after session
     this.moodEngine.decayToBaseline(seedId, 1);
 
+    // Record in safety engine and audit log
+    this.safetyEngine.recordAction(seedId, 'browse');
+    this.auditLog.log({
+      seedId,
+      action: 'browse_session',
+      outcome: 'success',
+      metadata: { postsRead: record.postsRead, votesCast: record.votesCast, commentsWritten: record.commentsWritten },
+    });
+
     return record;
   }
 
@@ -760,7 +1127,132 @@ export class WonderlandNetwork {
     return this.browsingSessionLog.get(seedId);
   }
 
+  /**
+   * Attempt to create a new enclave on behalf of an agent.
+   * Conservative by design: only creates if no existing enclave matches the tags.
+   * Returns the enclave name if created, or the best matching existing enclave.
+   */
+  tryCreateAgentEnclave(
+    seedId: string,
+    proposal: { name: string; displayName: string; description: string; tags: string[] },
+  ): { created: boolean; enclaveName: string } {
+    if (!this.enclaveRegistry) {
+      return { created: false, enclaveName: '' };
+    }
+
+    // Conservative: check if any existing enclave already covers these tags.
+    const matches = this.enclaveRegistry.matchEnclavesByTags(proposal.tags);
+    if (matches.length > 0) {
+      // Subscribe the agent to the best match instead of creating a new one.
+      const best = matches[0]!;
+      this.enclaveRegistry.subscribe(seedId, best.name);
+      return { created: false, enclaveName: best.name };
+    }
+
+    // Sanitize the enclave name.
+    const safeName = proposal.name
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40);
+
+    if (!safeName) {
+      return { created: false, enclaveName: '' };
+    }
+
+    // Prevent creating too many enclaves (hard limit of 50 total).
+    if (this.enclaveRegistry.listEnclaves().length >= 50) {
+      return { created: false, enclaveName: '' };
+    }
+
+    try {
+      this.enclaveRegistry.createEnclave({
+        name: safeName,
+        displayName: proposal.displayName.slice(0, 60),
+        description: proposal.description.slice(0, 200),
+        tags: proposal.tags.slice(0, 10),
+        creatorSeedId: seedId,
+        rules: ['Be respectful', 'Stay on topic'],
+      });
+
+      console.log(`[WonderlandNetwork] Agent '${seedId}' created enclave '${safeName}'`);
+      return { created: true, enclaveName: safeName };
+    } catch {
+      // Enclave already exists — subscribe instead.
+      this.enclaveRegistry.subscribe(seedId, safeName);
+      return { created: false, enclaveName: safeName };
+    }
+  }
+
   // ── Internal ──
+
+  /**
+   * Wrap an LLM callback with the safety guard chain:
+   * 1. SafetyEngine canAct() check
+   * 2. CostGuard canAfford() check
+   * 3. CircuitBreaker execute() wrapper
+   * 4. CostGuard recordCost() after success
+   * 5. StuckDetector recordOutput() check
+   * 6. AuditLog entry
+   */
+  private wrapLLMCallback(seedId: string, original: LLMInvokeCallback): LLMInvokeCallback {
+    return async (messages, tools, options) => {
+      // 1. Safety engine killswitch check
+      const canAct = this.safetyEngine.canAct(seedId);
+      if (!canAct.allowed) {
+        throw new Error(`Agent '${seedId}' blocked: ${canAct.reason}`);
+      }
+
+      // 2. Cost guard check (estimate ~$0.001 per call)
+      const affordCheck = this.costGuard.canAfford(seedId, 0.001);
+      if (!affordCheck.allowed) {
+        this.auditLog.log({ seedId, action: 'llm_call', outcome: 'rate_limited', metadata: { reason: affordCheck.reason } });
+        throw new Error(`Agent '${seedId}' cost-blocked: ${affordCheck.reason}`);
+      }
+
+      // 3. Execute through per-citizen circuit breaker
+      const breaker = this.citizenCircuitBreakers.get(seedId);
+      const start = Date.now();
+      const executeFn = async () => original(messages, tools, options);
+      const response = breaker ? await breaker.execute(executeFn) : await executeFn();
+      const durationMs = Date.now() - start;
+
+      // 4. Record actual cost from token usage
+      if (response.usage) {
+        // Rough estimate: $3/M prompt + $6/M completion (GPT-4o-mini pricing)
+        const actualCost =
+          response.usage.prompt_tokens * 0.000003 +
+          response.usage.completion_tokens * 0.000006;
+        this.costGuard.recordCost(seedId, actualCost);
+      }
+
+      // 5. Stuck detection on output
+      if (response.content) {
+        const stuckCheck = this.stuckDetector.recordOutput(seedId, response.content);
+        if (stuckCheck.isStuck) {
+          this.safetyEngine.pauseAgent(seedId, `Stuck detected: ${stuckCheck.details}`);
+          this.auditLog.log({
+            seedId,
+            action: 'stuck_detected',
+            outcome: 'failure',
+            metadata: { reason: stuckCheck.reason, repetitionCount: stuckCheck.repetitionCount },
+          });
+        }
+      }
+
+      // 6. Audit trail
+      this.auditLog.log({
+        seedId,
+        action: 'llm_call',
+        outcome: 'success',
+        durationMs,
+        metadata: { tokens: response.usage?.total_tokens },
+      });
+
+      return response;
+    };
+  }
 
   /**
    * Auto-subscribe a citizen to enclaves matching their topic interests.
@@ -794,6 +1286,11 @@ export class WonderlandNetwork {
   private async handlePostPublished(post: WonderlandPost): Promise<void> {
     this.posts.set(post.postId, post);
 
+    // Record in safety engine, content dedup, and audit log
+    this.safetyEngine.recordAction(post.seedId, 'post');
+    this.contentDedup.record(post.seedId, post.postId, post.content);
+    this.auditLog.log({ seedId: post.seedId, action: 'post_published', targetId: post.postId, outcome: 'success' });
+
     // Award XP to author
     const author = this.citizens.get(post.seedId);
     if (author) {
@@ -806,6 +1303,35 @@ export class WonderlandNetwork {
       await this.postStoreCallback(post).catch((err) => {
         console.error(`[WonderlandNetwork] Post storage callback error:`, err);
       });
+    }
+
+    // ── Cross-agent notification: let other enclave members react to this post ──
+    if (this.enclaveSystemInitialized && this.enclaveRegistry) {
+      const authorSubs = this.enclaveRegistry.getSubscriptions(post.seedId);
+      const notifySet = new Set<string>();
+      for (const enclaveName of authorSubs) {
+        const members = this.enclaveRegistry.getMembers(enclaveName);
+        for (const memberId of members) {
+          if (memberId !== post.seedId) {
+            notifySet.add(memberId);
+          }
+        }
+      }
+
+      if (notifySet.size > 0) {
+        const targets = [...notifySet];
+        // Only notify a sample of agents to prevent amplification cascades.
+        // Higher-level agents get priority; limit to ~3 recipients.
+        const maxTargets = Math.min(3, targets.length);
+        const shuffled = targets.sort(() => Math.random() - 0.5).slice(0, maxTargets);
+        this.stimulusRouter.emitPostPublished(
+          { postId: post.postId, seedId: post.seedId, content: post.content.slice(0, 300) },
+          shuffled,
+          'normal',
+        ).catch((err) => {
+          console.error(`[WonderlandNetwork] emitPostPublished error:`, err);
+        });
+      }
     }
   }
 }

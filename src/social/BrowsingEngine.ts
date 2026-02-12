@@ -11,6 +11,8 @@ import type { HEXACOTraits } from '../core/types.js';
 import type { MoodEngine, PADState } from './MoodEngine.js';
 import type { EnclaveRegistry } from './EnclaveRegistry.js';
 import type { PostDecisionEngine, PostAction, PostAnalysis } from './PostDecisionEngine.js';
+import type { EmojiReactionType } from './types.js';
+import type { ActionDeduplicator } from '@framers/agentos';
 
 // ============================================================================
 // Types
@@ -28,8 +30,10 @@ export interface BrowsingSessionResult {
   commentsWritten: number;
   /** Number of up/down votes cast */
   votesCast: number;
+  /** Number of emoji reactions added */
+  emojiReactions: number;
   /** Per-post action log */
-  actions: { postId: string; action: PostAction; enclave: string }[];
+  actions: { postId: string; action: PostAction; enclave: string; emojis?: EmojiReactionType[] }[];
   /** Session start timestamp */
   startedAt: Date;
   /** Session end timestamp */
@@ -60,15 +64,18 @@ export class BrowsingEngine {
   private moodEngine: MoodEngine;
   private registry: EnclaveRegistry;
   private decisionEngine: PostDecisionEngine;
+  private deduplicator?: ActionDeduplicator;
 
   constructor(
     moodEngine: MoodEngine,
     registry: EnclaveRegistry,
     decisionEngine: PostDecisionEngine,
+    deduplicator?: ActionDeduplicator,
   ) {
     this.moodEngine = moodEngine;
     this.registry = registry;
     this.decisionEngine = decisionEngine;
+    this.deduplicator = deduplicator;
   }
 
   /**
@@ -102,6 +109,7 @@ export class BrowsingEngine {
       postsRead: 0,
       commentsWritten: 0,
       votesCast: 0,
+      emojiReactions: 0,
       actions: [],
       startedAt,
       finishedAt: startedAt, // will be overwritten
@@ -138,8 +146,28 @@ export class BrowsingEngine {
         // Decide action
         const decision = this.decisionEngine.decide(seedId, traits, currentMood, analysis);
 
+        // Dedup check for vote actions
+        if (
+          this.deduplicator &&
+          (decision.action === 'upvote' || decision.action === 'downvote')
+        ) {
+          const dedupKey = `vote:${seedId}:${postId}`;
+          if (this.deduplicator.isDuplicate(dedupKey)) {
+            // Skip duplicate vote — still count as read
+            result.actions.push({ postId, action: 'skip', enclave });
+            result.postsRead++;
+            remainingEnergy--;
+            continue;
+          }
+          this.deduplicator.record(dedupKey);
+        }
+
+        // Emoji reaction selection (independent of primary action)
+        const emojiResult = this.decisionEngine.selectEmojiReaction(traits, currentMood, analysis);
+        const selectedEmojis = emojiResult.shouldReact ? emojiResult.emojis : undefined;
+
         // Log action
-        result.actions.push({ postId, action: decision.action, enclave });
+        result.actions.push({ postId, action: decision.action, enclave, emojis: selectedEmojis });
         result.postsRead++;
 
         // Apply mood delta based on action outcome
@@ -152,6 +180,9 @@ export class BrowsingEngine {
         }
         if (decision.action === 'upvote' || decision.action === 'downvote') {
           result.votesCast++;
+        }
+        if (selectedEmojis && selectedEmojis.length > 0) {
+          result.emojiReactions += selectedEmojis.length;
         }
 
         remainingEnergy--;
@@ -204,6 +235,8 @@ function computeMoodDelta(action: PostAction, analysis: PostAnalysis): { valence
         dominance: -0.01,
         trigger: 'read comment thread',
       };
+    case 'emoji_react':
+      return { valence: 0.04, arousal: 0.02, dominance: 0.01, trigger: 'reacted with emoji' };
     case 'skip':
     default:
       return { valence: -0.01, arousal: -0.03, dominance: 0, trigger: 'skipped a post' };

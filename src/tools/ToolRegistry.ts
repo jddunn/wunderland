@@ -22,6 +22,16 @@ export interface ToolRegistryConfig {
   unsplashApiKey?: string;
   pixabayApiKey?: string;
   newsApiKey?: string;
+  /**
+   * Optional allowlist for curated tool packs. Defaults to 'all'.
+   * Values correspond to `TOOL_CATALOG[].name` from @framers/agentos-extensions-registry
+   * (e.g. 'web-search', 'giphy', 'news-search').
+   */
+  tools?: string[] | 'all' | 'none';
+  /** Optional allowlist for curated voice provider packs (e.g. 'voice-twilio'). */
+  voice?: string[] | 'all' | 'none';
+  /** Optional allowlist for curated productivity packs (e.g. 'calendar-google'). */
+  productivity?: string[] | 'all' | 'none';
 }
 
 /**
@@ -74,10 +84,12 @@ export async function createWunderlandTools(config?: ToolRegistryConfig): Promis
   const secrets = buildSecretsMap(config);
 
   const manifest = await createCuratedManifest({
-    tools: 'all',
+    tools: config?.tools ?? 'all',
+    voice: config?.voice,
+    productivity: config?.productivity,
     channels: 'none',
     secrets,
-  });
+  } as Parameters<typeof createCuratedManifest>[0]);
 
   const tools: ITool[] = [];
   for (const pack of manifest.packs) {

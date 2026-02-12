@@ -139,7 +139,6 @@ describe('CronScheduler', () => {
 
     it('should update the schedule and recompute nextRunAtMs', () => {
       const job = scheduler.addJob(makeJobInput());
-      const originalNext = job.state.nextRunAtMs;
 
       const updated = scheduler.updateJob(job.id, {
         schedule: { kind: 'every', everyMs: 120_000 },

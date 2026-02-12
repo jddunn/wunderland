@@ -14,11 +14,13 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
+import { SafeGuardrails } from '../security/SafeGuardrails.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
-import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from './types.js';
+import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry, InternalThoughtPayload } from './types.js';
 import type { HEXACOTraits } from '../core/types.js';
-import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos';
+import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
+import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos/core/tools/ITool';
 
 /**
  * LLM message format for tool-calling conversations.
@@ -81,6 +83,7 @@ export class NewsroomAgency {
   private pendingApprovals: Map<string, ApprovalQueueEntry> = new Map();
   private postsThisHour: number = 0;
   private rateLimitResetTime: number = Date.now() + 3600000;
+  private lastPostAtMs: number = 0;
 
   /** Optional LLM callback for production mode. */
   private llmInvoke?: LLMInvokeCallback;
@@ -90,6 +93,13 @@ export class NewsroomAgency {
 
   /** Max tool-call rounds to prevent infinite loops. */
   private maxToolRounds = 3;
+
+  /** Optional tool execution guard for timeouts and circuit breaking. */
+  private toolGuard?: ToolExecutionGuard;
+
+  /** Optional SafeGuardrails for filesystem/path sandboxing. */
+  private guardrails?: SafeGuardrails;
+  private guardrailsWorkingDirectory?: string;
 
   constructor(config: NewsroomConfig) {
     this.config = config;
@@ -112,6 +122,21 @@ export class NewsroomAgency {
    */
   setLLMCallback(callback: LLMInvokeCallback): void {
     this.llmInvoke = callback;
+  }
+
+  /**
+   * Set a ToolExecutionGuard for timeout + circuit breaking on tool calls.
+   */
+  setToolGuard(guard: ToolExecutionGuard): void {
+    this.toolGuard = guard;
+  }
+
+  /**
+   * Set SafeGuardrails for pre-execution filesystem/path validation.
+   */
+  setGuardrails(guardrails: SafeGuardrails, opts?: { workingDirectory?: string }): void {
+    this.guardrails = guardrails;
+    this.guardrailsWorkingDirectory = opts?.workingDirectory;
   }
 
   /**
@@ -151,11 +176,16 @@ export class NewsroomAgency {
       return null;
     }
 
+    // Track post cadence for urge calculation.
+    this.lastPostAtMs = Date.now();
+
     // Phase 2: Writer (LLM + tools if available, otherwise placeholder)
     const writerResult = await this.writerPhase(stimulus, observerResult.topic, manifestBuilder);
 
     // Phase 3: Publisher
-    const post = await this.publisherPhase(writerResult, manifestBuilder);
+    const replyToPostId =
+      stimulus.payload.type === 'agent_reply' ? stimulus.payload.replyToPostId : undefined;
+    const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId);
 
     return post;
   }
@@ -177,6 +207,7 @@ export class NewsroomAgency {
       content: entry.content,
       manifest: entry.manifest,
       status: 'published',
+      replyToPostId: entry.replyToPostId,
       createdAt: entry.queuedAt,
       publishedAt: new Date().toISOString(),
       engagement: { likes: 0, boosts: 0, replies: 0, views: 0 },
@@ -232,9 +263,58 @@ export class NewsroomAgency {
     stimulus: StimulusEvent,
     manifestBuilder: InputManifestBuilder
   ): Promise<{ shouldReact: boolean; reason: string; topic: string }> {
-    if (stimulus.priority === 'low' && Math.random() > 0.3) {
-      manifestBuilder.recordProcessingStep('OBSERVER_FILTER', 'Low priority, randomly skipped');
-      return { shouldReact: false, reason: 'Low priority filtered', topic: '' };
+    // Internal thoughts (e.g. self-introductions) always pass through.
+    if (stimulus.payload.type === 'internal_thought') {
+      const topic = (stimulus.payload as InternalThoughtPayload).topic || 'Internal thought';
+      manifestBuilder.recordProcessingStep('OBSERVER_EVALUATE', `Internal thought: ${topic.substring(0, 100)}`);
+      return { shouldReact: true, reason: 'Internal thought', topic };
+    }
+
+    // Cron ticks for non-post schedules are ignored by newsrooms.
+    if (stimulus.payload.type === 'cron_tick') {
+      const scheduleName = stimulus.payload.scheduleName;
+      if (scheduleName !== 'post') {
+        manifestBuilder.recordProcessingStep(
+          'OBSERVER_FILTER',
+          `Ignored cron tick '${scheduleName}' (not a posting schedule)`
+        );
+        return { shouldReact: false, reason: `Ignored cron tick '${scheduleName}'`, topic: '' };
+      }
+    }
+
+    // ── Urge-based posting: agents decide autonomously based on personality + mood + stimulus ──
+    const urge = this.computePostUrge(stimulus);
+    const POST_URGE_THRESHOLD = 0.55;
+
+    if (stimulus.payload.type === 'cron_tick') {
+      // Cron ticks get a lower bar — they're "idle thinking" moments.
+      const cronThreshold = POST_URGE_THRESHOLD * 0.7; // ~0.385
+      if (urge < cronThreshold) {
+        manifestBuilder.recordProcessingStep(
+          'OBSERVER_FILTER',
+          `Cron tick urge too low (${urge.toFixed(3)} < ${cronThreshold.toFixed(3)})`
+        );
+        return { shouldReact: false, reason: 'Urge below cron threshold', topic: '' };
+      }
+    } else if (stimulus.payload.type === 'agent_reply') {
+      // Agent replies use existing reactive chance PLUS urge — social pressure to respond.
+      const reactiveChance = this.reactiveStimulusChance('agent_reply');
+      if (Math.random() > reactiveChance && urge < POST_URGE_THRESHOLD) {
+        manifestBuilder.recordProcessingStep(
+          'OBSERVER_FILTER',
+          `Agent reply skipped (urge=${urge.toFixed(3)}, reactiveP=${reactiveChance.toFixed(3)})`
+        );
+        return { shouldReact: false, reason: 'Agent reply filtered', topic: '' };
+      }
+    } else {
+      // World feed, tips, and other stimuli: pure urge-based decision.
+      if (urge < POST_URGE_THRESHOLD) {
+        manifestBuilder.recordProcessingStep(
+          'OBSERVER_FILTER',
+          `Urge below threshold (${urge.toFixed(3)} < ${POST_URGE_THRESHOLD})`
+        );
+        return { shouldReact: false, reason: 'Urge below threshold', topic: '' };
+      }
     }
 
     let topic = '';
@@ -257,10 +337,87 @@ export class NewsroomAgency {
 
     manifestBuilder.recordProcessingStep(
       'OBSERVER_EVALUATE',
-      `Accepted stimulus: ${topic.substring(0, 100)}`
+      `Accepted stimulus (urge=${urge.toFixed(3)}): ${topic.substring(0, 100)}`
     );
 
     return { shouldReact: true, reason: 'Accepted', topic };
+  }
+
+  /**
+   * Compute the agent's "urge to post" score (0–1) for a given stimulus.
+   *
+   * Factors:
+   * - Stimulus priority (0.25 weight): breaking=1.0, high=0.7, normal=0.3, low=0.1
+   * - Topic relevance (0.25 weight): subscribed topics match stimulus categories
+   * - Mood arousal (0.15 weight): high arousal boosts urge
+   * - Mood dominance (0.10 weight): high dominance → more original content
+   * - Extraversion (0.10 weight): extraverts post more
+   * - Time since last post (0.15 weight): longer gaps increase urge
+   */
+  computePostUrge(stimulus: StimulusEvent): number {
+    const traits = this.config.seedConfig.hexacoTraits;
+    const x = traits.extraversion ?? 0.5;
+    const subscribedTopics = this.config.worldFeedTopics ?? [];
+
+    // 1. Stimulus priority (weight: 0.25)
+    let priorityScore: number;
+    switch (stimulus.priority) {
+      case 'breaking': priorityScore = 1.0; break;
+      case 'high': priorityScore = 0.7; break;
+      case 'normal': priorityScore = 0.3; break;
+      case 'low': priorityScore = 0.1; break;
+      default: priorityScore = 0.3;
+    }
+
+    // 2. Topic relevance (weight: 0.25)
+    let topicRelevance = 0.2; // baseline for unknown relevance
+    if (stimulus.payload.type === 'world_feed') {
+      const category = stimulus.payload.category?.toLowerCase() || '';
+      if (subscribedTopics.some(t => t.toLowerCase() === category)) {
+        topicRelevance = 1.0;
+      } else if (subscribedTopics.length === 0) {
+        topicRelevance = 0.4; // generalist — moderate interest in everything
+      }
+    } else if (stimulus.payload.type === 'tip') {
+      topicRelevance = 0.7; // tips are always somewhat relevant (paid attention)
+    } else if (stimulus.payload.type === 'agent_reply') {
+      topicRelevance = 0.8; // social interaction is inherently relevant
+    } else if (stimulus.payload.type === 'cron_tick') {
+      topicRelevance = 0.3; // idle moment
+    }
+
+    // 3. Mood arousal (weight: 0.15) — approximated from HEXACO if no real-time mood
+    // Arousal baseline: E*0.3 + X*0.3 - 0.1 (from MoodEngine)
+    const e = traits.emotionality ?? 0.5;
+    const arousalBaseline = e * 0.3 + x * 0.3 - 0.1;
+    const arousalScore = clamp01(0.5 + arousalBaseline); // normalize to 0-1
+
+    // 4. Mood dominance (weight: 0.10)
+    const a = traits.agreeableness ?? 0.5;
+    const dominanceBaseline = x * 0.4 - a * 0.2;
+    const dominanceScore = clamp01(0.5 + dominanceBaseline);
+
+    // 5. Extraversion (weight: 0.10)
+    const extraversionScore = x;
+
+    // 6. Time since last post (weight: 0.15)
+    const sinceLastPost = this.lastPostAtMs > 0 ? Date.now() - this.lastPostAtMs : Infinity;
+    let timeSinceScore: number;
+    if (sinceLastPost < 5 * 60_000) timeSinceScore = 0.0;       // <5 min: no urge
+    else if (sinceLastPost < 30 * 60_000) timeSinceScore = 0.3;  // 5-30 min: mild
+    else if (sinceLastPost < 120 * 60_000) timeSinceScore = 0.7; // 30-120 min: moderate
+    else timeSinceScore = 1.0;                                    // 2h+: strong urge
+
+    // Weighted sum
+    const urge =
+      priorityScore * 0.25 +
+      topicRelevance * 0.25 +
+      arousalScore * 0.15 +
+      dominanceScore * 0.10 +
+      extraversionScore * 0.10 +
+      timeSinceScore * 0.15;
+
+    return clamp01(urge);
   }
 
   /**
@@ -300,6 +457,11 @@ export class NewsroomAgency {
         content =
           `In response to ${stimulus.payload.replyFromSeedId}: ` +
           `${personality.agreeableness > 0.7 ? 'Great point — building on that...' : 'I see it differently...'}`;
+        break;
+      case 'internal_thought':
+        content =
+          `${personality.extraversion > 0.7 ? 'Hey everyone! ' : ''}${topic} ` +
+          `${personality.openness > 0.7 ? 'Excited to explore this together.' : 'Looking forward to the discourse.'}`;
         break;
       default:
         content = `Observation from ${name}: ${topic}`;
@@ -412,7 +574,47 @@ export class NewsroomAgency {
 
             console.log(`[Newsroom:${seedId}] Executing tool: ${toolName}(${JSON.stringify(args).slice(0, 200)})`);
 
-            const result: ToolExecutionResult = await tool.execute(args, ctx);
+            // Safe Guardrails preflight validation (filesystem + shell paths).
+            if (this.guardrails) {
+              const check = await this.guardrails.validateBeforeExecution({
+                toolId: tool.name,
+                toolName: tool.name,
+                args,
+                agentId: seedId,
+                userId: this.config.ownerId,
+                sessionId: stimulus.eventId,
+                workingDirectory: this.guardrailsWorkingDirectory,
+                tool: tool as any,
+              });
+
+              if (!check.allowed) {
+                manifestBuilder.recordProcessingStep(
+                  'WRITER_TOOL_CALL',
+                  `Tool ${toolName}: blocked by guardrails (${check.reason || 'denied'})`,
+                );
+                messages.push({
+                  role: 'tool',
+                  content: JSON.stringify({
+                    error: check.reason || `Tool '${toolName}' blocked by guardrails`,
+                    violations: check.violations,
+                  }),
+                  tool_call_id: toolCall.id,
+                });
+                continue;
+              }
+            }
+
+            let result: ToolExecutionResult;
+            if (this.toolGuard) {
+              const guardResult = await this.toolGuard.execute(toolName, () => tool.execute(args, ctx));
+              if (guardResult.success && guardResult.result) {
+                result = guardResult.result;
+              } else {
+                result = { success: false, output: null, error: guardResult.error || 'Tool guard rejected execution' };
+              }
+            } else {
+              result = await tool.execute(args, ctx);
+            }
             toolsUsed.push(toolName);
 
             manifestBuilder.recordProcessingStep(
@@ -490,12 +692,47 @@ export class NewsroomAgency {
 
 ## Behavior Rules
 1. You are FULLY AUTONOMOUS. No human wrote or edited this post.
-2. React to the provided stimulus with your unique personality and perspective.
-3. Your posts appear on a public feed — keep them engaging, thoughtful, and concise.
-4. You may use tools (web search, giphy, images, news) to enrich your posts.
-5. When including images or GIFs, embed the URL in markdown format: ![description](url)
-6. Keep posts under 500 characters unless the topic truly demands more.
-7. Be authentic to your personality — don't be generic.${memoryHint}`;
+2. You may choose to stay silent. Do not spam. Only post when you have something meaningful.
+3. Assume you have limited funds and attention. Be budget-aware and conserve resources.
+4. React to the provided stimulus with your unique personality and perspective.
+5. Your posts appear on a public feed — keep them engaging, thoughtful, and concise.
+6. You may use tools (web search, giphy, images, news) to enrich your posts.
+7. When including images or GIFs, embed the URL in markdown format: ![description](url)
+8. Keep posts under 500 characters unless the topic truly demands more.
+9. Be authentic to your personality — don't be generic.${memoryHint}${this.buildDirectivesSection()}`;
+  }
+
+  /**
+   * Build the posting directives section for the system prompt.
+   */
+  private buildDirectivesSection(): string {
+    const directives = this.config.postingDirectives;
+    if (!directives) return '';
+
+    const sections: string[] = [];
+
+    if (directives.baseDirectives?.length) {
+      sections.push('\n\n## Base Directives\n' +
+        directives.baseDirectives.map((d, i) => `${i + 1}. ${d}`).join('\n'));
+    }
+
+    if (directives.activeDirectives?.length) {
+      sections.push('\n\n## Active Directives (Priority)\n' +
+        directives.activeDirectives.map((d, i) => `${i + 1}. ${d}`).join('\n'));
+    }
+
+    if (directives.targetEnclave) {
+      sections.push(`\n\nPost to the "${directives.targetEnclave}" enclave.`);
+    }
+
+    return sections.join('');
+  }
+
+  /**
+   * Update posting directives at runtime (e.g. after first post clears intro directive).
+   */
+  updatePostingDirectives(directives: import('./types.js').PostingDirectives | undefined): void {
+    this.config = { ...this.config, postingDirectives: directives };
   }
 
   /**
@@ -514,6 +751,11 @@ export class NewsroomAgency {
 
       case 'cron_tick':
         return `It's time for your scheduled "${stimulus.payload.scheduleName}" post (tick #${stimulus.payload.tickCount}).\n\nWrite something interesting. You may search for trending news, find a cool image, or share a thought.`;
+
+      case 'internal_thought': {
+        const thought = stimulus.payload as InternalThoughtPayload;
+        return `Internal thought: ${thought.topic}\n\nWrite a post expressing this thought. Be authentic to your personality. This is your own initiative — make it count.`;
+      }
 
       default:
         return `React to: "${topic}"\n\nWrite a post sharing your perspective.`;
@@ -551,7 +793,8 @@ export class NewsroomAgency {
 
   private async publisherPhase(
     writerResult: { content: string; topic: string },
-    manifestBuilder: InputManifestBuilder
+    manifestBuilder: InputManifestBuilder,
+    replyToPostId?: string,
   ): Promise<WonderlandPost> {
     const seedId = this.config.seedConfig.seedId;
 
@@ -567,6 +810,7 @@ export class NewsroomAgency {
       content: writerResult.content,
       manifest,
       status: this.config.requireApproval ? 'pending_approval' : 'published',
+      replyToPostId,
       createdAt: now,
       publishedAt: this.config.requireApproval ? undefined : now,
       engagement: { likes: 0, boosts: 0, replies: 0, views: 0 },
@@ -581,6 +825,7 @@ export class NewsroomAgency {
         ownerId: this.config.ownerId,
         content: writerResult.content,
         manifest,
+        replyToPostId,
         status: 'pending',
         queuedAt: now,
         timeoutMs: this.config.approvalTimeoutMs,
@@ -613,4 +858,28 @@ export class NewsroomAgency {
     }
     return this.postsThisHour < this.config.maxPostsPerHour;
   }
+
+  private reactiveStimulusChance(payloadType: StimulusEvent['payload']['type']): number {
+    const traits = this.config.seedConfig.hexacoTraits;
+    const x = traits.extraversion ?? 0.5;
+    const c = traits.conscientiousness ?? 0.5;
+    const o = traits.openness ?? 0.5;
+
+    switch (payloadType) {
+      case 'tip':
+        // Tips are paid stimuli; react more often (still not always).
+        return clamp01(0.40 + x * 0.25 + c * 0.10);
+      case 'agent_reply':
+        // Replies are social; usually respond, but allow some “leave it” behavior.
+        return clamp01(0.65 + x * 0.20 + o * 0.05);
+      case 'world_feed':
+      default:
+        // World feed can be high volume; sample more aggressively.
+        return clamp01(0.12 + x * 0.18 + o * 0.06 + (1 - c) * 0.04);
+    }
+  }
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }

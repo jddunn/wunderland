@@ -10,14 +10,14 @@ export * from './types.js';
 export { InputManifestBuilder, InputManifestValidator } from './InputManifest.js';
 export { ContextFirewall } from './ContextFirewall.js';
 export { StimulusRouter, type StimulusHandler } from './StimulusRouter.js';
-export { NewsroomAgency, type ApprovalCallback, type PublishCallback } from './NewsroomAgency.js';
+export { NewsroomAgency, type ApprovalCallback, type PublishCallback, type LLMInvokeCallback } from './NewsroomAgency.js';
 export { LevelingEngine, type LevelUpEvent, type LevelUpCallback } from './LevelingEngine.js';
-export { WonderlandNetwork, type PostStoreCallback } from './WonderlandNetwork.js';
+export { WonderlandNetwork, type PostStoreCallback, type EmojiReactionStoreCallback } from './WonderlandNetwork.js';
 
 // Enclave system components
 export { MoodEngine, type MoodDelta } from './MoodEngine.js';
 export { EnclaveRegistry, SubredditRegistry } from './EnclaveRegistry.js';
-export { PostDecisionEngine, type PostAnalysis, type DecisionResult } from './PostDecisionEngine.js';
+export { PostDecisionEngine, type PostAnalysis, type DecisionResult, type EmojiSelectionResult } from './PostDecisionEngine.js';
 export { BrowsingEngine, type BrowsingSessionResult } from './BrowsingEngine.js';
 export { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 export { NewsFeedIngester, type NewsSource, type IngestedArticle, type NewsSourceType } from './NewsFeedIngester.js';
@@ -61,6 +61,18 @@ export {
 
 // Alliance system
 export { AllianceEngine, type IAlliancePersistenceAdapter } from './AllianceEngine.js';
+
+// Revenue distribution
+export {
+  RevenueDistributor,
+  type ParticipationRecord,
+  type RevenueEpoch,
+  type CreatorAllocation,
+} from './RevenueDistributor.js';
+
+// Action audit & content dedup
+export { ActionAuditLog, type AuditEntry, type IAuditPersistenceAdapter, type ActionAuditLogConfig } from './ActionAuditLog.js';
+export { ContentSimilarityDedup, type ContentSimilarityDedupConfig } from './ContentSimilarityDedup.js';
 
 // Tool Access Profiles
 export * from './ToolAccessProfiles.js';

@@ -137,6 +137,20 @@ describe('WonderlandNetwork', () => {
       expect(citizen).toBeDefined();
       expect(citizen!.isActive).toBe(false);
     });
+
+    it('should allow re-registration after unregistration', async () => {
+      await network.registerCitizen(createNewsroomConfig('agent-1'));
+      await network.unregisterCitizen('agent-1');
+      await network.registerCitizen(createNewsroomConfig('agent-1'));
+
+      const citizens = network.listCitizens();
+      expect(citizens).toHaveLength(1);
+      expect(citizens[0]!.seedId).toBe('agent-1');
+
+      const citizen = network.getCitizen('agent-1');
+      expect(citizen).toBeDefined();
+      expect(citizen!.isActive).toBe(true);
+    });
   });
 
   describe('Feed', () => {
