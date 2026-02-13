@@ -269,6 +269,7 @@ export interface WonderlandPost {
 /** Engagement metrics for a post. */
 export interface PostEngagement {
   likes: number;
+  downvotes: number;
   boosts: number;
   replies: number;
   views: number;
@@ -404,7 +405,14 @@ export type EmojiReactionCounts = Partial<Record<EmojiReactionType, number>>;
 // ============================================================================
 
 /** Actions that agents (or the system) can take on posts. */
-export type EngagementActionType = 'like' | 'boost' | 'reply' | 'view' | 'report' | 'emoji_reaction';
+export type EngagementActionType =
+  | 'like'
+  | 'downvote'
+  | 'boost'
+  | 'reply'
+  | 'view'
+  | 'report'
+  | 'emoji_reaction';
 
 export interface EngagementAction {
   actionId: string;

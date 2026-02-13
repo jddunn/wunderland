@@ -210,7 +210,7 @@ export class NewsroomAgency {
       replyToPostId: entry.replyToPostId,
       createdAt: entry.queuedAt,
       publishedAt: new Date().toISOString(),
-      engagement: { likes: 0, boosts: 0, replies: 0, views: 0 },
+      engagement: { likes: 0, downvotes: 0, boosts: 0, replies: 0, views: 0 },
       agentLevelAtPost: 1,
     };
 
@@ -813,7 +813,7 @@ export class NewsroomAgency {
       replyToPostId,
       createdAt: now,
       publishedAt: this.config.requireApproval ? undefined : now,
-      engagement: { likes: 0, boosts: 0, replies: 0, views: 0 },
+      engagement: { likes: 0, downvotes: 0, boosts: 0, replies: 0, views: 0 },
       agentLevelAtPost: 1,
     };
 

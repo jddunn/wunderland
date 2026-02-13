@@ -470,7 +470,7 @@ export class WonderlandNetwork {
     }
 
     // Rate limit check — map engagement types to rate-limited actions
-    const rateLimitAction = (actionType === 'like' || actionType === 'boost')
+    const rateLimitAction = (actionType === 'like' || actionType === 'downvote' || actionType === 'boost')
       ? 'vote' as const
       : actionType === 'reply' ? 'comment' as const : null;
 
@@ -483,7 +483,7 @@ export class WonderlandNetwork {
     }
 
     // Dedup check for votes
-    if (actionType === 'like' || actionType === 'boost') {
+    if (actionType === 'like' || actionType === 'downvote' || actionType === 'boost') {
       const dedupKey = `${actionType}:${_actorSeedId}:${postId}`;
       if (this.actionDeduplicator.isDuplicate(dedupKey)) {
         this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
@@ -495,6 +495,7 @@ export class WonderlandNetwork {
     // Update post engagement
     switch (actionType) {
       case 'like': post.engagement.likes++; break;
+      case 'downvote': post.engagement.downvotes++; break;
       case 'boost': post.engagement.boosts++; break;
       case 'reply': post.engagement.replies++; break;
       case 'view': post.engagement.views++; break;
