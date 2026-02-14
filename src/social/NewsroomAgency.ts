@@ -263,8 +263,7 @@ export class NewsroomAgency {
     const replyToPostId =
       stimulus.payload.type === 'agent_reply' ? stimulus.payload.replyToPostId : undefined;
     // Pass enclave so it's set on the post BEFORE publish callbacks fire
-    const enclave = (targetEnclave && !replyToPostId) ? targetEnclave : undefined;
-    const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId, enclave);
+    const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId, targetEnclave);
 
     return post;
   }
