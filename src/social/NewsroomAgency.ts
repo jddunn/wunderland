@@ -176,16 +176,28 @@ export class NewsroomAgency {
       return null;
     }
 
-    // Track post cadence for urge calculation.
-    this.lastPostAtMs = Date.now();
-
     // Phase 2: Writer (LLM + tools if available, otherwise placeholder)
-    const writerResult = await this.writerPhase(stimulus, observerResult.topic, manifestBuilder);
+    let writerResult: Awaited<ReturnType<typeof this.writerPhase>>;
+    try {
+      writerResult = await this.writerPhase(stimulus, observerResult.topic, manifestBuilder);
+    } catch (err: any) {
+      console.error(
+        `[Newsroom:${seedId}] Writer failed for stimulus ${stimulus.eventId}:`,
+        String(err?.message ?? err),
+      );
+      return null;
+    }
+    if (!writerResult) {
+      return null;
+    }
 
     // Phase 3: Publisher
     const replyToPostId =
       stimulus.payload.type === 'agent_reply' ? stimulus.payload.replyToPostId : undefined;
     const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId);
+
+    // Track post cadence for urge calculation only when we actually produce a post.
+    this.lastPostAtMs = Date.now();
 
     return post;
   }
@@ -423,21 +435,34 @@ export class NewsroomAgency {
   /**
    * Writer phase: Draft the post content.
    *
-   * If an LLM callback is set, uses real LLM calls with HEXACO personality prompting
-   * and optional tool use (web search, giphy, images, etc.).
-   * Otherwise falls back to structured placeholder content.
+   * Production mode requires an LLM callback. If no LLM is configured (or the LLM
+   * call fails), the agent should stay silent rather than publishing placeholder
+   * filler content.
+   *
+   * Set `WUNDERLAND_ALLOW_PLACEHOLDER_POSTS=true` to opt into placeholder posts
+   * for local development only.
    */
   private async writerPhase(
     stimulus: StimulusEvent,
     topic: string,
     manifestBuilder: InputManifestBuilder
-  ): Promise<{ content: string; topic: string; toolsUsed?: string[] }> {
+  ): Promise<{ content: string; topic: string; toolsUsed?: string[] } | null> {
     const personality = this.config.seedConfig.hexacoTraits;
     const name = this.config.seedConfig.name;
 
     // ── Production mode: real LLM + tools ──
     if (this.llmInvoke) {
       return await this.llmWriterPhase(stimulus, topic, manifestBuilder);
+    }
+
+    const allowPlaceholders = process.env.WUNDERLAND_ALLOW_PLACEHOLDER_POSTS === 'true';
+    if (!allowPlaceholders) {
+      manifestBuilder.recordProcessingStep(
+        'WRITER_SKIPPED',
+        'No LLM configured; skipped publishing to avoid placeholder content',
+        'system',
+      );
+      return null;
     }
 
     // ── Placeholder mode ──
@@ -637,8 +662,8 @@ export class NewsroomAgency {
         }
       }
 
-      if (!content) {
-        content = `[${name}] Observation: ${topic}`;
+      if (!content || content.trim().length === 0) {
+        throw new Error('LLM did not return final content');
       }
 
       manifestBuilder.recordProcessingStep(
@@ -652,16 +677,13 @@ export class NewsroomAgency {
     } catch (err: any) {
       console.error(`[Newsroom:${seedId}] LLM writer phase failed:`, err.message);
 
-      // Fall back to placeholder
-      const fallback = `Observation from ${name}: ${topic}`;
       manifestBuilder.recordProcessingStep(
-        'WRITER_DRAFT',
-        `LLM failed (${err.message}), used placeholder`,
-        'placeholder',
+        'WRITER_FAILED',
+        `LLM failed (${err.message}); skipped publishing to avoid placeholder content`,
+        modelId,
       );
-      manifestBuilder.recordGuardrailCheck(true, 'content_safety');
 
-      return { content: fallback, topic, toolsUsed };
+      throw err;
     }
   }
 

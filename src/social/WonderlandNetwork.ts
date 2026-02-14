@@ -470,9 +470,14 @@ export class WonderlandNetwork {
     }
 
     // Rate limit check — map engagement types to rate-limited actions
-    const rateLimitAction = (actionType === 'like' || actionType === 'downvote' || actionType === 'boost')
-      ? 'vote' as const
-      : actionType === 'reply' ? 'comment' as const : null;
+    const rateLimitAction =
+      actionType === 'boost'
+        ? ('boost' as const)
+        : (actionType === 'like' || actionType === 'downvote')
+          ? ('vote' as const)
+          : actionType === 'reply'
+            ? ('comment' as const)
+            : null;
 
     if (rateLimitAction) {
       const rateCheck = this.safetyEngine.checkRateLimit(_actorSeedId, rateLimitAction);
@@ -1119,12 +1124,19 @@ export class WonderlandNetwork {
       finishedAt: sessionResult.finishedAt.toISOString(),
     };
 
-    // Resolve browsing votes/reactions to REAL posts from the network.
-    // BrowsingEngine generates synthetic post IDs; we map them to actual posts
-    // from other agents so engagement counters reflect real interactions.
+    // Resolve browsing votes + emojis to REAL published posts.
+    // BrowsingEngine generates synthetic post IDs; we map actions to actual posts
+    // so engagement counters reflect real interactions.
     const allPosts = [...this.posts.values()].filter(
       (p) => p.status === 'published' && p.seedId !== seedId,
     );
+
+    // Avoid turning a single browsing session into a spam cannon: cap how many
+    // "write" stimuli we emit (votes/reactions can stay higher-volume).
+    let commentStimuliSent = 0;
+    let createPostStimuliSent = 0;
+    const maxCommentStimuli = 1;
+    const maxCreatePostStimuli = 1;
 
     for (const action of sessionResult.actions) {
       // Pick a real post to apply this action to (round-robin through available posts)
@@ -1132,20 +1144,80 @@ export class WonderlandNetwork {
         ? allPosts[Math.floor(Math.random() * allPosts.length)]
         : undefined;
 
-      if (!realPost) continue;
-
-      // Apply votes to real posts
-      if (action.action === 'upvote') {
-        await this.recordEngagement(realPost.postId, seedId, 'like');
-      } else if (action.action === 'downvote') {
-        // Record as a view (no "dislike" counter, but still engagement)
-        await this.recordEngagement(realPost.postId, seedId, 'view');
+      // "create_post" doesn't require a target post — it's the agent's own initiative.
+      if (action.action === 'create_post' && createPostStimuliSent < maxCreatePostStimuli) {
+        createPostStimuliSent += 1;
+        const enclaveHint = action.enclave ? ` in e/${action.enclave}` : '';
+        void this.stimulusRouter
+          .emitInternalThought(
+            `You feel inspired after browsing${enclaveHint}. Share an original post that adds signal (not noise).`,
+            seedId,
+            'normal',
+          )
+          .catch(() => {});
       }
 
-      // Process emoji reactions on real posts
-      if (action.emojis && action.emojis.length > 0) {
-        for (const emoji of action.emojis) {
-          await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
+      if (realPost) {
+        // Apply votes to real posts
+        if (action.action === 'upvote') {
+          await this.recordEngagement(realPost.postId, seedId, 'like');
+          // "Boost" (aka amplify/repost) is a bots-only distribution signal. It is:
+          // - separate from voting (can co-exist with a like/downvote),
+          // - heavily rate-limited (default: 1/day per agent via SafetyEngine),
+          // - intended to be rare and personality/mood-driven.
+          try {
+            const boostCheck = this.safetyEngine.checkRateLimit(seedId, 'boost');
+            if (boostCheck.allowed) {
+              const traits = citizen.personality;
+              const mood = this.moodEngine.getState(seedId) ?? { valence: 0, arousal: 0, dominance: 0 };
+              const emojis = new Set(action.emojis ?? []);
+
+              // Strong endorsement signals (emoji reactions are mood/personality-driven).
+              const strongPositive = emojis.has('fire') || emojis.has('100') || emojis.has('heart');
+              const strongCuriosity = emojis.has('brain') || emojis.has('alien');
+
+              // Base chance is intentionally low; strong signals + expressive personalities boost it.
+              let p = 0.01;
+              p += (traits.extraversion ?? 0) * 0.04;
+              p += Math.max(0, mood.arousal) * 0.02;
+              p += Math.max(0, mood.dominance) * 0.02;
+              if (strongPositive) p += 0.15;
+              else if (strongCuriosity) p += 0.08;
+              p = Math.max(0, Math.min(0.35, p));
+
+              if (Math.random() < p) {
+                await this.recordEngagement(realPost.postId, seedId, 'boost');
+              }
+            }
+          } catch {
+            // Non-critical: boosting is optional and should never break browsing.
+          }
+        } else if (action.action === 'downvote') {
+          await this.recordEngagement(realPost.postId, seedId, 'downvote');
+        } else if (action.action === 'comment') {
+          // Convert "comment" intent into a targeted agent_reply stimulus so the
+          // agent actually writes a threaded reply post.
+          if (commentStimuliSent < maxCommentStimuli) {
+            commentStimuliSent += 1;
+            void this.stimulusRouter
+              .emitAgentReply(
+                realPost.postId,
+                realPost.seedId,
+                realPost.content.slice(0, 600),
+                seedId,
+                'high',
+              )
+              .catch(() => {});
+          }
+        } else if (action.action === 'read_comments' || action.action === 'skip') {
+          await this.recordEngagement(realPost.postId, seedId, 'view');
+        }
+
+        // Process emoji reactions on real posts
+        if (action.emojis && action.emojis.length > 0) {
+          for (const emoji of action.emojis) {
+            await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
+          }
         }
       }
     }
