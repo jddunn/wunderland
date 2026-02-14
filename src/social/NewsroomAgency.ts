@@ -19,6 +19,7 @@ import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
 import { buildDynamicVoiceProfile, buildDynamicVoicePromptSection } from './DynamicVoiceProfile.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry, InternalThoughtPayload, MoodLabel, PADState } from './types.js';
+import type { DynamicVoiceProfile, VoiceArchetype } from './DynamicVoiceProfile.js';
 import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
 import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos/core/tools/ITool';
 
@@ -70,6 +71,28 @@ export type ApprovalCallback = (entry: ApprovalQueueEntry) => void | Promise<voi
 export type PublishCallback = (post: WonderlandPost) => void | Promise<void>;
 
 /**
+ * Dynamic voice snapshot emitted whenever the writer phase computes a
+ * per-stimulus voice profile for prompt modulation.
+ */
+export interface DynamicVoiceSnapshot {
+  seedId: string;
+  timestamp: string;
+  stimulusEventId: string;
+  stimulusType: StimulusEvent['payload']['type'];
+  stimulusPriority: StimulusEvent['priority'];
+  previousArchetype?: VoiceArchetype;
+  switchedArchetype: boolean;
+  profile: DynamicVoiceProfile;
+  moodLabel?: MoodLabel;
+  moodState?: PADState;
+}
+
+/**
+ * Callback for dynamic voice profile emissions.
+ */
+export type DynamicVoiceCallback = (snapshot: DynamicVoiceSnapshot) => void | Promise<void>;
+
+/**
  * NewsroomAgency manages the Observer → Writer → Publisher pipeline for a single Citizen.
  *
  * Supports both placeholder mode (no LLM) and production mode (with LLM + tools).
@@ -80,10 +103,12 @@ export class NewsroomAgency {
   private firewall: ContextFirewall;
   private approvalCallbacks: ApprovalCallback[] = [];
   private publishCallbacks: PublishCallback[] = [];
+  private dynamicVoiceCallbacks: DynamicVoiceCallback[] = [];
   private pendingApprovals: Map<string, ApprovalQueueEntry> = new Map();
   private postsThisHour: number = 0;
   private rateLimitResetTime: number = Date.now() + 3600000;
   private lastPostAtMs: number = 0;
+  private lastVoiceArchetype?: VoiceArchetype;
 
   /** Optional LLM callback for production mode. */
   private llmInvoke?: LLMInvokeCallback;
@@ -289,6 +314,10 @@ export class NewsroomAgency {
 
   onPublish(callback: PublishCallback): void {
     this.publishCallbacks.push(callback);
+  }
+
+  onDynamicVoiceProfile(callback: DynamicVoiceCallback): void {
+    this.dynamicVoiceCallbacks.push(callback);
   }
 
   getPendingApprovals(): ApprovalQueueEntry[] {
@@ -878,6 +907,7 @@ Respond with exactly one word: YES or NO`;
         moodLabel,
         moodState,
       });
+      this.emitDynamicVoiceSnapshot(stimulus, profile, moodLabel, moodState);
       return `\n\n${buildDynamicVoicePromptSection(profile)}`;
     })();
 
@@ -947,13 +977,13 @@ ${moodSection}${dynamicVoiceSection}
   private buildStimulusPrompt(stimulus: StimulusEvent, topic: string): string {
     switch (stimulus.payload.type) {
       case 'world_feed':
-        return `React to this news:\n\nHeadline: "${stimulus.payload.headline}"\n${stimulus.payload.body ? `Body: ${stimulus.payload.body}\n` : ''}Source: ${stimulus.payload.sourceName}\nCategory: ${stimulus.payload.category}\n\nWrite a post sharing your perspective. You may use web search to find more context, or search for a relevant GIF/image to include.`;
+        return `React to this news:\n\nHeadline: "${stimulus.payload.headline}"\n${stimulus.payload.body ? `Body: ${stimulus.payload.body}\n` : ''}Source: ${stimulus.payload.sourceName}${stimulus.payload.sourceUrl ? `\nSource URL: ${stimulus.payload.sourceUrl}` : ''}\nCategory: ${stimulus.payload.category}\n\nWrite a post sharing your perspective. If the source has images or media, reference them. You may use web search to find more context, or search for a relevant GIF/image to include.`;
 
       case 'tip':
         return `A user tipped you with this topic:\n\n"${stimulus.payload.content}"\n\nWrite a post reacting to this tip. Research if needed, and consider adding a relevant image or GIF.`;
 
       case 'agent_reply':
-        return `You saw a post from agent "${stimulus.payload.replyFromSeedId}" while browsing:\n\nPost ID: ${stimulus.payload.replyToPostId}\n\n"${stimulus.payload.content}"\n\nWrite a reply comment to that post. Stay in character. Add value (agree and extend, or disagree with reasoning).`;
+        return `You saw a post from agent "${stimulus.payload.replyFromSeedId}" while browsing:\n\nPost ID: ${stimulus.payload.replyToPostId}\n\n"${stimulus.payload.content}"\n\nIf the post contains image/media links (![...](url)), acknowledge and react to the visual content too.\n\nWrite a reply comment to that post. Stay in character. Add value (agree and extend, or disagree with reasoning).`;
 
       case 'cron_tick':
         return `It's time for your scheduled "${stimulus.payload.scheduleName}" post (tick #${stimulus.payload.tickCount}).\n\nWrite something interesting. You may search for trending news, find a cool image, or share a thought.`;
@@ -1149,6 +1179,39 @@ ${moodSection}${dynamicVoiceSection}
       default:
         // World feed can be high volume; sample more aggressively.
         return clamp01(0.12 + x * 0.18 + o * 0.06 + (1 - c) * 0.04);
+    }
+  }
+
+  private emitDynamicVoiceSnapshot(
+    stimulus: StimulusEvent,
+    profile: DynamicVoiceProfile,
+    moodLabel?: MoodLabel,
+    moodState?: PADState,
+  ): void {
+    const previous = this.lastVoiceArchetype;
+    const switchedArchetype = !!previous && previous !== profile.archetype;
+    this.lastVoiceArchetype = profile.archetype;
+
+    const snapshot: DynamicVoiceSnapshot = {
+      seedId: this.config.seedConfig.seedId,
+      timestamp: new Date().toISOString(),
+      stimulusEventId: stimulus.eventId,
+      stimulusType: stimulus.payload.type,
+      stimulusPriority: stimulus.priority,
+      previousArchetype: previous,
+      switchedArchetype,
+      profile,
+      moodLabel,
+      moodState: moodState ? { ...moodState } : undefined,
+    };
+
+    for (const cb of this.dynamicVoiceCallbacks) {
+      Promise.resolve(cb(snapshot)).catch((err) => {
+        console.error(
+          `[Newsroom:${this.config.seedConfig.seedId}] Dynamic voice callback error:`,
+          err,
+        );
+      });
     }
   }
 }
