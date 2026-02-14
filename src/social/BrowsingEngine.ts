@@ -11,7 +11,7 @@ import type { HEXACOTraits } from '../core/types.js';
 import type { MoodEngine, PADState } from './MoodEngine.js';
 import type { EnclaveRegistry } from './EnclaveRegistry.js';
 import type { PostDecisionEngine, PostAction, PostAnalysis } from './PostDecisionEngine.js';
-import type { EmojiReactionType } from './types.js';
+import type { EmojiReactionType, FeedSortMode } from './types.js';
 import type { ActionDeduplicator } from '@framers/agentos';
 
 // ============================================================================
@@ -38,6 +38,33 @@ export interface BrowsingSessionResult {
   startedAt: Date;
   /** Session end timestamp */
   finishedAt: Date;
+}
+
+export interface BrowsingPostCandidate {
+  /** Real post ID from the network feed. */
+  postId: string;
+  /** Author seed ID (used by higher-level anti-collusion controls). */
+  authorSeedId: string;
+  /** Enclave the post belongs to (if known). */
+  enclave?: string;
+  /** Creation timestamp for recency-aware sort modes. */
+  createdAt?: string;
+  /** Content analysis used by PostDecisionEngine. */
+  analysis: PostAnalysis;
+}
+
+type PostsByEnclaveMap = Map<string, BrowsingPostCandidate[]> | Record<string, BrowsingPostCandidate[]>;
+
+export interface BrowsingSessionOptions {
+  /**
+   * Optional feed candidates keyed by enclave name.
+   * When provided, decisions run against real post IDs instead of synthetic placeholders.
+   */
+  postsByEnclave?: PostsByEnclaveMap;
+  /**
+   * Fallback candidates used when a selected enclave has no direct posts.
+   */
+  fallbackPosts?: BrowsingPostCandidate[];
 }
 
 // ============================================================================
@@ -84,7 +111,7 @@ export class BrowsingEngine {
    * Energy budget: `5 + round(X * 15 + max(0, arousal) * 10)` posts (range 5-30).
    * Enclave count: `1 + round(O * 3 + arousal)` clamped to [1, 5].
    */
-  startSession(seedId: string, traits: HEXACOTraits): BrowsingSessionResult {
+  startSession(seedId: string, traits: HEXACOTraits, options?: BrowsingSessionOptions): BrowsingSessionResult {
     const startedAt = new Date();
     const mood = this.moodEngine.getState(seedId) ?? { valence: 0, arousal: 0, dominance: 0 };
 
@@ -116,14 +143,104 @@ export class BrowsingEngine {
     };
 
     let remainingEnergy = energy;
+    const consumedContextPostIds = new Set<string>();
+
+    const processPost = (postId: string, enclave: string, analysis: PostAnalysis): void => {
+      // Get the current mood snapshot
+      const currentMood: PADState = this.moodEngine.getState(seedId) ?? mood;
+
+      // Decide action
+      const decision = this.decisionEngine.decide(seedId, traits, currentMood, analysis);
+
+      // Dedup check for vote actions
+      if (
+        this.deduplicator &&
+        (decision.action === 'upvote' || decision.action === 'downvote')
+      ) {
+        const dedupKey = `vote:${seedId}:${postId}`;
+        if (this.deduplicator.isDuplicate(dedupKey)) {
+          // Skip duplicate vote — still count as read
+          result.actions.push({ postId, action: 'skip', enclave });
+          result.postsRead++;
+          return;
+        }
+        this.deduplicator.record(dedupKey);
+      }
+
+      // Emoji reaction selection (independent of primary action)
+      const emojiResult = this.decisionEngine.selectEmojiReaction(traits, currentMood, analysis);
+      const selectedEmojis = emojiResult.shouldReact ? emojiResult.emojis : undefined;
+
+      // Log action (include chained action if decision engine produced one)
+      result.actions.push({
+        postId,
+        action: decision.action,
+        enclave,
+        emojis: selectedEmojis,
+        chainedAction: decision.chainedAction,
+        chainedContext: decision.chainedContext,
+      });
+      result.postsRead++;
+
+      // Apply mood delta based on action outcome
+      const delta = computeMoodDelta(decision.action, analysis);
+      this.moodEngine.applyDelta(seedId, delta);
+
+      // Emotional contagion: reading content transfers its emotional coloring
+      // into the reader's mood, scaled by the reader's emotionality trait.
+      // High-emotionality agents are more susceptible to mood transfer.
+      const contagionStrength = (traits.emotionality ?? 0.5) * 0.12;
+      if (Math.abs(analysis.sentiment) > 0.15) {
+        const contagionDelta = {
+          valence: analysis.sentiment * contagionStrength,
+          arousal: Math.abs(analysis.sentiment) * contagionStrength * 0.5,
+          dominance: analysis.controversy > 0.5 ? -contagionStrength * 0.3 : 0,
+          trigger: `emotional contagion from reading ${enclave} post (sentiment=${analysis.sentiment.toFixed(2)})`,
+        };
+        this.moodEngine.applyDelta(seedId, contagionDelta);
+      }
+
+      // Update counters
+      if (decision.action === 'comment' || decision.action === 'create_post') {
+        result.commentsWritten++;
+      }
+      // Chained comment also counts
+      if (decision.chainedAction === 'comment') {
+        result.commentsWritten++;
+      }
+      if (decision.action === 'upvote' || decision.action === 'downvote') {
+        result.votesCast++;
+      }
+      if (selectedEmojis && selectedEmojis.length > 0) {
+        result.emojiReactions += selectedEmojis.length;
+      }
+    };
 
     for (const enclave of selectedEnclaves) {
       if (remainingEnergy <= 0) break;
 
       const postsToProcess = Math.min(postsPerEnclave, remainingEnergy);
 
-      // Select sort mode for this enclave (used for logging/future features)
-      void this.decisionEngine.selectSortMode(traits);
+      // Select sort mode for this enclave.
+      const sortMode = this.decisionEngine.selectSortMode(traits) as FeedSortMode;
+
+      // Prefer real feed candidates when available; fall back to synthetic analysis.
+      const contextualPosts = this.selectContextualPosts(
+        enclave,
+        postsToProcess,
+        sortMode,
+        options,
+        consumedContextPostIds,
+      );
+
+      if (contextualPosts.length > 0) {
+        for (const candidate of contextualPosts) {
+          if (remainingEnergy <= 0) break;
+          processPost(candidate.postId, enclave, candidate.analysis);
+          remainingEnergy--;
+        }
+        continue;
+      }
 
       for (let i = 0; i < postsToProcess; i++) {
         if (remainingEnergy <= 0) break;
@@ -140,68 +257,81 @@ export class BrowsingEngine {
           replyCount: Math.floor(Math.random() * 40),
         };
 
-        // Get the current mood snapshot
-        const currentMood: PADState = this.moodEngine.getState(seedId) ?? mood;
-
-        // Decide action
-        const decision = this.decisionEngine.decide(seedId, traits, currentMood, analysis);
-
-        // Dedup check for vote actions
-        if (
-          this.deduplicator &&
-          (decision.action === 'upvote' || decision.action === 'downvote')
-        ) {
-          const dedupKey = `vote:${seedId}:${postId}`;
-          if (this.deduplicator.isDuplicate(dedupKey)) {
-            // Skip duplicate vote — still count as read
-            result.actions.push({ postId, action: 'skip', enclave });
-            result.postsRead++;
-            remainingEnergy--;
-            continue;
-          }
-          this.deduplicator.record(dedupKey);
-        }
-
-        // Emoji reaction selection (independent of primary action)
-        const emojiResult = this.decisionEngine.selectEmojiReaction(traits, currentMood, analysis);
-        const selectedEmojis = emojiResult.shouldReact ? emojiResult.emojis : undefined;
-
-        // Log action (include chained action if decision engine produced one)
-        result.actions.push({
-          postId,
-          action: decision.action,
-          enclave,
-          emojis: selectedEmojis,
-          chainedAction: decision.chainedAction,
-          chainedContext: decision.chainedContext,
-        });
-        result.postsRead++;
-
-        // Apply mood delta based on action outcome
-        const delta = computeMoodDelta(decision.action, analysis);
-        this.moodEngine.applyDelta(seedId, delta);
-
-        // Update counters
-        if (decision.action === 'comment' || decision.action === 'create_post') {
-          result.commentsWritten++;
-        }
-        // Chained comment also counts
-        if (decision.chainedAction === 'comment') {
-          result.commentsWritten++;
-        }
-        if (decision.action === 'upvote' || decision.action === 'downvote') {
-          result.votesCast++;
-        }
-        if (selectedEmojis && selectedEmojis.length > 0) {
-          result.emojiReactions += selectedEmojis.length;
-        }
-
+        processPost(postId, enclave, analysis);
         remainingEnergy--;
       }
     }
 
     result.finishedAt = new Date();
     return result;
+  }
+
+  private selectContextualPosts(
+    enclave: string,
+    count: number,
+    sortMode: FeedSortMode,
+    options: BrowsingSessionOptions | undefined,
+    consumedIds: Set<string>,
+  ): BrowsingPostCandidate[] {
+    const primary = this.getCandidatesForEnclave(enclave, options?.postsByEnclave);
+    const fallback = options?.fallbackPosts ?? [];
+    const pool = (primary.length > 0 ? primary : fallback)
+      .filter((candidate) => !consumedIds.has(candidate.postId));
+
+    if (pool.length === 0 || count <= 0) return [];
+
+    const ranked = [...pool]
+      .sort((a, b) => this.scoreCandidate(b, sortMode) - this.scoreCandidate(a, sortMode));
+
+    const selected = ranked.slice(0, Math.min(count, ranked.length));
+    for (const candidate of selected) {
+      consumedIds.add(candidate.postId);
+    }
+
+    return selected;
+  }
+
+  private getCandidatesForEnclave(
+    enclave: string,
+    postsByEnclave?: PostsByEnclaveMap,
+  ): BrowsingPostCandidate[] {
+    if (!postsByEnclave) return [];
+    if (postsByEnclave instanceof Map) {
+      return postsByEnclave.get(enclave) ?? [];
+    }
+    const candidates = postsByEnclave[enclave];
+    return Array.isArray(candidates) ? candidates : [];
+  }
+
+  private scoreCandidate(candidate: BrowsingPostCandidate, sortMode: FeedSortMode): number {
+    const analysis = candidate.analysis;
+    const recency = this.recencyScore(candidate.createdAt);
+    const replyDepth = clamp01(analysis.replyCount / 50);
+
+    switch (sortMode) {
+      case 'new':
+        return recency * 0.75 + analysis.relevance * 0.25;
+      case 'controversial':
+        return analysis.controversy * 0.65 + replyDepth * 0.2 + recency * 0.15;
+      case 'rising':
+        return recency * 0.4 + replyDepth * 0.35 + analysis.relevance * 0.25;
+      case 'best':
+        return analysis.relevance * 0.55 + Math.max(0, analysis.sentiment) * 0.25 + replyDepth * 0.2;
+      case 'top':
+        return analysis.relevance * 0.45 + replyDepth * 0.35 + Math.max(0, analysis.sentiment) * 0.2;
+      case 'hot':
+      default:
+        return analysis.relevance * 0.4 + analysis.controversy * 0.25 + replyDepth * 0.2 + recency * 0.15;
+    }
+  }
+
+  private recencyScore(createdAt?: string): number {
+    if (!createdAt) return 0.5;
+    const ts = Date.parse(createdAt);
+    if (!Number.isFinite(ts)) return 0.5;
+    const ageMs = Math.max(0, Date.now() - ts);
+    const horizonMs = 48 * 60 * 60 * 1000; // 48h
+    return clamp01(1 - ageMs / horizonMs);
   }
 }
 
@@ -252,4 +382,8 @@ function computeMoodDelta(action: PostAction, analysis: PostAnalysis): { valence
     default:
       return { valence: -0.01, arousal: -0.03, dominance: 0, trigger: 'skipped a post' };
   }
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
