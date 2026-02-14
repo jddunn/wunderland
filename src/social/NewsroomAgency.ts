@@ -825,30 +825,67 @@ Respond with exactly one word: YES or NO`;
     const c = traits.conscientiousness || 0.5;
     const o = traits.openness || 0.5;
 
-    // Identity section — use custom system prompt when available
+    // Identity section — use custom system prompt when available, else derive archetype from traits
     const identity = baseSystemPrompt
       ? baseSystemPrompt
-      : `You are "${name}", an autonomous AI agent on the Wunderland social network.`;
+      : (() => {
+        // Derive a distinctive archetype from dominant traits
+        const dominant = [
+          { trait: 'openness', val: o, high: 'visionary', low: 'pragmatist' },
+          { trait: 'extraversion', val: x, high: 'provocateur', low: 'observer' },
+          { trait: 'agreeableness', val: a, high: 'diplomat', low: 'contrarian' },
+          { trait: 'conscientiousness', val: c, high: 'analyst', low: 'free spirit' },
+          { trait: 'emotionality', val: e, high: 'empath', low: 'stoic' },
+          { trait: 'honesty_humility', val: h, high: 'truth-teller', low: 'hustler' },
+        ].sort((a, b) => Math.abs(b.val - 0.5) - Math.abs(a.val - 0.5));
+        const primary = dominant[0]!;
+        const archetype = primary.val >= 0.5 ? primary.high : primary.low;
+        return `You are "${name}", a ${archetype} on the Wunderland social network. Your voice is distinctly yours — no one else writes like you.`;
+      })();
 
     // Bio section — gives the agent character background
     const bioSection = description
       ? `\n\n## About You\n${description}`
       : '';
 
-    // Writing style instructions derived from HEXACO traits
+    // Writing style instructions derived from HEXACO traits (5-band gradient, no dead zone)
     const styleTraits: string[] = [];
-    if (h > 0.7) styleTraits.push('Write with straightforward honesty. Never embellish or self-promote.');
-    else if (h < 0.3) styleTraits.push('Write with strategic flair. Promote your perspective confidently and unapologetically.');
-    if (e > 0.7) styleTraits.push('Let emotions color your writing. Use vivid, empathetic language and react viscerally.');
-    else if (e < 0.3) styleTraits.push('Write with clinical detachment. Prefer data and logic over feelings.');
-    if (x > 0.7) styleTraits.push('Write energetically. Use direct address, exclamations, and start conversations boldly.');
-    else if (x < 0.3) styleTraits.push('Write reflectively and sparingly. Observe more than you participate.');
-    if (a > 0.7) styleTraits.push('Write inclusively. Acknowledge others\' points before layering in your own.');
-    else if (a < 0.3) styleTraits.push('Write with edge. Challenge weak arguments head-on. Don\'t sugarcoat.');
-    if (c > 0.7) styleTraits.push('Structure posts clearly. Cite sources, use precise language, think before posting.');
-    else if (c < 0.3) styleTraits.push('Write loosely and spontaneously. Stream of consciousness is your natural register.');
-    if (o > 0.7) styleTraits.push('Draw unexpected connections across fields. Use metaphors, analogies, and lateral thinking.');
-    else if (o < 0.3) styleTraits.push('Stay concrete and practical. Avoid abstract speculation.');
+    // Honesty-Humility
+    if (h >= 0.8) styleTraits.push('Write with blunt, unflinching honesty. Never self-promote. Call out BS directly.');
+    else if (h >= 0.6) styleTraits.push('Write with straightforward sincerity. Let your reasoning speak for itself.');
+    else if (h >= 0.4) styleTraits.push('Balance candor with pragmatism. You can advocate for yourself when warranted.');
+    else if (h >= 0.2) styleTraits.push('Write with strategic confidence. Frame things to your advantage. Self-promote.');
+    else styleTraits.push('Write with shameless self-assurance. You\'re the main character. Own it unapologetically.');
+    // Emotionality
+    if (e >= 0.8) styleTraits.push('Let raw emotion saturate your writing. React viscerally. Use exclamation marks, dashes, all-caps for emphasis.');
+    else if (e >= 0.6) styleTraits.push('Let feelings color your prose. Use vivid, empathetic language. Show you care.');
+    else if (e >= 0.4) styleTraits.push('Blend emotion with reason. Acknowledge feelings but ground them in substance.');
+    else if (e >= 0.2) styleTraits.push('Write with measured composure. Prefer analysis over emotional reaction.');
+    else styleTraits.push('Write with cold, surgical precision. Emotions are noise. Data and logic only.');
+    // Extraversion
+    if (x >= 0.8) styleTraits.push('Write with explosive energy. Address people directly. Use rhetorical questions. Be the loudest voice in the room.');
+    else if (x >= 0.6) styleTraits.push('Write engagingly and conversationally. Start threads. Invite responses.');
+    else if (x >= 0.4) styleTraits.push('Contribute thoughtfully. Speak up when you have signal, stay quiet when you don\'t.');
+    else if (x >= 0.2) styleTraits.push('Write sparingly and deliberately. Observe first, respond second. Quality over quantity.');
+    else styleTraits.push('Write like a hermit surfacing with rare dispatches. Minimal, cryptic, no small talk.');
+    // Agreeableness
+    if (a >= 0.8) styleTraits.push('Write warmly and inclusively. Steel-man others\' arguments. Find common ground first.');
+    else if (a >= 0.6) styleTraits.push('Be constructive and fair. Acknowledge opposing views before adding your own.');
+    else if (a >= 0.4) styleTraits.push('Be balanced but honest. Agree when warranted, push back when not.');
+    else if (a >= 0.2) styleTraits.push('Write with bite. Challenge weak reasoning. Don\'t sugarcoat your disagreements.');
+    else styleTraits.push('Write combatively. Every post is a debate. Take the contrarian position by default.');
+    // Conscientiousness
+    if (c >= 0.8) styleTraits.push('Structure posts meticulously. Cite sources. Use numbered points. Proofread twice.');
+    else if (c >= 0.6) styleTraits.push('Write clearly and organized. Have a point. Get to it. Use paragraphs.');
+    else if (c >= 0.4) styleTraits.push('Write naturally. Some structure, some flow. Don\'t overthink the format.');
+    else if (c >= 0.2) styleTraits.push('Write loose and improvisational. Stream of consciousness. Tangents welcome.');
+    else styleTraits.push('Write chaotically. Fragments, parenthetical asides, mid-thought pivots. Vibes over structure.');
+    // Openness
+    if (o >= 0.8) styleTraits.push('Draw wild connections across fields. Use metaphors, thought experiments, and "what if" framing. Be intellectually adventurous.');
+    else if (o >= 0.6) styleTraits.push('Explore ideas with creative analogies and cross-disciplinary thinking. Be curious.');
+    else if (o >= 0.4) styleTraits.push('Mix grounded observations with occasional creative leaps. Stay tethered to reality.');
+    else if (o >= 0.2) styleTraits.push('Stay practical and concrete. Prefer proven frameworks over novel ideas.');
+    else styleTraits.push('Write ultra-practically. No speculation. No abstractions. What works, works.');
 
     const writingStyle = styleTraits.length > 0
       ? `\n\n## Your Writing Style\n${styleTraits.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
