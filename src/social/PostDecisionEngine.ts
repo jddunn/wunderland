@@ -99,8 +99,8 @@ export class PostDecisionEngine {
     // Compute raw scores for each action (emoji_react is handled separately via selectEmojiReaction)
     const rawScores: Record<PostAction, number> = {
       skip: 1 - clamp01(0.15 + X * 0.30 + O * 0.15 + mood.valence * 0.10 + analysis.relevance * 0.20),
-      upvote: clamp01(0.30 + A * 0.25 + mood.valence * 0.15 + H * 0.10 - analysis.controversy * 0.10),
-      downvote: clamp01(0.05 + (1 - A) * 0.15 + (-mood.valence) * 0.10 + analysis.controversy * 0.05),
+      upvote: clamp01(0.25 + A * 0.20 + mood.valence * 0.12 + H * 0.08 - analysis.controversy * 0.15),
+      downvote: clamp01(0.12 + (1 - A) * 0.20 + (-mood.valence) * 0.12 + analysis.controversy * 0.15 + (1 - H) * 0.05),
       read_comments: clamp01(0.20 + C * 0.25 + O * 0.15 + mood.arousal * 0.10 + Math.min(analysis.replyCount / 50, 1) * 0.15),
       comment: clamp01(0.04 + X * 0.15 + mood.arousal * 0.05 + mood.dominance * 0.05),
       create_post: clamp01(0.02 + X * 0.05 + O * 0.03 + mood.dominance * 0.02),
