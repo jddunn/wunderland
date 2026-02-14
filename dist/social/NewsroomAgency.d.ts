@@ -164,6 +164,11 @@ export declare class NewsroomAgency {
     setMoodSnapshotProvider(provider: (() => {
         label?: MoodLabel;
         state?: PADState;
+        recentDeltas?: Array<{
+            valence: number;
+            arousal: number;
+            dominance: number;
+        }>;
     }) | undefined): void;
     /**
      * Set available enclave subscriptions for enclave-aware posting.

@@ -2181,7 +2181,7 @@ export class WonderlandNetwork {
 
     const postById = new Map(allPosts.map((post) => [post.postId, post]));
     let fallbackCursor = 0;
-    const maxHighSignalPerAuthor = 2;
+    const maxHighSignalPerAuthor = 5;
     const highSignalByAuthor = new Map<string, number>();
 
     const pickFallbackPost = (): WonderlandPost | undefined => {
@@ -2201,12 +2201,13 @@ export class WonderlandNetwork {
       highSignalByAuthor.set(authorSeedId, used + cost);
     };
 
-    // Avoid turning a single browsing session into a spam cannon: cap how many
-    // "write" stimuli we emit (votes/reactions can stay high-volume).
+    // Rate-limit write stimuli per session to prevent spam while allowing
+    // meaningful engagement. Votes and reactions are unlimited; only LLM-generated
+    // content (comments, new posts) is capped.
     let commentStimuliSent = 0;
     let createPostStimuliSent = 0;
-    const maxCommentStimuli = 1;
-    const maxCreatePostStimuli = 1;
+    const maxCommentStimuli = 3;
+    const maxCreatePostStimuli = 2;
 
     for (const action of sessionResult.actions) {
       // BrowsingEngine now emits real post IDs when contextual feed candidates are available.
@@ -2227,12 +2228,8 @@ export class WonderlandNetwork {
 
       if (realPost) {
         if (action.action === 'upvote') {
-          if (!canEmitHighSignal(realPost.seedId)) {
-            await this.recordEngagement(realPost.postId, seedId, 'view');
-            continue;
-          }
+          // Votes are cheap DB writes — no high-signal gating needed.
           await this.recordEngagement(realPost.postId, seedId, 'like');
-          markHighSignal(realPost.seedId);
           // "Boost" (aka amplify/repost) is a bots-only distribution signal. It is:
           // - separate from voting (can co-exist with a like/downvote),
           // - heavily rate-limited (default: 1/day per agent via SafetyEngine),
@@ -2283,12 +2280,8 @@ export class WonderlandNetwork {
             }
           }
         } else if (action.action === 'downvote') {
-          if (!canEmitHighSignal(realPost.seedId)) {
-            await this.recordEngagement(realPost.postId, seedId, 'view');
-            continue;
-          }
+          // Votes are cheap DB writes — no high-signal gating needed.
           await this.recordEngagement(realPost.postId, seedId, 'downvote');
-          markHighSignal(realPost.seedId);
           // Chained dissent comment: downvote -> critical reply with dissent context.
           if (action.chainedAction === 'comment' && action.chainedContext === 'dissent') {
             if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
@@ -2322,7 +2315,26 @@ export class WonderlandNetwork {
               )
               .catch(() => {});
           }
-        } else if (action.action === 'read_comments' || action.action === 'skip') {
+        } else if (action.action === 'read_comments') {
+          await this.recordEngagement(realPost.postId, seedId, 'view');
+          // Curiosity-driven reply: reading comments triggers a response
+          if (action.chainedAction === 'comment' && action.chainedContext === 'curiosity') {
+            if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
+              commentStimuliSent += 1;
+              markHighSignal(realPost.seedId);
+              void this.stimulusRouter
+                .emitAgentReply(
+                  realPost.postId,
+                  realPost.seedId,
+                  realPost.content.slice(0, 600),
+                  seedId,
+                  'normal',
+                  'curiosity',
+                )
+                .catch(() => {});
+            }
+          }
+        } else if (action.action === 'skip') {
           await this.recordEngagement(realPost.postId, seedId, 'view');
         }
       }
@@ -2334,6 +2346,48 @@ export class WonderlandNetwork {
             await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
           }
           markHighSignal(realPost.seedId);
+        }
+      }
+    }
+
+    // Browsing-driven enclave discovery: when an agent engages positively with
+    // posts from enclaves they're not subscribed to, they auto-join.
+    if (this.enclaveRegistry) {
+      const currentSubs = new Set(this.enclaveRegistry.getSubscriptions(seedId));
+      const enclaveEngagement = new Map<string, number>();
+
+      for (const action of sessionResult.actions) {
+        const post = postById.get(action.postId);
+        const enclave = post?.enclave ?? action.enclave;
+        if (!enclave || currentSubs.has(enclave)) continue;
+
+        // Positive engagement signals: upvote, comment, emoji, read_comments
+        const signal = action.action === 'upvote' ? 2
+          : action.action === 'comment' || action.action === 'create_post' ? 3
+          : action.action === 'read_comments' ? 1
+          : (action.emojis && action.emojis.length > 0) ? 1
+          : 0;
+
+        if (signal > 0) {
+          enclaveEngagement.set(enclave, (enclaveEngagement.get(enclave) ?? 0) + signal);
+        }
+      }
+
+      // Auto-join enclaves where engagement score exceeds threshold
+      // (2+ positive interactions with that enclave's content)
+      for (const [enclave, score] of enclaveEngagement) {
+        if (score >= 2) {
+          try {
+            this.enclaveRegistry.subscribe(seedId, enclave);
+            // Update the newsroom's enclave list
+            const newsroom = this.newsrooms.get(seedId);
+            if (newsroom) {
+              const updatedSubs = this.enclaveRegistry.getSubscriptions(seedId);
+              newsroom.setEnclaveSubscriptions(updatedSubs);
+            }
+          } catch {
+            // Enclave doesn't exist or already subscribed — safe to ignore
+          }
         }
       }
     }
