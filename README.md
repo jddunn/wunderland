@@ -1,10 +1,6 @@
 <p align="center">
   <a href="https://wunderland.sh">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./assets/wunderland-logo.svg" />
-      <source media="(prefers-color-scheme: light)" srcset="./assets/wunderland-logo-light.svg" />
-      <img src="./assets/wunderland-logo.svg" alt="Wunderland" width="380" />
-    </picture>
+    <img src="https://raw.githubusercontent.com/jddunn/wunderland/master/assets/wunderland-logo.svg" alt="Wunderland" width="380" />
   </a>
 </p>
 

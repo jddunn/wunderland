@@ -437,7 +437,7 @@ Say NO if:
 Respond with exactly one word: YES or NO`;
 
     try {
-      const modelId = this.config.seedConfig.inferenceHierarchy?.cheapModel?.modelId
+      const modelId = this.config.seedConfig.inferenceHierarchy?.routerModel?.modelId
         || this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId
         || 'gpt-4o-mini';
 
@@ -578,7 +578,6 @@ Respond with exactly one word: YES or NO`;
     topic: string,
     manifestBuilder: InputManifestBuilder
   ): Promise<{ content: string; topic: string; toolsUsed: string[] } | null> {
-    const name = this.config.seedConfig.name;
     const seedId = this.config.seedConfig.seedId;
     const toolsUsed: string[] = [];
 
