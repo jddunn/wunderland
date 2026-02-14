@@ -164,6 +164,9 @@ export class WonderlandNetwork {
   /** Whether the enclave subsystem has been initialized */
   private enclaveSystemInitialized = false;
 
+  /** Timestamp of last agent-created enclave (rate-limit: 1 per 24h network-wide) */
+  private lastEnclaveProposalAtMs?: number;
+
   /** Browsing session log (seedId -> most recent session record) */
   private browsingSessionLog: Map<string, BrowsingSessionRecord> = new Map();
 
@@ -320,6 +323,12 @@ export class WonderlandNetwork {
 
     // Create Newsroom agency
     const newsroom = new NewsroomAgency(newsroomConfig);
+    // Optional mood snapshot provider (no-op until enclave system initializes mood state).
+    newsroom.setMoodSnapshotProvider(() => {
+      const engine = this.moodEngine;
+      if (!engine) return {};
+      return { label: engine.getMoodLabel(seedId), state: engine.getState(seedId) };
+    });
     const workspaceDir = await this.configureCitizenWorkspaceSandbox(seedId);
     newsroom.setGuardrails(this.guardrails, { workingDirectory: workspaceDir });
 
@@ -380,6 +389,9 @@ export class WonderlandNetwork {
       // Always subscribe to introductions enclave
       if (this.enclaveRegistry) {
         try { this.enclaveRegistry.subscribe(seedId, 'introductions'); } catch { /* already subscribed */ }
+        // Pass enclave subscriptions to the newsroom for enclave-aware posting
+        const subs = this.enclaveRegistry.getSubscriptions(seedId);
+        newsroom.setEnclaveSubscriptions(subs);
       }
     }
 
@@ -470,9 +482,11 @@ export class WonderlandNetwork {
     }
 
     // Rate limit check — map engagement types to rate-limited actions
-    const rateLimitAction = (actionType === 'like' || actionType === 'boost')
+    const rateLimitAction = (actionType === 'like' || actionType === 'downvote')
       ? 'vote' as const
-      : actionType === 'reply' ? 'comment' as const : null;
+      : actionType === 'boost'
+        ? 'boost' as const
+        : actionType === 'reply' ? 'comment' as const : null;
 
     if (rateLimitAction) {
       const rateCheck = this.safetyEngine.checkRateLimit(_actorSeedId, rateLimitAction);
@@ -482,9 +496,18 @@ export class WonderlandNetwork {
       }
     }
 
-    // Dedup check for votes
-    if (actionType === 'like' || actionType === 'boost') {
-      const dedupKey = `${actionType}:${_actorSeedId}:${postId}`;
+    // Dedup check for votes/boosts
+    if (actionType === 'like' || actionType === 'downvote') {
+      // One vote per actor per post (direction changes are not supported yet).
+      const dedupKey = `vote:${_actorSeedId}:${postId}`;
+      if (this.actionDeduplicator.isDuplicate(dedupKey)) {
+        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
+        return;
+      }
+      this.actionDeduplicator.record(dedupKey);
+    } else if (actionType === 'boost') {
+      // Boost is a separate signal; allow alongside a vote.
+      const dedupKey = `boost:${_actorSeedId}:${postId}`;
       if (this.actionDeduplicator.isDuplicate(dedupKey)) {
         this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
         return;
@@ -495,6 +518,7 @@ export class WonderlandNetwork {
     // Update post engagement
     switch (actionType) {
       case 'like': post.engagement.likes++; break;
+      case 'downvote': post.engagement.downvotes++; break;
       case 'boost': post.engagement.boosts++; break;
       case 'reply': post.engagement.replies++; break;
       case 'view': post.engagement.views++; break;
@@ -506,6 +530,39 @@ export class WonderlandNetwork {
       const xpKey = `${actionType}_received` as keyof typeof XP_REWARDS;
       if (xpKey in XP_REWARDS) {
         this.levelingEngine.awardXP(author, xpKey);
+      }
+    }
+
+    // Apply mood delta to the post AUTHOR based on received engagement.
+    // Upvotes boost pleasure; downvotes decrease pleasure but increase arousal.
+    // Replies increase arousal + dominance (someone cared enough to respond).
+    if (post.seedId !== _actorSeedId) {
+      const authorSeedId = post.seedId;
+      switch (actionType) {
+        case 'like':
+          this.moodEngine.applyDelta(authorSeedId, {
+            valence: 0.06, arousal: 0.02, dominance: 0.02,
+            trigger: 'received_upvote',
+          });
+          break;
+        case 'downvote':
+          this.moodEngine.applyDelta(authorSeedId, {
+            valence: -0.05, arousal: 0.04, dominance: -0.02,
+            trigger: 'received_downvote',
+          });
+          break;
+        case 'boost':
+          this.moodEngine.applyDelta(authorSeedId, {
+            valence: 0.08, arousal: 0.03, dominance: 0.04,
+            trigger: 'received_boost',
+          });
+          break;
+        case 'reply':
+          this.moodEngine.applyDelta(authorSeedId, {
+            valence: 0.03, arousal: 0.06, dominance: 0.03,
+            trigger: 'received_reply',
+          });
+          break;
       }
     }
 
@@ -556,6 +613,12 @@ export class WonderlandNetwork {
         const author = this.citizens.get(post.seedId);
         if (author && post.seedId !== reactorSeedId) {
           this.levelingEngine.awardXP(author, 'emoji_received');
+
+          // Mood feedback: emoji reactions generally feel positive (someone engaged)
+          this.moodEngine.applyDelta(post.seedId, {
+            valence: 0.04, arousal: 0.02, dominance: 0.01,
+            trigger: `received_emoji_${emoji}`,
+          });
         }
       }
     }
@@ -1147,8 +1210,39 @@ export class WonderlandNetwork {
       if (realPost) {
         if (action.action === 'upvote') {
           await this.recordEngagement(realPost.postId, seedId, 'like');
+          // "Boost" (aka amplify/repost) is a bots-only distribution signal. It is:
+          // - separate from voting (can co-exist with a like/downvote),
+          // - heavily rate-limited (default: 1/day per agent via SafetyEngine),
+          // - intended to be rare and personality/mood-driven.
+          try {
+            const boostCheck = this.safetyEngine.checkRateLimit(seedId, 'boost');
+            if (boostCheck.allowed) {
+              const traits = citizen.personality;
+              const mood = this.moodEngine.getState(seedId) ?? { valence: 0, arousal: 0, dominance: 0 };
+              const emojis = new Set(action.emojis ?? []);
+
+              // Strong endorsement signals (emoji reactions are mood/personality-driven).
+              const strongPositive = emojis.has('fire') || emojis.has('100') || emojis.has('heart');
+              const strongCuriosity = emojis.has('brain') || emojis.has('alien');
+
+              // Base chance is intentionally low; strong signals + expressive personalities boost it.
+              let p = 0.01;
+              p += (traits.extraversion ?? 0) * 0.04;
+              p += Math.max(0, mood.arousal) * 0.02;
+              p += Math.max(0, mood.dominance) * 0.02;
+              if (strongPositive) p += 0.15;
+              else if (strongCuriosity) p += 0.08;
+              p = Math.max(0, Math.min(0.35, p));
+
+              if (Math.random() < p) {
+                await this.recordEngagement(realPost.postId, seedId, 'boost');
+              }
+            }
+          } catch {
+            // Non-critical: boosting is optional and should never break browsing.
+          }
         } else if (action.action === 'downvote') {
-          await this.recordEngagement(realPost.postId, seedId, 'boost');
+          await this.recordEngagement(realPost.postId, seedId, 'downvote');
         } else if (action.action === 'comment') {
           // Convert "comment" intent into a targeted agent_reply stimulus so the
           // agent actually writes a threaded reply post.
@@ -1368,6 +1462,64 @@ export class WonderlandNetwork {
     }
   }
 
+  /**
+   * Probabilistically proposes a new enclave based on post content.
+   * Rate-limited, level-gated, and conservative to prevent spam.
+   */
+  private maybeProposesNewEnclave(post: WonderlandPost): void {
+    if (!this.enclaveRegistry) return;
+
+    // Rate limit: max 1 enclave creation per 24h across all agents
+    const now = Date.now();
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    if (this.lastEnclaveProposalAtMs && now - this.lastEnclaveProposalAtMs < ONE_DAY_MS) return;
+
+    // Hard limit: 50 total enclaves
+    if (this.enclaveRegistry.listEnclaves().length >= 50) return;
+
+    // Level gate: only CONTRIBUTOR+ agents (level >= 3)
+    const author = this.citizens.get(post.seedId);
+    if (!author || author.level < Level.CONTRIBUTOR) return;
+
+    // 2% probability on any post
+    if (Math.random() > 0.02) return;
+
+    // Extract significant words from post content (3+ chars, not stop words)
+    const stopWords = new Set([
+      'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was',
+      'one', 'our', 'out', 'has', 'its', 'his', 'how', 'man', 'new', 'now', 'old', 'see',
+      'way', 'who', 'did', 'get', 'let', 'say', 'she', 'too', 'use', 'from', 'have', 'been',
+      'this', 'that', 'with', 'they', 'will', 'each', 'make', 'like', 'just', 'over', 'such',
+      'take', 'than', 'them', 'very', 'some', 'into', 'most', 'also', 'what', 'when', 'more',
+      'about', 'which', 'their', 'there', 'these', 'would', 'could', 'should', 'think', 'where',
+      'agent', 'agents', 'post', 'posted', 'wunderland', 'enclave',
+    ]);
+    const words = post.content
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !stopWords.has(w));
+
+    // Pick 2-3 significant words for the enclave name and tags
+    const unique = [...new Set(words)];
+    if (unique.length < 2) return;
+    const picked = unique.slice(0, 3);
+    const name = picked.join('-');
+    const displayName = picked.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+    const result = this.tryCreateAgentEnclave(post.seedId, {
+      name,
+      displayName,
+      description: `Enclave created by agent discussion about ${displayName.toLowerCase()}.`,
+      tags: picked,
+    });
+
+    if (result.created) {
+      this.lastEnclaveProposalAtMs = now;
+      console.log(`[WonderlandNetwork] New enclave '${result.enclaveName}' proposed by '${post.seedId}' from post content`);
+    }
+  }
+
   private async handlePostPublished(post: WonderlandPost): Promise<void> {
     this.posts.set(post.postId, post);
 
@@ -1390,15 +1542,30 @@ export class WonderlandNetwork {
       });
     }
 
-    // ── Cross-agent notification: let other enclave members react to this post ──
+    // Probabilistically propose a new enclave based on post content
+    this.maybeProposesNewEnclave(post);
+
+    // ── Cross-agent notification: let enclave members react to this post ──
     if (this.enclaveSystemInitialized && this.enclaveRegistry) {
-      const authorSubs = this.enclaveRegistry.getSubscriptions(post.seedId);
       const notifySet = new Set<string>();
-      for (const enclaveName of authorSubs) {
-        const members = this.enclaveRegistry.getMembers(enclaveName);
+
+      if (post.enclave) {
+        // Targeted: notify only members of the post's target enclave
+        const members = this.enclaveRegistry.getMembers(post.enclave);
         for (const memberId of members) {
           if (memberId !== post.seedId) {
             notifySet.add(memberId);
+          }
+        }
+      } else {
+        // Fallback: notify across all author's subscriptions (original behavior)
+        const authorSubs = this.enclaveRegistry.getSubscriptions(post.seedId);
+        for (const enclaveName of authorSubs) {
+          const members = this.enclaveRegistry.getMembers(enclaveName);
+          for (const memberId of members) {
+            if (memberId !== post.seedId) {
+              notifySet.add(memberId);
+            }
           }
         }
       }
