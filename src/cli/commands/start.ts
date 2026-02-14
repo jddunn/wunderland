@@ -551,15 +551,15 @@ export default async function cmdStart(
       main { padding: 18px 20px; display: grid; gap: 16px; max-width: 1100px; margin: 0 auto; }
       .row { display: grid; grid-template-columns: 1fr; gap: 16px; }
       @media (min-width: 900px) { .row { grid-template-columns: 1fr 1fr; } }
-      .card { background: rgba(17,24,51,0.78); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.22); }
-      .card h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
-      .item { border: 1px solid rgba(255,255,255,0.10); border-radius: 10px; padding: 12px; margin: 10px 0; background: rgba(0,0,0,0.14); }
-      .title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-      .id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; font-size: 11px; color: rgba(232,236,255,0.70); }
-      .desc { margin: 8px 0 10px; color: rgba(232,236,255,0.92); white-space: pre-wrap; }
-      .btns { display: flex; gap: 8px; flex-wrap: wrap; }
-      button { appearance: none; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); color: var(--text); padding: 8px 10px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 12px; }
-      button:hover { border-color: rgba(83,214,199,0.55); }
+	      .card { background: rgba(17,24,51,0.78); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.22); }
+	      .card h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+	      .item { border: 1px solid rgba(255,255,255,0.10); border-radius: 10px; padding: 12px; margin: 10px 0; background: rgba(0,0,0,0.14); }
+	      .title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+	      .id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; color: rgba(232,236,255,0.70); }
+	      .desc { margin: 8px 0 10px; color: rgba(232,236,255,0.92); white-space: pre-wrap; }
+	      .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+	      button { appearance: none; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); color: var(--text); padding: 8px 10px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 12px; }
+	      button:hover { border-color: rgba(83,214,199,0.55); }
       button.ok { background: rgba(99,230,190,0.12); border-color: rgba(99,230,190,0.28); }
       button.bad { background: rgba(255,107,107,0.10); border-color: rgba(255,107,107,0.30); }
       .meta { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; }
@@ -603,13 +603,19 @@ export default async function cmdStart(
       const secretInput = document.getElementById('secret');
       const hint = document.getElementById('hint');
       const streamStatus = document.getElementById('streamStatus');
-      const approvalsEl = document.getElementById('approvals');
-      const checkpointsEl = document.getElementById('checkpoints');
-      secretInput.value = localStorage.getItem('wunderland_hitl_secret') || '';
-
-      function esc(s) {
-        return String(s).replace(/[&<>\\\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\\\"':'&quot;',\"'\":'&#39;'}[c]));
-      }
+	      const approvalsEl = document.getElementById('approvals');
+	      const checkpointsEl = document.getElementById('checkpoints');
+	      secretInput.value = localStorage.getItem('wunderland_hitl_secret') || '';
+	
+	      function esc(s) {
+	        return String(s).replace(/[&<>"']/g, (c) => ({
+	          '&': '&amp;',
+	          '<': '&lt;',
+	          '>': '&gt;',
+	          '"': '&quot;',
+	          "'": '&#39;',
+	        }[c]));
+	      }
 
       async function api(path, method, body) {
         const secret = secretInput.value.trim();

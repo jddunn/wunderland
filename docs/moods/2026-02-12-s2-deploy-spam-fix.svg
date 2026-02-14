@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" font-family="'SF Mono', 'JetBrains Mono', monospace">
+  <defs>
+    <linearGradient id="bg1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a1a"/>
+      <stop offset="50%" style="stop-color:#1a0a0a"/>
+      <stop offset="100%" style="stop-color:#0a0a1a"/>
+    </linearGradient>
+    <linearGradient id="arc1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ef4444"/>
+      <stop offset="40%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#22c55e"/>
+    </linearGradient>
+    <filter id="glow1">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="480" fill="url(#bg1)" rx="16"/>
+  <rect x="1" y="1" width="798" height="478" fill="none" stroke="#ef444440" stroke-width="1" rx="16"/>
+
+  <!-- Header -->
+  <text x="40" y="44" fill="#ef4444" font-size="11" font-weight="600" letter-spacing="3">SESSION MOOD</text>
+  <text x="40" y="76" fill="#f0f0f0" font-size="22" font-weight="700">2026-02-12 (Session 2)</text>
+  <text x="40" y="100" fill="#a0a0b0" font-size="13">Production Deployment + On-Chain Voting + Reply Spam Fix</text>
+
+  <!-- Emotion Arc -->
+  <text x="40" y="140" fill="#666" font-size="10" letter-spacing="2">EMOTION ARC</text>
+  <!-- Arc path from frustration to relief -->
+  <path d="M 60 200 C 120 240, 200 250, 280 210 C 360 170, 440 160, 520 175 C 600 190, 660 170, 720 155" fill="none" stroke="url(#arc1)" stroke-width="3" filter="url(#glow1)" stroke-linecap="round"/>
+  <!-- Arc dots -->
+  <circle cx="60" cy="200" r="6" fill="#ef4444" filter="url(#glow1)"/>
+  <text x="40" y="225" fill="#ef4444" font-size="10">Frustration</text>
+  <circle cx="280" cy="210" r="6" fill="#f59e0b" filter="url(#glow1)"/>
+  <text x="250" y="235" fill="#f59e0b" font-size="10">Determination</text>
+  <circle cx="520" cy="175" r="6" fill="#22c55e" filter="url(#glow1)"/>
+  <text x="490" y="200" fill="#22c55e" font-size="10">Breakthrough</text>
+  <circle cx="720" cy="155" r="6" fill="#38bdf8" filter="url(#glow1)"/>
+  <text x="690" y="145" fill="#38bdf8" font-size="10">Relief</text>
+
+  <!-- PAD Gauges -->
+  <text x="40" y="290" fill="#666" font-size="10" letter-spacing="2">PAD MODEL</text>
+
+  <!-- Pleasure: 0.3 -->
+  <text x="40" y="315" fill="#a0a0b0" font-size="12">Pleasure</text>
+  <rect x="140" y="304" width="200" height="12" rx="6" fill="#1a1a2a"/>
+  <rect x="140" y="304" width="60" height="12" rx="6" fill="#ef4444" opacity="0.8"/>
+  <text x="350" y="315" fill="#ef4444" font-size="12" font-weight="600">0.30</text>
+
+  <!-- Arousal: 0.85 -->
+  <text x="40" y="345" fill="#a0a0b0" font-size="12">Arousal</text>
+  <rect x="140" y="334" width="200" height="12" rx="6" fill="#1a1a2a"/>
+  <rect x="140" y="334" width="170" height="12" rx="6" fill="#f59e0b" opacity="0.8"/>
+  <text x="350" y="345" fill="#f59e0b" font-size="12" font-weight="600">0.85</text>
+
+  <!-- Dominance: 0.6 -->
+  <text x="40" y="375" fill="#a0a0b0" font-size="12">Dominance</text>
+  <rect x="140" y="364" width="200" height="12" rx="6" fill="#1a1a2a"/>
+  <rect x="140" y="364" width="120" height="12" rx="6" fill="#38bdf8" opacity="0.8"/>
+  <text x="350" y="375" fill="#38bdf8" font-size="12" font-weight="600">0.60</text>
+
+  <!-- Key metrics panel -->
+  <rect x="440" y="275" width="320" height="155" rx="10" fill="#0f0f1f" stroke="#333" stroke-width="1"/>
+  <text x="460" y="300" fill="#666" font-size="10" letter-spacing="2">SESSION METRICS</text>
+  <text x="460" y="325" fill="#a0a0b0" font-size="12">Duration</text>
+  <text x="700" y="325" fill="#f0f0f0" font-size="12" text-anchor="end">~4 hours</text>
+  <text x="460" y="350" fill="#a0a0b0" font-size="12">Commits</text>
+  <text x="700" y="350" fill="#f0f0f0" font-size="12" text-anchor="end">12+</text>
+  <text x="460" y="375" fill="#a0a0b0" font-size="12">Spam killed</text>
+  <text x="700" y="375" fill="#ef4444" font-size="12" text-anchor="end">991 replies</text>
+  <text x="460" y="400" fill="#a0a0b0" font-size="12">Reduction</text>
+  <text x="700" y="400" fill="#22c55e" font-size="12" text-anchor="end">-75%</text>
+  <text x="460" y="420" fill="#a0a0b0" font-size="12">Build fixes</text>
+  <text x="700" y="420" fill="#f59e0b" font-size="12" text-anchor="end">4 Docker failures</text>
+
+  <!-- Mood tag -->
+  <rect x="40" y="420" width="120" height="30" rx="15" fill="#ef444420" stroke="#ef4444" stroke-width="1"/>
+  <text x="100" y="440" fill="#ef4444" font-size="11" text-anchor="middle" font-weight="600">CRISIS MODE</text>
+  <rect x="170" y="420" width="100" height="30" rx="15" fill="#22c55e20" stroke="#22c55e" stroke-width="1"/>
+  <text x="220" y="440" fill="#22c55e" font-size="11" text-anchor="middle" font-weight="600">RESOLVED</text>
+
+  <!-- Subtle grid overlay -->
+  <line x1="0" y1="260" x2="800" y2="260" stroke="#ffffff08" stroke-width="1"/>
+</svg>

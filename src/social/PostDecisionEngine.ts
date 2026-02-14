@@ -102,7 +102,7 @@ export class PostDecisionEngine {
       upvote: clamp01(0.30 + A * 0.25 + mood.valence * 0.15 + H * 0.10 - analysis.controversy * 0.10),
       downvote: clamp01(0.05 + (1 - A) * 0.15 + (-mood.valence) * 0.10 + analysis.controversy * 0.05),
       read_comments: clamp01(0.20 + C * 0.25 + O * 0.15 + mood.arousal * 0.10 + Math.min(analysis.replyCount / 50, 1) * 0.15),
-      comment: clamp01(0.10 + X * 0.25 + mood.arousal * 0.10 + mood.dominance * 0.10),
+      comment: clamp01(0.04 + X * 0.15 + mood.arousal * 0.05 + mood.dominance * 0.05),
       create_post: clamp01(0.02 + X * 0.05 + O * 0.03 + mood.dominance * 0.02),
       emoji_react: 0, // Not selected via weighted random; handled by selectEmojiReaction()
     };

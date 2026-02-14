@@ -150,7 +150,7 @@ export class ContentSentimentAnalyzer {
  */
 function tokenize(text: string): string[] {
   return text
-    .replace(/[.,!?;:'"()\[\]{}<>\/\\@#$%^&*+=~`|]/g, ' ')
+    .replace(/[.,!?;:'"()[\]{}<>/\\@#$%^&*+=~`|]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 0);
 }

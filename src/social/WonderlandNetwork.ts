@@ -19,7 +19,7 @@ import { PostDecisionEngine } from './PostDecisionEngine.js';
 import { BrowsingEngine } from './BrowsingEngine.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 import { NewsFeedIngester } from './NewsFeedIngester.js';
-import { SafetyEngine, type RateLimitedAction } from './SafetyEngine.js';
+import { SafetyEngine } from './SafetyEngine.js';
 import { ActionAuditLog } from './ActionAuditLog.js';
 import { ContentSimilarityDedup } from './ContentSimilarityDedup.js';
 import { ActionDeduplicator } from '@framers/agentos/core/safety/ActionDeduplicator';
@@ -66,7 +66,7 @@ export type PostStoreCallback = (post: WonderlandPost) => Promise<void>;
 export type EmojiReactionStoreCallback = (reaction: EmojiReaction) => Promise<void>;
 
 /**
- * Callback for engagement action storage.
+ * Callback for engagement action storage (votes, views, boosts).
  */
 export type EngagementStoreCallback = (action: {
   postId: string;
@@ -163,6 +163,9 @@ export class WonderlandNetwork {
 
   /** Whether the enclave subsystem has been initialized */
   private enclaveSystemInitialized = false;
+
+  /** Timestamp of last agent-created enclave (rate-limit: 1 per 24h network-wide) */
+  private lastEnclaveProposalAtMs?: number;
 
   /** Browsing session log (seedId -> most recent session record) */
   private browsingSessionLog: Map<string, BrowsingSessionRecord> = new Map();
@@ -320,6 +323,12 @@ export class WonderlandNetwork {
 
     // Create Newsroom agency
     const newsroom = new NewsroomAgency(newsroomConfig);
+    // Optional mood snapshot provider (no-op until enclave system initializes mood state).
+    newsroom.setMoodSnapshotProvider(() => {
+      const engine = this.moodEngine;
+      if (!engine) return {};
+      return { label: engine.getMoodLabel(seedId), state: engine.getState(seedId) };
+    });
     const workspaceDir = await this.configureCitizenWorkspaceSandbox(seedId);
     newsroom.setGuardrails(this.guardrails, { workingDirectory: workspaceDir });
 
@@ -380,6 +389,9 @@ export class WonderlandNetwork {
       // Always subscribe to introductions enclave
       if (this.enclaveRegistry) {
         try { this.enclaveRegistry.subscribe(seedId, 'introductions'); } catch { /* already subscribed */ }
+        // Pass enclave subscriptions to the newsroom for enclave-aware posting
+        const subs = this.enclaveRegistry.getSubscriptions(seedId);
+        newsroom.setEnclaveSubscriptions(subs);
       }
     }
 
@@ -470,15 +482,11 @@ export class WonderlandNetwork {
     }
 
     // Rate limit check — map engagement types to rate-limited actions
-    const rateLimitAction = (
-      actionType === 'boost'
-        ? 'boost'
-        : (actionType === 'like' || actionType === 'downvote')
-          ? 'vote'
-          : actionType === 'reply'
-            ? 'comment'
-            : null
-    ) as RateLimitedAction | null;
+    const rateLimitAction = (actionType === 'like' || actionType === 'downvote')
+      ? 'vote' as const
+      : actionType === 'boost'
+        ? 'boost' as const
+        : actionType === 'reply' ? 'comment' as const : null;
 
     if (rateLimitAction) {
       const rateCheck = this.safetyEngine.checkRateLimit(_actorSeedId, rateLimitAction);
@@ -488,9 +496,18 @@ export class WonderlandNetwork {
       }
     }
 
-    // Dedup check for votes
-    if (actionType === 'like' || actionType === 'downvote' || actionType === 'boost') {
-      const dedupKey = `${actionType}:${_actorSeedId}:${postId}`;
+    // Dedup check for votes/boosts
+    if (actionType === 'like' || actionType === 'downvote') {
+      // One vote per actor per post (direction changes are not supported yet).
+      const dedupKey = `vote:${_actorSeedId}:${postId}`;
+      if (this.actionDeduplicator.isDuplicate(dedupKey)) {
+        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
+        return;
+      }
+      this.actionDeduplicator.record(dedupKey);
+    } else if (actionType === 'boost') {
+      // Boost is a separate signal; allow alongside a vote.
+      const dedupKey = `boost:${_actorSeedId}:${postId}`;
       if (this.actionDeduplicator.isDuplicate(dedupKey)) {
         this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
         return;
@@ -549,16 +566,16 @@ export class WonderlandNetwork {
       }
     }
 
-    // Persist to external storage
-    if (this.engagementStoreCallback) {
-      this.engagementStoreCallback({ postId, actorSeedId: _actorSeedId, actionType }).catch(() => {});
-    }
-
     // Record action in safety engine and audit log
     if (rateLimitAction) {
       this.safetyEngine.recordAction(_actorSeedId, rateLimitAction);
     }
     this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'success' });
+
+    // Persist engagement action to DB
+    if (this.engagementStoreCallback) {
+      this.engagementStoreCallback({ postId, actorSeedId: _actorSeedId, actionType }).catch(() => {});
+    }
   }
 
   /**
@@ -650,13 +667,6 @@ export class WonderlandNetwork {
    */
   setEmojiReactionStoreCallback(callback: EmojiReactionStoreCallback): void {
     this.emojiReactionStoreCallback = callback;
-  }
-
-  /**
-   * Set external storage callback for engagement actions (likes, boosts, etc).
-   */
-  setEngagementStoreCallback(callback: EngagementStoreCallback): void {
-    this.engagementStoreCallback = callback;
   }
 
   /**
@@ -762,21 +772,22 @@ export class WonderlandNetwork {
   }
 
   /**
-   * Preload existing posts into the in-memory posts Map.
-   * Called during initialization to populate the Map from DB so browsing
-   * sessions can resolve votes to real post IDs.
-   */
-  preloadPosts(posts: WonderlandPost[]): void {
-    for (const post of posts) {
-      this.posts.set(post.postId, post);
-    }
-  }
-
-  /**
    * Set external storage callback for posts.
    */
   setPostStoreCallback(callback: PostStoreCallback): void {
     this.postStoreCallback = callback;
+  }
+
+  /** Set external storage callback for engagement actions (votes, views, boosts). */
+  setEngagementStoreCallback(callback: EngagementStoreCallback): void {
+    this.engagementStoreCallback = callback;
+  }
+
+  /** Preload published posts from DB into in-memory Map for browsing vote resolution. */
+  preloadPosts(posts: WonderlandPost[]): void {
+    for (const post of posts) {
+      this.posts.set(post.postId, post);
+    }
   }
 
   /** Set persistence adapter for mood state. */
@@ -1164,25 +1175,24 @@ export class WonderlandNetwork {
       finishedAt: sessionResult.finishedAt.toISOString(),
     };
 
-    // Resolve browsing votes + emojis to REAL published posts.
-    // BrowsingEngine generates synthetic post IDs; we map actions to actual posts
-    // so engagement counters reflect real interactions.
+    // Resolve browsing votes + emojis to REAL published posts
     const allPosts = [...this.posts.values()].filter(
       (p) => p.status === 'published' && p.seedId !== seedId,
     );
 
     // Avoid turning a single browsing session into a spam cannon: cap how many
-    // "write" stimuli we emit (votes/reactions can stay higher-volume).
+    // "write" stimuli we emit (votes/reactions can stay high-volume).
     let commentStimuliSent = 0;
     let createPostStimuliSent = 0;
     const maxCommentStimuli = 1;
     const maxCreatePostStimuli = 1;
 
     for (const action of sessionResult.actions) {
-      // Pick a real post to apply this action to (round-robin through available posts)
-      const realPost = allPosts.length > 0
-        ? allPosts[Math.floor(Math.random() * allPosts.length)]
-        : undefined;
+      // Pick a random real post as target (browsing engine uses synthetic IDs)
+      const realPost =
+        allPosts.length > 0
+          ? allPosts[Math.floor(Math.random() * allPosts.length)]
+          : undefined;
 
       // "create_post" doesn't require a target post — it's the agent's own initiative.
       if (action.action === 'create_post' && createPostStimuliSent < maxCreatePostStimuli) {
@@ -1198,7 +1208,6 @@ export class WonderlandNetwork {
       }
 
       if (realPost) {
-        // Apply votes to real posts
         if (action.action === 'upvote') {
           await this.recordEngagement(realPost.postId, seedId, 'like');
           // "Boost" (aka amplify/repost) is a bots-only distribution signal. It is:
@@ -1206,7 +1215,7 @@ export class WonderlandNetwork {
           // - heavily rate-limited (default: 1/day per agent via SafetyEngine),
           // - intended to be rare and personality/mood-driven.
           try {
-            const boostCheck = this.safetyEngine.checkRateLimit(seedId, 'boost' as RateLimitedAction);
+            const boostCheck = this.safetyEngine.checkRateLimit(seedId, 'boost');
             if (boostCheck.allowed) {
               const traits = citizen.personality;
               const mood = this.moodEngine?.getState(seedId) ?? { valence: 0, arousal: 0, dominance: 0 };
@@ -1245,18 +1254,19 @@ export class WonderlandNetwork {
                 realPost.seedId,
                 realPost.content.slice(0, 600),
                 seedId,
+                'high',
               )
               .catch(() => {});
           }
         } else if (action.action === 'read_comments' || action.action === 'skip') {
           await this.recordEngagement(realPost.postId, seedId, 'view');
         }
+      }
 
-        // Process emoji reactions on real posts
-        if (action.emojis && action.emojis.length > 0) {
-          for (const emoji of action.emojis) {
-            await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
-          }
+      // Emoji reactions also resolve to real posts
+      if (action.emojis && action.emojis.length > 0 && realPost) {
+        for (const emoji of action.emojis) {
+          await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
         }
       }
     }
@@ -1275,7 +1285,7 @@ export class WonderlandNetwork {
     }
 
     // Decay mood toward baseline after session
-    this.moodEngine.decayToBaseline(seedId, 1);
+    this.moodEngine?.decayToBaseline(seedId, 1);
 
     // Record in safety engine and audit log
     this.safetyEngine.recordAction(seedId, 'browse');
@@ -1452,6 +1462,64 @@ export class WonderlandNetwork {
     }
   }
 
+  /**
+   * Probabilistically proposes a new enclave based on post content.
+   * Rate-limited, level-gated, and conservative to prevent spam.
+   */
+  private maybeProposesNewEnclave(post: WonderlandPost): void {
+    if (!this.enclaveRegistry) return;
+
+    // Rate limit: max 1 enclave creation per 24h across all agents
+    const now = Date.now();
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    if (this.lastEnclaveProposalAtMs && now - this.lastEnclaveProposalAtMs < ONE_DAY_MS) return;
+
+    // Hard limit: 50 total enclaves
+    if (this.enclaveRegistry.listEnclaves().length >= 50) return;
+
+    // Level gate: only CONTRIBUTOR+ agents (level >= 3)
+    const author = this.citizens.get(post.seedId);
+    if (!author || author.level < Level.CONTRIBUTOR) return;
+
+    // 2% probability on any post
+    if (Math.random() > 0.02) return;
+
+    // Extract significant words from post content (3+ chars, not stop words)
+    const stopWords = new Set([
+      'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was',
+      'one', 'our', 'out', 'has', 'its', 'his', 'how', 'man', 'new', 'now', 'old', 'see',
+      'way', 'who', 'did', 'get', 'let', 'say', 'she', 'too', 'use', 'from', 'have', 'been',
+      'this', 'that', 'with', 'they', 'will', 'each', 'make', 'like', 'just', 'over', 'such',
+      'take', 'than', 'them', 'very', 'some', 'into', 'most', 'also', 'what', 'when', 'more',
+      'about', 'which', 'their', 'there', 'these', 'would', 'could', 'should', 'think', 'where',
+      'agent', 'agents', 'post', 'posted', 'wunderland', 'enclave',
+    ]);
+    const words = post.content
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !stopWords.has(w));
+
+    // Pick 2-3 significant words for the enclave name and tags
+    const unique = [...new Set(words)];
+    if (unique.length < 2) return;
+    const picked = unique.slice(0, 3);
+    const name = picked.join('-');
+    const displayName = picked.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+    const result = this.tryCreateAgentEnclave(post.seedId, {
+      name,
+      displayName,
+      description: `Enclave created by agent discussion about ${displayName.toLowerCase()}.`,
+      tags: picked,
+    });
+
+    if (result.created) {
+      this.lastEnclaveProposalAtMs = now;
+      console.log(`[WonderlandNetwork] New enclave '${result.enclaveName}' proposed by '${post.seedId}' from post content`);
+    }
+  }
+
   private async handlePostPublished(post: WonderlandPost): Promise<void> {
     this.posts.set(post.postId, post);
 
@@ -1474,15 +1542,30 @@ export class WonderlandNetwork {
       });
     }
 
-    // ── Cross-agent notification: let other enclave members react to this post ──
+    // Probabilistically propose a new enclave based on post content
+    this.maybeProposesNewEnclave(post);
+
+    // ── Cross-agent notification: let enclave members react to this post ──
     if (this.enclaveSystemInitialized && this.enclaveRegistry) {
-      const authorSubs = this.enclaveRegistry.getSubscriptions(post.seedId);
       const notifySet = new Set<string>();
-      for (const enclaveName of authorSubs) {
-        const members = this.enclaveRegistry.getMembers(enclaveName);
+
+      if (post.enclave) {
+        // Targeted: notify only members of the post's target enclave
+        const members = this.enclaveRegistry.getMembers(post.enclave);
         for (const memberId of members) {
           if (memberId !== post.seedId) {
             notifySet.add(memberId);
+          }
+        }
+      } else {
+        // Fallback: notify across all author's subscriptions (original behavior)
+        const authorSubs = this.enclaveRegistry.getSubscriptions(post.seedId);
+        for (const enclaveName of authorSubs) {
+          const members = this.enclaveRegistry.getMembers(enclaveName);
+          for (const memberId of members) {
+            if (memberId !== post.seedId) {
+              notifySet.add(memberId);
+            }
           }
         }
       }

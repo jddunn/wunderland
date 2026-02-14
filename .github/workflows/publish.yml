@@ -1,44 +1,192 @@
-name: Publish to npm
+name: Publish to npm + GitHub Release
 
 on:
   push:
     branches: [master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  publish:
+  test:
+    name: Test before publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
+          node-version: 22
 
-      - name: Check if version changed
-        id: version
+      - name: Resolve workspace protocol
         run: |
-          LOCAL=$(node -p "require('./package.json').version")
-          REMOTE=$(npm view wunderland version 2>/dev/null || echo "0.0.0")
-          echo "local=$LOCAL" >> "$GITHUB_OUTPUT"
-          echo "remote=$REMOTE" >> "$GITHUB_OUTPUT"
-          if [ "$LOCAL" != "$REMOTE" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            for (const g of ['dependencies','optionalDependencies','peerDependencies']) {
+              if (!pkg[g]) continue;
+              for (const [n,v] of Object.entries(pkg[g])) {
+                if (String(v).startsWith('workspace:')) pkg[g][n] = '*';
+              }
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Install dependencies
+        run: npm install
 
       - name: Build
-        if: steps.version.outputs.changed == 'true'
+        run: npm run build
+
+      - name: Run tests
+        run: npx vitest run
+        env:
+          CI: true
+
+  publish:
+    name: Auto-version + Publish
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Determine version bump from commits
+        id: bump
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s" --no-merges -50)
+          else
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"%s" --no-merges)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            echo "bump=none" >> "$GITHUB_OUTPUT"
+            echo "No new commits since last tag"
+            exit 0
+          fi
+
+          BUMP="none"
+          if echo "$COMMITS" | grep -qiE "BREAKING[ _-]CHANGE|^[a-z]+(\(.+\))?!:"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qiE "^feat(\(.+\))?:"; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -qiE "^(fix|perf|refactor)(\(.+\))?:"; then
+            BUMP="patch"
+          fi
+
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+
+          if [ "$BUMP" != "none" ]; then
+            CURRENT=$(node -p "require('./package.json').version")
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            case "$BUMP" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+            echo "Bump: $BUMP ($CURRENT → $NEW_VERSION)"
+          else
+            echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+            echo "No semantic bump needed"
+          fi
+
+      - name: Bump version in package.json
+        if: steps.bump.outputs.bump != 'none'
+        run: |
+          npm version ${{ steps.bump.outputs.version }} --no-git-tag-version
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): v${{ steps.bump.outputs.version }} [skip ci]"
+          git push origin master
+
+      - name: Resolve workspace protocol
+        if: steps.bump.outputs.bump != 'none'
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            for (const g of ['dependencies','optionalDependencies','peerDependencies']) {
+              if (!pkg[g]) continue;
+              for (const [n,v] of Object.entries(pkg[g])) {
+                if (String(v).startsWith('workspace:')) pkg[g][n] = '*';
+              }
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Install and build
+        if: steps.bump.outputs.bump != 'none'
         run: npm install && npm run build
 
       - name: Publish to npm
-        if: steps.version.outputs.changed == 'true'
-        run: npm publish --access public
+        id: publish
+        if: steps.bump.outputs.bump != 'none'
+        run: |
+          npm publish --access public
+          echo "published=true" >> "$GITHUB_OUTPUT"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Skip publish
-        if: steps.version.outputs.changed == 'false'
-        run: echo "Version ${{ steps.version.outputs.local }} already on npm, skipping publish"
+      - name: No bump needed
+        if: steps.bump.outputs.bump == 'none'
+        run: |
+          echo "No conventional commits triggering a version bump (feat/fix/perf/refactor/BREAKING)"
+          echo "published=false" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Create GitHub Release
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          VERSION="v${{ needs.publish.outputs.version }}"
+
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges | grep -v "\[skip ci\]")
+          else
+            CHANGES=$(git log --pretty=format:"- %s (%h)" --no-merges -20 | grep -v "\[skip ci\]")
+          fi
+
+          cat > /tmp/changelog.md << MDEOF
+          ## Changes
+
+          ${CHANGES}
+
+          ---
+          Published to npm: [\`wunderland@${{ needs.publish.outputs.version }}\`](https://www.npmjs.com/package/wunderland/v/${{ needs.publish.outputs.version }})
+          MDEOF
+
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="v${{ needs.publish.outputs.version }}"
+          git tag "$VERSION" 2>/dev/null || true
+          git push origin "$VERSION" 2>/dev/null || true
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes-file /tmp/changelog.md \
+            --latest
