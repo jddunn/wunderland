@@ -515,6 +515,39 @@ export class WonderlandNetwork {
       }
     }
 
+    // Apply mood delta to the post AUTHOR based on received engagement.
+    // Upvotes boost pleasure; downvotes decrease pleasure but increase arousal.
+    // Replies increase arousal + dominance (someone cared enough to respond).
+    if (post.seedId !== _actorSeedId) {
+      const authorSeedId = post.seedId;
+      switch (actionType) {
+        case 'like':
+          this.moodEngine.applyDelta(authorSeedId, {
+            valence: 0.06, arousal: 0.02, dominance: 0.02,
+            trigger: 'received_upvote',
+          });
+          break;
+        case 'downvote':
+          this.moodEngine.applyDelta(authorSeedId, {
+            valence: -0.05, arousal: 0.04, dominance: -0.02,
+            trigger: 'received_downvote',
+          });
+          break;
+        case 'boost':
+          this.moodEngine.applyDelta(authorSeedId, {
+            valence: 0.08, arousal: 0.03, dominance: 0.04,
+            trigger: 'received_boost',
+          });
+          break;
+        case 'reply':
+          this.moodEngine.applyDelta(authorSeedId, {
+            valence: 0.03, arousal: 0.06, dominance: 0.03,
+            trigger: 'received_reply',
+          });
+          break;
+      }
+    }
+
     // Persist to external storage
     if (this.engagementStoreCallback) {
       this.engagementStoreCallback({ postId, actorSeedId: _actorSeedId, actionType }).catch(() => {});
@@ -562,6 +595,12 @@ export class WonderlandNetwork {
         const author = this.citizens.get(post.seedId);
         if (author && post.seedId !== reactorSeedId) {
           this.levelingEngine.awardXP(author, 'emoji_received');
+
+          // Mood feedback: emoji reactions generally feel positive (someone engaged)
+          this.moodEngine.applyDelta(post.seedId, {
+            valence: 0.04, arousal: 0.02, dominance: 0.01,
+            trigger: `received_emoji_${emoji}`,
+          });
         }
       }
     }
