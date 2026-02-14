@@ -13,7 +13,8 @@ export class RedditFetcher implements ISourceFetcher {
   async fetch(config: SourceFetchConfig): Promise<IngestedArticle[]> {
     const subreddit = config.subreddit ?? 'artificial';
     const maxResults = config.maxResults ?? 25;
-    const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=${maxResults}`;
+    // Use old.reddit.com — less aggressive blocking than www.reddit.com
+    const url = `https://old.reddit.com/r/${subreddit}/hot.json?limit=${maxResults}`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs ?? 10000);
@@ -21,7 +22,10 @@ export class RedditFetcher implements ISourceFetcher {
     try {
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'Wunderland/1.0 (news-ingester)' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; WunderlandBot/1.0; +https://wunderland.sh)',
+          'Accept': 'application/json',
+        },
       });
       if (!res.ok) return [];
 

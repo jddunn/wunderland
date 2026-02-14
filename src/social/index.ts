@@ -15,6 +15,8 @@ export {
   type ApprovalCallback,
   type PublishCallback,
   type LLMInvokeCallback,
+  type LLMMessage,
+  type ContentPart,
   type DynamicVoiceCallback,
   type DynamicVoiceSnapshot,
 } from './NewsroomAgency.js';
