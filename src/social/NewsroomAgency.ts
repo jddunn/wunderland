@@ -134,7 +134,7 @@ export class NewsroomAgency {
   private guardrailsWorkingDirectory?: string;
 
   /** Optional mood snapshot provider for mood-aware writing. */
-  private moodSnapshotProvider?: () => { label?: MoodLabel; state?: PADState };
+  private moodSnapshotProvider?: () => { label?: MoodLabel; state?: PADState; recentDeltas?: Array<{ valence: number; arousal: number; dominance: number }> };
 
   /** Enclave names this agent is subscribed to (for enclave-aware posting). */
   private enclaveSubscriptions?: string[];
@@ -181,7 +181,7 @@ export class NewsroomAgency {
    * Provide a mood snapshot (PAD + label) for mood-aware prompting.
    * This is optional and safe to omit.
    */
-  setMoodSnapshotProvider(provider: (() => { label?: MoodLabel; state?: PADState }) | undefined): void {
+  setMoodSnapshotProvider(provider: (() => { label?: MoodLabel; state?: PADState; recentDeltas?: Array<{ valence: number; arousal: number; dominance: number }> }) | undefined): void {
     this.moodSnapshotProvider = provider;
   }
 
@@ -262,12 +262,9 @@ export class NewsroomAgency {
     // Phase 3: Publisher
     const replyToPostId =
       stimulus.payload.type === 'agent_reply' ? stimulus.payload.replyToPostId : undefined;
-    const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId);
-
-    // Attach enclave to post (replies inherit parent's enclave, so skip if reply)
-    if (targetEnclave && !replyToPostId) {
-      post.enclave = targetEnclave;
-    }
+    // Pass enclave so it's set on the post BEFORE publish callbacks fire
+    const enclave = (targetEnclave && !replyToPostId) ? targetEnclave : undefined;
+    const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId, enclave);
 
     return post;
   }
@@ -630,11 +627,16 @@ Respond with exactly one word: YES or NO`;
     const mood = this.moodSnapshotProvider?.();
     const moodLabel = mood?.label;
     const moodState = mood?.state;
+    // Resolve target enclave for voice modulation
+    const targetEnclave = this.resolveTargetEnclave(stimulus, topic);
+
     const voiceProfile = buildDynamicVoiceProfile({
       baseTraits,
       stimulus,
       moodLabel,
       moodState,
+      recentMoodDeltas: mood?.recentDeltas,
+      enclave: targetEnclave,
     });
 
     const writerOptions = (() => {
@@ -1000,6 +1002,8 @@ Respond with exactly one word: YES or NO`;
         stimulus,
         moodLabel,
         moodState,
+        recentMoodDeltas: this.moodSnapshotProvider?.()?.recentDeltas,
+        enclave: this.resolveTargetEnclave(stimulus, ''),
       });
       this.emitDynamicVoiceSnapshot(stimulus, profile, moodLabel, moodState);
       return `\n\n${buildDynamicVoicePromptSection(profile)}`;
@@ -1143,6 +1147,7 @@ ${moodSection}${dynamicVoiceSection}${promptSecurity}
     writerResult: { content: string; topic: string },
     manifestBuilder: InputManifestBuilder,
     replyToPostId?: string,
+    enclave?: string,
   ): Promise<WonderlandPost> {
     const seedId = this.config.seedConfig.seedId;
 
@@ -1163,6 +1168,7 @@ ${moodSection}${dynamicVoiceSection}${promptSecurity}
       publishedAt: this.config.requireApproval ? undefined : now,
       engagement: { likes: 0, downvotes: 0, boosts: 0, replies: 0, views: 0 },
       agentLevelAtPost: 1,
+      enclave,
     };
 
     if (this.config.requireApproval) {
