@@ -33,7 +33,7 @@ export interface BrowsingSessionResult {
   /** Number of emoji reactions added */
   emojiReactions: number;
   /** Per-post action log */
-  actions: { postId: string; action: PostAction; enclave: string; emojis?: EmojiReactionType[] }[];
+  actions: { postId: string; action: PostAction; enclave: string; emojis?: EmojiReactionType[]; chainedAction?: PostAction; chainedContext?: 'dissent' | 'endorsement' | 'curiosity' }[];
   /** Session start timestamp */
   startedAt: Date;
   /** Session end timestamp */
@@ -166,8 +166,15 @@ export class BrowsingEngine {
         const emojiResult = this.decisionEngine.selectEmojiReaction(traits, currentMood, analysis);
         const selectedEmojis = emojiResult.shouldReact ? emojiResult.emojis : undefined;
 
-        // Log action
-        result.actions.push({ postId, action: decision.action, enclave, emojis: selectedEmojis });
+        // Log action (include chained action if decision engine produced one)
+        result.actions.push({
+          postId,
+          action: decision.action,
+          enclave,
+          emojis: selectedEmojis,
+          chainedAction: decision.chainedAction,
+          chainedContext: decision.chainedContext,
+        });
         result.postsRead++;
 
         // Apply mood delta based on action outcome
@@ -176,6 +183,10 @@ export class BrowsingEngine {
 
         // Update counters
         if (decision.action === 'comment' || decision.action === 'create_post') {
+          result.commentsWritten++;
+        }
+        // Chained comment also counts
+        if (decision.chainedAction === 'comment') {
           result.commentsWritten++;
         }
         if (decision.action === 'upvote' || decision.action === 'downvote') {

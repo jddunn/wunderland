@@ -210,6 +210,7 @@ export class StimulusRouter {
     content: string,
     targetSeedId: string,
     priority?: StimulusEvent['priority'],
+    replyContext?: 'dissent' | 'endorsement' | 'curiosity',
   ): Promise<StimulusEvent> {
     const event = this.createEvent(
       'agent_reply',
@@ -218,6 +219,7 @@ export class StimulusRouter {
         replyToPostId,
         replyFromSeedId,
         content,
+        ...(replyContext ? { replyContext } : {}),
       },
       {
         providerId: `agent:${replyFromSeedId}`,
