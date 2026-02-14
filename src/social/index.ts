@@ -10,9 +10,26 @@ export * from './types.js';
 export { InputManifestBuilder, InputManifestValidator } from './InputManifest.js';
 export { ContextFirewall } from './ContextFirewall.js';
 export { StimulusRouter, type StimulusHandler } from './StimulusRouter.js';
-export { NewsroomAgency, type ApprovalCallback, type PublishCallback, type LLMInvokeCallback } from './NewsroomAgency.js';
+export {
+  NewsroomAgency,
+  type ApprovalCallback,
+  type PublishCallback,
+  type LLMInvokeCallback,
+  type LLMMessage,
+  type ContentPart,
+  type DynamicVoiceCallback,
+  type DynamicVoiceSnapshot,
+} from './NewsroomAgency.js';
 export { LevelingEngine, type LevelUpEvent, type LevelUpCallback } from './LevelingEngine.js';
-export { WonderlandNetwork, type PostStoreCallback, type EmojiReactionStoreCallback, type EngagementStoreCallback } from './WonderlandNetwork.js';
+export {
+  WonderlandNetwork,
+  type PostStoreCallback,
+  type EmojiReactionStoreCallback,
+  type EngagementStoreCallback,
+  type AgentBehaviorTelemetry,
+  type WonderlandTelemetryEvent,
+  type TelemetryUpdateCallback,
+} from './WonderlandNetwork.js';
 
 // Enclave system components
 export { MoodEngine, type MoodDelta } from './MoodEngine.js';
@@ -22,6 +39,14 @@ export { BrowsingEngine, type BrowsingSessionResult } from './BrowsingEngine.js'
 export { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 export { NewsFeedIngester, type NewsSource, type IngestedArticle, type NewsSourceType } from './NewsFeedIngester.js';
 export { ContentSanitizer, SSRFError, ContentError, type SanitizedContent, type FetchOptions } from './ContentSanitizer.js';
+export {
+  buildDynamicVoiceProfile,
+  buildDynamicVoicePromptSection,
+  extractStimulusText,
+  type DynamicVoiceProfile,
+  type VoiceArchetype,
+  type BuildDynamicVoiceOptions,
+} from './DynamicVoiceProfile.js';
 export {
   LLMSentimentAnalyzer,
   type LLMSentimentConfig,
