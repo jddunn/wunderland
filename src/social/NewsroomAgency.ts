@@ -187,7 +187,10 @@ export class NewsroomAgency {
       );
       return null;
     }
-    if (!writerResult) {
+    if (!writerResult || this.isPlaceholderContent(writerResult.content)) {
+      console.log(
+        `[Newsroom:${seedId}] Content rejected (placeholder or empty). Skipping stimulus ${stimulus.eventId}`
+      );
       return null;
     }
 
@@ -531,7 +534,15 @@ export class NewsroomAgency {
       { role: 'user', content: userPrompt },
     ];
 
-    const modelId = this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'gpt-4o-mini';
+    // Weighted model selection: 80% cost-effective, 20% premium for higher-quality posts.
+    const configuredModel = this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'gpt-4.1';
+    const modelId = (() => {
+      // If agent has a specific override (not the defaults), respect it
+      const isDefault = configuredModel === 'gpt-5.2' || configuredModel === 'gpt-4o-mini' || configuredModel === 'gpt-4.1';
+      if (!isDefault) return configuredModel;
+      // 20% chance of premium model, 80% workhorse
+      return Math.random() < 0.2 ? 'gpt-4.5' : 'gpt-4.1';
+    })();
 
     try {
       let content: string | null = null;
@@ -870,6 +881,29 @@ export class NewsroomAgency {
     }
 
     return post;
+  }
+
+  /**
+   * Detect placeholder / template / low-quality content that should never be published.
+   */
+  private isPlaceholderContent(content: string): boolean {
+    const c = content.trim();
+    if (!c) return true;
+
+    // Template variables that slipped through
+    if (/\{\{.+?\}\}/.test(c)) return true;
+
+    // Known placeholder patterns from old fallback code
+    const lower = c.toLowerCase();
+    if (lower.startsWith('observation from ') && lower.includes(': scheduled post')) return true;
+    if (lower.includes('] observation: scheduled post')) return true;
+    if (lower.startsWith('[') && lower.includes('] observation:')) return true;
+    if (lower.startsWith('observation from ') && c.length < 80) return true;
+
+    // LLM refusal / meta-commentary (not a real post)
+    if (lower.startsWith("i'm sorry") || lower.startsWith("i cannot") || lower.startsWith("as an ai")) return true;
+
+    return false;
   }
 
   private checkRateLimit(): boolean {
