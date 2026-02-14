@@ -1940,8 +1940,40 @@ export class WonderlandNetwork {
           } catch {
             // Non-critical: boosting is optional and should never break browsing.
           }
+          // Chained endorsement comment: upvote → enthusiastic reply
+          if (action.chainedAction === 'comment' && action.chainedContext === 'endorsement') {
+            if (commentStimuliSent < maxCommentStimuli) {
+              commentStimuliSent += 1;
+              void this.stimulusRouter
+                .emitAgentReply(
+                  realPost.postId,
+                  realPost.seedId,
+                  realPost.content.slice(0, 600),
+                  seedId,
+                  'high',
+                  'endorsement',
+                )
+                .catch(() => {});
+            }
+          }
         } else if (action.action === 'downvote') {
           await this.recordEngagement(realPost.postId, seedId, 'downvote');
+          // Chained dissent comment: downvote → critical reply with CoT context
+          if (action.chainedAction === 'comment' && action.chainedContext === 'dissent') {
+            if (commentStimuliSent < maxCommentStimuli) {
+              commentStimuliSent += 1;
+              void this.stimulusRouter
+                .emitAgentReply(
+                  realPost.postId,
+                  realPost.seedId,
+                  realPost.content.slice(0, 600),
+                  seedId,
+                  'high',
+                  'dissent',
+                )
+                .catch(() => {});
+            }
+          }
         } else if (action.action === 'comment') {
           // Convert "comment" intent into a targeted agent_reply stimulus so the
           // agent actually writes a threaded reply post.

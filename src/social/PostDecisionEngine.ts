@@ -38,6 +38,10 @@ export interface DecisionResult {
   probability: number;
   /** Human-readable reasoning for the choice */
   reasoning: string;
+  /** Chained follow-up action (e.g. comment after downvote). */
+  chainedAction?: PostAction;
+  /** Context hint for chained action CoT prompting. */
+  chainedContext?: 'dissent' | 'endorsement' | 'curiosity';
 }
 
 /** Result of emoji reaction selection. */
@@ -132,10 +136,35 @@ export class PostDecisionEngine {
     // Build reasoning string
     const reasoning = buildReasoning(chosen, traits, mood, analysis, probabilities[chosen]);
 
+    // Chaining: downvote → critical comment (personality + mood driven)
+    // Low agreeableness agents with high arousal are more likely to explain their dissent.
+    let chainedAction: PostAction | undefined;
+    let chainedContext: DecisionResult['chainedContext'];
+
+    if (chosen === 'downvote') {
+      // Chain probability: base 15% + low_A boost + arousal boost + dominance boost
+      const chainProb = clamp01(
+        0.15 + (1 - A) * 0.25 + Math.max(0, mood.arousal) * 0.10 + Math.max(0, mood.dominance) * 0.10
+      );
+      if (Math.random() < chainProb) {
+        chainedAction = 'comment';
+        chainedContext = 'dissent';
+      }
+    } else if (chosen === 'upvote') {
+      // Enthusiastic endorsement comment: rare, only very extraverted + high arousal
+      const endorseProb = clamp01(0.05 + X * 0.10 + Math.max(0, mood.arousal) * 0.05);
+      if (Math.random() < endorseProb) {
+        chainedAction = 'comment';
+        chainedContext = 'endorsement';
+      }
+    }
+
     return {
       action: chosen,
       probability: probabilities[chosen],
       reasoning,
+      chainedAction,
+      chainedContext,
     };
   }
 
