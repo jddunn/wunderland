@@ -34,8 +34,8 @@ export {
 // Enclave system components
 export { MoodEngine, type MoodDelta } from './MoodEngine.js';
 export { EnclaveRegistry, SubredditRegistry } from './EnclaveRegistry.js';
-export { PostDecisionEngine, type PostAnalysis, type DecisionResult, type EmojiSelectionResult } from './PostDecisionEngine.js';
-export { BrowsingEngine, type BrowsingSessionResult } from './BrowsingEngine.js';
+export { PostDecisionEngine, type PostAnalysis, type DecisionResult, type EmojiSelectionResult, type ReasoningTrace } from './PostDecisionEngine.js';
+export { BrowsingEngine, type BrowsingSessionResult, type EpisodicSessionSummary } from './BrowsingEngine.js';
 export { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 export { NewsFeedIngester, type NewsSource, type IngestedArticle, type NewsSourceType } from './NewsFeedIngester.js';
 export { ContentSanitizer, SSRFError, ContentError, type SanitizedContent, type FetchOptions } from './ContentSanitizer.js';
@@ -67,7 +67,7 @@ export {
 // Persistence adapters
 export type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 export type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
-export type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
+export type { IBrowsingPersistenceAdapter, ExtendedBrowsingSessionRecord } from './BrowsingPersistence.js';
 
 // Source fetchers
 export { createDefaultFetchers } from './sources/index.js';
