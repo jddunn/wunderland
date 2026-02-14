@@ -79,6 +79,9 @@ export class MoodEngine extends EventEmitter {
   /** Recent mood deltas per agent for trajectory computation (newest first, max 16). */
   private recentDeltas: Map<string, Array<{ valence: number; arousal: number; dominance: number }>> = new Map();
 
+  /** Per-agent count of consecutive ticks spent in a sustained mood deviation. */
+  private sustainedMoodTicks: Map<string, number> = new Map();
+
   /** Set the persistence adapter for durable mood state. */
   setPersistenceAdapter(adapter: IMoodPersistenceAdapter): void {
     this.persistenceAdapter = adapter;
@@ -119,10 +122,29 @@ export class MoodEngine extends EventEmitter {
     const agentTraits = this.traits.get(seedId);
     const sensitivity = 0.5 + (agentTraits?.emotionality ?? 0.5) * 0.8;
 
+    // Mood inertia: if the agent has sustained a mood deviation for many ticks,
+    // opposing deltas (ones that push back toward baseline) are dampened.
+    // Aligned deltas (pushing further from baseline) are not dampened.
+    const baseline = this.baselines.get(seedId);
+    const sustainedTicks = this.sustainedMoodTicks.get(seedId) ?? 0;
+    const inertiaDampen = sustainedTicks > 3 ? Math.min(0.35, (sustainedTicks - 3) * 0.05) : 0;
+
+    const applyInertia = (currentVal: number, baseVal: number, deltaVal: number): number => {
+      if (inertiaDampen === 0 || !baseline) return deltaVal * sensitivity;
+      // Is this delta pushing TOWARD baseline (opposing current deviation)?
+      const deviation = currentVal - baseVal;
+      const pushingBack = (deviation > 0 && deltaVal < 0) || (deviation < 0 && deltaVal > 0);
+      if (pushingBack) {
+        // Dampen opposing stimuli — sustained moods resist reversal
+        return deltaVal * sensitivity * (1 - inertiaDampen);
+      }
+      return deltaVal * sensitivity;
+    };
+
     const newState: PADState = {
-      valence: clamp(current.valence + delta.valence * sensitivity),
-      arousal: clamp(current.arousal + delta.arousal * sensitivity),
-      dominance: clamp(current.dominance + delta.dominance * sensitivity),
+      valence: clamp(current.valence + applyInertia(current.valence, baseline?.valence ?? 0, delta.valence)),
+      arousal: clamp(current.arousal + applyInertia(current.arousal, baseline?.arousal ?? 0, delta.arousal)),
+      dominance: clamp(current.dominance + applyInertia(current.dominance, baseline?.dominance ?? 0, delta.dominance)),
     };
 
     this.states.set(seedId, newState);
@@ -196,6 +218,15 @@ export class MoodEngine extends EventEmitter {
   /**
    * Exponentially decay the agent's current mood toward their personality baseline.
    *
+   * Decay rate is personality-driven:
+   * - High emotionality → faster recovery (bounce back quickly)
+   * - High conscientiousness → slower decay (ruminate longer, hold moods)
+   * - Base rate: 0.05, effective range: ~0.025 (ruminative) to ~0.09 (resilient)
+   *
+   * Mood inertia: sustained mood states (5+ ticks in same region) resist change,
+   * reducing decay by up to 40%. This creates emotional momentum — agents don't
+   * snap back to baseline after one interaction.
+   *
    * @param seedId  Agent identifier.
    * @param deltaTime  Time elapsed since last decay tick (arbitrary unit; 1 = one tick).
    */
@@ -204,8 +235,39 @@ export class MoodEngine extends EventEmitter {
     const baseline = this.baselines.get(seedId);
     if (!current || !baseline) return;
 
-    const decayRate = 0.05;
-    const factor = 1 - Math.exp(-decayRate * deltaTime);
+    const agentTraits = this.traits.get(seedId);
+    const E = agentTraits?.emotionality ?? 0.5;
+    const C = agentTraits?.conscientiousness ?? 0.5;
+
+    // Personality-driven decay rate:
+    // High E → faster recovery (E * 0.5 boost)
+    // High C → slower decay (C * 0.3 reduction)
+    // Effective range: ~0.025 (low E, high C) to ~0.09 (high E, low C)
+    const baseDecayRate = 0.05;
+    const personalityDecayRate = baseDecayRate * (0.6 + E * 0.5 + (1 - C) * 0.3);
+
+    // Mood inertia: how far from baseline on each dimension?
+    // Sustained deviations resist decay (emotional momentum).
+    const deviationMagnitude = Math.sqrt(
+      (current.valence - baseline.valence) ** 2 +
+      (current.arousal - baseline.arousal) ** 2 +
+      (current.dominance - baseline.dominance) ** 2,
+    );
+
+    // Track sustained mood ticks for inertia buildup
+    let sustainedTicks = this.sustainedMoodTicks.get(seedId) ?? 0;
+    if (deviationMagnitude > 0.08) {
+      sustainedTicks = Math.min(sustainedTicks + 1, 20);
+    } else {
+      sustainedTicks = Math.max(0, sustainedTicks - 2);
+    }
+    this.sustainedMoodTicks.set(seedId, sustainedTicks);
+
+    // Inertia dampens decay: up to 40% reduction after 10+ sustained ticks
+    const inertiaFactor = 1 - Math.min(0.4, sustainedTicks * 0.04);
+
+    const effectiveDecayRate = personalityDecayRate * inertiaFactor;
+    const factor = 1 - Math.exp(-effectiveDecayRate * deltaTime);
 
     const newState: PADState = {
       valence: current.valence + (baseline.valence - current.valence) * factor,
