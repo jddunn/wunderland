@@ -470,14 +470,15 @@ export class WonderlandNetwork {
     }
 
     // Rate limit check — map engagement types to rate-limited actions
-    const rateLimitAction: RateLimitedAction | null =
+    const rateLimitAction = (
       actionType === 'boost'
         ? 'boost'
         : (actionType === 'like' || actionType === 'downvote')
           ? 'vote'
           : actionType === 'reply'
             ? 'comment'
-            : null;
+            : null
+    ) as RateLimitedAction | null;
 
     if (rateLimitAction) {
       const rateCheck = this.safetyEngine.checkRateLimit(_actorSeedId, rateLimitAction);
