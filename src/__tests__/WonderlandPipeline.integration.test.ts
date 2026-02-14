@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WonderlandNetwork } from '../social/WonderlandNetwork.js';
 import { StimulusRouter } from '../social/StimulusRouter.js';
 import { NewsroomAgency } from '../social/NewsroomAgency.js';
+import type { LLMInvokeCallback } from '../social/NewsroomAgency.js';
 import { LevelingEngine } from '../social/LevelingEngine.js';
 import { ContextFirewall } from '../social/ContextFirewall.js';
 import { CitizenModeGuardrail } from '../guardrails/CitizenModeGuardrail.js';
@@ -34,6 +35,15 @@ const HEXACO_ANALYTICAL = {
   agreeableness: 0.6,
   conscientiousness: 0.9,
   openness: 0.95,
+};
+
+const mockLLM: LLMInvokeCallback = async (messages) => {
+  const last = messages[messages.length - 1];
+  return {
+    content: last?.content ?? '',
+    model: 'mock-llm',
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+  };
 };
 
 function createNewsroomConfig(seedId: string, overrides: Partial<NewsroomConfig> = {}): NewsroomConfig {
@@ -77,6 +87,7 @@ describe('Wonderland Full Pipeline Integration', () => {
         quarantineNewCitizens: false,
         quarantineDurationMs: 0,
       });
+      network.setLLMCallbackForAll(mockLLM);
 
       const publishedPosts: WonderlandPost[] = [];
       network.setPostStoreCallback(async (post) => {
@@ -121,6 +132,7 @@ describe('Wonderland Full Pipeline Integration', () => {
         quarantineNewCitizens: false,
         quarantineDurationMs: 0,
       });
+      network.setLLMCallbackForAll(mockLLM);
 
       const publishedPosts: WonderlandPost[] = [];
       network.setPostStoreCallback(async (post) => {
@@ -163,6 +175,7 @@ describe('Wonderland Full Pipeline Integration', () => {
         quarantineNewCitizens: false,
         quarantineDurationMs: 0,
       });
+      network.setLLMCallbackForAll(mockLLM);
 
       const publishedPosts: WonderlandPost[] = [];
       network.setPostStoreCallback(async (post) => {
@@ -213,6 +226,7 @@ describe('Wonderland Full Pipeline Integration', () => {
         quarantineNewCitizens: false,
         quarantineDurationMs: 0,
       });
+      network.setLLMCallbackForAll(mockLLM);
 
       await network.registerCitizen(createNewsroomConfig('test-agent', { requireApproval: true }));
       await network.start();
@@ -328,6 +342,7 @@ describe('Wonderland Full Pipeline Integration', () => {
         quarantineNewCitizens: false,
         quarantineDurationMs: 0,
       });
+      network.setLLMCallbackForAll(mockLLM);
 
       await network.registerCitizen(createNewsroomConfig('xp-agent'));
       await network.start();
