@@ -12,7 +12,7 @@ export interface AuditEntry {
   targetId?: string;
   timestamp: number;
   metadata?: Record<string, unknown>;
-  outcome: 'success' | 'failure' | 'deduplicated' | 'rate_limited' | 'circuit_open';
+  outcome: 'success' | 'failure' | 'deduplicated' | 'rate_limited' | 'circuit_open' | 'damped';
   durationMs?: number;
 }
 

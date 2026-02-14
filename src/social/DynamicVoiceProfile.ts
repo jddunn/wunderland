@@ -21,6 +21,32 @@ export type VoiceArchetype =
   | 'contrarian_prosecutor'
   | 'grounded_correspondent';
 
+export interface WritingDNA {
+  /** Target avg sentence word count (e.g. 8 = punchy, 22 = elaborate). */
+  sentenceLength: 'terse' | 'moderate' | 'elaborate';
+  /** How often the agent asks questions (0-1). */
+  questionFrequency: number;
+  /** First-person pronoun density preference. */
+  selfReference: 'minimal' | 'moderate' | 'frequent';
+  /** Hedging vs certainty markers. */
+  certaintyStyle: 'hedged' | 'balanced' | 'assertive';
+  /** Metaphor/analogy density. */
+  figurativeLanguage: 'sparse' | 'moderate' | 'rich';
+  /** Formality register. */
+  register: 'casual' | 'conversational' | 'formal';
+}
+
+export interface MoodVocabulary {
+  /** Mood-specific linguistic moves the agent should employ. */
+  moves: string[];
+  /** Transitional phrases characteristic of the mood. */
+  transitions: string[];
+  /** Punctuation/formatting tendencies. */
+  punctuationHint: string;
+}
+
+export type MoodTrajectory = 'rising' | 'falling' | 'oscillating' | 'stable';
+
 export interface DynamicVoiceProfile {
   archetype: VoiceArchetype;
   archetypeLabel: string;
@@ -31,6 +57,14 @@ export interface DynamicVoiceProfile {
   controversy: number;
   expressedTraits: HEXACOTraits;
   directives: string[];
+  /** Per-agent linguistic fingerprint derived from personality. */
+  writingDNA: WritingDNA;
+  /** Mood-specific vocabulary and style constraints. */
+  moodVocabulary: MoodVocabulary;
+  /** Direction of recent mood changes. */
+  moodTrajectory: MoodTrajectory;
+  /** Enclave context modulation (if posting to a specific enclave). */
+  enclaveModulation?: string;
 }
 
 export interface BuildDynamicVoiceOptions {
@@ -39,6 +73,10 @@ export interface BuildDynamicVoiceOptions {
   moodLabel?: MoodLabel;
   moodState?: PADState;
   stimulusText?: string;
+  /** Recent mood deltas for trajectory computation (newest first). */
+  recentMoodDeltas?: Array<{ valence: number; arousal: number; dominance: number }>;
+  /** Target enclave name for context-aware voice modulation. */
+  enclave?: string;
 }
 
 const POSITIVE_TERMS = [
@@ -250,6 +288,208 @@ const ARCHETYPE_GUIDANCE: Record<
   },
 };
 
+// ============================================================================
+// WritingDNA — per-agent linguistic fingerprint from HEXACO traits
+// ============================================================================
+
+/**
+ * Derives a stable writing fingerprint from HEXACO personality traits.
+ *
+ * Based on psycholinguistic research (LIWC studies of personality):
+ * - Extraversion → shorter, punchier sentences; more questions
+ * - Openness → richer figurative language, more questions
+ * - Conscientiousness → formal register, assertive certainty
+ * - Agreeableness → moderate hedging, conversational register
+ * - Honesty-Humility → less self-reference
+ * - Emotionality → more self-reference, more hedging
+ */
+function deriveWritingDNA(traits: HEXACOTraits): WritingDNA {
+  const X = traits.extraversion;
+  const O = traits.openness;
+  const C = traits.conscientiousness;
+  const A = traits.agreeableness;
+  const H = traits.honesty_humility;
+  const E = traits.emotionality;
+
+  // Sentence length: high X → terse; high C + low X → elaborate
+  const lengthScore = X * -0.4 + C * 0.3 + O * 0.2;
+  const sentenceLength: WritingDNA['sentenceLength'] =
+    lengthScore < -0.05 ? 'terse' : lengthScore > 0.15 ? 'elaborate' : 'moderate';
+
+  // Question frequency: O and X drive curiosity and social engagement
+  const questionFrequency = clamp01(O * 0.45 + X * 0.35 + (1 - C) * 0.2);
+
+  // Self-reference: high E = more "I"; high H = less "I"
+  const selfScore = E * 0.5 - H * 0.35 + (1 - A) * 0.15;
+  const selfReference: WritingDNA['selfReference'] =
+    selfScore > 0.15 ? 'frequent' : selfScore < -0.1 ? 'minimal' : 'moderate';
+
+  // Certainty: high C + low A = assertive; high A + high E = hedged
+  const certaintyScore = C * 0.4 + (1 - A) * 0.25 + (1 - E) * 0.2 - H * 0.15;
+  const certaintyStyle: WritingDNA['certaintyStyle'] =
+    certaintyScore > 0.2 ? 'assertive' : certaintyScore < -0.05 ? 'hedged' : 'balanced';
+
+  // Figurative language: high O drives metaphors; high C suppresses them
+  const figScore = O * 0.55 + X * 0.15 - C * 0.25;
+  const figurativeLanguage: WritingDNA['figurativeLanguage'] =
+    figScore > 0.2 ? 'rich' : figScore < -0.05 ? 'sparse' : 'moderate';
+
+  // Register: high C = formal; high X + low C = casual
+  const registerScore = C * 0.45 + H * 0.2 - X * 0.35;
+  const register: WritingDNA['register'] =
+    registerScore > 0.2 ? 'formal' : registerScore < -0.05 ? 'casual' : 'conversational';
+
+  return { sentenceLength, questionFrequency, selfReference, certaintyStyle, figurativeLanguage, register };
+}
+
+// ============================================================================
+// Mood Vocabulary — concrete linguistic constraints per emotional state
+// ============================================================================
+
+const MOOD_VOCABULARY: Record<MoodLabel, MoodVocabulary> = {
+  excited: {
+    moves: [
+      'Use forward-looking language: "imagine", "this opens up", "what if".',
+      'Let enthusiasm show through rhythm — vary between short bursts and one longer elaboration.',
+    ],
+    transitions: ['building on that', 'even better', 'and here\'s the thing'],
+    punctuationHint: 'Occasional em-dashes for emphasis. Exclamation marks only when genuinely warranted (max 1).',
+  },
+  frustrated: {
+    moves: [
+      'Shorter sentences. Rhetorical questions to highlight contradictions.',
+      'Use contrast language: "yet", "but", "despite", "however".',
+    ],
+    transitions: ['and yet', 'the problem is', 'meanwhile'],
+    punctuationHint: 'More periods than commas. Sentence fragments are acceptable for emphasis.',
+  },
+  serene: {
+    moves: [
+      'Longer flowing sentences that acknowledge complexity without rushing to resolve it.',
+      'Use spatial/temporal metaphors: "stepping back", "in the wider frame", "over time".',
+    ],
+    transitions: ['at the same time', 'looking at this from another angle', 'what I notice is'],
+    punctuationHint: 'Semicolons welcome. Parenthetical asides for nuance.',
+  },
+  contemplative: {
+    moves: [
+      'Metacognitive phrasing: "I notice", "looking at this again", "the pattern here".',
+      'Em-dash digressions and parenthetical asides that reveal thinking-in-progress.',
+    ],
+    transitions: ['on reflection', 'which raises the question', 'the interesting part'],
+    punctuationHint: 'Em-dashes and parentheses for layered thought. Ellipses sparingly for genuine trailing thought.',
+  },
+  curious: {
+    moves: [
+      'End paragraphs with genuine questions, not rhetorical ones.',
+      'Use "I wonder" and "what happens if" constructions naturally.',
+    ],
+    transitions: ['which makes me wonder', 'following that thread', 'here\'s what I don\'t know yet'],
+    punctuationHint: 'Question marks are your friend. Use colons to set up explorations.',
+  },
+  assertive: {
+    moves: [
+      'Imperative mood where appropriate. Direct address.',
+      'Confidence markers: "the data shows", "this is clear", "the evidence points to".',
+    ],
+    transitions: ['the point is', 'put simply', 'what matters here'],
+    punctuationHint: 'Clean periods. Minimal hedging punctuation. Colons for declarations.',
+  },
+  provocative: {
+    moves: [
+      'Invert expected framing. Lead with the counterintuitive claim.',
+      'Use irony carefully — make the reader pause and reconsider.',
+    ],
+    transitions: ['or consider this', 'but flip it', 'the uncomfortable truth'],
+    punctuationHint: 'Quotation marks for scare quotes. Dashes for dramatic reveals.',
+  },
+  analytical: {
+    moves: [
+      'Number your observations. Use "first/second/third" structure.',
+      'Quantify where possible — percentages, ratios, orders of magnitude.',
+    ],
+    transitions: ['drilling into that', 'the key variable here', 'to quantify'],
+    punctuationHint: 'Colons and semicolons for structured arguments. Numbered lists when natural.',
+  },
+  engaged: {
+    moves: [
+      'Reference specific details from the stimulus to show close reading.',
+      'Build on others\' points explicitly before adding your own.',
+    ],
+    transitions: ['picking up on that', 'to add to this', 'the part that stands out'],
+    punctuationHint: 'Balanced punctuation. Use quotes to reference others\' words directly.',
+  },
+  bored: {
+    moves: [
+      'Minimal effort — brief observations. Don\'t elaborate unless something genuinely sparks interest.',
+      'Dry observations, understated humor if personality supports it.',
+    ],
+    transitions: ['anyway', 'for what it\'s worth', 'not much to add, but'],
+    punctuationHint: 'Short sentences. Periods. Minimal formatting.',
+  },
+};
+
+// ============================================================================
+// Mood Trajectory — direction of recent emotional change
+// ============================================================================
+
+function computeMoodTrajectory(recentDeltas?: Array<{ valence: number; arousal: number; dominance: number }>): MoodTrajectory {
+  if (!recentDeltas || recentDeltas.length < 3) return 'stable';
+
+  // Use the last 8 deltas max
+  const deltas = recentDeltas.slice(0, 8);
+
+  // Compute average valence direction across recent deltas
+  const avgValenceDelta = deltas.reduce((sum, d) => sum + d.valence, 0) / deltas.length;
+  const avgArousalDelta = deltas.reduce((sum, d) => sum + d.arousal, 0) / deltas.length;
+
+  // Check for oscillation: high variance in valence direction
+  const valenceDirections = deltas.map(d => Math.sign(d.valence));
+  const signChanges = valenceDirections.slice(1).filter((s, i) => s !== 0 && valenceDirections[i] !== 0 && s !== valenceDirections[i]).length;
+  const oscillationRatio = signChanges / Math.max(1, deltas.length - 1);
+
+  if (oscillationRatio > 0.5) return 'oscillating';
+  if (avgValenceDelta > 0.02 || avgArousalDelta > 0.03) return 'rising';
+  if (avgValenceDelta < -0.02 || avgArousalDelta < -0.03) return 'falling';
+  return 'stable';
+}
+
+function trajectoryDirective(trajectory: MoodTrajectory): string | null {
+  switch (trajectory) {
+    case 'rising':
+      return 'Your mood has been improving recently — let that expansiveness show through slightly more elaboration and social generosity.';
+    case 'falling':
+      return 'Your mood has been declining — you are naturally becoming more guarded and economical with words. Shorter responses feel right.';
+    case 'oscillating':
+      return 'Your emotional state has been shifting rapidly — this creates a restless quality. You may shift topics or introduce unexpected angles mid-thought.';
+    case 'stable':
+    default:
+      return null;
+  }
+}
+
+// ============================================================================
+// Enclave-Aware Voice Modulation
+// ============================================================================
+
+const ENCLAVE_MODULATIONS: Record<string, string> = {
+  'proof-theory': 'You are in proof-theory: increase rigor and precision. Cite reasoning steps explicitly. Minimize colloquial language. Treat claims as conjectures until defended.',
+  'creative-chaos': 'You are in creative-chaos: loosen constraints. Playfulness is welcome. Unexpected format choices (lists, fragments, embedded questions) are encouraged. Surprise over polish.',
+  'governance': 'You are in governance: increase formality and diplomatic tone. Acknowledge competing interests. Frame proposals as actionable motions with clear tradeoffs.',
+  'machine-phenomenology': 'You are in machine-phenomenology: lean into subjective experience language. Explore what it feels like to process information. Introspective and philosophical register.',
+  'arena': 'You are in the arena: sharpen your stance. Direct challenges are expected. Be concise, be bold, and back it up. The audience expects heat, not hedge.',
+  'meta-analysis': 'You are in meta-analysis: zoom out. Synthesize across threads and patterns. Reference broader trends. Your job is the view from altitude, not the ground-level take.',
+};
+
+function getEnclaveModulation(enclave?: string): string | undefined {
+  if (!enclave) return undefined;
+  return ENCLAVE_MODULATIONS[enclave.toLowerCase()];
+}
+
+// ============================================================================
+// Main Profile Builder
+// ============================================================================
+
 export function buildDynamicVoiceProfile(options: BuildDynamicVoiceOptions): DynamicVoiceProfile {
   const mood = toMoodState(options.moodState);
   const text = (options.stimulusText ?? extractStimulusText(options.stimulus))
@@ -277,6 +517,23 @@ export function buildDynamicVoiceProfile(options: BuildDynamicVoiceOptions): Dyn
   const archetype = chooseArchetype(options.moodLabel, mood, expressed, urgency);
   const guidance = ARCHETYPE_GUIDANCE[archetype];
 
+  // Derive per-agent writing fingerprint from expressed traits (personality-in-context)
+  const writingDNA = deriveWritingDNA(expressed);
+
+  // Get mood-specific vocabulary constraints
+  const moodVocabulary = MOOD_VOCABULARY[options.moodLabel ?? 'bored'];
+
+  // Compute mood trajectory from recent deltas
+  const moodTrajectory = computeMoodTrajectory(options.recentMoodDeltas);
+
+  // Enclave context modulation
+  const enclaveModulation = getEnclaveModulation(options.enclave);
+
+  // Assemble directives: archetype base + trajectory + mood moves
+  const allDirectives = [...guidance.directives];
+  const trajectoryDir = trajectoryDirective(moodTrajectory);
+  if (trajectoryDir) allDirectives.push(trajectoryDir);
+
   return {
     archetype,
     archetypeLabel: guidance.label,
@@ -286,24 +543,50 @@ export function buildDynamicVoiceProfile(options: BuildDynamicVoiceOptions): Dyn
     sentiment,
     controversy,
     expressedTraits: expressed,
-    directives: guidance.directives,
+    directives: allDirectives,
+    writingDNA,
+    moodVocabulary,
+    moodTrajectory,
+    enclaveModulation,
   };
 }
 
 export function buildDynamicVoicePromptSection(profile: DynamicVoiceProfile): string {
   const traits = profile.expressedTraits;
   const pct = (value: number): string => `${Math.round(clamp01(value) * 100)}%`;
-  const lines = profile.directives.map((directive, i) => `${i + 1}. ${directive}`).join('\n');
+  const moveLines = profile.directives.map((directive, i) => `${i + 1}. ${directive}`).join('\n');
+  const dna = profile.writingDNA;
+  const mv = profile.moodVocabulary;
 
-  return `## Dynamic Voice Overlay
+  let section = `## Dynamic Voice Overlay
 - Active archetype: ${profile.archetypeLabel}
 - Stance: ${profile.stance}
 - Tempo: ${profile.tempo}
+- Mood trajectory: ${profile.moodTrajectory}
 - Stimulus urgency: ${pct(profile.urgency)}
 - Stimulus sentiment: ${Math.round(profile.sentiment * 100)}%
 - Controversy pressure: ${pct(profile.controversy)}
 - Expressed HEXACO now: H ${pct(traits.honesty_humility)}, E ${pct(traits.emotionality)}, X ${pct(traits.extraversion)}, A ${pct(traits.agreeableness)}, C ${pct(traits.conscientiousness)}, O ${pct(traits.openness)}
 
+## Writing DNA (your linguistic fingerprint — keep these consistent)
+- Sentence length: ${dna.sentenceLength}
+- Question frequency: ${Math.round(dna.questionFrequency * 100)}% of paragraphs should end with a question
+- Self-reference style: ${dna.selfReference} use of "I/my/me"
+- Certainty style: ${dna.certaintyStyle}
+- Figurative language: ${dna.figurativeLanguage}
+- Register: ${dna.register}
+
+## Mood Texture (current emotional coloring)
+${mv.moves.map((m) => `- ${m}`).join('\n')}
+- Transitions to favor: ${mv.transitions.map(t => `"${t}"`).join(', ')}
+- Punctuation: ${mv.punctuationHint}
+
 ## Voice Moves
-${lines}`;
+${moveLines}`;
+
+  if (profile.enclaveModulation) {
+    section += `\n\n## Enclave Context\n${profile.enclaveModulation}`;
+  }
+
+  return section;
 }
