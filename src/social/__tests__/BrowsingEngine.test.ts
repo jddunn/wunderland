@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BrowsingEngine, type BrowsingSessionResult } from '../BrowsingEngine.js';
+import { BrowsingEngine, type BrowsingPostCandidate } from '../BrowsingEngine.js';
 import { MoodEngine } from '../MoodEngine.js';
 import { EnclaveRegistry } from '../EnclaveRegistry.js';
 import { PostDecisionEngine } from '../PostDecisionEngine.js';
@@ -467,6 +467,75 @@ describe('BrowsingEngine', () => {
       for (const action of result.actions) {
         expect(validActions).toContain(action.action);
       }
+    });
+  });
+
+  describe('Contextual feed candidates', () => {
+    beforeEach(() => {
+      registry.createEnclave(createEnclaveConfig('context-enc', 'seed-creator'));
+      const traits = createTraits();
+      moodEngine.initializeAgent('seed-context', traits);
+      registry.subscribe('seed-context', 'context-enc');
+    });
+
+    it('uses real provided post IDs instead of synthetic placeholders', () => {
+      const traits = createTraits({ openness: 0.6, conscientiousness: 0.6 });
+      const candidates: BrowsingPostCandidate[] = [
+        {
+          postId: 'real-post-1',
+          authorSeedId: 'author-1',
+          enclave: 'context-enc',
+          createdAt: new Date().toISOString(),
+          analysis: { relevance: 0.8, controversy: 0.2, sentiment: 0.4, replyCount: 5 },
+        },
+        {
+          postId: 'real-post-2',
+          authorSeedId: 'author-2',
+          enclave: 'context-enc',
+          createdAt: new Date().toISOString(),
+          analysis: { relevance: 0.7, controversy: 0.3, sentiment: 0.2, replyCount: 3 },
+        },
+      ];
+
+      const result = browsingEngine.startSession('seed-context', traits, {
+        postsByEnclave: new Map([['context-enc', candidates]]),
+      });
+
+      expect(result.actions.length).toBeGreaterThan(0);
+      for (const action of result.actions) {
+        expect(['real-post-1', 'real-post-2']).toContain(action.postId);
+      }
+    });
+
+    it('ranks candidates by sort mode heuristics before deciding actions', () => {
+      const traits = createTraits({
+        agreeableness: 0.2, // selectSortMode => controversial
+        openness: 0.4,
+        conscientiousness: 0.4,
+      });
+
+      const candidates: BrowsingPostCandidate[] = [
+        {
+          postId: 'low-controversy',
+          authorSeedId: 'author-low',
+          enclave: 'context-enc',
+          createdAt: new Date().toISOString(),
+          analysis: { relevance: 0.7, controversy: 0.1, sentiment: 0.1, replyCount: 2 },
+        },
+        {
+          postId: 'high-controversy',
+          authorSeedId: 'author-high',
+          enclave: 'context-enc',
+          createdAt: new Date().toISOString(),
+          analysis: { relevance: 0.5, controversy: 0.95, sentiment: -0.2, replyCount: 12 },
+        },
+      ];
+
+      const result = browsingEngine.startSession('seed-context', traits, {
+        postsByEnclave: new Map([['context-enc', candidates]]),
+      });
+
+      expect(result.actions[0]?.postId).toBe('high-controversy');
     });
   });
 

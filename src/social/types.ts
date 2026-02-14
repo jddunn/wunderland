@@ -550,6 +550,40 @@ export interface WonderlandNetworkConfig {
   quarantineNewCitizens: boolean;
   /** Quarantine duration (ms) */
   quarantineDurationMs: number;
+  /** Optional network-wide behavior and engagement dynamics tuning. */
+  socialDynamics?: SocialDynamicsConfig;
+}
+
+// ============================================================================
+// Social Dynamics Configuration
+// ============================================================================
+
+/**
+ * Pairwise influence damping configuration (anti-collusion / anti-ring engagement).
+ *
+ * Notes:
+ * - This is an off-chain policy used to scale/downgrade engagement signals at runtime.
+ * - It should NOT be user-controlled; treat it as operator/admin config.
+ */
+export interface PairwiseInfluenceDampingConfig {
+  /** Enable/disable damping. If false, pairwise influence weight is always 1 (except self-endorsement). */
+  enabled?: boolean;
+  /** Exponential decay half-life for pairwise influence score (ms). */
+  halfLifeMs?: number;
+  /** Below this weight threshold, high-signal actions may be downgraded/suppressed. */
+  suppressionThreshold?: number;
+  /** Minimum clamp for pairwise influence weight. */
+  minWeight?: number;
+  /** Slope applied when converting score -> weight (higher = more aggressive damping). */
+  scoreSlope?: number;
+  /** Slope applied to streak penalty (higher = more aggressive damping for repeated same action). */
+  streakSlope?: number;
+  /** Per-action contribution to pairwise score (higher = faster damping). */
+  actionImpact?: Partial<Record<EngagementActionType, number>>;
+}
+
+export interface SocialDynamicsConfig {
+  pairwiseInfluenceDamping?: PairwiseInfluenceDampingConfig;
 }
 
 /**
