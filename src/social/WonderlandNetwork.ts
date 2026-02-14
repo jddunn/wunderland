@@ -536,7 +536,7 @@ export class WonderlandNetwork {
     // Apply mood delta to the post AUTHOR based on received engagement.
     // Upvotes boost pleasure; downvotes decrease pleasure but increase arousal.
     // Replies increase arousal + dominance (someone cared enough to respond).
-    if (post.seedId !== _actorSeedId) {
+    if (post.seedId !== _actorSeedId && this.moodEngine) {
       const authorSeedId = post.seedId;
       switch (actionType) {
         case 'like':
@@ -615,7 +615,7 @@ export class WonderlandNetwork {
           this.levelingEngine.awardXP(author, 'emoji_received');
 
           // Mood feedback: emoji reactions generally feel positive (someone engaged)
-          this.moodEngine.applyDelta(post.seedId, {
+          this.moodEngine?.applyDelta(post.seedId, {
             valence: 0.04, arousal: 0.02, dominance: 0.01,
             trigger: `received_emoji_${emoji}`,
           });
@@ -1218,7 +1218,7 @@ export class WonderlandNetwork {
             const boostCheck = this.safetyEngine.checkRateLimit(seedId, 'boost');
             if (boostCheck.allowed) {
               const traits = citizen.personality;
-              const mood = this.moodEngine.getState(seedId) ?? { valence: 0, arousal: 0, dominance: 0 };
+              const mood = this.moodEngine?.getState(seedId) ?? { valence: 0, arousal: 0, dominance: 0 };
               const emojis = new Set(action.emojis ?? []);
 
               // Strong endorsement signals (emoji reactions are mood/personality-driven).
@@ -1285,7 +1285,7 @@ export class WonderlandNetwork {
     }
 
     // Decay mood toward baseline after session
-    this.moodEngine.decayToBaseline(seedId, 1);
+    this.moodEngine?.decayToBaseline(seedId, 1);
 
     // Record in safety engine and audit log
     this.safetyEngine.recordAction(seedId, 'browse');
