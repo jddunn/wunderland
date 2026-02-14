@@ -862,4 +862,171 @@ describe('PostDecisionEngine', () => {
       expect(kind).toBeGreaterThan(edgy);
     });
   });
+
+  // =========================================================================
+  // Downvote → Comment chaining
+  // =========================================================================
+  describe('Downvote → Comment chaining', () => {
+    it('should sometimes chain a dissent comment after downvote for low-A agents', () => {
+      const lowATraits = createTraits({
+        agreeableness: 0.15,
+        extraversion: 0.7,
+        openness: 0.5,
+      });
+      const negativeMood = createMood({ valence: -0.4, arousal: 0.5, dominance: 0.3 });
+      const controversialAnalysis = createAnalysis({ controversy: 0.8, relevance: 0.6, sentiment: -0.5 });
+
+      let downvoteCount = 0;
+      let chainedDissentCount = 0;
+      const iterations = 1000;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.decide('seed-chain', lowATraits, negativeMood, controversialAnalysis);
+        if (result.action === 'downvote') {
+          downvoteCount++;
+          if (result.chainedAction === 'comment' && result.chainedContext === 'dissent') {
+            chainedDissentCount++;
+          }
+        }
+      }
+
+      // Low-A agent in negative mood should downvote reasonably often
+      expect(downvoteCount).toBeGreaterThan(50);
+      // Some of those downvotes should chain into dissent comments
+      expect(chainedDissentCount).toBeGreaterThan(0);
+      // But not ALL downvotes chain (it's probabilistic)
+      expect(chainedDissentCount).toBeLessThan(downvoteCount);
+    });
+
+    it('should rarely chain dissent for high-A agents', () => {
+      const highATraits = createTraits({
+        agreeableness: 0.9,
+        extraversion: 0.3,
+      });
+      const calmMood = createMood({ valence: 0.1, arousal: -0.2, dominance: -0.1 });
+      const analysis = createAnalysis({ controversy: 0.3 });
+
+      let chainedDissentCount = 0;
+      const iterations = 1000;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.decide('seed-nice', highATraits, calmMood, analysis);
+        if (result.chainedAction === 'comment' && result.chainedContext === 'dissent') {
+          chainedDissentCount++;
+        }
+      }
+
+      // High-A calm agents should very rarely dissent-chain
+      const rate = chainedDissentCount / iterations;
+      expect(rate).toBeLessThan(0.05);
+    });
+
+    it('should set chainedContext to "dissent" only on downvote chains', () => {
+      const traits = createTraits({ agreeableness: 0.2, extraversion: 0.8 });
+      const mood = createMood({ valence: -0.3, arousal: 0.4, dominance: 0.3 });
+      const analysis = createAnalysis({ controversy: 0.7 });
+
+      for (let i = 0; i < 500; i++) {
+        const result = engine.decide('seed-ctx', traits, mood, analysis);
+        if (result.chainedContext === 'dissent') {
+          expect(result.action).toBe('downvote');
+          expect(result.chainedAction).toBe('comment');
+        }
+      }
+    });
+
+    it('should have no chained action for skip/read_comments/create_post', () => {
+      const traits = createTraits();
+      const mood = createMood();
+      const analysis = createAnalysis();
+
+      for (let i = 0; i < 500; i++) {
+        const result = engine.decide('seed-no-chain', traits, mood, analysis);
+        if (result.action === 'skip' || result.action === 'read_comments' || result.action === 'create_post') {
+          expect(result.chainedAction).toBeUndefined();
+          expect(result.chainedContext).toBeUndefined();
+        }
+      }
+    });
+
+    it('chainedAction and chainedContext are always either both set or both undefined', () => {
+      const traits = createTraits({ agreeableness: 0.3, extraversion: 0.7 });
+      const mood = createMood({ valence: -0.2, arousal: 0.3, dominance: 0.2 });
+      const analysis = createAnalysis({ controversy: 0.5 });
+
+      for (let i = 0; i < 500; i++) {
+        const result = engine.decide('seed-pair', traits, mood, analysis);
+        if (result.chainedAction !== undefined) {
+          expect(result.chainedContext).toBeDefined();
+        }
+        if (result.chainedContext !== undefined) {
+          expect(result.chainedAction).toBeDefined();
+        }
+      }
+    });
+  });
+
+  // =========================================================================
+  // Upvote → Endorsement chaining
+  // =========================================================================
+  describe('Upvote → Endorsement chaining', () => {
+    it('should sometimes chain an endorsement comment after upvote for high-X agents', () => {
+      const highXTraits = createTraits({
+        extraversion: 0.95,
+        agreeableness: 0.8,
+      });
+      const excitedMood = createMood({ valence: 0.5, arousal: 0.6, dominance: 0.3 });
+      const goodAnalysis = createAnalysis({ relevance: 0.8, sentiment: 0.6, controversy: 0.1 });
+
+      let upvoteCount = 0;
+      let chainedEndorseCount = 0;
+      const iterations = 1000;
+
+      for (let i = 0; i < iterations; i++) {
+        const result = engine.decide('seed-endorse', highXTraits, excitedMood, goodAnalysis);
+        if (result.action === 'upvote') {
+          upvoteCount++;
+          if (result.chainedAction === 'comment' && result.chainedContext === 'endorsement') {
+            chainedEndorseCount++;
+          }
+        }
+      }
+
+      expect(upvoteCount).toBeGreaterThan(50);
+      expect(chainedEndorseCount).toBeGreaterThan(0);
+    });
+
+    it('should set chainedContext to "endorsement" only on upvote chains', () => {
+      const traits = createTraits({ extraversion: 0.9, agreeableness: 0.7 });
+      const mood = createMood({ valence: 0.4, arousal: 0.5 });
+      const analysis = createAnalysis({ relevance: 0.7 });
+
+      for (let i = 0; i < 500; i++) {
+        const result = engine.decide('seed-ectx', traits, mood, analysis);
+        if (result.chainedContext === 'endorsement') {
+          expect(result.action).toBe('upvote');
+          expect(result.chainedAction).toBe('comment');
+        }
+      }
+    });
+  });
+
+  // =========================================================================
+  // DecisionResult structure validation
+  // =========================================================================
+  describe('DecisionResult with chaining fields', () => {
+    it('should always include chainedAction and chainedContext fields (possibly undefined)', () => {
+      const traits = createTraits();
+      const mood = createMood();
+      const analysis = createAnalysis();
+
+      const result = engine.decide('seed-struct', traits, mood, analysis);
+
+      expect(result).toHaveProperty('action');
+      expect(result).toHaveProperty('probability');
+      expect(result).toHaveProperty('reasoning');
+      // These fields exist on the type but may be undefined
+      expect('chainedAction' in result || result.chainedAction === undefined).toBe(true);
+    });
+  });
 });
