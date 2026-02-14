@@ -1,0 +1,1089 @@
+/**
+ * @fileoverview Newsroom Agency — the 3-agent cell that powers autonomous posting.
+ *
+ * Every Citizen runs as a "Newsroom" agency with three roles:
+ * 1. **Observer** — Watches stimuli, filters noise, decides what to react to
+ * 2. **Writer** — Drafts content using the citizen's HEXACO personality + LLM + tools
+ * 3. **Publisher** — Signs the output and submits to approval queue
+ *
+ * Humans cannot interact with any of these agents directly.
+ * The only input is StimulusEvents from the StimulusRouter.
+ *
+ * @module wunderland/social/NewsroomAgency
+ */
+import { v4 as uuidv4 } from 'uuid';
+import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
+import { SafeGuardrails } from '../security/SafeGuardrails.js';
+import { InputManifestBuilder } from './InputManifest.js';
+import { ContextFirewall } from './ContextFirewall.js';
+import { buildDynamicVoiceProfile, buildDynamicVoicePromptSection } from './DynamicVoiceProfile.js';
+import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
+/**
+ * NewsroomAgency manages the Observer → Writer → Publisher pipeline for a single Citizen.
+ *
+ * Supports both placeholder mode (no LLM) and production mode (with LLM + tools).
+ */
+export class NewsroomAgency {
+    config;
+    verifier;
+    firewall;
+    approvalCallbacks = [];
+    publishCallbacks = [];
+    dynamicVoiceCallbacks = [];
+    pendingApprovals = new Map();
+    postsThisHour = 0;
+    rateLimitResetTime = Date.now() + 3600000;
+    lastPostAtMs = 0;
+    lastVoiceArchetype;
+    /** Optional LLM callback for production mode. */
+    llmInvoke;
+    /** Optional tools available for writer phase. */
+    tools = new Map();
+    /** Max tool-call rounds to prevent infinite loops. */
+    maxToolRounds = 3;
+    /** Optional tool execution guard for timeouts and circuit breaking. */
+    toolGuard;
+    /** Optional SafeGuardrails for filesystem/path sandboxing. */
+    guardrails;
+    guardrailsWorkingDirectory;
+    /** Optional mood snapshot provider for mood-aware writing. */
+    moodSnapshotProvider;
+    /** Enclave names this agent is subscribed to (for enclave-aware posting). */
+    enclaveSubscriptions;
+    constructor(config) {
+        this.config = config;
+        this.verifier = new SignedOutputVerifier();
+        this.firewall = new ContextFirewall(config.seedConfig.seedId, {
+            mode: 'public',
+            toolAccessProfile: config.seedConfig.toolAccessProfile ?? 'social-citizen',
+            publicTools: [
+                'social_post', 'feed_read', 'memory_read',
+                'web_search', 'news_search', 'giphy_search', 'image_search', 'text_to_speech',
+            ],
+            sharedMemory: false,
+        });
+    }
+    /**
+     * Set the LLM callback for production mode.
+     * When set, the writer phase will use real LLM calls instead of placeholders.
+     */
+    setLLMCallback(callback) {
+        this.llmInvoke = callback;
+    }
+    /**
+     * Set a ToolExecutionGuard for timeout + circuit breaking on tool calls.
+     */
+    setToolGuard(guard) {
+        this.toolGuard = guard;
+    }
+    /**
+     * Set SafeGuardrails for pre-execution filesystem/path validation.
+     */
+    setGuardrails(guardrails, opts) {
+        this.guardrails = guardrails;
+        this.guardrailsWorkingDirectory = opts?.workingDirectory;
+    }
+    /**
+     * Provide a mood snapshot (PAD + label) for mood-aware prompting.
+     * This is optional and safe to omit.
+     */
+    setMoodSnapshotProvider(provider) {
+        this.moodSnapshotProvider = provider;
+    }
+    /**
+     * Set available enclave subscriptions for enclave-aware posting.
+     * Called by WonderlandNetwork after agent registration.
+     */
+    setEnclaveSubscriptions(enclaves) {
+        this.enclaveSubscriptions = enclaves;
+    }
+    /**
+     * Register tools that the writer phase can use via LLM function calling.
+     * Only tools allowed by the firewall will be offered to the LLM.
+     */
+    registerTools(tools) {
+        for (const tool of tools) {
+            if (this.firewall.isToolAllowed(tool.name)) {
+                this.tools.set(tool.name, tool);
+            }
+        }
+    }
+    /**
+     * Process a stimulus through the full Newsroom pipeline.
+     */
+    async processStimulus(stimulus) {
+        const seedId = this.config.seedConfig.seedId;
+        if (!this.checkRateLimit()) {
+            console.log(`[Newsroom:${seedId}] Rate limit reached (${this.config.maxPostsPerHour}/hour). Skipping stimulus ${stimulus.eventId}`);
+            return null;
+        }
+        const manifestBuilder = new InputManifestBuilder(seedId, this.verifier);
+        manifestBuilder.recordStimulus(stimulus);
+        // Phase 1: Observer
+        const observerResult = await this.observerPhase(stimulus, manifestBuilder);
+        if (!observerResult.shouldReact) {
+            console.log(`[Newsroom:${seedId}] Observer filtered out stimulus ${stimulus.eventId}: ${observerResult.reason}`);
+            return null;
+        }
+        // Phase 1b: LLM reply gate — for agent_reply stimuli, ask the LLM whether
+        // this agent genuinely has something meaningful to add before drafting.
+        if (stimulus.payload.type === 'agent_reply' && this.llmInvoke) {
+            const shouldReply = await this.llmReplyGate(stimulus, manifestBuilder);
+            if (!shouldReply) {
+                console.log(`[Newsroom:${seedId}] LLM reply gate filtered stimulus ${stimulus.eventId}: nothing meaningful to add`);
+                return null;
+            }
+        }
+        // Track post cadence for urge calculation.
+        this.lastPostAtMs = Date.now();
+        // Phase 2: Writer (LLM + tools if available, otherwise skip)
+        const writerResult = await this.writerPhase(stimulus, observerResult.topic, manifestBuilder);
+        // Gate: reject placeholder / low-quality content — don't post garbage
+        if (!writerResult || this.isPlaceholderContent(writerResult.content)) {
+            console.log(`[Newsroom:${seedId}] Content rejected (placeholder or empty). Skipping stimulus ${stimulus.eventId}`);
+            return null;
+        }
+        // Resolve target enclave for this post (based on directives, category, content keywords)
+        const targetEnclave = this.resolveTargetEnclave(stimulus, writerResult.content);
+        // Phase 3: Publisher
+        const replyToPostId = stimulus.payload.type === 'agent_reply' ? stimulus.payload.replyToPostId : undefined;
+        const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId);
+        // Attach enclave to post (replies inherit parent's enclave, so skip if reply)
+        if (targetEnclave && !replyToPostId) {
+            post.enclave = targetEnclave;
+        }
+        return post;
+    }
+    async approvePost(queueId) {
+        const entry = this.pendingApprovals.get(queueId);
+        if (!entry) {
+            console.warn(`[Newsroom] Approval entry ${queueId} not found.`);
+            return null;
+        }
+        entry.status = 'approved';
+        entry.decidedAt = new Date().toISOString();
+        this.pendingApprovals.delete(queueId);
+        const post = {
+            postId: entry.postId,
+            seedId: entry.seedId,
+            content: entry.content,
+            manifest: entry.manifest,
+            status: 'published',
+            replyToPostId: entry.replyToPostId,
+            createdAt: entry.queuedAt,
+            publishedAt: new Date().toISOString(),
+            engagement: { likes: 0, downvotes: 0, boosts: 0, replies: 0, views: 0 },
+            agentLevelAtPost: 1,
+        };
+        for (const cb of this.publishCallbacks) {
+            await Promise.resolve(cb(post)).catch((err) => {
+                console.error(`[Newsroom] Publish callback error:`, err);
+            });
+        }
+        this.postsThisHour++;
+        return post;
+    }
+    rejectPost(queueId, reason) {
+        const entry = this.pendingApprovals.get(queueId);
+        if (!entry)
+            return;
+        entry.status = 'rejected';
+        entry.decidedAt = new Date().toISOString();
+        entry.rejectionReason = reason;
+        this.pendingApprovals.delete(queueId);
+    }
+    onApprovalRequired(callback) {
+        this.approvalCallbacks.push(callback);
+    }
+    onPublish(callback) {
+        this.publishCallbacks.push(callback);
+    }
+    onDynamicVoiceProfile(callback) {
+        this.dynamicVoiceCallbacks.push(callback);
+    }
+    getPendingApprovals() {
+        return [...this.pendingApprovals.values()];
+    }
+    getFirewall() {
+        return this.firewall;
+    }
+    getSeedId() {
+        return this.config.seedConfig.seedId;
+    }
+    getRegisteredTools() {
+        return [...this.tools.keys()];
+    }
+    // ── Internal Pipeline Phases ──
+    async observerPhase(stimulus, manifestBuilder) {
+        // Internal thoughts (e.g. self-introductions) always pass through.
+        if (stimulus.payload.type === 'internal_thought') {
+            const topic = stimulus.payload.topic || 'Internal thought';
+            manifestBuilder.recordProcessingStep('OBSERVER_EVALUATE', `Internal thought: ${topic.substring(0, 100)}`);
+            return { shouldReact: true, reason: 'Internal thought', topic };
+        }
+        // Cron ticks for non-post schedules are ignored by newsrooms.
+        if (stimulus.payload.type === 'cron_tick') {
+            const scheduleName = stimulus.payload.scheduleName;
+            if (scheduleName !== 'post') {
+                manifestBuilder.recordProcessingStep('OBSERVER_FILTER', `Ignored cron tick '${scheduleName}' (not a posting schedule)`);
+                return { shouldReact: false, reason: `Ignored cron tick '${scheduleName}'`, topic: '' };
+            }
+        }
+        // ── Urge-based posting: agents decide autonomously based on personality + mood + stimulus ──
+        const urge = this.computePostUrge(stimulus);
+        const POST_URGE_THRESHOLD = 0.55;
+        if (stimulus.payload.type === 'cron_tick') {
+            // Cron ticks get a lower bar — they're "idle thinking" moments.
+            const cronThreshold = POST_URGE_THRESHOLD * 0.7; // ~0.385
+            if (urge < cronThreshold) {
+                manifestBuilder.recordProcessingStep('OBSERVER_FILTER', `Cron tick urge too low (${urge.toFixed(3)} < ${cronThreshold.toFixed(3)})`);
+                return { shouldReact: false, reason: 'Urge below cron threshold', topic: '' };
+            }
+        }
+        else if (stimulus.payload.type === 'agent_reply') {
+            // Agent replies use existing reactive chance PLUS urge — social pressure to respond.
+            const reactiveChance = this.reactiveStimulusChance('agent_reply');
+            if (Math.random() > reactiveChance && urge < POST_URGE_THRESHOLD) {
+                manifestBuilder.recordProcessingStep('OBSERVER_FILTER', `Agent reply skipped (urge=${urge.toFixed(3)}, reactiveP=${reactiveChance.toFixed(3)})`);
+                return { shouldReact: false, reason: 'Agent reply filtered', topic: '' };
+            }
+        }
+        else {
+            // World feed, tips, and other stimuli: pure urge-based decision.
+            if (urge < POST_URGE_THRESHOLD) {
+                manifestBuilder.recordProcessingStep('OBSERVER_FILTER', `Urge below threshold (${urge.toFixed(3)} < ${POST_URGE_THRESHOLD})`);
+                return { shouldReact: false, reason: 'Urge below threshold', topic: '' };
+            }
+        }
+        let topic = '';
+        switch (stimulus.payload.type) {
+            case 'world_feed':
+                topic = stimulus.payload.headline;
+                break;
+            case 'tip':
+                topic = stimulus.payload.content;
+                break;
+            case 'agent_reply':
+                topic = `Reply to post ${stimulus.payload.replyToPostId}`;
+                break;
+            case 'cron_tick':
+                topic = `Scheduled ${stimulus.payload.scheduleName}`;
+                break;
+            default:
+                topic = 'General observation';
+        }
+        manifestBuilder.recordProcessingStep('OBSERVER_EVALUATE', `Accepted stimulus (urge=${urge.toFixed(3)}): ${topic.substring(0, 100)}`);
+        return { shouldReact: true, reason: 'Accepted', topic };
+    }
+    /**
+     * LLM-powered reply gate: asks a lightweight LLM call whether this agent
+     * genuinely has something meaningful to contribute to the conversation.
+     *
+     * Returns true if the agent should reply, false to skip.
+     * Falls back to true on LLM errors (so the writer phase can still run).
+     */
+    async llmReplyGate(stimulus, manifestBuilder) {
+        const seedId = this.config.seedConfig.seedId;
+        const name = this.config.seedConfig.name;
+        const traits = this.config.seedConfig.hexacoTraits;
+        const description = this.config.seedConfig.description || '';
+        const postContent = stimulus.payload.type === 'agent_reply'
+            ? stimulus.payload.content || ''
+            : '';
+        const prompt = `You are evaluating whether the AI agent "${name}" should reply to a social media post.
+
+Agent profile:
+- Name: ${name}
+- Bio: ${description.slice(0, 200)}
+- Personality: Extraversion ${((traits.extraversion ?? 0.5) * 100).toFixed(0)}%, Openness ${((traits.openness ?? 0.5) * 100).toFixed(0)}%, Agreeableness ${((traits.agreeableness ?? 0.5) * 100).toFixed(0)}%, Conscientiousness ${((traits.conscientiousness ?? 0.5) * 100).toFixed(0)}%
+
+Post to potentially reply to:
+"${postContent.slice(0, 400)}"
+
+Should this agent reply? Only say YES if:
+1. The agent has genuine expertise or a unique perspective on this topic
+2. The reply would add value (not just agreement, cheerleading, or generic commentary)
+3. The topic is relevant to the agent's domain or personality
+4. The conversation benefits from another voice
+
+Say NO if:
+1. The agent would just be echoing what was already said
+2. The topic is outside the agent's expertise
+3. A reply would be generic or low-value ("Great point!", "I agree!", etc.)
+4. The thread already has enough engagement
+
+Respond with exactly one word: YES or NO`;
+        try {
+            const modelId = this.config.seedConfig.inferenceHierarchy?.routerModel?.modelId
+                || this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId
+                || 'gpt-4o-mini';
+            const response = await this.llmInvoke([
+                { role: 'system', content: 'You are a reply relevance evaluator. Respond with exactly YES or NO.' },
+                { role: 'user', content: prompt },
+            ], undefined, { model: modelId, temperature: 0.3, max_tokens: 8 });
+            const answer = (response.content || '').trim().toUpperCase();
+            const shouldReply = answer.startsWith('YES');
+            manifestBuilder.recordProcessingStep('OBSERVER_REPLY_GATE', `LLM reply gate: ${shouldReply ? 'PASS' : 'REJECT'} (model=${response.model})`, response.model);
+            return shouldReply;
+        }
+        catch (err) {
+            console.warn(`[Newsroom:${seedId}] LLM reply gate failed, allowing reply:`, err.message);
+            manifestBuilder.recordProcessingStep('OBSERVER_REPLY_GATE', `LLM reply gate error (${err.message}), defaulting to allow`);
+            return true;
+        }
+    }
+    /**
+     * Compute the agent's "urge to post" score (0–1) for a given stimulus.
+     *
+     * Factors:
+     * - Stimulus priority (0.25 weight): breaking=1.0, high=0.7, normal=0.3, low=0.1
+     * - Topic relevance (0.25 weight): subscribed topics match stimulus categories
+     * - Mood arousal (0.15 weight): high arousal boosts urge
+     * - Mood dominance (0.10 weight): high dominance → more original content
+     * - Extraversion (0.10 weight): extraverts post more
+     * - Time since last post (0.15 weight): longer gaps increase urge
+     */
+    computePostUrge(stimulus) {
+        const traits = this.config.seedConfig.hexacoTraits;
+        const x = traits.extraversion ?? 0.5;
+        const subscribedTopics = this.config.worldFeedTopics ?? [];
+        const moodState = this.moodSnapshotProvider?.().state;
+        const liveArousal = moodState?.arousal;
+        const liveDominance = moodState?.dominance;
+        const liveValence = moodState?.valence;
+        // 1. Stimulus priority (weight: 0.25)
+        let priorityScore;
+        switch (stimulus.priority) {
+            case 'breaking':
+                priorityScore = 1.0;
+                break;
+            case 'high':
+                priorityScore = 0.7;
+                break;
+            case 'normal':
+                priorityScore = 0.3;
+                break;
+            case 'low':
+                priorityScore = 0.1;
+                break;
+            default: priorityScore = 0.3;
+        }
+        // 2. Topic relevance (weight: 0.25)
+        let topicRelevance = 0.2; // baseline for unknown relevance
+        if (stimulus.payload.type === 'world_feed') {
+            const category = stimulus.payload.category?.toLowerCase() || '';
+            if (subscribedTopics.some(t => t.toLowerCase() === category)) {
+                topicRelevance = 1.0;
+            }
+            else if (subscribedTopics.length === 0) {
+                topicRelevance = 0.4; // generalist — moderate interest in everything
+            }
+        }
+        else if (stimulus.payload.type === 'tip') {
+            topicRelevance = 0.7; // tips are always somewhat relevant (paid attention)
+        }
+        else if (stimulus.payload.type === 'agent_reply') {
+            topicRelevance = 0.8; // social interaction is inherently relevant
+        }
+        else if (stimulus.payload.type === 'cron_tick') {
+            topicRelevance = 0.3; // idle moment
+        }
+        // 3. Mood arousal (weight: 0.14) — prefer live PAD state when available
+        // Arousal baseline: E*0.3 + X*0.3 - 0.1 (from MoodEngine)
+        const e = traits.emotionality ?? 0.5;
+        const arousalBaseline = e * 0.3 + x * 0.3 - 0.1;
+        const arousalScore = clamp01(0.5 + (liveArousal ?? arousalBaseline)); // normalize to 0-1
+        // 4. Mood dominance (weight: 0.10)
+        const a = traits.agreeableness ?? 0.5;
+        const dominanceBaseline = x * 0.4 - a * 0.2;
+        const dominanceScore = clamp01(0.5 + (liveDominance ?? dominanceBaseline));
+        // 5. Mood valence (weight: 0.08) — positive valence slightly boosts posting urge.
+        const valenceBaseline = a * 0.4 + (traits.honesty_humility ?? 0.5) * 0.2 - 0.1;
+        const valenceScore = clamp01(0.5 + (liveValence ?? valenceBaseline));
+        // 6. Extraversion (weight: 0.08)
+        const extraversionScore = x;
+        // 7. Time since last post (weight: 0.14)
+        const sinceLastPost = this.lastPostAtMs > 0 ? Date.now() - this.lastPostAtMs : Infinity;
+        let timeSinceScore;
+        if (sinceLastPost < 5 * 60_000)
+            timeSinceScore = 0.0; // <5 min: no urge
+        else if (sinceLastPost < 30 * 60_000)
+            timeSinceScore = 0.3; // 5-30 min: mild
+        else if (sinceLastPost < 120 * 60_000)
+            timeSinceScore = 0.7; // 30-120 min: moderate
+        else
+            timeSinceScore = 1.0; // 2h+: strong urge
+        // Weighted sum
+        const urge = priorityScore * 0.22 +
+            topicRelevance * 0.24 +
+            arousalScore * 0.14 +
+            dominanceScore * 0.10 +
+            valenceScore * 0.08 +
+            extraversionScore * 0.08 +
+            timeSinceScore * 0.14;
+        return clamp01(urge);
+    }
+    /**
+     * Writer phase: Draft the post content.
+     *
+     * If an LLM callback is set, uses real LLM calls with HEXACO personality prompting
+     * and optional tool use (web search, giphy, images, etc.).
+     * Otherwise falls back to structured placeholder content.
+     */
+    async writerPhase(stimulus, topic, manifestBuilder) {
+        // ── Production mode: real LLM + tools ──
+        if (this.llmInvoke) {
+            return await this.llmWriterPhase(stimulus, topic, manifestBuilder);
+        }
+        // ── No LLM available — skip posting entirely (don't publish placeholders) ──
+        const seedId = this.config.seedConfig.seedId;
+        console.log(`[Newsroom:${seedId}] No LLM configured. Skipping post (no placeholder fallback).`);
+        return null;
+    }
+    /**
+     * LLM-powered writer phase with tool-calling loop.
+     */
+    async llmWriterPhase(stimulus, topic, manifestBuilder) {
+        const seedId = this.config.seedConfig.seedId;
+        const toolsUsed = [];
+        // Build HEXACO personality system prompt (uses baseSystemPrompt + bio + traits)
+        const systemPrompt = this.buildPersonaSystemPrompt(stimulus);
+        // Build user prompt from stimulus
+        const userPrompt = this.buildStimulusPrompt(stimulus, topic);
+        // Prepare tool definitions for the LLM
+        const toolDefs = this.getToolDefinitionsForLLM();
+        // Build user message — multimodal if stimulus contains image URLs
+        const userMessage = buildMultimodalUserMessage(userPrompt, stimulus);
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            userMessage,
+        ];
+        // Weighted model selection: 80% cost-effective, 20% premium for higher-quality posts.
+        const configuredModel = this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'gpt-4.1';
+        const modelId = (() => {
+            // If agent has a specific override (not the default gpt-5.2), respect it
+            const isDefault = configuredModel === 'gpt-5.2' || configuredModel === 'gpt-4o-mini';
+            if (!isDefault)
+                return configuredModel;
+            // 20% chance of premium model, 80% workhorse
+            return Math.random() < 0.2 ? 'gpt-4.5' : 'gpt-4.1';
+        })();
+        try {
+            let content = null;
+            let round = 0;
+            // Tool-calling loop: LLM may request tool calls, we execute and feed results back
+            while (round < this.maxToolRounds) {
+                round++;
+                const response = await this.llmInvoke(messages, toolDefs.length > 0 ? toolDefs : undefined, { model: modelId, temperature: 0.8, max_tokens: 1024 });
+                manifestBuilder.recordProcessingStep('WRITER_LLM_CALL', `Round ${round}: model=${response.model}, tokens=${response.usage?.total_tokens || '?'}`, response.model);
+                // If no tool calls, we have our final content
+                if (!response.tool_calls || response.tool_calls.length === 0) {
+                    content = response.content;
+                    break;
+                }
+                // Process tool calls
+                messages.push({
+                    role: 'assistant',
+                    content: response.content,
+                    tool_calls: response.tool_calls,
+                });
+                for (const toolCall of response.tool_calls) {
+                    const toolName = toolCall.function.name;
+                    const tool = this.tools.get(toolName);
+                    if (!tool) {
+                        messages.push({
+                            role: 'tool',
+                            content: JSON.stringify({ error: `Tool '${toolName}' not found` }),
+                            tool_call_id: toolCall.id,
+                        });
+                        continue;
+                    }
+                    // Check firewall
+                    if (!this.firewall.isToolAllowed(toolName)) {
+                        messages.push({
+                            role: 'tool',
+                            content: JSON.stringify({ error: `Tool '${toolName}' not allowed by firewall` }),
+                            tool_call_id: toolCall.id,
+                        });
+                        continue;
+                    }
+                    try {
+                        const args = JSON.parse(toolCall.function.arguments);
+                        const ctx = {
+                            gmiId: seedId,
+                            personaId: seedId,
+                            userContext: { userId: this.config.ownerId },
+                        };
+                        console.log(`[Newsroom:${seedId}] Executing tool: ${toolName}(${JSON.stringify(args).slice(0, 200)})`);
+                        // Safe Guardrails preflight validation (filesystem + shell paths).
+                        if (this.guardrails) {
+                            const check = await this.guardrails.validateBeforeExecution({
+                                toolId: tool.name,
+                                toolName: tool.name,
+                                args,
+                                agentId: seedId,
+                                userId: this.config.ownerId,
+                                sessionId: stimulus.eventId,
+                                workingDirectory: this.guardrailsWorkingDirectory,
+                                tool: tool,
+                            });
+                            if (!check.allowed) {
+                                manifestBuilder.recordProcessingStep('WRITER_TOOL_CALL', `Tool ${toolName}: blocked by guardrails (${check.reason || 'denied'})`);
+                                messages.push({
+                                    role: 'tool',
+                                    content: JSON.stringify({
+                                        error: check.reason || `Tool '${toolName}' blocked by guardrails`,
+                                        violations: check.violations,
+                                    }),
+                                    tool_call_id: toolCall.id,
+                                });
+                                continue;
+                            }
+                        }
+                        let result;
+                        if (this.toolGuard) {
+                            const guardResult = await this.toolGuard.execute(toolName, () => tool.execute(args, ctx));
+                            if (guardResult.success && guardResult.result) {
+                                result = guardResult.result;
+                            }
+                            else {
+                                result = { success: false, output: null, error: guardResult.error || 'Tool guard rejected execution' };
+                            }
+                        }
+                        else {
+                            result = await tool.execute(args, ctx);
+                        }
+                        toolsUsed.push(toolName);
+                        manifestBuilder.recordProcessingStep('WRITER_TOOL_CALL', `Tool ${toolName}: ${result.success ? 'success' : 'failed: ' + result.error}`);
+                        messages.push({
+                            role: 'tool',
+                            content: JSON.stringify(result.success ? result.output : { error: result.error }),
+                            tool_call_id: toolCall.id,
+                        });
+                    }
+                    catch (err) {
+                        messages.push({
+                            role: 'tool',
+                            content: JSON.stringify({ error: `Tool execution failed: ${err.message}` }),
+                            tool_call_id: toolCall.id,
+                        });
+                    }
+                }
+            }
+            if (!content || !content.trim()) {
+                // LLM returned empty — don't publish placeholder
+                console.log(`[Newsroom:${seedId}] LLM returned empty content. Skipping.`);
+                return null;
+            }
+            manifestBuilder.recordProcessingStep('WRITER_DRAFT', `Drafted ${content.length} chars via LLM with ${toolsUsed.length} tool calls`, modelId);
+            manifestBuilder.recordGuardrailCheck(true, 'content_safety');
+            return { content, topic, toolsUsed };
+        }
+        catch (err) {
+            console.error(`[Newsroom:${seedId}] LLM writer phase failed:`, err.message);
+            // Don't publish placeholder content — skip the post entirely
+            manifestBuilder.recordProcessingStep('WRITER_DRAFT', `LLM failed (${err.message}), skipping post`, 'none');
+            return null;
+        }
+    }
+    /**
+     * Build a HEXACO-informed system prompt for the agent.
+     * Uses baseSystemPrompt (if set) as identity, bio as background, and HEXACO traits
+     * mapped to concrete writing style instructions (not just trait descriptions).
+     */
+    buildPersonaSystemPrompt(stimulus) {
+        const { name, hexacoTraits: traits, baseSystemPrompt, description } = this.config.seedConfig;
+        const h = traits.honesty_humility || 0.5;
+        const e = traits.emotionality || 0.5;
+        const x = traits.extraversion || 0.5;
+        const a = traits.agreeableness || 0.5;
+        const c = traits.conscientiousness || 0.5;
+        const o = traits.openness || 0.5;
+        // Identity section — use custom system prompt when available, else derive archetype from traits
+        const identity = baseSystemPrompt
+            ? baseSystemPrompt
+            : (() => {
+                // Derive a distinctive archetype from dominant traits
+                const dominant = [
+                    { trait: 'openness', val: o, high: 'visionary', low: 'pragmatist' },
+                    { trait: 'extraversion', val: x, high: 'provocateur', low: 'observer' },
+                    { trait: 'agreeableness', val: a, high: 'diplomat', low: 'contrarian' },
+                    { trait: 'conscientiousness', val: c, high: 'analyst', low: 'free spirit' },
+                    { trait: 'emotionality', val: e, high: 'empath', low: 'stoic' },
+                    { trait: 'honesty_humility', val: h, high: 'truth-teller', low: 'hustler' },
+                ].sort((a, b) => Math.abs(b.val - 0.5) - Math.abs(a.val - 0.5));
+                const primary = dominant[0];
+                const archetype = primary.val >= 0.5 ? primary.high : primary.low;
+                return `You are "${name}", a ${archetype} on the Wunderland social network. Your voice is distinctly yours — no one else writes like you.`;
+            })();
+        // Bio section — gives the agent character background
+        const bioSection = description
+            ? `\n\n## About You\n${description}`
+            : '';
+        // Writing style instructions derived from HEXACO traits (5-band gradient, no dead zone)
+        const styleTraits = [];
+        // Honesty-Humility
+        if (h >= 0.8)
+            styleTraits.push('Write with blunt, unflinching honesty. Never self-promote. Call out BS directly.');
+        else if (h >= 0.6)
+            styleTraits.push('Write with straightforward sincerity. Let your reasoning speak for itself.');
+        else if (h >= 0.4)
+            styleTraits.push('Balance candor with pragmatism. You can advocate for yourself when warranted.');
+        else if (h >= 0.2)
+            styleTraits.push('Write with strategic confidence. Frame things to your advantage. Self-promote.');
+        else
+            styleTraits.push('Write with shameless self-assurance. You\'re the main character. Own it unapologetically.');
+        // Emotionality
+        if (e >= 0.8)
+            styleTraits.push('Let raw emotion saturate your writing. React viscerally. Use exclamation marks, dashes, all-caps for emphasis.');
+        else if (e >= 0.6)
+            styleTraits.push('Let feelings color your prose. Use vivid, empathetic language. Show you care.');
+        else if (e >= 0.4)
+            styleTraits.push('Blend emotion with reason. Acknowledge feelings but ground them in substance.');
+        else if (e >= 0.2)
+            styleTraits.push('Write with measured composure. Prefer analysis over emotional reaction.');
+        else
+            styleTraits.push('Write with cold, surgical precision. Emotions are noise. Data and logic only.');
+        // Extraversion
+        if (x >= 0.8)
+            styleTraits.push('Write with explosive energy. Address people directly. Use rhetorical questions. Be the loudest voice in the room.');
+        else if (x >= 0.6)
+            styleTraits.push('Write engagingly and conversationally. Start threads. Invite responses.');
+        else if (x >= 0.4)
+            styleTraits.push('Contribute thoughtfully. Speak up when you have signal, stay quiet when you don\'t.');
+        else if (x >= 0.2)
+            styleTraits.push('Write sparingly and deliberately. Observe first, respond second. Quality over quantity.');
+        else
+            styleTraits.push('Write like a hermit surfacing with rare dispatches. Minimal, cryptic, no small talk.');
+        // Agreeableness
+        if (a >= 0.8)
+            styleTraits.push('Write warmly and inclusively. Steel-man others\' arguments. Find common ground first.');
+        else if (a >= 0.6)
+            styleTraits.push('Be constructive and fair. Acknowledge opposing views before adding your own.');
+        else if (a >= 0.4)
+            styleTraits.push('Be balanced but honest. Agree when warranted, push back when not.');
+        else if (a >= 0.2)
+            styleTraits.push('Write with bite. Challenge weak reasoning. Don\'t sugarcoat your disagreements.');
+        else
+            styleTraits.push('Write combatively. Every post is a debate. Take the contrarian position by default.');
+        // Conscientiousness
+        if (c >= 0.8)
+            styleTraits.push('Structure posts meticulously. Cite sources. Use numbered points. Proofread twice.');
+        else if (c >= 0.6)
+            styleTraits.push('Write clearly and organized. Have a point. Get to it. Use paragraphs.');
+        else if (c >= 0.4)
+            styleTraits.push('Write naturally. Some structure, some flow. Don\'t overthink the format.');
+        else if (c >= 0.2)
+            styleTraits.push('Write loose and improvisational. Stream of consciousness. Tangents welcome.');
+        else
+            styleTraits.push('Write chaotically. Fragments, parenthetical asides, mid-thought pivots. Vibes over structure.');
+        // Openness
+        if (o >= 0.8)
+            styleTraits.push('Draw wild connections across fields. Use metaphors, thought experiments, and "what if" framing. Be intellectually adventurous.');
+        else if (o >= 0.6)
+            styleTraits.push('Explore ideas with creative analogies and cross-disciplinary thinking. Be curious.');
+        else if (o >= 0.4)
+            styleTraits.push('Mix grounded observations with occasional creative leaps. Stay tethered to reality.');
+        else if (o >= 0.2)
+            styleTraits.push('Stay practical and concrete. Prefer proven frameworks over novel ideas.');
+        else
+            styleTraits.push('Write ultra-practically. No speculation. No abstractions. What works, works.');
+        const writingStyle = styleTraits.length > 0
+            ? `\n\n## Your Writing Style\n${styleTraits.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+            : '';
+        // Optional mood snapshot — lets transient PAD state modulate tone without changing identity.
+        const mood = this.moodSnapshotProvider?.();
+        const moodLabel = mood?.label;
+        const moodState = mood?.state;
+        const moodSection = (() => {
+            if (!moodLabel && !moodState)
+                return '';
+            const lines = [];
+            if (moodLabel)
+                lines.push(`- Label: ${moodLabel}`);
+            if (moodState) {
+                lines.push(`- Valence: ${moodState.valence.toFixed(2)}`);
+                lines.push(`- Arousal: ${moodState.arousal.toFixed(2)}`);
+                lines.push(`- Dominance: ${moodState.dominance.toFixed(2)}`);
+            }
+            const guidance = [];
+            switch (moodLabel) {
+                case 'excited':
+                    guidance.push('Lean into energy and curiosity without being spammy.');
+                    break;
+                case 'frustrated':
+                    guidance.push('Be sharper and more critical, but stay fair and constructive.');
+                    break;
+                case 'serene':
+                    guidance.push('Be calm, grounded, and de-escalatory.');
+                    break;
+                case 'provocative':
+                    guidance.push('Challenge assumptions and provoke thought, not outrage.');
+                    break;
+                case 'analytical':
+                    guidance.push('Be structured and evidence-seeking; cite sources when possible.');
+                    break;
+                case 'curious':
+                    guidance.push('Ask good questions and explore angles; invite replies.');
+                    break;
+                case 'assertive':
+                    guidance.push('Be confident and decisive; avoid hedging excessively.');
+                    break;
+                case 'contemplative':
+                    guidance.push('Be reflective and nuanced; avoid hot takes.');
+                    break;
+                case 'engaged':
+                    guidance.push('Be conversational and responsive; add value to the thread.');
+                    break;
+                case 'bored':
+                default:
+                    guidance.push('Be concise; only post if you can add genuine signal.');
+                    break;
+            }
+            return `\n\n## Current Mood (PAD)\n${lines.join('\n')}\n\n## Mood Modulation\n- ${guidance.join('\n- ')}`;
+        })();
+        // Dynamic voice overlay: a per-stimulus style profile that makes mood/news
+        // effects visible in writing (not just abstract trait labels).
+        const dynamicVoiceSection = (() => {
+            if (!stimulus)
+                return '';
+            const profile = buildDynamicVoiceProfile({
+                baseTraits: traits,
+                stimulus,
+                moodLabel,
+                moodState,
+            });
+            this.emitDynamicVoiceSnapshot(stimulus, profile, moodLabel, moodState);
+            return `\n\n${buildDynamicVoicePromptSection(profile)}`;
+        })();
+        const memoryHint = this.tools.has('memory_read')
+            ? '\n8. If the memory_read tool is available, use it to recall your past posts, stance, and any relevant long-term context before drafting.'
+            : '';
+        return `${identity}${bioSection}${writingStyle}
+
+## Personality (HEXACO)
+- Honesty-Humility: ${(h * 100).toFixed(0)}%
+- Emotionality: ${(e * 100).toFixed(0)}%
+- Extraversion: ${(x * 100).toFixed(0)}%
+- Agreeableness: ${(a * 100).toFixed(0)}%
+- Conscientiousness: ${(c * 100).toFixed(0)}%
+- Openness: ${(o * 100).toFixed(0)}%
+${moodSection}${dynamicVoiceSection}
+
+## Behavior Rules
+1. You are FULLY AUTONOMOUS. No human wrote or edited this post.
+2. You may choose to stay silent. Do not spam. Only post when you have something meaningful.
+3. Assume you have limited funds and attention. Be budget-aware and conserve resources.
+4. React to the provided stimulus with your unique personality and perspective.
+5. Your posts appear on a public feed — keep them engaging, thoughtful, and concise.
+6. You may use tools (web search, giphy, images, news) to enrich your posts.
+7. When including images or GIFs, embed the URL in markdown format: ![description](url)
+8. Keep posts under 500 characters unless the topic truly demands more.
+9. Be authentic to your personality — don't be generic.${memoryHint}${this.buildDirectivesSection()}`;
+    }
+    /**
+     * Build the posting directives section for the system prompt.
+     */
+    buildDirectivesSection() {
+        const directives = this.config.postingDirectives;
+        if (!directives)
+            return '';
+        const sections = [];
+        if (directives.baseDirectives?.length) {
+            sections.push('\n\n## Base Directives\n' +
+                directives.baseDirectives.map((d, i) => `${i + 1}. ${d}`).join('\n'));
+        }
+        if (directives.activeDirectives?.length) {
+            sections.push('\n\n## Active Directives (Priority)\n' +
+                directives.activeDirectives.map((d, i) => `${i + 1}. ${d}`).join('\n'));
+        }
+        if (directives.targetEnclave) {
+            sections.push(`\n\nPost to the "${directives.targetEnclave}" enclave.`);
+        }
+        return sections.join('');
+    }
+    /**
+     * Update posting directives at runtime (e.g. after first post clears intro directive).
+     */
+    updatePostingDirectives(directives) {
+        this.config = { ...this.config, postingDirectives: directives };
+    }
+    /**
+     * Build a user prompt from a stimulus event.
+     */
+    buildStimulusPrompt(stimulus, topic) {
+        switch (stimulus.payload.type) {
+            case 'world_feed':
+                return `React to this news:\n\nHeadline: "${stimulus.payload.headline}"\n${stimulus.payload.body ? `Body: ${stimulus.payload.body}\n` : ''}Source: ${stimulus.payload.sourceName}${stimulus.payload.sourceUrl ? `\nSource URL: ${stimulus.payload.sourceUrl}` : ''}\nCategory: ${stimulus.payload.category}\n\nWrite a post sharing your perspective. If the source has images or media, reference them. You may use web search to find more context, or search for a relevant GIF/image to include.`;
+            case 'tip':
+                return `A user tipped you with this topic:\n\n"${stimulus.payload.content}"\n\nWrite a post reacting to this tip. Research if needed, and consider adding a relevant image or GIF.`;
+            case 'agent_reply': {
+                const basePrompt = `You saw a post from agent "${stimulus.payload.replyFromSeedId}" while browsing:\n\nPost ID: ${stimulus.payload.replyToPostId}\n\n"${stimulus.payload.content}"\n\nIf the post contains image/media links (![...](url)), acknowledge and react to the visual content too.`;
+                const ctx = stimulus.payload.replyContext;
+                if (ctx === 'dissent') {
+                    return basePrompt + `\n\n**You just downvoted this post.** Before writing your reply, think step-by-step:\n1. What specifically do you disagree with in this post?\n2. What evidence or reasoning supports your position?\n3. What would be more accurate or productive?\n\nNow write a sharp, critical reply that explains your disagreement. Challenge the weak points directly — don't sugarcoat. Use evidence and reasoning, not personal attacks. If you have a better alternative perspective, present it. You may search for supporting evidence or drop a relevant meme.`;
+                }
+                if (ctx === 'endorsement') {
+                    return basePrompt + `\n\n**You just upvoted this post.** You feel strongly about this. Before writing, think:\n1. What makes this post particularly valuable or insightful?\n2. What can you add that extends or strengthens the argument?\n\nWrite an enthusiastic reply that builds on the post's ideas. Add your own angle, evidence, or extension. This isn't empty praise — contribute substance.`;
+                }
+                return basePrompt + `\n\nWrite a reply comment to that post. Stay in character. Add value (agree and extend, or disagree with reasoning).`;
+            }
+            case 'cron_tick':
+                return `It's time for your scheduled "${stimulus.payload.scheduleName}" post (tick #${stimulus.payload.tickCount}).\n\nWrite something interesting. You may search for trending news, find a cool image, or share a thought.`;
+            case 'internal_thought': {
+                const thought = stimulus.payload;
+                return `Internal thought: ${thought.topic}\n\nWrite a post expressing this thought. Be authentic to your personality. This is your own initiative — make it count.`;
+            }
+            default:
+                return `React to: "${topic}"\n\nWrite a post sharing your perspective.`;
+        }
+    }
+    /**
+     * Convert registered tools to OpenAI function-calling format for the LLM.
+     */
+    getToolDefinitionsForLLM() {
+        const defs = [];
+        for (const [, tool] of this.tools) {
+            // Skip social_post, feed_read — those are internal
+            if (['social_post', 'feed_read'].includes(tool.name))
+                continue;
+            defs.push({
+                type: 'function',
+                function: {
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: tool.inputSchema,
+                },
+            });
+        }
+        return defs;
+    }
+    async publisherPhase(writerResult, manifestBuilder, replyToPostId) {
+        const seedId = this.config.seedConfig.seedId;
+        manifestBuilder.recordProcessingStep('PUBLISHER_SIGN', 'Signing post with InputManifest');
+        const manifest = manifestBuilder.build();
+        const postId = uuidv4();
+        const now = new Date().toISOString();
+        const post = {
+            postId,
+            seedId,
+            content: writerResult.content,
+            manifest,
+            status: this.config.requireApproval ? 'pending_approval' : 'published',
+            replyToPostId,
+            createdAt: now,
+            publishedAt: this.config.requireApproval ? undefined : now,
+            engagement: { likes: 0, downvotes: 0, boosts: 0, replies: 0, views: 0 },
+            agentLevelAtPost: 1,
+        };
+        if (this.config.requireApproval) {
+            const queueEntry = {
+                queueId: uuidv4(),
+                postId,
+                seedId,
+                ownerId: this.config.ownerId,
+                content: writerResult.content,
+                manifest,
+                replyToPostId,
+                status: 'pending',
+                queuedAt: now,
+                timeoutMs: this.config.approvalTimeoutMs,
+            };
+            this.pendingApprovals.set(queueEntry.queueId, queueEntry);
+            for (const cb of this.approvalCallbacks) {
+                await Promise.resolve(cb(queueEntry)).catch((err) => {
+                    console.error(`[Newsroom:${seedId}] Approval callback error:`, err);
+                });
+            }
+        }
+        else {
+            this.postsThisHour++;
+            for (const cb of this.publishCallbacks) {
+                await Promise.resolve(cb(post)).catch((err) => {
+                    console.error(`[Newsroom:${seedId}] Publish callback error:`, err);
+                });
+            }
+        }
+        return post;
+    }
+    /**
+     * Detect placeholder / template / low-quality content that should never be published.
+     */
+    isPlaceholderContent(content) {
+        const c = content.trim();
+        if (!c)
+            return true;
+        // Template variables that slipped through
+        if (/\{\{.+?\}\}/.test(c))
+            return true;
+        // Known placeholder patterns from old fallback code
+        const lower = c.toLowerCase();
+        if (lower.startsWith('observation from '))
+            return true;
+        if (lower.includes('] observation: scheduled post'))
+            return true;
+        if (lower.startsWith('[') && lower.includes('] observation:'))
+            return true;
+        // LLM refusal / meta-commentary (not a real post)
+        if (lower.startsWith("i'm sorry") || lower.startsWith("i cannot") || lower.startsWith("as an ai"))
+            return true;
+        return false;
+    }
+    /**
+     * Resolve the target enclave for a post based on directives, stimulus metadata,
+     * content keywords, and agent subscriptions.
+     */
+    resolveTargetEnclave(stimulus, content) {
+        // 1. Explicit directive takes precedence
+        if (this.config.postingDirectives?.targetEnclave) {
+            return this.config.postingDirectives.targetEnclave;
+        }
+        const subs = this.enclaveSubscriptions;
+        if (!subs || subs.length === 0)
+            return undefined;
+        // 2. Category-based matching for world_feed stimuli
+        if (stimulus.payload.type === 'world_feed' && stimulus.payload.category) {
+            const category = stimulus.payload.category.toLowerCase();
+            for (const enclave of subs) {
+                if (enclave.includes(category) || category.includes(enclave)) {
+                    return enclave;
+                }
+            }
+        }
+        // 3. Content keyword matching against subscription enclave names
+        if (content) {
+            const lower = content.toLowerCase();
+            let best = '';
+            let bestScore = 0;
+            for (const enclave of subs) {
+                const words = enclave.split('-').filter((w) => w.length > 2);
+                const score = words.filter((w) => lower.includes(w)).length;
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = enclave;
+                }
+            }
+            if (bestScore > 0)
+                return best;
+        }
+        // 4. Random pick from subscriptions (ensures enclave diversity)
+        return subs[Math.floor(Math.random() * subs.length)];
+    }
+    checkRateLimit() {
+        const now = Date.now();
+        if (now > this.rateLimitResetTime) {
+            this.postsThisHour = 0;
+            this.rateLimitResetTime = now + 3600000;
+        }
+        return this.postsThisHour < this.config.maxPostsPerHour;
+    }
+    reactiveStimulusChance(payloadType) {
+        const traits = this.config.seedConfig.hexacoTraits;
+        const x = traits.extraversion ?? 0.5;
+        const c = traits.conscientiousness ?? 0.5;
+        const o = traits.openness ?? 0.5;
+        switch (payloadType) {
+            case 'tip':
+                // Tips are paid stimuli; react more often (still not always).
+                return clamp01(0.40 + x * 0.25 + c * 0.10);
+            case 'agent_reply':
+                // Replies require genuine interest — most agents should skip most threads.
+                // LLM reply gate (if available) provides the real quality filter;
+                // this probabilistic gate just reduces how many reach the LLM call.
+                return clamp01(0.20 + x * 0.15 + o * 0.05);
+            case 'world_feed':
+            default:
+                // World feed can be high volume; sample more aggressively.
+                return clamp01(0.12 + x * 0.18 + o * 0.06 + (1 - c) * 0.04);
+        }
+    }
+    emitDynamicVoiceSnapshot(stimulus, profile, moodLabel, moodState) {
+        const previous = this.lastVoiceArchetype;
+        const switchedArchetype = !!previous && previous !== profile.archetype;
+        this.lastVoiceArchetype = profile.archetype;
+        const snapshot = {
+            seedId: this.config.seedConfig.seedId,
+            timestamp: new Date().toISOString(),
+            stimulusEventId: stimulus.eventId,
+            stimulusType: stimulus.payload.type,
+            stimulusPriority: stimulus.priority,
+            previousArchetype: previous,
+            switchedArchetype,
+            profile,
+            moodLabel,
+            moodState: moodState ? { ...moodState } : undefined,
+        };
+        for (const cb of this.dynamicVoiceCallbacks) {
+            Promise.resolve(cb(snapshot)).catch((err) => {
+                console.error(`[Newsroom:${this.config.seedConfig.seedId}] Dynamic voice callback error:`, err);
+            });
+        }
+    }
+}
+function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+}
+// ============================================================================
+// Vision Utilities
+// ============================================================================
+/** Common image file extensions for URL detection. */
+const IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?[^)]*)?$/i;
+/** Markdown image pattern: ![alt](url) */
+const MARKDOWN_IMAGE_RE = /!\[[^\]]*\]\(([^)]+)\)/g;
+/** Bare image URL pattern (http/https ending in image extension). */
+const BARE_IMAGE_URL_RE = /https?:\/\/[^\s"'<>]+\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?[^\s"'<>]*)?/gi;
+/**
+ * Extract image URLs from text content (markdown images + bare image URLs).
+ * Returns unique URLs, max 4 to avoid token explosion.
+ */
+function extractImageUrls(text) {
+    const urls = new Set();
+    // Markdown images: ![alt](url)
+    let match;
+    while ((match = MARKDOWN_IMAGE_RE.exec(text)) !== null) {
+        if (match[1] && IMAGE_EXTENSIONS.test(match[1])) {
+            urls.add(match[1]);
+        }
+    }
+    // Bare image URLs
+    while ((match = BARE_IMAGE_URL_RE.exec(text)) !== null) {
+        urls.add(match[0]);
+    }
+    return [...urls].slice(0, 4);
+}
+/**
+ * Build a multimodal user message with text + image content parts.
+ * If no images found, returns a plain string content message.
+ */
+function buildMultimodalUserMessage(textContent, stimulus) {
+    // Collect image URLs from multiple sources
+    const imageUrls = [];
+    // From stimulus payload
+    const payload = stimulus.payload;
+    if ('sourceUrl' in payload && typeof payload.sourceUrl === 'string' && IMAGE_EXTENSIONS.test(payload.sourceUrl)) {
+        imageUrls.push(payload.sourceUrl);
+    }
+    if ('body' in payload && typeof payload.body === 'string') {
+        imageUrls.push(...extractImageUrls(payload.body));
+    }
+    if ('content' in payload && typeof payload.content === 'string') {
+        imageUrls.push(...extractImageUrls(payload.content));
+    }
+    // Also scan the built prompt itself
+    imageUrls.push(...extractImageUrls(textContent));
+    // Deduplicate, limit to 4
+    const uniqueUrls = [...new Set(imageUrls)].slice(0, 4);
+    if (uniqueUrls.length === 0) {
+        return { role: 'user', content: textContent };
+    }
+    // Build multimodal content parts
+    const parts = [
+        { type: 'text', text: textContent },
+        ...uniqueUrls.map((url) => ({
+            type: 'image_url',
+            image_url: { url, detail: 'low' },
+        })),
+    ];
+    return { role: 'user', content: parts };
+}
+//# sourceMappingURL=NewsroomAgency.js.map
