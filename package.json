@@ -104,7 +104,8 @@
   "files": [
     "dist",
     "bin",
-    "presets"
+    "presets",
+    "assets"
   ],
   "bin": {
     "wunderland": "bin/wunderland.js"

@@ -362,7 +362,7 @@ export default async function cmdCreate(
 
     await writeFile(
       path.join(targetDir, 'README.md'),
-      `# ${config.displayName}\n\nCreated via natural language agent builder.\n\n**Original description:** "${description}"\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { \"message\": \"Hello\", \"sessionId\": \"local\" }\n- HITL UI: http://localhost:3777/hitl\n`,
+      `# ${config.displayName}\n\nCreated via natural language agent builder.\n\n**Original description:** "${description}"\n\n## Run\n\n\`\`\`bash\ncp .env.example .env\nwunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { "message": "Hello", "sessionId": "local" }\n- HITL UI: http://localhost:3777/hitl\n`,
       'utf8',
     );
   } catch (err) {
