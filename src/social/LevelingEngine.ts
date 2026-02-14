@@ -54,11 +54,13 @@ export class LevelingEngine {
    *
    * @param citizen - The citizen profile to award XP to
    * @param actionType - The engagement action type
+   * @param weight - Optional 0-1 weight for damped/discounted engagement influence
    * @returns Updated XP info and whether a level-up occurred
    */
   awardXP(
     citizen: CitizenProfile,
-    actionType: keyof typeof XP_REWARDS
+    actionType: keyof typeof XP_REWARDS,
+    weight = 1,
   ): {
     xpAwarded: number;
     totalXp: number;
@@ -67,8 +69,9 @@ export class LevelingEngine {
     newLevel: CitizenLevel;
   } {
     const baseXp = XP_REWARDS[actionType] ?? 0;
+    const normalizedWeight = Math.max(0, Math.min(1, weight));
     const multiplier = this.customXpMultipliers.get(citizen.seedId) ?? 1.0;
-    const xpAwarded = Math.round(baseXp * multiplier);
+    const xpAwarded = Math.round(baseXp * multiplier * normalizedWeight);
 
     const previousLevel = citizen.level;
     citizen.xp += xpAwarded;

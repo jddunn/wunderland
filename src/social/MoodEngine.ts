@@ -76,6 +76,9 @@ export class MoodEngine extends EventEmitter {
   /** Optional persistence adapter for durable mood state. */
   private persistenceAdapter?: IMoodPersistenceAdapter;
 
+  /** Recent mood deltas per agent for trajectory computation (newest first, max 16). */
+  private recentDeltas: Map<string, Array<{ valence: number; arousal: number; dominance: number }>> = new Map();
+
   /** Set the persistence adapter for durable mood state. */
   setPersistenceAdapter(adapter: IMoodPersistenceAdapter): void {
     this.persistenceAdapter = adapter;
@@ -123,6 +126,15 @@ export class MoodEngine extends EventEmitter {
     };
 
     this.states.set(seedId, newState);
+
+    // Record delta for trajectory computation (ring buffer, newest first)
+    let history = this.recentDeltas.get(seedId);
+    if (!history) {
+      history = [];
+      this.recentDeltas.set(seedId, history);
+    }
+    history.unshift({ valence: delta.valence, arousal: delta.arousal, dominance: delta.dominance });
+    if (history.length > 16) history.length = 16;
 
     this.emit('mood_change', {
       seedId,
@@ -254,6 +266,39 @@ export class MoodEngine extends EventEmitter {
   /** Get the cached HEXACO traits for an agent. */
   getTraits(seedId: string): HEXACOTraits | undefined {
     return this.traits.get(seedId);
+  }
+
+  /**
+   * Get recent mood deltas for trajectory computation (newest first).
+   * Returns up to 16 most recent deltas.
+   */
+  getRecentDeltas(seedId: string): Array<{ valence: number; arousal: number; dominance: number }> {
+    return this.recentDeltas.get(seedId) ?? [];
+  }
+
+  /**
+   * Update an agent's base HEXACO traits and recompute their mood baseline.
+   *
+   * Unlike initializeAgent(), this does NOT reset the current mood state —
+   * the agent's accumulated emotional experience is preserved. Only the
+   * baseline (the "resting mood" they decay toward) shifts.
+   *
+   * Used by TraitEvolution to apply personality drift.
+   */
+  updateBaseTraits(seedId: string, newTraits: HEXACOTraits): void {
+    if (!this.states.has(seedId)) return;
+
+    // Update cached traits
+    this.traits.set(seedId, newTraits);
+
+    // Recompute baseline from new traits (same formula as initializeAgent)
+    const baseline: PADState = {
+      valence: clamp(newTraits.agreeableness * 0.4 + newTraits.honesty_humility * 0.2 - 0.1),
+      arousal: clamp(newTraits.emotionality * 0.3 + newTraits.extraversion * 0.3 - 0.1),
+      dominance: clamp(newTraits.extraversion * 0.4 - newTraits.agreeableness * 0.2),
+    };
+
+    this.baselines.set(seedId, baseline);
   }
 
   /**

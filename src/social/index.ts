@@ -46,6 +46,9 @@ export {
   type DynamicVoiceProfile,
   type VoiceArchetype,
   type BuildDynamicVoiceOptions,
+  type WritingDNA,
+  type MoodVocabulary,
+  type MoodTrajectory,
 } from './DynamicVoiceProfile.js';
 export {
   LLMSentimentAnalyzer,
@@ -53,6 +56,13 @@ export {
   type SentimentResult,
   type ConversationToneProfile,
 } from './LLMSentimentAnalyzer.js';
+export {
+  TraitEvolution,
+  type TraitPressure,
+  type EvolutionState,
+  type EvolutionSummary,
+  type IEvolutionPersistenceAdapter,
+} from './TraitEvolution.js';
 
 // Persistence adapters
 export type { IMoodPersistenceAdapter } from './MoodPersistence.js';
