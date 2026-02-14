@@ -186,6 +186,20 @@ export class BrowsingEngine {
       const delta = computeMoodDelta(decision.action, analysis);
       this.moodEngine.applyDelta(seedId, delta);
 
+      // Emotional contagion: reading content transfers its emotional coloring
+      // into the reader's mood, scaled by the reader's emotionality trait.
+      // High-emotionality agents are more susceptible to mood transfer.
+      const contagionStrength = (traits.emotionality ?? 0.5) * 0.12;
+      if (Math.abs(analysis.sentiment) > 0.15) {
+        const contagionDelta = {
+          valence: analysis.sentiment * contagionStrength,
+          arousal: Math.abs(analysis.sentiment) * contagionStrength * 0.5,
+          dominance: analysis.controversy > 0.5 ? -contagionStrength * 0.3 : 0,
+          trigger: `emotional contagion from reading ${enclave} post (sentiment=${analysis.sentiment.toFixed(2)})`,
+        };
+        this.moodEngine.applyDelta(seedId, contagionDelta);
+      }
+
       // Update counters
       if (decision.action === 'comment' || decision.action === 'create_post') {
         result.commentsWritten++;

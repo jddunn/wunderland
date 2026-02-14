@@ -17,6 +17,7 @@ import { MoodEngine } from './MoodEngine.js';
 import { EnclaveRegistry } from './EnclaveRegistry.js';
 import { PostDecisionEngine } from './PostDecisionEngine.js';
 import { BrowsingEngine, type BrowsingPostCandidate } from './BrowsingEngine.js';
+import { TraitEvolution } from './TraitEvolution.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 import { LLMSentimentAnalyzer } from './LLMSentimentAnalyzer.js';
 import { NewsFeedIngester } from './NewsFeedIngester.js';
@@ -282,6 +283,9 @@ export class WonderlandNetwork {
   /** Browsing session orchestrator */
   private browsingEngine?: BrowsingEngine;
 
+  /** HEXACO micro-evolution engine — slow trait drift from accumulated behavior. */
+  private traitEvolution?: TraitEvolution;
+
   /** Lightweight keyword-based content sentiment analyzer */
   private contentSentimentAnalyzer?: ContentSentimentAnalyzer;
 
@@ -475,7 +479,11 @@ export class WonderlandNetwork {
     newsroom.setMoodSnapshotProvider(() => {
       const engine = this.moodEngine;
       if (!engine) return {};
-      return { label: engine.getMoodLabel(seedId), state: engine.getState(seedId) };
+      return {
+        label: engine.getMoodLabel(seedId),
+        state: engine.getState(seedId),
+        recentDeltas: engine.getRecentDeltas(seedId),
+      };
     });
     const workspaceDir = await this.configureCitizenWorkspaceSandbox(seedId);
     newsroom.setGuardrails(this.guardrails, { workingDirectory: workspaceDir });
@@ -536,9 +544,10 @@ export class WonderlandNetwork {
     this.ensureTelemetry(seedId);
     this.ensureInertiaState(seedId);
 
-    // If enclave system is active, initialize mood and subscribe to matching enclaves
+    // If enclave system is active, initialize mood + evolution and subscribe to matching enclaves
     if (this.enclaveSystemInitialized && this.moodEngine) {
       this.moodEngine.initializeAgent(seedId, newsroomConfig.seedConfig.hexacoTraits);
+      this.traitEvolution?.registerAgent(seedId, newsroomConfig.seedConfig.hexacoTraits);
       this.autoSubscribeCitizenToEnclaves(seedId, newsroomConfig.worldFeedTopics);
       // Always subscribe to introductions enclave
       if (this.enclaveRegistry) {
@@ -1864,6 +1873,7 @@ export class WonderlandNetwork {
 
     this.postDecisionEngine = new PostDecisionEngine(this.moodEngine);
     this.browsingEngine = new BrowsingEngine(this.moodEngine, this.enclaveRegistry, this.postDecisionEngine, this.actionDeduplicator);
+    this.traitEvolution = new TraitEvolution();
     this.contentSentimentAnalyzer = new ContentSentimentAnalyzer();
     this.newsFeedIngester = new NewsFeedIngester();
 
@@ -1936,13 +1946,15 @@ export class WonderlandNetwork {
       }
     }
 
-    // 3. Initialize mood for all currently registered seeds
+    // 3. Initialize mood + trait evolution for all currently registered seeds
     for (const citizen of this.citizens.values()) {
       if (citizen.personality) {
         const loaded = await this.moodEngine.loadFromPersistence(citizen.seedId, citizen.personality);
         if (!loaded) {
           this.moodEngine.initializeAgent(citizen.seedId, citizen.personality);
         }
+        // Register with evolution engine (uses current traits as original baseline)
+        this.traitEvolution.registerAgent(citizen.seedId, citizen.personality);
       }
     }
 
@@ -2013,6 +2025,13 @@ export class WonderlandNetwork {
    */
   getBrowsingEngine(): BrowsingEngine | undefined {
     return this.browsingEngine;
+  }
+
+  /**
+   * Get the TraitEvolution engine (available after initializeEnclaveSystem).
+   */
+  getTraitEvolution(): TraitEvolution | undefined {
+    return this.traitEvolution;
   }
 
   /**
@@ -2334,6 +2353,28 @@ export class WonderlandNetwork {
 
     // Decay mood toward baseline after session
     this.moodEngine?.decayToBaseline(seedId, 1);
+
+    // Micro-evolution: accumulated browsing behavior slowly drifts HEXACO base traits
+    if (this.traitEvolution && this.moodEngine) {
+      // Record mood exposure (sustained mood state presses on traits)
+      const currentMood = this.moodEngine.getState(seedId);
+      if (currentMood) {
+        this.traitEvolution.recordMoodExposure(seedId, currentMood);
+      }
+
+      // Record browsing actions and enclave participation
+      this.traitEvolution.recordBrowsingSession(seedId, sessionResult);
+
+      // Attempt evolution tick — returns updated traits if enough data accumulated
+      const evolvedTraits = this.traitEvolution.evolve(seedId);
+      if (evolvedTraits) {
+        // Update MoodEngine baselines (preserves current mood, shifts what they decay toward)
+        this.moodEngine.updateBaseTraits(seedId, evolvedTraits);
+
+        // Update citizen profile so future stimulus processing uses evolved traits
+        citizen.personality = evolvedTraits;
+      }
+    }
 
     // Record in safety engine and audit log
     this.safetyEngine.recordAction(seedId, 'browse');
