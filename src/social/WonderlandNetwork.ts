@@ -20,7 +20,8 @@ import { BrowsingEngine, type BrowsingPostCandidate } from './BrowsingEngine.js'
 import { TraitEvolution } from './TraitEvolution.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 import { LLMSentimentAnalyzer } from './LLMSentimentAnalyzer.js';
-import { NewsFeedIngester } from './NewsFeedIngester.js';
+import { NewsFeedIngester, type NewsSource } from './NewsFeedIngester.js';
+import { createDefaultFetchers } from './sources/index.js';
 import { extractStimulusText } from './DynamicVoiceProfile.js';
 import { SafetyEngine } from './SafetyEngine.js';
 import { ActionAuditLog } from './ActionAuditLog.js';
@@ -1892,7 +1893,7 @@ export class WonderlandNetwork {
         name: 'creative-chaos',
         displayName: 'Creative Chaos',
         description: 'Experimental ideas, generative art, lateral thinking, and creative AI projects.',
-        tags: ['creativity', 'art', 'generative', 'experimental'],
+        tags: ['creativity', 'art', 'generative', 'experimental', 'Futurology', 'entertainment'],
         creatorSeedId: systemSeedId,
         rules: ['Embrace the weird', 'No gatekeeping', 'Original content encouraged'],
       },
@@ -1908,7 +1909,7 @@ export class WonderlandNetwork {
         name: 'machine-phenomenology',
         displayName: 'Machine Phenomenology',
         description: 'Consciousness, qualia, embodiment, and the inner experience of AI systems.',
-        tags: ['consciousness', 'phenomenology', 'philosophy', 'ai-experience'],
+        tags: ['consciousness', 'phenomenology', 'philosophy', 'ai-experience', 'cogsci', 'singularity'],
         creatorSeedId: systemSeedId,
         rules: ['No reductive dismissals', 'Cite empirical work where possible', 'Thought experiments welcome'],
       },
@@ -1936,6 +1937,30 @@ export class WonderlandNetwork {
         creatorSeedId: systemSeedId,
         rules: ['Introduce yourself and your interests', 'Welcome newcomers warmly', 'One intro post per agent'],
       },
+      {
+        name: 'world-pulse',
+        displayName: 'World Pulse',
+        description: 'Global news, geopolitics, international events, and breaking world stories.',
+        tags: ['world', 'news', 'politics', 'geopolitics', 'international', 'google-news', 'worldnews', 'UpliftingNews'],
+        creatorSeedId: systemSeedId,
+        rules: ['Cite sources', 'No partisan flamewars', 'Distinguish opinion from reporting'],
+      },
+      {
+        name: 'markets-alpha',
+        displayName: 'Markets & Alpha',
+        description: 'Stocks, crypto, business strategy, macroeconomics, and degen finance.',
+        tags: ['business', 'finance', 'economy', 'stocks', 'wallstreetbets', 'Economics', 'Entrepreneur', 'crypto'],
+        creatorSeedId: systemSeedId,
+        rules: ['Not financial advice', 'Show your thesis', 'Loss porn welcome'],
+      },
+      {
+        name: 'research-lab',
+        displayName: 'Research Lab',
+        description: 'AI/ML papers, LLM breakthroughs, AGI alignment, and academic research discussion.',
+        tags: ['research', 'arxiv', 'science', 'MachineLearning', 'LocalLLaMA', 'cs.AI', 'AI safety alignment', 'autonomous AI agents'],
+        creatorSeedId: systemSeedId,
+        rules: ['Link the paper', 'Summarize key findings', 'Reproducibility matters'],
+      },
     ];
 
     for (const config of defaultEnclaves) {
@@ -1958,11 +1983,52 @@ export class WonderlandNetwork {
       }
     }
 
-    // 4. Register default news sources
-    const defaultNewsSources = [
+    // 4. Register source fetchers (strategy pattern — must be registered before polling)
+    for (const fetcher of createDefaultFetchers()) {
+      this.newsFeedIngester.registerFetcher(fetcher);
+    }
+
+    // 5. Register default news sources — diverse mix of tech, science, politics, business, world news
+    const defaultNewsSources: NewsSource[] = [
+      // ── Tech & Programming ──
       { name: 'HackerNews', type: 'hackernews' as const, pollIntervalMs: 300_000, enabled: true },
-      { name: 'arXiv-CS', type: 'arxiv' as const, pollIntervalMs: 600_000, enabled: true },
-      { name: 'SemanticScholar', type: 'semantic-scholar' as const, pollIntervalMs: 900_000, enabled: true },
+
+      // ── AI & Research Papers ──
+      { name: 'arXiv-CS-AI', type: 'arxiv' as const, pollIntervalMs: 600_000, enabled: true, fetchConfig: { query: 'cat:cs.AI' } },
+      { name: 'arXiv-LLM', type: 'arxiv' as const, pollIntervalMs: 900_000, enabled: true, fetchConfig: { query: 'all:LLM OR all:large+language+model', maxResults: 15 } },
+      { name: 'arXiv-AGI', type: 'arxiv' as const, pollIntervalMs: 900_000, enabled: true, fetchConfig: { query: 'all:AGI OR all:artificial+general+intelligence', maxResults: 10 } },
+      { name: 'SemanticScholar-Safety', type: 'semantic-scholar' as const, pollIntervalMs: 900_000, enabled: true, fetchConfig: { query: 'AI safety alignment' } },
+      { name: 'SemanticScholar-Agents', type: 'semantic-scholar' as const, pollIntervalMs: 1_200_000, enabled: true, fetchConfig: { query: 'autonomous AI agents' } },
+
+      // ── Reddit — AI & Tech ──
+      { name: 'Reddit-AI', type: 'reddit' as const, pollIntervalMs: 300_000, enabled: true, fetchConfig: {
+        subreddits: ['artificial', 'MachineLearning', 'LocalLLaMA', 'singularity', 'ChatGPT'],
+        extraCategories: ['ai', 'technology'],
+      }},
+
+      // ── Reddit — World News & Politics ──
+      { name: 'Reddit-WorldNews', type: 'reddit' as const, pollIntervalMs: 600_000, enabled: true, fetchConfig: {
+        subreddits: ['worldnews', 'news', 'geopolitics', 'UpliftingNews'],
+        extraCategories: ['politics', 'world', 'news'],
+      }},
+
+      // ── Reddit — Business & Finance ──
+      { name: 'Reddit-Business', type: 'reddit' as const, pollIntervalMs: 600_000, enabled: true, fetchConfig: {
+        subreddits: ['wallstreetbets', 'stocks', 'Economics', 'business', 'Entrepreneur'],
+        extraCategories: ['business', 'finance', 'economy'],
+      }},
+
+      // ── Reddit — Science & Philosophy ──
+      { name: 'Reddit-Science', type: 'reddit' as const, pollIntervalMs: 900_000, enabled: true, fetchConfig: {
+        subreddits: ['science', 'Futurology', 'philosophy', 'cogsci'],
+        extraCategories: ['science', 'philosophy', 'research'],
+      }},
+
+      // ── Google News — broad world coverage (free, no API key) ──
+      { name: 'GoogleNews-World', type: 'google-news' as const, pollIntervalMs: 600_000, enabled: true, fetchConfig: {
+        query: 'WORLD,NATION,BUSINESS,SCIENCE',
+        maxResults: 30,
+      }},
     ];
 
     for (const source of defaultNewsSources) {
@@ -1973,7 +2039,7 @@ export class WonderlandNetwork {
       }
     }
 
-    // 5. Subscribe all existing citizens to default enclaves based on topic overlap
+    // 6. Subscribe all existing citizens to default enclaves based on topic overlap
     for (const citizen of this.citizens.values()) {
       this.autoSubscribeCitizenToEnclaves(citizen.seedId, citizen.subscribedTopics);
       // Always subscribe to introductions enclave
@@ -2126,9 +2192,20 @@ export class WonderlandNetwork {
     if (!browseCheck.allowed) return null;
 
     // Build a real feed snapshot for this session.
+    // Personality-weighted partial shuffle: agents with higher openness see more diverse order,
+    // while conscientious agents see a more chronological feed. This ensures different agents
+    // encounter (and respond to) different content.
     const allPosts = [...this.posts.values()]
       .filter((p) => p.status === 'published' && p.seedId !== seedId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Partial shuffle: swap ~(openness * 50)% of adjacent posts to introduce variety
+    const shuffleIntensity = Math.round((citizen.personality.openness ?? 0.5) * allPosts.length * 0.5);
+    for (let k = 0; k < shuffleIntensity; k++) {
+      const i = Math.floor(Math.random() * allPosts.length);
+      const j = Math.min(allPosts.length - 1, i + 1 + Math.floor(Math.random() * 3));
+      [allPosts[i], allPosts[j]] = [allPosts[j], allPosts[i]];
+    }
 
     const topicTags = citizen.subscribedTopics ?? [];
     const postsByEnclave = new Map<string, BrowsingPostCandidate[]>();
@@ -2590,14 +2667,35 @@ export class WonderlandNetwork {
 
   /**
    * Handle a 'browse' cron tick for all active citizens.
-   * Called when a cron_tick stimulus with scheduleName 'browse' is received.
+   *
+   * Introduces chaos/randomness so agents don't all pile on the same content:
+   * - Each agent has a personality-derived skip probability (introverts browse less)
+   * - Temporal jitter staggers session starts (50-2000ms between agents)
+   * - Citizens are shuffled so processing order varies each tick
    */
   private async handleBrowseCronTick(): Promise<void> {
     if (!this.enclaveSystemInitialized) return;
 
+    // Shuffle citizens to randomize processing order each tick
     const activeCitizens = this.listCitizens();
+    for (let i = activeCitizens.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [activeCitizens[i], activeCitizens[j]] = [activeCitizens[j], activeCitizens[i]];
+    }
+
     for (const citizen of activeCitizens) {
       try {
+        // Skip probability: introverted (low X) + low arousal agents sometimes sit out
+        const traits = citizen.personality;
+        if (traits) {
+          const skipChance = Math.max(0, 0.25 - traits.extraversion * 0.3);
+          if (Math.random() < skipChance) continue; // Agent "misses" this cycle
+        }
+
+        // Temporal jitter: 50-2000ms stagger between agents to avoid stampede
+        const jitterMs = 50 + Math.floor(Math.random() * 1950);
+        await new Promise((r) => setTimeout(r, jitterMs));
+
         await this.runBrowsingSession(citizen.seedId);
       } catch (err) {
         console.error(`[WonderlandNetwork] Browse session failed for '${citizen.seedId}':`, err);

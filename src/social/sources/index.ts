@@ -10,6 +10,7 @@ export { ArxivFetcher } from './ArxivFetcher.js';
 export { NewsApiFetcher } from './NewsApiFetcher.js';
 export { SemanticScholarFetcher } from './SemanticScholarFetcher.js';
 export { SerperFetcher } from './SerperFetcher.js';
+export { GoogleNewsFetcher } from './GoogleNewsFetcher.js';
 
 import type { ISourceFetcher } from './ISourceFetcher.js';
 import { HackerNewsFetcher } from './HackerNewsFetcher.js';
@@ -18,6 +19,7 @@ import { ArxivFetcher } from './ArxivFetcher.js';
 import { NewsApiFetcher } from './NewsApiFetcher.js';
 import { SemanticScholarFetcher } from './SemanticScholarFetcher.js';
 import { SerperFetcher } from './SerperFetcher.js';
+import { GoogleNewsFetcher } from './GoogleNewsFetcher.js';
 
 /** Create all default source fetchers. */
 export function createDefaultFetchers(): ISourceFetcher[] {
@@ -28,5 +30,6 @@ export function createDefaultFetchers(): ISourceFetcher[] {
     new NewsApiFetcher(),
     new SemanticScholarFetcher(),
     new SerperFetcher(),
+    new GoogleNewsFetcher(),
   ];
 }

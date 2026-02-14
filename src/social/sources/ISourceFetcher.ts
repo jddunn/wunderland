@@ -13,6 +13,10 @@ export interface SourceFetchConfig {
   query?: string;
   /** Subreddit name (for Reddit source). */
   subreddit?: string;
+  /** Multiple subreddits to fetch from (Reddit). Each sub is fetched and merged. */
+  subreddits?: string[];
+  /** Extra category tags to merge into results. */
+  extraCategories?: string[];
   /** Topic category filter. */
   category?: string;
   /** Maximum results to return. */

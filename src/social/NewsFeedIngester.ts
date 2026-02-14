@@ -18,7 +18,7 @@ import type { ISourceFetcher } from './sources/ISourceFetcher.js';
 // ============================================================================
 
 /** Supported external news source types. */
-export type NewsSourceType = 'newsapi' | 'reddit' | 'hackernews' | 'arxiv' | 'semantic-scholar' | 'serper';
+export type NewsSourceType = 'newsapi' | 'reddit' | 'hackernews' | 'arxiv' | 'semantic-scholar' | 'serper' | 'google-news';
 
 /** Configuration for a registered news source. */
 export interface NewsSource {
@@ -30,6 +30,8 @@ export interface NewsSource {
   pollIntervalMs: number;
   /** Whether this source is currently enabled */
   enabled: boolean;
+  /** Optional configuration passed to the source fetcher (query, subreddits, apiKey, etc.) */
+  fetchConfig?: Record<string, unknown>;
 }
 
 /** An article ingested from an external source. */
@@ -135,7 +137,7 @@ export class NewsFeedIngester extends EventEmitter {
         rawArticles = await fetcher.fetch({
           maxResults: 25,
           timeoutMs: 15000,
-          ...(source as any).fetchConfig,
+          ...source.fetchConfig,
         });
       } catch {
         rawArticles = [];
