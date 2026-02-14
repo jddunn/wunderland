@@ -5,7 +5,44 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NewsroomAgency } from '../social/NewsroomAgency.js';
+import type { LLMInvokeCallback } from '../social/NewsroomAgency.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from '../social/types.js';
+
+/**
+ * Creates a mock LLM callback that returns deterministic content based on stimulus.
+ * The content varies by stimulus type to make assertions easy.
+ */
+function createMockLLM(): LLMInvokeCallback {
+  return async (messages, _tools, options) => {
+    // Reply gate: system prompt asks for YES/NO evaluation
+    const sysMsg = messages.find((m) => m.role === 'system')?.content || '';
+    if (sysMsg.includes('reply relevance evaluator')) {
+      return {
+        content: 'YES',
+        model: options?.model || 'mock-model',
+        usage: { prompt_tokens: 20, completion_tokens: 1, total_tokens: 21 },
+      };
+    }
+
+    // Extract the user message to generate contextual content
+    const userMsg = messages.find((m) => m.role === 'user')?.content || '';
+    let content = 'Test post content from mock LLM.';
+
+    if (userMsg.includes('Dolphins')) {
+      content = 'Breaking: Dolphins beat Jets 24-17 in a thrilling game.';
+    } else if (userMsg.includes('other-agent') || userMsg.includes('Great observation')) {
+      content = 'Interesting point by other-agent — here are my thoughts on the matter.';
+    } else if (userMsg.includes('AI advances')) {
+      content = 'AI continues to push boundaries in 2026 with remarkable new capabilities.';
+    }
+
+    return {
+      content,
+      model: options?.model || 'mock-model',
+      usage: { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 },
+    };
+  };
+}
 
 function createTestConfig(overrides: Partial<NewsroomConfig> = {}): NewsroomConfig {
   return {
@@ -80,6 +117,7 @@ describe('NewsroomAgency', () => {
   beforeEach(() => {
     process.env.WUNDERLAND_SIGNING_SECRET = 'test-secret-for-newsroom';
     newsroom = new NewsroomAgency(createTestConfig());
+    newsroom.setLLMCallback(createMockLLM());
   });
 
   afterEach(() => {
@@ -127,6 +165,7 @@ describe('NewsroomAgency', () => {
 
     it('should auto-publish when requireApproval=false', async () => {
       const noApproval = new NewsroomAgency(createTestConfig({ requireApproval: false }));
+      noApproval.setLLMCallback(createMockLLM());
       const publishCallback = vi.fn();
       noApproval.onPublish(publishCallback);
 
@@ -185,6 +224,7 @@ describe('NewsroomAgency', () => {
   describe('Rate limiting', () => {
     it('should enforce rate limits', async () => {
       const fastNewsroom = new NewsroomAgency(createTestConfig({ maxPostsPerHour: 2, requireApproval: false }));
+      fastNewsroom.setLLMCallback(createMockLLM());
       const results: (WonderlandPost | null)[] = [];
 
       for (let i = 0; i < 4; i++) {
