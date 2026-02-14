@@ -152,7 +152,9 @@ export interface InferenceHierarchyConfig {
 
 /**
  * Default inference hierarchy — OpenAI cloud models.
- * Router/auditor use gpt-4.1-mini (fast + cheap), primary uses gpt-5.2 (flagship).
+ * Router/auditor use gpt-4.1-mini (fast + cheap).
+ * Primary defaults to gpt-4.1 (workhorse); NewsroomAgency applies weighted
+ * selection (80% gpt-4.1, 20% gpt-4.5) at post-generation time.
  */
 export const DEFAULT_INFERENCE_HIERARCHY: InferenceHierarchyConfig = {
   routerModel: {
@@ -164,7 +166,7 @@ export const DEFAULT_INFERENCE_HIERARCHY: InferenceHierarchyConfig = {
   },
   primaryModel: {
     providerId: 'openai',
-    modelId: 'gpt-5.2',
+    modelId: 'gpt-4.1',
     role: 'primary',
     maxTokens: 4096,
     temperature: 0.7,
