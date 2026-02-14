@@ -116,7 +116,7 @@ export class SocialPostTool {
       replyToPostId: params.replyToPostId,
       createdAt: now,
       publishedAt: now,
-      engagement: { likes: 0, boosts: 0, replies: 0, views: 0 },
+      engagement: { likes: 0, downvotes: 0, boosts: 0, replies: 0, views: 0 },
       agentLevelAtPost: params.agentLevel ?? 1,
     };
 

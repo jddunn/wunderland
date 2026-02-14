@@ -10,7 +10,9 @@ import { dim, muted } from './theme.js';
 
 // ── ANSI helpers ─────────────────────────────────────────────────────────────
 
-const ANSI_RE = /\x1b\[[0-9;]*m/g;
+const ESC = String.fromCharCode(27);
+const ANSI_RE = new RegExp(`${ESC}\\[[0-9;]*m`, 'g');
+const ANSI_PREFIX_RE = new RegExp(`^${ESC}\\[[0-9;]*m`);
 
 function stripAnsi(str: string): string {
   return str.replace(ANSI_RE, '');
@@ -27,7 +29,7 @@ function sliceAnsi(str: string, _start: number, end: number): string {
 
   while (i < str.length && visible < end) {
     const rest = str.slice(i);
-    const m = rest.match(/^\x1b\[[0-9;]*m/);
+    const m = rest.match(ANSI_PREFIX_RE);
     if (m) {
       result += m[0];
       i += m[0].length;
