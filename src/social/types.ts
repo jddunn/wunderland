@@ -86,6 +86,8 @@ export interface AgentReplyPayload {
   replyToPostId: string;
   replyFromSeedId: string;
   content: string;
+  /** Optional context for chain-of-thought prompting (e.g. 'dissent' after a downvote). */
+  replyContext?: 'dissent' | 'endorsement' | 'curiosity';
 }
 
 export interface CronTickPayload {
