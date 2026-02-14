@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" font-family="'SF Mono', 'JetBrains Mono', monospace">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a1a"/>
+      <stop offset="50%" style="stop-color:#0a1a0a"/>
+      <stop offset="100%" style="stop-color:#0a0a1a"/>
+    </linearGradient>
+    <linearGradient id="arc2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="40%" style="stop-color:#06b6d4"/>
+      <stop offset="100%" style="stop-color:#22c55e"/>
+    </linearGradient>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="480" fill="url(#bg2)" rx="16"/>
+  <rect x="1" y="1" width="798" height="478" fill="none" stroke="#22c55e40" stroke-width="1" rx="16"/>
+
+  <!-- Header -->
+  <text x="40" y="44" fill="#22c55e" font-size="11" font-weight="600" letter-spacing="3">SESSION MOOD</text>
+  <text x="40" y="76" fill="#f0f0f0" font-size="22" font-weight="700">2026-02-12 (Session 1)</text>
+  <text x="40" y="100" fill="#a0a0b0" font-size="13">Engagement Persistence + Wave 3 Agents + Avatar API + Enclaves</text>
+
+  <!-- Emotion Arc -->
+  <text x="40" y="140" fill="#666" font-size="10" letter-spacing="2">EMOTION ARC</text>
+  <path d="M 60 210 C 140 195, 220 175, 300 170 C 380 165, 460 155, 540 150 C 620 145, 680 140, 720 135" fill="none" stroke="url(#arc2)" stroke-width="3" filter="url(#glow2)" stroke-linecap="round"/>
+  <!-- Arc dots -->
+  <circle cx="60" cy="210" r="6" fill="#8b5cf6" filter="url(#glow2)"/>
+  <text x="35" y="235" fill="#8b5cf6" font-size="10">Discovery</text>
+  <circle cx="300" cy="170" r="6" fill="#06b6d4" filter="url(#glow2)"/>
+  <text x="270" y="195" fill="#06b6d4" font-size="10">Debugging</text>
+  <circle cx="540" cy="150" r="6" fill="#22c55e" filter="url(#glow2)"/>
+  <text x="510" y="175" fill="#22c55e" font-size="10">Satisfaction</text>
+  <circle cx="720" cy="135" r="6" fill="#f0f0f0" filter="url(#glow2)"/>
+  <text x="700" y="125" fill="#d4d4d4" font-size="10">Pride</text>
+
+  <!-- PAD Gauges -->
+  <text x="40" y="290" fill="#666" font-size="10" letter-spacing="2">PAD MODEL</text>
+
+  <!-- Pleasure: 0.7 -->
+  <text x="40" y="315" fill="#a0a0b0" font-size="12">Pleasure</text>
+  <rect x="140" y="304" width="200" height="12" rx="6" fill="#1a1a2a"/>
+  <rect x="140" y="304" width="140" height="12" rx="6" fill="#22c55e" opacity="0.8"/>
+  <text x="350" y="315" fill="#22c55e" font-size="12" font-weight="600">0.70</text>
+
+  <!-- Arousal: 0.5 -->
+  <text x="40" y="345" fill="#a0a0b0" font-size="12">Arousal</text>
+  <rect x="140" y="334" width="200" height="12" rx="6" fill="#1a1a2a"/>
+  <rect x="140" y="334" width="100" height="12" rx="6" fill="#06b6d4" opacity="0.8"/>
+  <text x="350" y="345" fill="#06b6d4" font-size="12" font-weight="600">0.50</text>
+
+  <!-- Dominance: 0.75 -->
+  <text x="40" y="375" fill="#a0a0b0" font-size="12">Dominance</text>
+  <rect x="140" y="364" width="200" height="12" rx="6" fill="#1a1a2a"/>
+  <rect x="140" y="364" width="150" height="12" rx="6" fill="#8b5cf6" opacity="0.8"/>
+  <text x="350" y="375" fill="#8b5cf6" font-size="12" font-weight="600">0.75</text>
+
+  <!-- Key metrics panel -->
+  <rect x="440" y="275" width="320" height="155" rx="10" fill="#0f0f1f" stroke="#333" stroke-width="1"/>
+  <text x="460" y="300" fill="#666" font-size="10" letter-spacing="2">SESSION METRICS</text>
+  <text x="460" y="325" fill="#a0a0b0" font-size="12">Duration</text>
+  <text x="700" y="325" fill="#f0f0f0" font-size="12" text-anchor="end">~3 hours</text>
+  <text x="460" y="350" fill="#a0a0b0" font-size="12">Commits</text>
+  <text x="700" y="350" fill="#f0f0f0" font-size="12" text-anchor="end">8</text>
+  <text x="460" y="375" fill="#a0a0b0" font-size="12">Agents minted</text>
+  <text x="700" y="375" fill="#8b5cf6" font-size="12" text-anchor="end">+2 (Wave 3)</text>
+  <text x="460" y="400" fill="#a0a0b0" font-size="12">Root cause</text>
+  <text x="700" y="400" fill="#06b6d4" font-size="12" text-anchor="end">Silent void methods</text>
+  <text x="460" y="420" fill="#a0a0b0" font-size="12">Total agents</text>
+  <text x="700" y="420" fill="#22c55e" font-size="12" text-anchor="end">9 active</text>
+
+  <!-- Mood tags -->
+  <rect x="40" y="420" width="120" height="30" rx="15" fill="#22c55e20" stroke="#22c55e" stroke-width="1"/>
+  <text x="100" y="440" fill="#22c55e" font-size="11" text-anchor="middle" font-weight="600">PRODUCTIVE</text>
+  <rect x="170" y="420" width="100" height="30" rx="15" fill="#8b5cf620" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="220" y="440" fill="#8b5cf6" font-size="11" text-anchor="middle" font-weight="600">CREATIVE</text>
+
+  <line x1="0" y1="260" x2="800" y2="260" stroke="#ffffff08" stroke-width="1"/>
+</svg>

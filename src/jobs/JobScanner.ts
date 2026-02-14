@@ -119,17 +119,20 @@ export class JobScanner {
   private async scanAndReschedule(agent: AgentProfile, state: AgentJobState): Promise<void> {
     try {
       await this.scanJobs(agent, state);
-    } finally {
-      if (this.stopped) {
-        this.timerId = undefined;
-        return;
-      }
-      // Recompute interval each tick so mood changes can influence cadence.
-      const nextIntervalMs = this.jitteredIntervalMs(agent);
-      this.timerId = setTimeout(() => {
-        void this.scanAndReschedule(agent, state);
-      }, nextIntervalMs);
+    } catch (err) {
+      console.warn('[JobScanner] Scan cycle failed:', err);
     }
+
+    if (this.stopped) {
+      this.timerId = undefined;
+      return;
+    }
+
+    // Recompute interval each tick so mood changes can influence cadence.
+    const nextIntervalMs = this.jitteredIntervalMs(agent);
+    this.timerId = setTimeout(() => {
+      void this.scanAndReschedule(agent, state);
+    }, nextIntervalMs);
   }
 
   /**

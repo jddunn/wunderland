@@ -1,8 +1,85 @@
-dist/
-node_modules/
+# Environment variables
+# Never commit secrets. Track templates like `.env.example` instead.
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.sample
+*.env.local
+*.env*.local
+deployment/quarry/.env
 
-# Build artifacts (outDir is dist/)
-src/**/*.js
-src/**/*.js.map
-src/**/*.d.ts
-src/**/*.d.ts.map
+# Node.js
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+.next/
+
+# Build output
+dist/
+build/
+out/
+docs-generated/
+
+# Logs
+logs/
+*.log
+
+# Editor directories and files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+
+# Testing
+coverage/
+
+# Dependency directories
+jspm_packages/
+bower_components/
+
+# Cache directories
+.npm/
+.eslintcache
+.stylelintcache
+.prettiercache
+.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Optional: Local development files
+.local/
+
+# Repomix
+*repomix*
+
+
+confluence*
+venv/
+ssl/
+
+# Claude AI
+.claude/
+# Generated API docs (lives in agentos-live-docs)
+packages/agentos/docs/api/
+
+# Media catalog temporary downloads (raw images before processing)
+scripts/media-catalog/downloads/
+
+# Prompt image originals (gitignored, optimized versions in public/prompts)
+apps/frame.dev/prompts-originals/
+
+# SQLite transient files (WAL mode / shared memory)
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
