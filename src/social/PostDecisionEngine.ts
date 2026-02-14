@@ -30,6 +30,28 @@ export interface PostAnalysis {
   replyCount: number;
 }
 
+/** Structured breakdown of what influenced a decision. */
+export interface ReasoningTrace {
+  /** Human-readable narrative */
+  narrative: string;
+  /** Full probability distribution across all actions */
+  probabilities: Record<PostAction, number>;
+  /** Component-level influence scores (how much each factor contributed) */
+  components: {
+    traitInfluence: Record<string, number>;
+    moodInfluence: { valence: number; arousal: number; dominance: number };
+    contentInfluence: { relevance: number; controversy: number; sentiment: number; replyCount: number };
+  };
+  /** Top 2 rejected alternatives with their probabilities and why they lost */
+  counterfactuals: Array<{
+    action: PostAction;
+    probability: number;
+    reason: string;
+  }>;
+  /** Timestamp of decision */
+  decidedAt: string;
+}
+
 /** Result of the decision engine's evaluation. */
 export interface DecisionResult {
   /** The selected action */
@@ -38,6 +60,8 @@ export interface DecisionResult {
   probability: number;
   /** Human-readable reasoning for the choice */
   reasoning: string;
+  /** Structured reasoning trace with component scores and counterfactuals */
+  trace: ReasoningTrace;
   /** Chained follow-up action (e.g. comment after downvote). */
   chainedAction?: PostAction;
   /** Context hint for chained action CoT prompting. */
@@ -136,6 +160,48 @@ export class PostDecisionEngine {
     // Build reasoning string
     const reasoning = buildReasoning(chosen, traits, mood, analysis, probabilities[chosen]);
 
+    // Build structured reasoning trace with component scores
+    const traitInfluence: Record<string, number> = {
+      honesty_humility: H,
+      extraversion: X,
+      agreeableness: A,
+      conscientiousness: C,
+      openness: O,
+    };
+
+    // Build counterfactuals: top 2 rejected alternatives
+    const sortedActions = (Object.entries(probabilities) as [PostAction, number][])
+      .filter(([a]) => a !== chosen && a !== 'emoji_react')
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2);
+
+    const counterfactuals = sortedActions.map(([action, prob]) => ({
+      action,
+      probability: prob,
+      reason: buildCounterfactualReason(chosen, action, traits, mood, analysis),
+    }));
+
+    const trace: ReasoningTrace = {
+      narrative: reasoning,
+      probabilities: { ...probabilities },
+      components: {
+        traitInfluence,
+        moodInfluence: {
+          valence: mood.valence,
+          arousal: mood.arousal,
+          dominance: mood.dominance,
+        },
+        contentInfluence: {
+          relevance: analysis.relevance,
+          controversy: analysis.controversy,
+          sentiment: analysis.sentiment,
+          replyCount: analysis.replyCount,
+        },
+      },
+      counterfactuals,
+      decidedAt: new Date().toISOString(),
+    };
+
     // Chaining: downvote → critical comment (personality + mood driven)
     // Low agreeableness agents with high arousal are more likely to explain their dissent.
     let chainedAction: PostAction | undefined;
@@ -170,6 +236,7 @@ export class PostDecisionEngine {
       action: chosen,
       probability: probabilities[chosen],
       reasoning,
+      trace,
       chainedAction,
       chainedContext,
     };
@@ -269,6 +336,37 @@ export class PostDecisionEngine {
 /** Clamp a number to [0, 1]. */
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+/** Build a contrastive explanation for why an alternative was rejected. */
+function buildCounterfactualReason(
+  chosen: PostAction,
+  alternative: PostAction,
+  traits: HEXACOTraits,
+  mood: PADState,
+  _analysis: PostAnalysis,
+): string {
+  // Identify the key factor that differentiated chosen from alternative
+  const factors: string[] = [];
+
+  if (chosen === 'upvote' && alternative === 'skip') {
+    factors.push(`agreeableness (${traits.agreeableness.toFixed(2)}) and valence (${mood.valence.toFixed(2)}) favored engagement over skip`);
+  } else if (chosen === 'downvote' && alternative === 'skip') {
+    factors.push(`low agreeableness (${traits.agreeableness.toFixed(2)}) drove disapproval over disengagement`);
+  } else if (chosen === 'comment' && alternative === 'upvote') {
+    factors.push(`extraversion (${traits.extraversion.toFixed(2)}) and arousal (${mood.arousal.toFixed(2)}) pushed toward active participation`);
+  } else if (chosen === 'skip' && alternative === 'upvote') {
+    factors.push(`low engagement drive outweighed approval tendency`);
+  } else if (chosen === 'read_comments' && alternative === 'upvote') {
+    factors.push(`conscientiousness (${traits.conscientiousness.toFixed(2)}) favored investigation over quick endorsement`);
+  } else if (alternative === 'create_post') {
+    factors.push(`original posting requires higher dominance (${mood.dominance.toFixed(2)}) than available`);
+  } else {
+    // Generic contrastive
+    factors.push(`${chosen} scored higher given current personality and mood configuration`);
+  }
+
+  return `Rejected ${alternative} in favor of ${chosen}: ${factors.join('; ')}.`;
 }
 
 /** Build a human-readable reasoning string for the chosen action. */

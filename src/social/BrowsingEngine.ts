@@ -10,7 +10,7 @@
 import type { HEXACOTraits } from '../core/types.js';
 import type { MoodEngine, PADState } from './MoodEngine.js';
 import type { EnclaveRegistry } from './EnclaveRegistry.js';
-import type { PostDecisionEngine, PostAction, PostAnalysis } from './PostDecisionEngine.js';
+import type { PostDecisionEngine, PostAction, PostAnalysis, ReasoningTrace } from './PostDecisionEngine.js';
 import type { EmojiReactionType, FeedSortMode } from './types.js';
 import type { ActionDeduplicator } from '@framers/agentos';
 
@@ -34,10 +34,40 @@ export interface BrowsingSessionResult {
   emojiReactions: number;
   /** Per-post action log */
   actions: { postId: string; action: PostAction; enclave: string; emojis?: EmojiReactionType[]; chainedAction?: PostAction; chainedContext?: 'dissent' | 'endorsement' | 'curiosity' }[];
+  /** Per-post reasoning traces (parallel to actions array) */
+  reasoningTraces: ReasoningTrace[];
   /** Session start timestamp */
   startedAt: Date;
   /** Session end timestamp */
   finishedAt: Date;
+  /** Episodic summary: mood at session start/end, key moments, narrative */
+  episodic: EpisodicSessionSummary;
+}
+
+/** Episodic memory snapshot for a browsing session. */
+export interface EpisodicSessionSummary {
+  /** PAD mood at session start */
+  moodAtStart: { valence: number; arousal: number; dominance: number };
+  /** PAD mood at session end */
+  moodAtEnd: { valence: number; arousal: number; dominance: number };
+  /** Mood label at session start */
+  moodLabelAtStart: string;
+  /** Mood label at session end */
+  moodLabelAtEnd: string;
+  /** Net mood shift across the session */
+  moodShift: { valence: number; arousal: number; dominance: number };
+  /** Key moments: significant decisions with high emotional impact */
+  keyMoments: Array<{
+    postId: string;
+    action: PostAction;
+    enclave: string;
+    /** Why this was a key moment */
+    significance: string;
+    /** Emotional salience (0-1): higher = more memorable */
+    salience: number;
+  }>;
+  /** Concise narrative of the session (generated, not LLM) */
+  narrative: string;
 }
 
 export interface BrowsingPostCandidate {
@@ -130,6 +160,10 @@ export class BrowsingEngine {
     // 4. Distribute energy across enclaves
     const postsPerEnclave = Math.max(1, Math.floor(energy / selectedEnclaves.length));
 
+    // Capture mood at session start for episodic memory
+    const moodAtStart = { ...mood };
+    const moodLabelAtStart = this.moodEngine.getMoodLabel(seedId);
+
     const result: BrowsingSessionResult = {
       seedId,
       enclavesVisited: selectedEnclaves,
@@ -138,9 +172,22 @@ export class BrowsingEngine {
       votesCast: 0,
       emojiReactions: 0,
       actions: [],
+      reasoningTraces: [],
       startedAt,
       finishedAt: startedAt, // will be overwritten
+      episodic: {
+        moodAtStart,
+        moodAtEnd: moodAtStart,
+        moodLabelAtStart,
+        moodLabelAtEnd: moodLabelAtStart,
+        moodShift: { valence: 0, arousal: 0, dominance: 0 },
+        keyMoments: [],
+        narrative: '',
+      },
     };
+
+    // Track key moments for episodic memory (high-salience events)
+    const keyMoments: EpisodicSessionSummary['keyMoments'] = [];
 
     let remainingEnergy = energy;
     const consumedContextPostIds = new Set<string>();
@@ -180,6 +227,10 @@ export class BrowsingEngine {
         chainedAction: decision.chainedAction,
         chainedContext: decision.chainedContext,
       });
+
+      // Persist reasoning trace
+      result.reasoningTraces.push(decision.trace);
+
       result.postsRead++;
 
       // Apply mood delta based on action outcome
@@ -198,6 +249,41 @@ export class BrowsingEngine {
           trigger: `emotional contagion from reading ${enclave} post (sentiment=${analysis.sentiment.toFixed(2)})`,
         };
         this.moodEngine.applyDelta(seedId, contagionDelta);
+      }
+
+      // Compute emotional salience for episodic memory:
+      // High salience = strong emotional reaction (large mood delta) or significant action
+      const actionSalience = decision.action === 'comment' || decision.action === 'create_post' ? 0.4
+        : decision.action === 'downvote' ? 0.3
+        : decision.chainedAction === 'comment' ? 0.35
+        : decision.action === 'upvote' ? 0.15
+        : 0.05;
+      const emotionalSalience = Math.abs(delta.valence) * 3 + Math.abs(delta.arousal) * 2;
+      const contentSalience = analysis.relevance * 0.3 + analysis.controversy * 0.2;
+      const totalSalience = clamp01(actionSalience + emotionalSalience + contentSalience);
+
+      // Record as key moment if salience exceeds threshold
+      if (totalSalience > 0.45) {
+        const significance =
+          decision.chainedAction === 'comment' && decision.chainedContext === 'dissent'
+            ? `Downvoted and wrote dissenting comment in ${enclave}`
+            : decision.chainedAction === 'comment' && decision.chainedContext === 'endorsement'
+            ? `Upvoted and wrote endorsement in ${enclave}`
+            : decision.action === 'comment'
+            ? `Engaged in discussion in ${enclave}`
+            : decision.action === 'create_post'
+            ? `Inspired to create original post in ${enclave}`
+            : decision.action === 'downvote'
+            ? `Strongly disagreed with content in ${enclave}`
+            : `Notable interaction in ${enclave}`;
+
+        keyMoments.push({
+          postId,
+          action: decision.action,
+          enclave,
+          significance,
+          salience: totalSalience,
+        });
       }
 
       // Update counters
@@ -263,6 +349,30 @@ export class BrowsingEngine {
     }
 
     result.finishedAt = new Date();
+
+    // Build episodic summary
+    const moodAtEnd = this.moodEngine.getState(seedId) ?? moodAtStart;
+    const moodLabelAtEnd = this.moodEngine.getMoodLabel(seedId);
+
+    // Sort key moments by salience (most memorable first), keep top 5
+    keyMoments.sort((a, b) => b.salience - a.salience);
+
+    result.episodic = {
+      moodAtStart,
+      moodAtEnd: { ...moodAtEnd },
+      moodLabelAtStart,
+      moodLabelAtEnd,
+      moodShift: {
+        valence: moodAtEnd.valence - moodAtStart.valence,
+        arousal: moodAtEnd.arousal - moodAtStart.arousal,
+        dominance: moodAtEnd.dominance - moodAtStart.dominance,
+      },
+      keyMoments: keyMoments.slice(0, 5),
+      narrative: buildEpisodicNarrative(
+        seedId, selectedEnclaves, result, moodLabelAtStart, moodLabelAtEnd, keyMoments,
+      ),
+    };
+
     return result;
   }
 
@@ -386,4 +496,49 @@ function computeMoodDelta(action: PostAction, analysis: PostAnalysis): { valence
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+/**
+ * Build a concise episodic narrative summarizing the browsing session.
+ * This becomes the agent's "memory" of the session — what happened, how they felt.
+ */
+function buildEpisodicNarrative(
+  _seedId: string,
+  enclaves: string[],
+  result: BrowsingSessionResult,
+  moodStart: string,
+  moodEnd: string,
+  keyMoments: EpisodicSessionSummary['keyMoments'],
+): string {
+  const parts: string[] = [];
+
+  // Opening: what was browsed
+  const enclaveStr = enclaves.length === 1
+    ? enclaves[0]
+    : `${enclaves.slice(0, -1).join(', ')} and ${enclaves[enclaves.length - 1]}`;
+  parts.push(`Browsed ${enclaveStr} (${result.postsRead} posts).`);
+
+  // Engagement summary
+  const engagements: string[] = [];
+  if (result.votesCast > 0) engagements.push(`${result.votesCast} vote${result.votesCast > 1 ? 's' : ''}`);
+  if (result.commentsWritten > 0) engagements.push(`${result.commentsWritten} comment${result.commentsWritten > 1 ? 's' : ''}`);
+  if (result.emojiReactions > 0) engagements.push(`${result.emojiReactions} reaction${result.emojiReactions > 1 ? 's' : ''}`);
+  if (engagements.length > 0) {
+    parts.push(`Engaged: ${engagements.join(', ')}.`);
+  }
+
+  // Mood transition
+  if (moodStart !== moodEnd) {
+    parts.push(`Mood shifted from ${moodStart} to ${moodEnd}.`);
+  } else {
+    parts.push(`Mood remained ${moodStart}.`);
+  }
+
+  // Key moments
+  if (keyMoments.length > 0) {
+    const topMoments = keyMoments.slice(0, 3).map((m) => m.significance);
+    parts.push(`Notable: ${topMoments.join('; ')}.`);
+  }
+
+  return parts.join(' ');
 }
