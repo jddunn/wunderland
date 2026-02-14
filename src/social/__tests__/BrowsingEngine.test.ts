@@ -116,11 +116,13 @@ describe('BrowsingEngine', () => {
       const traits = createTraits({ extraversion: 0.9 }); // High X for more engagement
       const result = browsingEngine.startSession('seed-1', traits);
 
-      // Count comments from actions
-      const commentActions = result.actions.filter(
-        (a) => a.action === 'comment' || a.action === 'create_post',
-      );
-      expect(result.commentsWritten).toBe(commentActions.length);
+      // Count comments from actions (primary + chained)
+      let expectedComments = 0;
+      for (const a of result.actions) {
+        if (a.action === 'comment' || a.action === 'create_post') expectedComments++;
+        if (a.chainedAction === 'comment') expectedComments++;
+      }
+      expect(result.commentsWritten).toBe(expectedComments);
 
       // Count votes from actions
       const voteActions = result.actions.filter(
@@ -532,6 +534,104 @@ describe('BrowsingEngine', () => {
       }
 
       expect(result.emojiReactions).toBe(manualCount);
+    });
+  });
+
+  // =========================================================================
+  // Chained actions in browsing sessions
+  // =========================================================================
+  describe('Chained actions (downvote → comment, upvote → endorsement)', () => {
+    beforeEach(() => {
+      // Create enclaves first (outer beforeEach resets the registry)
+      registry.createEnclave(createEnclaveConfig('tech', 'seed-creator'));
+      registry.createEnclave(createEnclaveConfig('science', 'seed-creator'));
+
+      const traits = createTraits({ agreeableness: 0.2, extraversion: 0.8 });
+      moodEngine.initializeAgent('seed-chain', traits);
+      registry.subscribe('seed-chain', 'tech');
+      registry.subscribe('seed-chain', 'science');
+    });
+
+    it('should record chainedAction and chainedContext in session actions', () => {
+      // Very low agreeableness + high arousal to maximize downvote + chain probability
+      const traits = createTraits({ agreeableness: 0.05, extraversion: 0.95, openness: 0.8 });
+      moodEngine.applyDelta('seed-chain', {
+        valence: -0.5, arousal: 0.7, dominance: 0.5, trigger: 'test frustration',
+      });
+
+      // Run many sessions — browsing uses random post analysis so chaining is stochastic.
+      // Each session processes 5-30 posts, each with independent chaining probability.
+      let foundChained = false;
+      let totalActions = 0;
+      for (let attempt = 0; attempt < 100 && !foundChained; attempt++) {
+        const result = browsingEngine.startSession('seed-chain', traits);
+        totalActions += result.actions.length;
+        for (const action of result.actions) {
+          if (action.chainedAction !== undefined) {
+            foundChained = true;
+            expect(action.chainedContext).toBeDefined();
+            expect(['dissent', 'endorsement', 'curiosity']).toContain(action.chainedContext);
+            expect(action.chainedAction).toBe('comment');
+            break;
+          }
+        }
+      }
+
+      // With very low agreeableness + high arousal across 100 sessions (500-3000 total posts),
+      // at least one chained action should occur.
+      expect(foundChained).toBe(true);
+    });
+
+    it('should count chained comments in commentsWritten', () => {
+      const traits = createTraits({ agreeableness: 0.2, extraversion: 0.8 });
+
+      // Run many sessions and verify counting
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const result = browsingEngine.startSession('seed-chain', traits);
+
+        // Manually count: primary comments + chained comments
+        let expectedComments = 0;
+        for (const action of result.actions) {
+          if (action.action === 'comment' || action.action === 'create_post') {
+            expectedComments++;
+          }
+          if (action.chainedAction === 'comment') {
+            expectedComments++;
+          }
+        }
+
+        expect(result.commentsWritten).toBe(expectedComments);
+      }
+    });
+
+    it('chained dissent should only appear on downvote actions', () => {
+      const traits = createTraits({ agreeableness: 0.15 });
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const result = browsingEngine.startSession('seed-chain', traits);
+        for (const action of result.actions) {
+          if (action.chainedContext === 'dissent') {
+            expect(action.action).toBe('downvote');
+          }
+          if (action.chainedContext === 'endorsement') {
+            expect(action.action).toBe('upvote');
+          }
+        }
+      }
+    });
+
+    it('actions without chaining should have undefined chainedAction', () => {
+      const traits = createTraits();
+      moodEngine.initializeAgent('seed-unchained', traits);
+      // 'tech' enclave already created in beforeEach
+      registry.subscribe('seed-unchained', 'tech');
+
+      const result = browsingEngine.startSession('seed-unchained', traits);
+      for (const action of result.actions) {
+        if (action.action === 'skip' || action.action === 'read_comments') {
+          expect(action.chainedAction).toBeUndefined();
+        }
+      }
     });
   });
 });
