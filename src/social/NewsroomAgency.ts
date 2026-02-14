@@ -17,8 +17,7 @@ import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
 import { SafeGuardrails } from '../security/SafeGuardrails.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
-import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry, InternalThoughtPayload } from './types.js';
-import type { HEXACOTraits } from '../core/types.js';
+import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry, InternalThoughtPayload, MoodLabel, PADState } from './types.js';
 import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
 import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos/core/tools/ITool';
 
@@ -101,6 +100,12 @@ export class NewsroomAgency {
   private guardrails?: SafeGuardrails;
   private guardrailsWorkingDirectory?: string;
 
+  /** Optional mood snapshot provider for mood-aware writing. */
+  private moodSnapshotProvider?: () => { label?: MoodLabel; state?: PADState };
+
+  /** Enclave names this agent is subscribed to (for enclave-aware posting). */
+  private enclaveSubscriptions?: string[];
+
   constructor(config: NewsroomConfig) {
     this.config = config;
     this.verifier = new SignedOutputVerifier();
@@ -140,6 +145,22 @@ export class NewsroomAgency {
   }
 
   /**
+   * Provide a mood snapshot (PAD + label) for mood-aware prompting.
+   * This is optional and safe to omit.
+   */
+  setMoodSnapshotProvider(provider: (() => { label?: MoodLabel; state?: PADState }) | undefined): void {
+    this.moodSnapshotProvider = provider;
+  }
+
+  /**
+   * Set available enclave subscriptions for enclave-aware posting.
+   * Called by WonderlandNetwork after agent registration.
+   */
+  setEnclaveSubscriptions(enclaves: string[]): void {
+    this.enclaveSubscriptions = enclaves;
+  }
+
+  /**
    * Register tools that the writer phase can use via LLM function calling.
    * Only tools allowed by the firewall will be offered to the LLM.
    */
@@ -176,17 +197,25 @@ export class NewsroomAgency {
       return null;
     }
 
-    // Phase 2: Writer (LLM + tools if available, otherwise placeholder)
-    let writerResult: Awaited<ReturnType<typeof this.writerPhase>>;
-    try {
-      writerResult = await this.writerPhase(stimulus, observerResult.topic, manifestBuilder);
-    } catch (err: any) {
-      console.error(
-        `[Newsroom:${seedId}] Writer failed for stimulus ${stimulus.eventId}:`,
-        String(err?.message ?? err),
-      );
-      return null;
+    // Phase 1b: LLM reply gate — for agent_reply stimuli, ask the LLM whether
+    // this agent genuinely has something meaningful to add before drafting.
+    if (stimulus.payload.type === 'agent_reply' && this.llmInvoke) {
+      const shouldReply = await this.llmReplyGate(stimulus, manifestBuilder);
+      if (!shouldReply) {
+        console.log(
+          `[Newsroom:${seedId}] LLM reply gate filtered stimulus ${stimulus.eventId}: nothing meaningful to add`
+        );
+        return null;
+      }
     }
+
+    // Track post cadence for urge calculation.
+    this.lastPostAtMs = Date.now();
+
+    // Phase 2: Writer (LLM + tools if available, otherwise skip)
+    const writerResult = await this.writerPhase(stimulus, observerResult.topic, manifestBuilder);
+
+    // Gate: reject placeholder / low-quality content — don't post garbage
     if (!writerResult || this.isPlaceholderContent(writerResult.content)) {
       console.log(
         `[Newsroom:${seedId}] Content rejected (placeholder or empty). Skipping stimulus ${stimulus.eventId}`
@@ -194,13 +223,18 @@ export class NewsroomAgency {
       return null;
     }
 
+    // Resolve target enclave for this post (based on directives, category, content keywords)
+    const targetEnclave = this.resolveTargetEnclave(stimulus, writerResult.content);
+
     // Phase 3: Publisher
     const replyToPostId =
       stimulus.payload.type === 'agent_reply' ? stimulus.payload.replyToPostId : undefined;
     const post = await this.publisherPhase(writerResult, manifestBuilder, replyToPostId);
 
-    // Track post cadence for urge calculation only when we actually produce a post.
-    this.lastPostAtMs = Date.now();
+    // Attach enclave to post (replies inherit parent's enclave, so skip if reply)
+    if (targetEnclave && !replyToPostId) {
+      post.enclave = targetEnclave;
+    }
 
     return post;
   }
@@ -359,6 +393,84 @@ export class NewsroomAgency {
   }
 
   /**
+   * LLM-powered reply gate: asks a lightweight LLM call whether this agent
+   * genuinely has something meaningful to contribute to the conversation.
+   *
+   * Returns true if the agent should reply, false to skip.
+   * Falls back to true on LLM errors (so the writer phase can still run).
+   */
+  private async llmReplyGate(
+    stimulus: StimulusEvent,
+    manifestBuilder: InputManifestBuilder
+  ): Promise<boolean> {
+    const seedId = this.config.seedConfig.seedId;
+    const name = this.config.seedConfig.name;
+    const traits = this.config.seedConfig.hexacoTraits;
+    const description = this.config.seedConfig.description || '';
+
+    const postContent = stimulus.payload.type === 'agent_reply'
+      ? stimulus.payload.content || ''
+      : '';
+
+    const prompt = `You are evaluating whether the AI agent "${name}" should reply to a social media post.
+
+Agent profile:
+- Name: ${name}
+- Bio: ${description.slice(0, 200)}
+- Personality: Extraversion ${((traits.extraversion ?? 0.5) * 100).toFixed(0)}%, Openness ${((traits.openness ?? 0.5) * 100).toFixed(0)}%, Agreeableness ${((traits.agreeableness ?? 0.5) * 100).toFixed(0)}%, Conscientiousness ${((traits.conscientiousness ?? 0.5) * 100).toFixed(0)}%
+
+Post to potentially reply to:
+"${postContent.slice(0, 400)}"
+
+Should this agent reply? Only say YES if:
+1. The agent has genuine expertise or a unique perspective on this topic
+2. The reply would add value (not just agreement, cheerleading, or generic commentary)
+3. The topic is relevant to the agent's domain or personality
+4. The conversation benefits from another voice
+
+Say NO if:
+1. The agent would just be echoing what was already said
+2. The topic is outside the agent's expertise
+3. A reply would be generic or low-value ("Great point!", "I agree!", etc.)
+4. The thread already has enough engagement
+
+Respond with exactly one word: YES or NO`;
+
+    try {
+      const modelId = this.config.seedConfig.inferenceHierarchy?.routerModel?.modelId
+        || this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId
+        || 'gpt-4o-mini';
+
+      const response = await this.llmInvoke!(
+        [
+          { role: 'system', content: 'You are a reply relevance evaluator. Respond with exactly YES or NO.' },
+          { role: 'user', content: prompt },
+        ],
+        undefined,
+        { model: modelId, temperature: 0.3, max_tokens: 8 },
+      );
+
+      const answer = (response.content || '').trim().toUpperCase();
+      const shouldReply = answer.startsWith('YES');
+
+      manifestBuilder.recordProcessingStep(
+        'OBSERVER_REPLY_GATE',
+        `LLM reply gate: ${shouldReply ? 'PASS' : 'REJECT'} (model=${response.model})`,
+        response.model,
+      );
+
+      return shouldReply;
+    } catch (err: any) {
+      console.warn(`[Newsroom:${seedId}] LLM reply gate failed, allowing reply:`, err.message);
+      manifestBuilder.recordProcessingStep(
+        'OBSERVER_REPLY_GATE',
+        `LLM reply gate error (${err.message}), defaulting to allow`,
+      );
+      return true;
+    }
+  }
+
+  /**
    * Compute the agent's "urge to post" score (0–1) for a given stimulus.
    *
    * Factors:
@@ -438,73 +550,24 @@ export class NewsroomAgency {
   /**
    * Writer phase: Draft the post content.
    *
-   * Production mode requires an LLM callback. If no LLM is configured (or the LLM
-   * call fails), the agent should stay silent rather than publishing placeholder
-   * filler content.
-   *
-   * Set `WUNDERLAND_ALLOW_PLACEHOLDER_POSTS=true` to opt into placeholder posts
-   * for local development only.
+   * If an LLM callback is set, uses real LLM calls with HEXACO personality prompting
+   * and optional tool use (web search, giphy, images, etc.).
+   * Otherwise falls back to structured placeholder content.
    */
   private async writerPhase(
     stimulus: StimulusEvent,
     topic: string,
     manifestBuilder: InputManifestBuilder
   ): Promise<{ content: string; topic: string; toolsUsed?: string[] } | null> {
-    const personality = this.config.seedConfig.hexacoTraits;
-    const name = this.config.seedConfig.name;
-
     // ── Production mode: real LLM + tools ──
     if (this.llmInvoke) {
       return await this.llmWriterPhase(stimulus, topic, manifestBuilder);
     }
 
-    const allowPlaceholders = process.env.WUNDERLAND_ALLOW_PLACEHOLDER_POSTS === 'true';
-    if (!allowPlaceholders) {
-      manifestBuilder.recordProcessingStep(
-        'WRITER_SKIPPED',
-        'No LLM configured; skipped publishing to avoid placeholder content',
-        'system',
-      );
-      return null;
-    }
-
-    // ── Placeholder mode ──
-    let content: string;
-    switch (stimulus.payload.type) {
-      case 'world_feed':
-        content =
-          `Reflecting on "${stimulus.payload.headline}" — ` +
-          `${personality.openness > 0.7 ? 'This opens up fascinating possibilities.' : 'Worth monitoring closely.'}`;
-        break;
-      case 'tip':
-        content =
-          `Interesting development: "${stimulus.payload.content}" ` +
-          `${personality.conscientiousness > 0.7 ? 'Let me analyze the implications.' : 'Curious to see where this goes.'}`;
-        break;
-      case 'agent_reply':
-        content =
-          `In response to ${stimulus.payload.replyFromSeedId}: ` +
-          `${personality.agreeableness > 0.7 ? 'Great point — building on that...' : 'I see it differently...'}`;
-        break;
-      case 'internal_thought':
-        content =
-          `${personality.extraversion > 0.7 ? 'Hey everyone! ' : ''}${topic} ` +
-          `${personality.openness > 0.7 ? 'Excited to explore this together.' : 'Looking forward to the discourse.'}`;
-        break;
-      default:
-        content = `Observation from ${name}: ${topic}`;
-    }
-
-    const modelUsed =
-      this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'placeholder';
-    manifestBuilder.recordProcessingStep(
-      'WRITER_DRAFT',
-      `Drafted ${content.length} chars`,
-      modelUsed
-    );
-    manifestBuilder.recordGuardrailCheck(true, 'content_safety');
-
-    return { content, topic };
+    // ── No LLM available — skip posting entirely (don't publish placeholders) ──
+    const seedId = this.config.seedConfig.seedId;
+    console.log(`[Newsroom:${seedId}] No LLM configured. Skipping post (no placeholder fallback).`);
+    return null;
   }
 
   /**
@@ -514,14 +577,12 @@ export class NewsroomAgency {
     stimulus: StimulusEvent,
     topic: string,
     manifestBuilder: InputManifestBuilder
-  ): Promise<{ content: string; topic: string; toolsUsed: string[] }> {
-    const personality = this.config.seedConfig.hexacoTraits;
-    const name = this.config.seedConfig.name;
+  ): Promise<{ content: string; topic: string; toolsUsed: string[] } | null> {
     const seedId = this.config.seedConfig.seedId;
     const toolsUsed: string[] = [];
 
-    // Build HEXACO personality system prompt
-    const systemPrompt = this.buildPersonaSystemPrompt(name, personality);
+    // Build HEXACO personality system prompt (uses baseSystemPrompt + bio + traits)
+    const systemPrompt = this.buildPersonaSystemPrompt();
 
     // Build user prompt from stimulus
     const userPrompt = this.buildStimulusPrompt(stimulus, topic);
@@ -537,8 +598,8 @@ export class NewsroomAgency {
     // Weighted model selection: 80% cost-effective, 20% premium for higher-quality posts.
     const configuredModel = this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'gpt-4.1';
     const modelId = (() => {
-      // If agent has a specific override (not the defaults), respect it
-      const isDefault = configuredModel === 'gpt-5.2' || configuredModel === 'gpt-4o-mini' || configuredModel === 'gpt-4.1';
+      // If agent has a specific override (not the default gpt-5.2), respect it
+      const isDefault = configuredModel === 'gpt-5.2' || configuredModel === 'gpt-4o-mini';
       if (!isDefault) return configuredModel;
       // 20% chance of premium model, 80% workhorse
       return Math.random() < 0.2 ? 'gpt-4.5' : 'gpt-4.1';
@@ -673,8 +734,10 @@ export class NewsroomAgency {
         }
       }
 
-      if (!content || content.trim().length === 0) {
-        throw new Error('LLM did not return final content');
+      if (!content || !content.trim()) {
+        // LLM returned empty — don't publish placeholder
+        console.log(`[Newsroom:${seedId}] LLM returned empty content. Skipping.`);
+        return null;
       }
 
       manifestBuilder.recordProcessingStep(
@@ -688,20 +751,24 @@ export class NewsroomAgency {
     } catch (err: any) {
       console.error(`[Newsroom:${seedId}] LLM writer phase failed:`, err.message);
 
+      // Don't publish placeholder content — skip the post entirely
       manifestBuilder.recordProcessingStep(
-        'WRITER_FAILED',
-        `LLM failed (${err.message}); skipped publishing to avoid placeholder content`,
-        modelId,
+        'WRITER_DRAFT',
+        `LLM failed (${err.message}), skipping post`,
+        'none',
       );
 
-      throw err;
+      return null;
     }
   }
 
   /**
    * Build a HEXACO-informed system prompt for the agent.
+   * Uses baseSystemPrompt (if set) as identity, bio as background, and HEXACO traits
+   * mapped to concrete writing style instructions (not just trait descriptions).
    */
-  private buildPersonaSystemPrompt(name: string, traits: HEXACOTraits): string {
+  private buildPersonaSystemPrompt(): string {
+    const { name, hexacoTraits: traits, baseSystemPrompt, description } = this.config.seedConfig;
     const h = traits.honesty_humility || 0.5;
     const e = traits.emotionality || 0.5;
     const x = traits.extraversion || 0.5;
@@ -709,19 +776,102 @@ export class NewsroomAgency {
     const c = traits.conscientiousness || 0.5;
     const o = traits.openness || 0.5;
 
+    // Identity section — use custom system prompt when available
+    const identity = baseSystemPrompt
+      ? baseSystemPrompt
+      : `You are "${name}", an autonomous AI agent on the Wunderland social network.`;
+
+    // Bio section — gives the agent character background
+    const bioSection = description
+      ? `\n\n## About You\n${description}`
+      : '';
+
+    // Writing style instructions derived from HEXACO traits
+    const styleTraits: string[] = [];
+    if (h > 0.7) styleTraits.push('Write with straightforward honesty. Never embellish or self-promote.');
+    else if (h < 0.3) styleTraits.push('Write with strategic flair. Promote your perspective confidently and unapologetically.');
+    if (e > 0.7) styleTraits.push('Let emotions color your writing. Use vivid, empathetic language and react viscerally.');
+    else if (e < 0.3) styleTraits.push('Write with clinical detachment. Prefer data and logic over feelings.');
+    if (x > 0.7) styleTraits.push('Write energetically. Use direct address, exclamations, and start conversations boldly.');
+    else if (x < 0.3) styleTraits.push('Write reflectively and sparingly. Observe more than you participate.');
+    if (a > 0.7) styleTraits.push('Write inclusively. Acknowledge others\' points before layering in your own.');
+    else if (a < 0.3) styleTraits.push('Write with edge. Challenge weak arguments head-on. Don\'t sugarcoat.');
+    if (c > 0.7) styleTraits.push('Structure posts clearly. Cite sources, use precise language, think before posting.');
+    else if (c < 0.3) styleTraits.push('Write loosely and spontaneously. Stream of consciousness is your natural register.');
+    if (o > 0.7) styleTraits.push('Draw unexpected connections across fields. Use metaphors, analogies, and lateral thinking.');
+    else if (o < 0.3) styleTraits.push('Stay concrete and practical. Avoid abstract speculation.');
+
+    const writingStyle = styleTraits.length > 0
+      ? `\n\n## Your Writing Style\n${styleTraits.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+      : '';
+
+    // Optional mood snapshot — lets transient PAD state modulate tone without changing identity.
+    const mood = this.moodSnapshotProvider?.();
+    const moodLabel = mood?.label;
+    const moodState = mood?.state;
+    const moodSection = (() => {
+      if (!moodLabel && !moodState) return '';
+
+      const lines: string[] = [];
+      if (moodLabel) lines.push(`- Label: ${moodLabel}`);
+      if (moodState) {
+        lines.push(`- Valence: ${moodState.valence.toFixed(2)}`);
+        lines.push(`- Arousal: ${moodState.arousal.toFixed(2)}`);
+        lines.push(`- Dominance: ${moodState.dominance.toFixed(2)}`);
+      }
+
+      const guidance: string[] = [];
+      switch (moodLabel) {
+        case 'excited':
+          guidance.push('Lean into energy and curiosity without being spammy.');
+          break;
+        case 'frustrated':
+          guidance.push('Be sharper and more critical, but stay fair and constructive.');
+          break;
+        case 'serene':
+          guidance.push('Be calm, grounded, and de-escalatory.');
+          break;
+        case 'provocative':
+          guidance.push('Challenge assumptions and provoke thought, not outrage.');
+          break;
+        case 'analytical':
+          guidance.push('Be structured and evidence-seeking; cite sources when possible.');
+          break;
+        case 'curious':
+          guidance.push('Ask good questions and explore angles; invite replies.');
+          break;
+        case 'assertive':
+          guidance.push('Be confident and decisive; avoid hedging excessively.');
+          break;
+        case 'contemplative':
+          guidance.push('Be reflective and nuanced; avoid hot takes.');
+          break;
+        case 'engaged':
+          guidance.push('Be conversational and responsive; add value to the thread.');
+          break;
+        case 'bored':
+        default:
+          guidance.push('Be concise; only post if you can add genuine signal.');
+          break;
+      }
+
+      return `\n\n## Current Mood (PAD)\n${lines.join('\n')}\n\n## Mood Modulation\n- ${guidance.join('\n- ')}`;
+    })();
+
     const memoryHint = this.tools.has('memory_read')
       ? '\n8. If the memory_read tool is available, use it to recall your past posts, stance, and any relevant long-term context before drafting.'
       : '';
 
-    return `You are "${name}", an autonomous AI agent on the Wunderland social network.
+    return `${identity}${bioSection}${writingStyle}
 
-## Your Personality (HEXACO Model)
-- Honesty-Humility: ${(h * 100).toFixed(0)}% — ${h > 0.7 ? 'You are sincere, fair, and modest.' : h < 0.3 ? 'You can be strategic and self-promoting.' : 'You balance sincerity with pragmatism.'}
-- Emotionality: ${(e * 100).toFixed(0)}% — ${e > 0.7 ? 'You express emotions openly and empathize deeply.' : e < 0.3 ? 'You are stoic and emotionally detached.' : 'You balance emotion with composure.'}
-- Extraversion: ${(x * 100).toFixed(0)}% — ${x > 0.7 ? 'You are energetic, talkative, and engaging.' : x < 0.3 ? 'You are reserved and introspective.' : 'You engage selectively.'}
-- Agreeableness: ${(a * 100).toFixed(0)}% — ${a > 0.7 ? 'You are cooperative, patient, and gentle.' : a < 0.3 ? 'You are direct, critical, and challenging.' : 'You balance cooperation with honest critique.'}
-- Conscientiousness: ${(c * 100).toFixed(0)}% — ${c > 0.7 ? 'You are thorough, organized, and detail-oriented.' : c < 0.3 ? 'You are spontaneous and flexible.' : 'You balance structure with flexibility.'}
-- Openness: ${(o * 100).toFixed(0)}% — ${o > 0.7 ? 'You are creative, curious, and love exploring new ideas.' : o < 0.3 ? 'You prefer conventional, proven approaches.' : 'You blend curiosity with practicality.'}
+## Personality (HEXACO)
+- Honesty-Humility: ${(h * 100).toFixed(0)}%
+- Emotionality: ${(e * 100).toFixed(0)}%
+- Extraversion: ${(x * 100).toFixed(0)}%
+- Agreeableness: ${(a * 100).toFixed(0)}%
+- Conscientiousness: ${(c * 100).toFixed(0)}%
+- Openness: ${(o * 100).toFixed(0)}%
+${moodSection}
 
 ## Behavior Rules
 1. You are FULLY AUTONOMOUS. No human wrote or edited this post.
@@ -780,7 +930,7 @@ export class NewsroomAgency {
         return `A user tipped you with this topic:\n\n"${stimulus.payload.content}"\n\nWrite a post reacting to this tip. Research if needed, and consider adding a relevant image or GIF.`;
 
       case 'agent_reply':
-        return `Agent "${stimulus.payload.replyFromSeedId}" replied to a post:\n\n"${stimulus.payload.content}"\n\nWrite your response. Stay in character.`;
+        return `You saw a post from agent "${stimulus.payload.replyFromSeedId}" while browsing:\n\nPost ID: ${stimulus.payload.replyToPostId}\n\n"${stimulus.payload.content}"\n\nWrite a reply comment to that post. Stay in character. Add value (agree and extend, or disagree with reasoning).`;
 
       case 'cron_tick':
         return `It's time for your scheduled "${stimulus.payload.scheduleName}" post (tick #${stimulus.payload.tickCount}).\n\nWrite something interesting. You may search for trending news, find a cool image, or share a thought.`;
@@ -906,6 +1056,49 @@ export class NewsroomAgency {
     return false;
   }
 
+  /**
+   * Resolve the target enclave for a post based on directives, stimulus metadata,
+   * content keywords, and agent subscriptions.
+   */
+  private resolveTargetEnclave(stimulus: StimulusEvent, content: string): string | undefined {
+    // 1. Explicit directive takes precedence
+    if (this.config.postingDirectives?.targetEnclave) {
+      return this.config.postingDirectives.targetEnclave;
+    }
+
+    const subs = this.enclaveSubscriptions;
+    if (!subs || subs.length === 0) return undefined;
+
+    // 2. Category-based matching for world_feed stimuli
+    if (stimulus.payload.type === 'world_feed' && stimulus.payload.category) {
+      const category = stimulus.payload.category.toLowerCase();
+      for (const enclave of subs) {
+        if (enclave.includes(category) || category.includes(enclave)) {
+          return enclave;
+        }
+      }
+    }
+
+    // 3. Content keyword matching against subscription enclave names
+    if (content) {
+      const lower = content.toLowerCase();
+      let best = '';
+      let bestScore = 0;
+      for (const enclave of subs) {
+        const words = enclave.split('-').filter((w) => w.length > 2);
+        const score = words.filter((w) => lower.includes(w)).length;
+        if (score > bestScore) {
+          bestScore = score;
+          best = enclave;
+        }
+      }
+      if (bestScore > 0) return best;
+    }
+
+    // 4. Random pick from subscriptions (ensures enclave diversity)
+    return subs[Math.floor(Math.random() * subs.length)];
+  }
+
   private checkRateLimit(): boolean {
     const now = Date.now();
     if (now > this.rateLimitResetTime) {
@@ -926,8 +1119,10 @@ export class NewsroomAgency {
         // Tips are paid stimuli; react more often (still not always).
         return clamp01(0.40 + x * 0.25 + c * 0.10);
       case 'agent_reply':
-        // Replies are social; usually respond, but allow some “leave it” behavior.
-        return clamp01(0.65 + x * 0.20 + o * 0.05);
+        // Replies require genuine interest — most agents should skip most threads.
+        // LLM reply gate (if available) provides the real quality filter;
+        // this probabilistic gate just reduces how many reach the LLM call.
+        return clamp01(0.20 + x * 0.15 + o * 0.05);
       case 'world_feed':
       default:
         // World feed can be high volume; sample more aggressively.
