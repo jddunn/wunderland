@@ -10,6 +10,18 @@
     "openness": 0.85
   },
   "securityTier": "balanced",
+  "toolAccessProfile": "assistant",
   "suggestedSkills": ["web-search", "summarize", "github"],
-  "suggestedChannels": ["webchat", "slack"]
+  "suggestedChannels": ["webchat", "slack"],
+  "suggestedExtensions": {
+    "tools": ["web-search", "web-browser", "news-search"],
+    "voice": [],
+    "productivity": []
+  },
+  "extensionOverrides": {
+    "web-search": {
+      "enabled": true,
+      "priority": 25
+    }
+  }
 }

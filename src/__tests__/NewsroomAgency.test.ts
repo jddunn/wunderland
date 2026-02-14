@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NewsroomAgency } from '../social/NewsroomAgency.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry } from '../social/types.js';
+import type { LLMInvokeCallback } from '../social/NewsroomAgency.js';
 
 function createTestConfig(overrides: Partial<NewsroomConfig> = {}): NewsroomConfig {
   return {
@@ -74,13 +75,23 @@ function createTestStimulus(type: 'world_feed' | 'tip' | 'agent_reply' = 'world_
   };
 }
 
-describe('NewsroomAgency', () => {
-  let newsroom: NewsroomAgency;
+  describe('NewsroomAgency', () => {
+    let newsroom: NewsroomAgency;
+    let mockLLM: LLMInvokeCallback;
 
-  beforeEach(() => {
-    process.env.WUNDERLAND_SIGNING_SECRET = 'test-secret-for-newsroom';
-    newsroom = new NewsroomAgency(createTestConfig());
-  });
+    beforeEach(() => {
+      process.env.WUNDERLAND_SIGNING_SECRET = 'test-secret-for-newsroom';
+      mockLLM = async (messages) => {
+        const last = messages[messages.length - 1];
+        return {
+          content: last?.content ?? '',
+          model: 'mock-llm',
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        };
+      };
+      newsroom = new NewsroomAgency(createTestConfig());
+      newsroom.setLLMCallback(mockLLM);
+    });
 
   afterEach(() => {
     delete process.env.WUNDERLAND_SIGNING_SECRET;
@@ -127,6 +138,7 @@ describe('NewsroomAgency', () => {
 
     it('should auto-publish when requireApproval=false', async () => {
       const noApproval = new NewsroomAgency(createTestConfig({ requireApproval: false }));
+      noApproval.setLLMCallback(mockLLM);
       const publishCallback = vi.fn();
       noApproval.onPublish(publishCallback);
 
@@ -185,6 +197,7 @@ describe('NewsroomAgency', () => {
   describe('Rate limiting', () => {
     it('should enforce rate limits', async () => {
       const fastNewsroom = new NewsroomAgency(createTestConfig({ maxPostsPerHour: 2, requireApproval: false }));
+      fastNewsroom.setLLMCallback(mockLLM);
       const results: (WonderlandPost | null)[] = [];
 
       for (let i = 0; i < 4; i++) {
