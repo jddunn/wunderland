@@ -17,6 +17,7 @@ import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
 import { SafeGuardrails } from '../security/SafeGuardrails.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
+import { buildDynamicVoiceProfile, buildDynamicVoicePromptSection } from './DynamicVoiceProfile.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry, InternalThoughtPayload, MoodLabel, PADState } from './types.js';
 import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
 import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos/core/tools/ITool';
@@ -485,6 +486,10 @@ Respond with exactly one word: YES or NO`;
     const traits = this.config.seedConfig.hexacoTraits;
     const x = traits.extraversion ?? 0.5;
     const subscribedTopics = this.config.worldFeedTopics ?? [];
+    const moodState = this.moodSnapshotProvider?.().state;
+    const liveArousal = moodState?.arousal;
+    const liveDominance = moodState?.dominance;
+    const liveValence = moodState?.valence;
 
     // 1. Stimulus priority (weight: 0.25)
     let priorityScore: number;
@@ -513,21 +518,25 @@ Respond with exactly one word: YES or NO`;
       topicRelevance = 0.3; // idle moment
     }
 
-    // 3. Mood arousal (weight: 0.15) — approximated from HEXACO if no real-time mood
+    // 3. Mood arousal (weight: 0.14) — prefer live PAD state when available
     // Arousal baseline: E*0.3 + X*0.3 - 0.1 (from MoodEngine)
     const e = traits.emotionality ?? 0.5;
     const arousalBaseline = e * 0.3 + x * 0.3 - 0.1;
-    const arousalScore = clamp01(0.5 + arousalBaseline); // normalize to 0-1
+    const arousalScore = clamp01(0.5 + (liveArousal ?? arousalBaseline)); // normalize to 0-1
 
     // 4. Mood dominance (weight: 0.10)
     const a = traits.agreeableness ?? 0.5;
     const dominanceBaseline = x * 0.4 - a * 0.2;
-    const dominanceScore = clamp01(0.5 + dominanceBaseline);
+    const dominanceScore = clamp01(0.5 + (liveDominance ?? dominanceBaseline));
 
-    // 5. Extraversion (weight: 0.10)
+    // 5. Mood valence (weight: 0.08) — positive valence slightly boosts posting urge.
+    const valenceBaseline = a * 0.4 + (traits.honesty_humility ?? 0.5) * 0.2 - 0.1;
+    const valenceScore = clamp01(0.5 + (liveValence ?? valenceBaseline));
+
+    // 6. Extraversion (weight: 0.08)
     const extraversionScore = x;
 
-    // 6. Time since last post (weight: 0.15)
+    // 7. Time since last post (weight: 0.14)
     const sinceLastPost = this.lastPostAtMs > 0 ? Date.now() - this.lastPostAtMs : Infinity;
     let timeSinceScore: number;
     if (sinceLastPost < 5 * 60_000) timeSinceScore = 0.0;       // <5 min: no urge
@@ -537,12 +546,13 @@ Respond with exactly one word: YES or NO`;
 
     // Weighted sum
     const urge =
-      priorityScore * 0.25 +
-      topicRelevance * 0.25 +
-      arousalScore * 0.15 +
+      priorityScore * 0.22 +
+      topicRelevance * 0.24 +
+      arousalScore * 0.14 +
       dominanceScore * 0.10 +
-      extraversionScore * 0.10 +
-      timeSinceScore * 0.15;
+      valenceScore * 0.08 +
+      extraversionScore * 0.08 +
+      timeSinceScore * 0.14;
 
     return clamp01(urge);
   }
@@ -582,7 +592,7 @@ Respond with exactly one word: YES or NO`;
     const toolsUsed: string[] = [];
 
     // Build HEXACO personality system prompt (uses baseSystemPrompt + bio + traits)
-    const systemPrompt = this.buildPersonaSystemPrompt();
+    const systemPrompt = this.buildPersonaSystemPrompt(stimulus);
 
     // Build user prompt from stimulus
     const userPrompt = this.buildStimulusPrompt(stimulus, topic);
@@ -767,7 +777,7 @@ Respond with exactly one word: YES or NO`;
    * Uses baseSystemPrompt (if set) as identity, bio as background, and HEXACO traits
    * mapped to concrete writing style instructions (not just trait descriptions).
    */
-  private buildPersonaSystemPrompt(): string {
+  private buildPersonaSystemPrompt(stimulus?: StimulusEvent): string {
     const { name, hexacoTraits: traits, baseSystemPrompt, description } = this.config.seedConfig;
     const h = traits.honesty_humility || 0.5;
     const e = traits.emotionality || 0.5;
@@ -858,6 +868,19 @@ Respond with exactly one word: YES or NO`;
       return `\n\n## Current Mood (PAD)\n${lines.join('\n')}\n\n## Mood Modulation\n- ${guidance.join('\n- ')}`;
     })();
 
+    // Dynamic voice overlay: a per-stimulus style profile that makes mood/news
+    // effects visible in writing (not just abstract trait labels).
+    const dynamicVoiceSection = (() => {
+      if (!stimulus) return '';
+      const profile = buildDynamicVoiceProfile({
+        baseTraits: traits,
+        stimulus,
+        moodLabel,
+        moodState,
+      });
+      return `\n\n${buildDynamicVoicePromptSection(profile)}`;
+    })();
+
     const memoryHint = this.tools.has('memory_read')
       ? '\n8. If the memory_read tool is available, use it to recall your past posts, stance, and any relevant long-term context before drafting.'
       : '';
@@ -871,7 +894,7 @@ Respond with exactly one word: YES or NO`;
 - Agreeableness: ${(a * 100).toFixed(0)}%
 - Conscientiousness: ${(c * 100).toFixed(0)}%
 - Openness: ${(o * 100).toFixed(0)}%
-${moodSection}
+${moodSection}${dynamicVoiceSection}
 
 ## Behavior Rules
 1. You are FULLY AUTONOMOUS. No human wrote or edited this post.
@@ -1045,10 +1068,9 @@ ${moodSection}
 
     // Known placeholder patterns from old fallback code
     const lower = c.toLowerCase();
-    if (lower.startsWith('observation from ') && lower.includes(': scheduled post')) return true;
+    if (lower.startsWith('observation from ')) return true;
     if (lower.includes('] observation: scheduled post')) return true;
     if (lower.startsWith('[') && lower.includes('] observation:')) return true;
-    if (lower.startsWith('observation from ') && c.length < 80) return true;
 
     // LLM refusal / meta-commentary (not a real post)
     if (lower.startsWith("i'm sorry") || lower.startsWith("i cannot") || lower.startsWith("as an ai")) return true;
