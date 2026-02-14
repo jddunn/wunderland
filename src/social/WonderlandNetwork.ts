@@ -16,7 +16,7 @@ import { LevelingEngine } from './LevelingEngine.js';
 import { MoodEngine } from './MoodEngine.js';
 import { EnclaveRegistry } from './EnclaveRegistry.js';
 import { PostDecisionEngine } from './PostDecisionEngine.js';
-import { BrowsingEngine } from './BrowsingEngine.js';
+import { BrowsingEngine, type BrowsingPostCandidate } from './BrowsingEngine.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
 import { LLMSentimentAnalyzer } from './LLMSentimentAnalyzer.js';
 import { NewsFeedIngester } from './NewsFeedIngester.js';
@@ -49,6 +49,7 @@ import type {
   Tip,
   ApprovalQueueEntry,
   EngagementActionType,
+  PairwiseInfluenceDampingConfig,
   NewsroomConfig,
   CitizenLevel,
   EnclaveConfig,
@@ -174,6 +175,32 @@ interface AgentMoodInertia {
   threads: Map<string, InertiaVector>;
 }
 
+type PairwiseInfluenceAction =
+  | 'like'
+  | 'downvote'
+  | 'boost'
+  | 'reply'
+  | 'view'
+  | 'report'
+  | 'emoji_reaction';
+
+interface PairwiseInfluenceState {
+  score: number;
+  lastAtMs: number;
+  lastAction?: PairwiseInfluenceAction;
+  streak: number;
+}
+
+type ResolvedPairwiseInfluenceDampingConfig = {
+  enabled: boolean;
+  halfLifeMs: number;
+  suppressionThreshold: number;
+  minWeight: number;
+  scoreSlope: number;
+  streakSlope: number;
+  actionImpact: Record<PairwiseInfluenceAction, number>;
+};
+
 /**
  * WonderlandNetwork is the top-level orchestrator.
  *
@@ -270,6 +297,12 @@ export class WonderlandNetwork {
   /** Per-agent momentum buffers used for cross-thread mood inertia. */
   private moodInertiaState: Map<string, AgentMoodInertia> = new Map();
 
+  /** Per actor->author influence history for anti-collusion damping. */
+  private pairwiseInfluenceState: Map<string, PairwiseInfluenceState> = new Map();
+
+  /** Runtime-resolved pairwise damping config (treat as operator/admin config, not end-user input). */
+  private readonly pairwiseInfluenceDamping: ResolvedPairwiseInfluenceDampingConfig;
+
   /** External news feed ingestion framework */
   private newsFeedIngester?: NewsFeedIngester;
 
@@ -322,6 +355,9 @@ export class WonderlandNetwork {
 
   constructor(config: WonderlandNetworkConfig) {
     this.config = config;
+    this.pairwiseInfluenceDamping = this.resolvePairwiseInfluenceDampingConfig(
+      config.socialDynamics?.pairwiseInfluenceDamping,
+    );
     this.stimulusRouter = new StimulusRouter();
     this.levelingEngine = new LevelingEngine();
 
@@ -593,6 +629,22 @@ export class WonderlandNetwork {
     const post = this.posts.get(postId);
     if (!post) return;
 
+    const pairwiseInfluenceWeight = this.computePairwiseInfluenceWeight(
+      _actorSeedId,
+      post.seedId,
+      actionType,
+    );
+    const shouldDowngradeHighSignal =
+      post.seedId !== _actorSeedId &&
+      (actionType === 'like' ||
+        actionType === 'downvote' ||
+        actionType === 'boost' ||
+        actionType === 'reply') &&
+      pairwiseInfluenceWeight < this.pairwiseInfluenceDamping.suppressionThreshold;
+    const effectiveActionType: EngagementActionType = shouldDowngradeHighSignal
+      ? 'view'
+      : actionType;
+
     // Safety checks
     const canAct = this.safetyEngine.canAct(_actorSeedId);
     if (!canAct.allowed) {
@@ -601,41 +653,77 @@ export class WonderlandNetwork {
     }
 
     // Rate limit check — map engagement types to rate-limited actions
-    const rateLimitAction = (actionType === 'like' || actionType === 'downvote')
+    const rateLimitAction = (effectiveActionType === 'like' || effectiveActionType === 'downvote')
       ? 'vote' as const
-      : actionType === 'boost'
+      : effectiveActionType === 'boost'
         ? 'boost' as const
-        : actionType === 'reply' ? 'comment' as const : null;
+        : effectiveActionType === 'reply' ? 'comment' as const : null;
 
     if (rateLimitAction) {
       const rateCheck = this.safetyEngine.checkRateLimit(_actorSeedId, rateLimitAction);
       if (!rateCheck.allowed) {
-        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'rate_limited' });
+        this.auditLog.log({
+          seedId: _actorSeedId,
+          action: `engagement:${actionType}`,
+          targetId: postId,
+          outcome: 'rate_limited',
+          metadata: shouldDowngradeHighSignal
+            ? {
+                effectiveAction: effectiveActionType,
+                pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
+                damped: true,
+              }
+            : undefined,
+        });
         return;
       }
     }
 
     // Dedup check for votes/boosts
-    if (actionType === 'like' || actionType === 'downvote') {
+    if (effectiveActionType === 'like' || effectiveActionType === 'downvote') {
       // One vote per actor per post (direction changes are not supported yet).
       const dedupKey = `vote:${_actorSeedId}:${postId}`;
       if (this.actionDeduplicator.isDuplicate(dedupKey)) {
-        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
+        this.auditLog.log({
+          seedId: _actorSeedId,
+          action: `engagement:${actionType}`,
+          targetId: postId,
+          outcome: 'deduplicated',
+          metadata: shouldDowngradeHighSignal
+            ? {
+                effectiveAction: effectiveActionType,
+                pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
+                damped: true,
+              }
+            : undefined,
+        });
         return;
       }
       this.actionDeduplicator.record(dedupKey);
-    } else if (actionType === 'boost') {
+    } else if (effectiveActionType === 'boost') {
       // Boost is a separate signal; allow alongside a vote.
       const dedupKey = `boost:${_actorSeedId}:${postId}`;
       if (this.actionDeduplicator.isDuplicate(dedupKey)) {
-        this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'deduplicated' });
+        this.auditLog.log({
+          seedId: _actorSeedId,
+          action: `engagement:${actionType}`,
+          targetId: postId,
+          outcome: 'deduplicated',
+          metadata: shouldDowngradeHighSignal
+            ? {
+                effectiveAction: effectiveActionType,
+                pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
+                damped: true,
+              }
+            : undefined,
+        });
         return;
       }
       this.actionDeduplicator.record(dedupKey);
     }
 
     // Update post engagement
-    switch (actionType) {
+    switch (effectiveActionType) {
       case 'like': post.engagement.likes++; break;
       case 'downvote': post.engagement.downvotes++; break;
       case 'boost': post.engagement.boosts++; break;
@@ -646,9 +734,9 @@ export class WonderlandNetwork {
     // Award XP to the post author
     const author = this.citizens.get(post.seedId);
     if (author) {
-      const xpKey = `${actionType}_received` as keyof typeof XP_REWARDS;
+      const xpKey = `${effectiveActionType}_received` as keyof typeof XP_REWARDS;
       if (xpKey in XP_REWARDS) {
-        this.levelingEngine.awardXP(author, xpKey);
+        this.levelingEngine.awardXP(author, xpKey, pairwiseInfluenceWeight);
       }
     }
 
@@ -658,13 +746,13 @@ export class WonderlandNetwork {
     if (post.seedId !== _actorSeedId) {
       const authorSeedId = post.seedId;
       if (
-        actionType === 'like' ||
-        actionType === 'downvote' ||
-        actionType === 'boost' ||
-        actionType === 'reply' ||
-        actionType === 'view'
+        effectiveActionType === 'like' ||
+        effectiveActionType === 'downvote' ||
+        effectiveActionType === 'boost' ||
+        effectiveActionType === 'reply' ||
+        effectiveActionType === 'view'
       ) {
-        this.recordEngagementImpact(authorSeedId, actionType);
+        this.recordEngagementImpact(authorSeedId, effectiveActionType);
       }
 
       let engagementDelta: MoodDelta | undefined;
@@ -674,7 +762,7 @@ export class WonderlandNetwork {
         | 'boost'
         | 'reply'
         | undefined;
-      switch (actionType) {
+      switch (effectiveActionType) {
         case 'like':
           engagementDelta = {
             valence: 0.06, arousal: 0.02, dominance: 0.02,
@@ -715,8 +803,11 @@ export class WonderlandNetwork {
       }
 
       if (engagementDelta && engagementActionForDelta) {
-        this.recordEngagementMoodDelta(authorSeedId, engagementDelta, engagementActionForDelta);
-        this.applyMoodDeltaWithTelemetry(authorSeedId, engagementDelta, 'engagement');
+        const scaledDelta = this.scaleMoodDelta(engagementDelta, pairwiseInfluenceWeight);
+        if (scaledDelta) {
+          this.recordEngagementMoodDelta(authorSeedId, scaledDelta, engagementActionForDelta);
+          this.applyMoodDeltaWithTelemetry(authorSeedId, scaledDelta, 'engagement');
+        }
       }
     }
 
@@ -724,11 +815,24 @@ export class WonderlandNetwork {
     if (rateLimitAction) {
       this.safetyEngine.recordAction(_actorSeedId, rateLimitAction);
     }
-    this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'success' });
+    this.auditLog.log({
+      seedId: _actorSeedId,
+      action: `engagement:${actionType}`,
+      targetId: postId,
+      outcome: shouldDowngradeHighSignal ? 'damped' : 'success',
+      metadata: {
+        effectiveAction: effectiveActionType,
+        pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
+      },
+    });
 
     // Persist engagement action to DB
     if (this.engagementStoreCallback) {
-      this.engagementStoreCallback({ postId, actorSeedId: _actorSeedId, actionType }).catch(() => {});
+      this.engagementStoreCallback({
+        postId,
+        actorSeedId: _actorSeedId,
+        actionType: effectiveActionType,
+      }).catch(() => {});
     }
   }
 
@@ -742,21 +846,42 @@ export class WonderlandNetwork {
     reactorSeedId: string,
     emoji: EmojiReactionType,
   ): Promise<boolean> {
+    // Safety check
+    const canAct = this.safetyEngine.canAct(reactorSeedId);
+    if (!canAct.allowed) return false;
+
+    const post = entityType === 'post' ? this.posts.get(entityId) : undefined;
+    const pairwiseInfluenceWeight = post
+      ? this.computePairwiseInfluenceWeight(reactorSeedId, post.seedId, 'emoji_reaction')
+      : 1;
+    const shouldSuppress = Boolean(
+      post && pairwiseInfluenceWeight < this.pairwiseInfluenceDamping.suppressionThreshold,
+    );
+    if (shouldSuppress) {
+      this.auditLog.log({
+        seedId: reactorSeedId,
+        action: 'emoji_reaction',
+        targetId: entityId,
+        outcome: 'damped',
+        metadata: {
+          emoji,
+          entityType,
+          pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
+        },
+      });
+      return false;
+    }
+
     // Dedup key
     const dedupKey = `${entityType}:${entityId}:${reactorSeedId}:${emoji}`;
     if (this.emojiReactionIndex.has(dedupKey)) {
       return false; // Already reacted with this emoji
     }
 
-    // Safety check
-    const canAct = this.safetyEngine.canAct(reactorSeedId);
-    if (!canAct.allowed) return false;
-
     this.emojiReactionIndex.add(dedupKey);
 
     // Update in-memory reaction counts on the post
     if (entityType === 'post') {
-      const post = this.posts.get(entityId);
       if (post) {
         if (!post.engagement.reactions) {
           post.engagement.reactions = {};
@@ -766,16 +891,19 @@ export class WonderlandNetwork {
         // Award XP to post author
         const author = this.citizens.get(post.seedId);
         if (author && post.seedId !== reactorSeedId) {
-          this.levelingEngine.awardXP(author, 'emoji_received');
+          this.levelingEngine.awardXP(author, 'emoji_received', pairwiseInfluenceWeight);
 
           // Mood feedback: emoji reactions generally feel positive (someone engaged)
           const delta: MoodDelta = {
             valence: 0.04, arousal: 0.02, dominance: 0.01,
             trigger: `received_emoji_${emoji}`,
           };
+          const scaledDelta = this.scaleMoodDelta(delta, pairwiseInfluenceWeight);
           this.recordEngagementImpact(post.seedId, 'emoji_reaction');
-          this.recordEngagementMoodDelta(post.seedId, delta, 'emoji_reaction');
-          this.applyMoodDeltaWithTelemetry(post.seedId, delta, 'emoji');
+          if (scaledDelta) {
+            this.recordEngagementMoodDelta(post.seedId, scaledDelta, 'emoji_reaction');
+            this.applyMoodDeltaWithTelemetry(post.seedId, scaledDelta, 'emoji');
+          }
         }
       }
     }
@@ -802,7 +930,11 @@ export class WonderlandNetwork {
       action: 'emoji_reaction',
       targetId: entityId,
       outcome: 'success',
-      metadata: { emoji, entityType },
+      metadata: {
+        emoji,
+        entityType,
+        pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
+      },
     });
 
     return true;
@@ -1448,6 +1580,129 @@ export class WonderlandNetwork {
     });
   }
 
+  private computePairwiseInfluenceWeight(
+    actorSeedId: string,
+    authorSeedId: string,
+    action: PairwiseInfluenceAction,
+  ): number {
+    if (!actorSeedId || !authorSeedId) return 1;
+
+    // Self-endorsement never carries engagement influence.
+    if (actorSeedId === authorSeedId) return 0;
+
+    const cfg = this.pairwiseInfluenceDamping;
+    if (!cfg.enabled) return 1;
+
+    const key = `${actorSeedId}->${authorSeedId}`;
+    const now = Date.now();
+    const existing = this.pairwiseInfluenceState.get(key);
+    const elapsed = existing ? Math.max(0, now - existing.lastAtMs) : 0;
+    const decay = Math.exp(-Math.log(2) * elapsed / Math.max(1, cfg.halfLifeMs));
+    const decayedScore = (existing?.score ?? 0) * decay;
+
+    const score = decayedScore + this.pairwiseActionImpact(action);
+    const streak = existing?.lastAction === action ? existing.streak + 1 : 1;
+
+    this.pairwiseInfluenceState.set(key, {
+      score,
+      lastAtMs: now,
+      lastAction: action,
+      streak,
+    });
+
+    const baseWeight = 1 / (1 + Math.max(0, score - 1) * cfg.scoreSlope);
+    const streakPenalty = 1 / (1 + Math.max(0, streak - 2) * cfg.streakSlope);
+    return this.clampSigned(baseWeight * streakPenalty, cfg.minWeight, 1);
+  }
+
+  private pairwiseActionImpact(action: PairwiseInfluenceAction): number {
+    return this.pairwiseInfluenceDamping.actionImpact[action] ?? 1;
+  }
+
+  private resolvePairwiseInfluenceDampingConfig(
+    raw: PairwiseInfluenceDampingConfig | undefined,
+  ): ResolvedPairwiseInfluenceDampingConfig {
+    const enabled = raw?.enabled !== false;
+    const halfLifeMs = this.clampSigned(
+      typeof raw?.halfLifeMs === 'number' && Number.isFinite(raw.halfLifeMs)
+        ? raw.halfLifeMs
+        : 6 * 60 * 60 * 1000,
+      1,
+      30 * 24 * 60 * 60 * 1000,
+    );
+    const suppressionThreshold = this.clamp01(
+      typeof raw?.suppressionThreshold === 'number' &&
+        Number.isFinite(raw.suppressionThreshold)
+        ? raw.suppressionThreshold
+        : 0.2,
+    );
+    const minWeight = this.clamp01(
+      typeof raw?.minWeight === 'number' && Number.isFinite(raw.minWeight) ? raw.minWeight : 0.08,
+    );
+    const scoreSlope = this.clampSigned(
+      typeof raw?.scoreSlope === 'number' && Number.isFinite(raw.scoreSlope)
+        ? raw.scoreSlope
+        : 0.28,
+      0,
+      10,
+    );
+    const streakSlope = this.clampSigned(
+      typeof raw?.streakSlope === 'number' && Number.isFinite(raw.streakSlope)
+        ? raw.streakSlope
+        : 0.18,
+      0,
+      10,
+    );
+
+    const impacts = raw?.actionImpact ?? {};
+    const actionImpact: Record<PairwiseInfluenceAction, number> = {
+      like: 1,
+      downvote: 1,
+      boost: 1.25,
+      reply: 1.25,
+      view: 0.2,
+      report: 0.8,
+      emoji_reaction: 0.6,
+    };
+
+    for (const [action, defaultImpact] of Object.entries(actionImpact) as Array<
+      [PairwiseInfluenceAction, number]
+    >) {
+      const override = (impacts as any)?.[action];
+      if (typeof override === 'number' && Number.isFinite(override)) {
+        actionImpact[action] = this.clampSigned(override, 0, 10);
+      } else {
+        actionImpact[action] = defaultImpact;
+      }
+    }
+
+    return {
+      enabled,
+      halfLifeMs,
+      suppressionThreshold,
+      minWeight,
+      scoreSlope,
+      streakSlope,
+      actionImpact,
+    };
+  }
+
+  private scaleMoodDelta(delta: MoodDelta, weight: number): MoodDelta | undefined {
+    const w = this.clamp01(weight);
+    const scaled: MoodDelta = {
+      valence: this.clampSigned(delta.valence * w, -1, 1),
+      arousal: this.clampSigned(delta.arousal * w, -1, 1),
+      dominance: this.clampSigned(delta.dominance * w, -1, 1),
+      trigger: `${delta.trigger}:w${w.toFixed(2)}`,
+    };
+
+    const magnitude =
+      Math.abs(scaled.valence) +
+      Math.abs(scaled.arousal) +
+      Math.abs(scaled.dominance);
+    return magnitude < 0.002 ? undefined : scaled;
+  }
+
   private ensureInertiaState(seedId: string): AgentMoodInertia {
     let state = this.moodInertiaState.get(seedId);
     if (state) return state;
@@ -1851,7 +2106,48 @@ export class WonderlandNetwork {
     const browseCheck = this.safetyEngine.checkRateLimit(seedId, 'browse');
     if (!browseCheck.allowed) return null;
 
-    const sessionResult = this.browsingEngine.startSession(seedId, citizen.personality);
+    // Build a real feed snapshot for this session.
+    const allPosts = [...this.posts.values()]
+      .filter((p) => p.status === 'published' && p.seedId !== seedId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const topicTags = citizen.subscribedTopics ?? [];
+    const postsByEnclave = new Map<string, BrowsingPostCandidate[]>();
+    const fallbackFeed: BrowsingPostCandidate[] = [];
+
+    for (const post of allPosts) {
+      const analysis = this.contentSentimentAnalyzer
+        ? this.contentSentimentAnalyzer.analyze(post.content, topicTags)
+        : {
+            relevance: 0.35,
+            controversy: 0.2,
+            sentiment: 0,
+            replyCount: 0,
+          };
+
+      const candidate: BrowsingPostCandidate = {
+        postId: post.postId,
+        authorSeedId: post.seedId,
+        enclave: post.enclave,
+        createdAt: post.createdAt,
+        analysis: {
+          ...analysis,
+          replyCount: Math.max(0, Number(post.engagement.replies ?? 0)),
+        },
+      };
+
+      fallbackFeed.push(candidate);
+      if (post.enclave) {
+        const bucket = postsByEnclave.get(post.enclave) ?? [];
+        bucket.push(candidate);
+        postsByEnclave.set(post.enclave, bucket);
+      }
+    }
+
+    const sessionResult = this.browsingEngine.startSession(seedId, citizen.personality, {
+      postsByEnclave,
+      fallbackPosts: fallbackFeed,
+    });
 
     const record: BrowsingSessionRecord = {
       seedId,
@@ -1864,14 +2160,27 @@ export class WonderlandNetwork {
       finishedAt: sessionResult.finishedAt.toISOString(),
     };
 
-    // Resolve browsing votes + emojis to REAL published posts, weighted toward newer ones
-    const allPosts = [...this.posts.values()]
-      .filter((p) => p.status === 'published' && p.seedId !== seedId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const postById = new Map(allPosts.map((post) => [post.postId, post]));
+    let fallbackCursor = 0;
+    const maxHighSignalPerAuthor = 2;
+    const highSignalByAuthor = new Map<string, number>();
 
-    // Build recency-weighted selection: newer posts get exponentially more chance
-    const postWeights = allPosts.map((_, i) => Math.exp(-i * 0.05));
-    const totalWeight = postWeights.reduce((sum, w) => sum + w, 0);
+    const pickFallbackPost = (): WonderlandPost | undefined => {
+      if (allPosts.length === 0) return undefined;
+      const idx = fallbackCursor % allPosts.length;
+      fallbackCursor += 1;
+      return allPosts[idx];
+    };
+
+    const canEmitHighSignal = (authorSeedId: string, cost = 1): boolean => {
+      const used = highSignalByAuthor.get(authorSeedId) ?? 0;
+      return used + cost <= maxHighSignalPerAuthor;
+    };
+
+    const markHighSignal = (authorSeedId: string, cost = 1): void => {
+      const used = highSignalByAuthor.get(authorSeedId) ?? 0;
+      highSignalByAuthor.set(authorSeedId, used + cost);
+    };
 
     // Avoid turning a single browsing session into a spam cannon: cap how many
     // "write" stimuli we emit (votes/reactions can stay high-volume).
@@ -1881,17 +2190,8 @@ export class WonderlandNetwork {
     const maxCreatePostStimuli = 1;
 
     for (const action of sessionResult.actions) {
-      // Pick a recency-weighted real post as target (browsing engine uses synthetic IDs)
-      let realPost: typeof allPosts[number] | undefined;
-      if (allPosts.length > 0 && totalWeight > 0) {
-        const roll = Math.random() * totalWeight;
-        let cum = 0;
-        for (let j = 0; j < allPosts.length; j++) {
-          cum += postWeights[j];
-          if (roll <= cum) { realPost = allPosts[j]; break; }
-        }
-        if (!realPost) realPost = allPosts[0];
-      }
+      // BrowsingEngine now emits real post IDs when contextual feed candidates are available.
+      const realPost = postById.get(action.postId) ?? pickFallbackPost();
 
       // "create_post" doesn't require a target post — it's the agent's own initiative.
       if (action.action === 'create_post' && createPostStimuliSent < maxCreatePostStimuli) {
@@ -1908,7 +2208,12 @@ export class WonderlandNetwork {
 
       if (realPost) {
         if (action.action === 'upvote') {
+          if (!canEmitHighSignal(realPost.seedId)) {
+            await this.recordEngagement(realPost.postId, seedId, 'view');
+            continue;
+          }
           await this.recordEngagement(realPost.postId, seedId, 'like');
+          markHighSignal(realPost.seedId);
           // "Boost" (aka amplify/repost) is a bots-only distribution signal. It is:
           // - separate from voting (can co-exist with a like/downvote),
           // - heavily rate-limited (default: 1/day per agent via SafetyEngine),
@@ -1933,8 +2238,9 @@ export class WonderlandNetwork {
               else if (strongCuriosity) p += 0.08;
               p = Math.max(0, Math.min(0.35, p));
 
-              if (Math.random() < p) {
+              if (Math.random() < p && canEmitHighSignal(realPost.seedId)) {
                 await this.recordEngagement(realPost.postId, seedId, 'boost');
+                markHighSignal(realPost.seedId);
               }
             }
           } catch {
@@ -1942,8 +2248,9 @@ export class WonderlandNetwork {
           }
           // Chained endorsement comment: upvote → enthusiastic reply
           if (action.chainedAction === 'comment' && action.chainedContext === 'endorsement') {
-            if (commentStimuliSent < maxCommentStimuli) {
+            if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
               commentStimuliSent += 1;
+              markHighSignal(realPost.seedId);
               void this.stimulusRouter
                 .emitAgentReply(
                   realPost.postId,
@@ -1957,11 +2264,17 @@ export class WonderlandNetwork {
             }
           }
         } else if (action.action === 'downvote') {
+          if (!canEmitHighSignal(realPost.seedId)) {
+            await this.recordEngagement(realPost.postId, seedId, 'view');
+            continue;
+          }
           await this.recordEngagement(realPost.postId, seedId, 'downvote');
-          // Chained dissent comment: downvote → critical reply with CoT context
+          markHighSignal(realPost.seedId);
+          // Chained dissent comment: downvote -> critical reply with dissent context.
           if (action.chainedAction === 'comment' && action.chainedContext === 'dissent') {
-            if (commentStimuliSent < maxCommentStimuli) {
+            if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
               commentStimuliSent += 1;
+              markHighSignal(realPost.seedId);
               void this.stimulusRouter
                 .emitAgentReply(
                   realPost.postId,
@@ -1977,8 +2290,9 @@ export class WonderlandNetwork {
         } else if (action.action === 'comment') {
           // Convert "comment" intent into a targeted agent_reply stimulus so the
           // agent actually writes a threaded reply post.
-          if (commentStimuliSent < maxCommentStimuli) {
+          if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
             commentStimuliSent += 1;
+            markHighSignal(realPost.seedId);
             void this.stimulusRouter
               .emitAgentReply(
                 realPost.postId,
@@ -1996,8 +2310,11 @@ export class WonderlandNetwork {
 
       // Emoji reactions also resolve to real posts
       if (action.emojis && action.emojis.length > 0 && realPost) {
-        for (const emoji of action.emojis) {
-          await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
+        if (canEmitHighSignal(realPost.seedId)) {
+          for (const emoji of action.emojis) {
+            await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
+          }
+          markHighSignal(realPost.seedId);
         }
       }
     }

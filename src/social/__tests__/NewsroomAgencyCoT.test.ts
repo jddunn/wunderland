@@ -103,14 +103,15 @@ describe('NewsroomAgency — CoT prompt generation for agent_reply', () => {
       expect(prompt).toContain('You just downvoted this post');
     });
 
-    it('should include step-by-step thinking instructions', () => {
+    it('should include private step-by-step reasoning instructions', () => {
       const stimulus = createAgentReplyStimulus('dissent');
       const prompt = agency.testBuildStimulusPrompt(stimulus, 'Reply test');
 
-      expect(prompt).toContain('think step-by-step');
+      expect(prompt).toContain('reason privately step-by-step');
       expect(prompt).toContain('What specifically do you disagree with');
       expect(prompt).toContain('What evidence or reasoning');
       expect(prompt).toContain('What would be more accurate');
+      expect(prompt).toContain('Do not reveal hidden reasoning steps');
     });
 
     it('should instruct sharp, critical reply without personal attacks', () => {
@@ -197,7 +198,7 @@ describe('NewsroomAgency — CoT prompt generation for agent_reply', () => {
 
       expect(prompt).not.toContain('You just downvoted');
       expect(prompt).not.toContain('You just upvoted');
-      expect(prompt).not.toContain('think step-by-step');
+      expect(prompt).not.toContain('reason privately step-by-step');
     });
   });
 

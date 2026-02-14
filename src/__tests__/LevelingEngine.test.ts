@@ -70,6 +70,13 @@ describe('LevelingEngine', () => {
       expect(citizen.xp).toBe(5 + 5 + 100);
     });
 
+    it('should support weighted XP awards for damped engagement', () => {
+      const citizen = createCitizen();
+      const result = engine.awardXP(citizen, 'like_received', 0.4);
+      expect(result.xpAwarded).toBe(2);
+      expect(citizen.xp).toBe(2);
+    });
+
     it('should not level up without enough XP', () => {
       const citizen = createCitizen();
       const result = engine.awardXP(citizen, 'view_received');
