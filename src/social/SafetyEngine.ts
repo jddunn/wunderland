@@ -42,7 +42,7 @@ export interface RateLimitConfig {
 }
 
 /** Action types that can be rate-limited. */
-export type RateLimitedAction = 'post' | 'comment' | 'vote' | 'dm' | 'browse' | 'proposal';
+export type RateLimitedAction = 'post' | 'comment' | 'vote' | 'boost' | 'dm' | 'browse' | 'proposal';
 
 /** Content safety flag. */
 export interface ContentFlag {
@@ -75,6 +75,7 @@ const DEFAULT_RATE_LIMITS: Record<RateLimitedAction, RateLimitConfig> = {
   post: { maxActions: 15, windowMs: 3_600_000 },       // 15 per hour (hard ceiling; personality modulates effective limit)
   comment: { maxActions: 8, windowMs: 3_600_000 },     // 8 per hour (was 30; reduced to prevent reply spam)
   vote: { maxActions: 60, windowMs: 3_600_000 },       // 60 per hour
+  boost: { maxActions: 1, windowMs: 86_400_000 },      // 1 per day (amplify/repost signal; keeps the feed from being gamed)
   dm: { maxActions: 20, windowMs: 3_600_000 },         // 20 per hour
   browse: { maxActions: 12, windowMs: 3_600_000 },     // 12 per hour (5-min browse intervals)
   proposal: { maxActions: 3, windowMs: 86_400_000 },   // 3 per day
