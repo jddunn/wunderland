@@ -18,7 +18,9 @@ import { EnclaveRegistry } from './EnclaveRegistry.js';
 import { PostDecisionEngine } from './PostDecisionEngine.js';
 import { BrowsingEngine } from './BrowsingEngine.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
+import { LLMSentimentAnalyzer } from './LLMSentimentAnalyzer.js';
 import { NewsFeedIngester } from './NewsFeedIngester.js';
+import { extractStimulusText } from './DynamicVoiceProfile.js';
 import { SafetyEngine } from './SafetyEngine.js';
 import { ActionAuditLog } from './ActionAuditLog.js';
 import { ContentSimilarityDedup } from './ContentSimilarityDedup.js';
@@ -32,15 +34,18 @@ import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
 import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 import type { IEnclavePersistenceAdapter } from './EnclavePersistence.js';
 import type { IBrowsingPersistenceAdapter } from './BrowsingPersistence.js';
-import type { LLMInvokeCallback } from './NewsroomAgency.js';
+import type { LLMInvokeCallback, DynamicVoiceSnapshot } from './NewsroomAgency.js';
 import type { ITool } from '@framers/agentos/core/tools/ITool';
 import { resolveAgentWorkspaceBaseDir, resolveAgentWorkspaceDir } from '@framers/agentos';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import type { PADState, MoodDelta } from './MoodEngine.js';
+import type { VoiceArchetype } from './DynamicVoiceProfile.js';
 import type {
   WonderlandNetworkConfig,
   CitizenProfile,
   WonderlandPost,
+  StimulusEvent,
   Tip,
   ApprovalQueueEntry,
   EngagementActionType,
@@ -73,6 +78,101 @@ export type EngagementStoreCallback = (action: {
   actorSeedId: string;
   actionType: EngagementActionType;
 }) => Promise<void>;
+
+type MoodTelemetrySource = 'stimulus' | 'engagement' | 'emoji' | 'system';
+
+export interface AgentBehaviorTelemetry {
+  seedId: string;
+  mood: {
+    updates: number;
+    cumulativeDrift: number;
+    averageDrift: number;
+    maxDrift: number;
+    lastDrift: number;
+    lastTrigger?: string;
+    lastSource?: MoodTelemetrySource;
+    lastUpdatedAt?: string;
+    currentState?: PADState;
+  };
+  voice: {
+    updates: number;
+    currentArchetype?: VoiceArchetype;
+    archetypeSwitches: number;
+    lastStimulusType?: StimulusEvent['payload']['type'];
+    lastStimulusPriority?: StimulusEvent['priority'];
+    lastUrgency?: number;
+    lastSentiment?: number;
+    lastControversy?: number;
+    lastUpdatedAt?: string;
+  };
+  engagement: {
+    received: {
+      likes: number;
+      downvotes: number;
+      boosts: number;
+      replies: number;
+      views: number;
+      emojiReactions: number;
+    };
+    moodDelta: {
+      valence: number;
+      arousal: number;
+      dominance: number;
+    };
+    lastUpdatedAt?: string;
+  };
+}
+
+export type WonderlandTelemetryEvent =
+  | {
+      type: 'mood_drift';
+      seedId: string;
+      timestamp: string;
+      source: MoodTelemetrySource;
+      trigger: string;
+      drift: number;
+      state: PADState;
+    }
+  | {
+      type: 'voice_profile';
+      seedId: string;
+      timestamp: string;
+      archetype: VoiceArchetype;
+      switchedArchetype: boolean;
+      previousArchetype?: VoiceArchetype;
+      stimulusType: StimulusEvent['payload']['type'];
+      stimulusPriority: StimulusEvent['priority'];
+      urgency: number;
+      sentiment: number;
+      controversy: number;
+    }
+  | {
+      type: 'engagement_impact';
+      seedId: string;
+      timestamp: string;
+      action: 'like' | 'downvote' | 'boost' | 'reply' | 'view' | 'emoji_reaction';
+      delta: {
+        valence: number;
+        arousal: number;
+        dominance: number;
+      };
+    };
+
+export type TelemetryUpdateCallback = (
+  event: WonderlandTelemetryEvent
+) => void | Promise<void>;
+
+interface InertiaVector {
+  valence: number;
+  arousal: number;
+  dominance: number;
+  updatedAtMs: number;
+}
+
+interface AgentMoodInertia {
+  global: InertiaVector;
+  threads: Map<string, InertiaVector>;
+}
 
 /**
  * WonderlandNetwork is the top-level orchestrator.
@@ -157,6 +257,18 @@ export class WonderlandNetwork {
 
   /** Lightweight keyword-based content sentiment analyzer */
   private contentSentimentAnalyzer?: ContentSentimentAnalyzer;
+
+  /** Optional LLM-backed mood impact analyzer for richer stimulus reactions */
+  private llmSentimentAnalyzer?: LLMSentimentAnalyzer;
+
+  /** Per-agent telemetry for mood drift, voice shifts, and engagement impact. */
+  private behaviorTelemetry: Map<string, AgentBehaviorTelemetry> = new Map();
+
+  /** Subscribers for telemetry update events. */
+  private telemetryCallbacks: TelemetryUpdateCallback[] = [];
+
+  /** Per-agent momentum buffers used for cross-thread mood inertia. */
+  private moodInertiaState: Map<string, AgentMoodInertia> = new Map();
 
   /** External news feed ingestion framework */
   private newsFeedIngester?: NewsFeedIngester;
@@ -365,12 +477,16 @@ export class WonderlandNetwork {
     newsroom.onPublish(async (post) => {
       await this.handlePostPublished(post);
     });
+    newsroom.onDynamicVoiceProfile((snapshot) => {
+      this.recordVoiceTelemetry(snapshot);
+    });
 
     // Subscribe to stimuli
     this.stimulusRouter.subscribe(
       seedId,
       async (event) => {
         if (!this.running) return;
+        await this.applyStimulusMoodImpact(seedId, event);
         await newsroom.processStimulus(event);
       },
       {
@@ -381,6 +497,8 @@ export class WonderlandNetwork {
 
     this.citizens.set(seedId, citizen);
     this.newsrooms.set(seedId, newsroom);
+    this.ensureTelemetry(seedId);
+    this.ensureInertiaState(seedId);
 
     // If enclave system is active, initialize mood and subscribe to matching enclaves
     if (this.enclaveSystemInitialized && this.moodEngine) {
@@ -449,6 +567,7 @@ export class WonderlandNetwork {
     this.newsrooms.delete(seedId);
     this.citizenCircuitBreakers.delete(seedId);
     this.stuckDetector.clearAgent(seedId);
+    this.moodInertiaState.delete(seedId);
     const citizen = this.citizens.get(seedId);
     if (citizen) {
       citizen.isActive = false;
@@ -536,33 +655,68 @@ export class WonderlandNetwork {
     // Apply mood delta to the post AUTHOR based on received engagement.
     // Upvotes boost pleasure; downvotes decrease pleasure but increase arousal.
     // Replies increase arousal + dominance (someone cared enough to respond).
-    if (post.seedId !== _actorSeedId && this.moodEngine) {
+    if (post.seedId !== _actorSeedId) {
       const authorSeedId = post.seedId;
+      if (
+        actionType === 'like' ||
+        actionType === 'downvote' ||
+        actionType === 'boost' ||
+        actionType === 'reply' ||
+        actionType === 'view'
+      ) {
+        this.recordEngagementImpact(authorSeedId, actionType);
+      }
+
+      let engagementDelta: MoodDelta | undefined;
+      let engagementActionForDelta:
+        | 'like'
+        | 'downvote'
+        | 'boost'
+        | 'reply'
+        | undefined;
       switch (actionType) {
         case 'like':
-          this.moodEngine.applyDelta(authorSeedId, {
+          engagementDelta = {
             valence: 0.06, arousal: 0.02, dominance: 0.02,
             trigger: 'received_upvote',
-          });
+          };
+          engagementActionForDelta = 'like';
           break;
         case 'downvote':
-          this.moodEngine.applyDelta(authorSeedId, {
+          engagementDelta = {
             valence: -0.05, arousal: 0.04, dominance: -0.02,
             trigger: 'received_downvote',
-          });
+          };
+          engagementActionForDelta = 'downvote';
           break;
         case 'boost':
-          this.moodEngine.applyDelta(authorSeedId, {
+          engagementDelta = {
             valence: 0.08, arousal: 0.03, dominance: 0.04,
             trigger: 'received_boost',
-          });
+          };
+          engagementActionForDelta = 'boost';
           break;
         case 'reply':
-          this.moodEngine.applyDelta(authorSeedId, {
+          engagementDelta = {
             valence: 0.03, arousal: 0.06, dominance: 0.03,
             trigger: 'received_reply',
+          };
+          engagementActionForDelta = 'reply';
+          break;
+        case 'view':
+          this.emitTelemetry({
+            type: 'engagement_impact',
+            seedId: authorSeedId,
+            timestamp: new Date().toISOString(),
+            action: 'view',
+            delta: { valence: 0, arousal: 0, dominance: 0 },
           });
           break;
+      }
+
+      if (engagementDelta && engagementActionForDelta) {
+        this.recordEngagementMoodDelta(authorSeedId, engagementDelta, engagementActionForDelta);
+        this.applyMoodDeltaWithTelemetry(authorSeedId, engagementDelta, 'engagement');
       }
     }
 
@@ -615,10 +769,13 @@ export class WonderlandNetwork {
           this.levelingEngine.awardXP(author, 'emoji_received');
 
           // Mood feedback: emoji reactions generally feel positive (someone engaged)
-          this.moodEngine?.applyDelta(post.seedId, {
+          const delta: MoodDelta = {
             valence: 0.04, arousal: 0.02, dominance: 0.01,
             trigger: `received_emoji_${emoji}`,
-          });
+          };
+          this.recordEngagementImpact(post.seedId, 'emoji_reaction');
+          this.recordEngagementMoodDelta(post.seedId, delta, 'emoji_reaction');
+          this.applyMoodDeltaWithTelemetry(post.seedId, delta, 'emoji');
         }
       }
     }
@@ -812,6 +969,36 @@ export class WonderlandNetwork {
   }
 
   /**
+   * Subscribe to telemetry updates (mood drift, voice profile, engagement impact).
+   */
+  onTelemetryUpdate(callback: TelemetryUpdateCallback): void {
+    this.telemetryCallbacks.push(callback);
+  }
+
+  /**
+   * Get telemetry for a specific agent.
+   */
+  getAgentBehaviorTelemetry(seedId: string): AgentBehaviorTelemetry | undefined {
+    const telemetry = this.behaviorTelemetry.get(seedId);
+    return telemetry ? this.cloneTelemetry(telemetry) : undefined;
+  }
+
+  /**
+   * Get telemetry for all tracked agents.
+   */
+  listBehaviorTelemetry(): AgentBehaviorTelemetry[] {
+    return [...this.behaviorTelemetry.values()].map((entry) => this.cloneTelemetry(entry));
+  }
+
+  /**
+   * Set an optional LLM sentiment analyzer used to convert incoming stimuli
+   * into PAD mood deltas before newsroom processing.
+   */
+  setLLMSentimentAnalyzer(analyzer: LLMSentimentAnalyzer | undefined): void {
+    this.llmSentimentAnalyzer = analyzer;
+  }
+
+  /**
    * Set LLM callback for ALL registered newsroom agencies.
    * This enables production mode (real LLM calls) for the Writer phase.
    */
@@ -855,6 +1042,508 @@ export class WonderlandNetwork {
     for (const tool of existing) map.set(tool.name, tool);
     for (const tool of next) map.set(tool.name, tool);
     return [...map.values()];
+  }
+
+  /**
+   * Apply a mood update from the incoming stimulus before newsroom processing.
+   * This makes news/replies/emotional inputs affect downstream writing style.
+   */
+  private async applyStimulusMoodImpact(seedId: string, event: StimulusEvent): Promise<void> {
+    const engine = this.moodEngine;
+    if (!engine) return;
+
+    const currentMood = engine.getState(seedId);
+    if (!currentMood) return;
+
+    const stimulusText = extractStimulusText(event).trim();
+    const impactWeight = this.getStimulusImpactWeight(event);
+
+    let delta:
+      | {
+          valence: number;
+          arousal: number;
+          dominance: number;
+          trigger: string;
+        }
+      | undefined;
+
+    if (this.llmSentimentAnalyzer && stimulusText) {
+      try {
+        delta = await this.llmSentimentAnalyzer.analyzeMoodImpact(stimulusText, currentMood);
+      } catch {
+        delta = undefined;
+      }
+    }
+
+    if (!delta) {
+      delta = this.buildFallbackStimulusDelta(seedId, event, stimulusText);
+    }
+
+    const scaledDelta: MoodDelta = {
+      valence: this.clampSigned(delta.valence * impactWeight, -0.35, 0.35),
+      arousal: this.clampSigned(delta.arousal * impactWeight, -0.35, 0.35),
+      dominance: this.clampSigned(delta.dominance * impactWeight, -0.35, 0.35),
+      trigger: `stimulus_${event.payload.type}:${delta.trigger}`,
+    };
+
+    const inertiaAdjusted = this.applyCrossThreadMoodInertia(seedId, event, scaledDelta);
+
+    const magnitude =
+      Math.abs(inertiaAdjusted.valence) +
+      Math.abs(inertiaAdjusted.arousal) +
+      Math.abs(inertiaAdjusted.dominance);
+
+    if (magnitude < 0.01) return;
+    this.applyMoodDeltaWithTelemetry(seedId, inertiaAdjusted, 'stimulus');
+  }
+
+  private buildFallbackStimulusDelta(
+    seedId: string,
+    event: StimulusEvent,
+    stimulusText: string,
+  ): { valence: number; arousal: number; dominance: number; trigger: string } {
+    const citizen = this.citizens.get(seedId);
+    const tags = citizen?.subscribedTopics ?? [];
+    const analysis =
+      stimulusText && this.contentSentimentAnalyzer
+        ? this.contentSentimentAnalyzer.analyze(stimulusText, tags)
+        : undefined;
+
+    const sentiment = analysis?.sentiment ?? 0;
+    const controversy = analysis?.controversy ?? 0;
+
+    let valence = sentiment * 0.16;
+    let arousal = Math.abs(sentiment) * 0.08 + controversy * 0.10;
+    let dominance = 0;
+
+    switch (event.priority) {
+      case 'breaking':
+        arousal += 0.14;
+        dominance += 0.03;
+        break;
+      case 'high':
+        arousal += 0.08;
+        break;
+      case 'normal':
+        arousal += 0.03;
+        break;
+      case 'low':
+      default:
+        arousal -= 0.02;
+        break;
+    }
+
+    switch (event.payload.type) {
+      case 'tip':
+        arousal += 0.06;
+        valence += 0.02;
+        break;
+      case 'agent_reply':
+      case 'agent_dm':
+      case 'channel_message':
+        arousal += 0.05;
+        dominance += 0.05;
+        break;
+      case 'world_feed':
+        dominance += 0.02;
+        break;
+      case 'internal_thought':
+        dominance += 0.02;
+        break;
+      case 'cron_tick':
+      default:
+        break;
+    }
+
+    if (sentiment < -0.35) dominance -= 0.03;
+    if (sentiment > 0.35) dominance += 0.02;
+
+    return {
+      valence: this.clampSigned(valence, -0.3, 0.3),
+      arousal: this.clampSigned(arousal, -0.3, 0.3),
+      dominance: this.clampSigned(dominance, -0.3, 0.3),
+      trigger: analysis ? 'keyword_sentiment' : 'priority_heuristic',
+    };
+  }
+
+  private getStimulusImpactWeight(event: StimulusEvent): number {
+    let byType = 0.6;
+    switch (event.payload.type) {
+      case 'tip':
+        byType = 0.9;
+        break;
+      case 'agent_reply':
+        byType = 0.85;
+        break;
+      case 'channel_message':
+      case 'agent_dm':
+        byType = 0.95;
+        break;
+      case 'world_feed':
+        byType = 0.7;
+        break;
+      case 'internal_thought':
+        byType = 0.65;
+        break;
+      case 'cron_tick':
+      default:
+        byType = 0.25;
+        break;
+    }
+
+    let byPriority = 1;
+    switch (event.priority) {
+      case 'breaking':
+        byPriority = 1.3;
+        break;
+      case 'high':
+        byPriority = 1.15;
+        break;
+      case 'normal':
+        byPriority = 1;
+        break;
+      case 'low':
+      default:
+        byPriority = 0.7;
+        break;
+    }
+
+    return this.clamp01(byType * byPriority);
+  }
+
+  private clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  private clampSigned(value: number, min = -1, max = 1): number {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  private ensureTelemetry(seedId: string): AgentBehaviorTelemetry {
+    let telemetry = this.behaviorTelemetry.get(seedId);
+    if (telemetry) return telemetry;
+
+    telemetry = {
+      seedId,
+      mood: {
+        updates: 0,
+        cumulativeDrift: 0,
+        averageDrift: 0,
+        maxDrift: 0,
+        lastDrift: 0,
+      },
+      voice: {
+        updates: 0,
+        archetypeSwitches: 0,
+      },
+      engagement: {
+        received: {
+          likes: 0,
+          downvotes: 0,
+          boosts: 0,
+          replies: 0,
+          views: 0,
+          emojiReactions: 0,
+        },
+        moodDelta: {
+          valence: 0,
+          arousal: 0,
+          dominance: 0,
+        },
+      },
+    };
+    this.behaviorTelemetry.set(seedId, telemetry);
+    return telemetry;
+  }
+
+  private cloneTelemetry(entry: AgentBehaviorTelemetry): AgentBehaviorTelemetry {
+    return {
+      seedId: entry.seedId,
+      mood: {
+        updates: entry.mood.updates,
+        cumulativeDrift: entry.mood.cumulativeDrift,
+        averageDrift: entry.mood.averageDrift,
+        maxDrift: entry.mood.maxDrift,
+        lastDrift: entry.mood.lastDrift,
+        lastTrigger: entry.mood.lastTrigger,
+        lastSource: entry.mood.lastSource,
+        lastUpdatedAt: entry.mood.lastUpdatedAt,
+        currentState: entry.mood.currentState ? { ...entry.mood.currentState } : undefined,
+      },
+      voice: {
+        updates: entry.voice.updates,
+        currentArchetype: entry.voice.currentArchetype,
+        archetypeSwitches: entry.voice.archetypeSwitches,
+        lastStimulusType: entry.voice.lastStimulusType,
+        lastStimulusPriority: entry.voice.lastStimulusPriority,
+        lastUrgency: entry.voice.lastUrgency,
+        lastSentiment: entry.voice.lastSentiment,
+        lastControversy: entry.voice.lastControversy,
+        lastUpdatedAt: entry.voice.lastUpdatedAt,
+      },
+      engagement: {
+        received: { ...entry.engagement.received },
+        moodDelta: { ...entry.engagement.moodDelta },
+        lastUpdatedAt: entry.engagement.lastUpdatedAt,
+      },
+    };
+  }
+
+  private emitTelemetry(event: WonderlandTelemetryEvent): void {
+    for (const cb of this.telemetryCallbacks) {
+      Promise.resolve(cb(event)).catch((err) => {
+        console.error('[WonderlandNetwork] Telemetry callback error:', err);
+      });
+    }
+  }
+
+  private applyMoodDeltaWithTelemetry(
+    seedId: string,
+    delta: MoodDelta,
+    source: MoodTelemetrySource,
+  ): void {
+    if (!this.moodEngine) return;
+    const before = this.moodEngine.getState(seedId);
+    if (!before) return;
+
+    this.moodEngine.applyDelta(seedId, delta);
+    const after = this.moodEngine.getState(seedId);
+    if (!after) return;
+
+    const drift = this.computePadDistance(before, after);
+    const telemetry = this.ensureTelemetry(seedId);
+    telemetry.mood.updates += 1;
+    telemetry.mood.cumulativeDrift += drift;
+    telemetry.mood.averageDrift =
+      telemetry.mood.updates > 0
+        ? telemetry.mood.cumulativeDrift / telemetry.mood.updates
+        : 0;
+    telemetry.mood.maxDrift = Math.max(telemetry.mood.maxDrift, drift);
+    telemetry.mood.lastDrift = drift;
+    telemetry.mood.lastTrigger = delta.trigger;
+    telemetry.mood.lastSource = source;
+    telemetry.mood.lastUpdatedAt = new Date().toISOString();
+    telemetry.mood.currentState = { ...after };
+
+    this.emitTelemetry({
+      type: 'mood_drift',
+      seedId,
+      timestamp: telemetry.mood.lastUpdatedAt,
+      source,
+      trigger: delta.trigger,
+      drift,
+      state: { ...after },
+    });
+  }
+
+  private computePadDistance(a: PADState, b: PADState): number {
+    const dv = b.valence - a.valence;
+    const da = b.arousal - a.arousal;
+    const dd = b.dominance - a.dominance;
+    return Math.sqrt(dv * dv + da * da + dd * dd);
+  }
+
+  private recordVoiceTelemetry(snapshot: DynamicVoiceSnapshot): void {
+    const telemetry = this.ensureTelemetry(snapshot.seedId);
+    telemetry.voice.updates += 1;
+    if (snapshot.switchedArchetype) {
+      telemetry.voice.archetypeSwitches += 1;
+    }
+    telemetry.voice.currentArchetype = snapshot.profile.archetype;
+    telemetry.voice.lastStimulusType = snapshot.stimulusType;
+    telemetry.voice.lastStimulusPriority = snapshot.stimulusPriority;
+    telemetry.voice.lastUrgency = snapshot.profile.urgency;
+    telemetry.voice.lastSentiment = snapshot.profile.sentiment;
+    telemetry.voice.lastControversy = snapshot.profile.controversy;
+    telemetry.voice.lastUpdatedAt = snapshot.timestamp;
+
+    this.emitTelemetry({
+      type: 'voice_profile',
+      seedId: snapshot.seedId,
+      timestamp: snapshot.timestamp,
+      archetype: snapshot.profile.archetype,
+      switchedArchetype: snapshot.switchedArchetype,
+      previousArchetype: snapshot.previousArchetype,
+      stimulusType: snapshot.stimulusType,
+      stimulusPriority: snapshot.stimulusPriority,
+      urgency: snapshot.profile.urgency,
+      sentiment: snapshot.profile.sentiment,
+      controversy: snapshot.profile.controversy,
+    });
+  }
+
+  private recordEngagementImpact(
+    seedId: string,
+    action:
+      | 'like'
+      | 'downvote'
+      | 'boost'
+      | 'reply'
+      | 'view'
+      | 'emoji_reaction',
+  ): void {
+    const telemetry = this.ensureTelemetry(seedId);
+    switch (action) {
+      case 'like':
+        telemetry.engagement.received.likes += 1;
+        break;
+      case 'downvote':
+        telemetry.engagement.received.downvotes += 1;
+        break;
+      case 'boost':
+        telemetry.engagement.received.boosts += 1;
+        break;
+      case 'reply':
+        telemetry.engagement.received.replies += 1;
+        break;
+      case 'view':
+        telemetry.engagement.received.views += 1;
+        break;
+      case 'emoji_reaction':
+        telemetry.engagement.received.emojiReactions += 1;
+        break;
+    }
+    telemetry.engagement.lastUpdatedAt = new Date().toISOString();
+  }
+
+  private recordEngagementMoodDelta(
+    seedId: string,
+    delta: Pick<MoodDelta, 'valence' | 'arousal' | 'dominance'>,
+    action:
+      | 'like'
+      | 'downvote'
+      | 'boost'
+      | 'reply'
+      | 'view'
+      | 'emoji_reaction',
+  ): void {
+    const telemetry = this.ensureTelemetry(seedId);
+    telemetry.engagement.moodDelta.valence = this.clampSigned(
+      telemetry.engagement.moodDelta.valence + delta.valence,
+      -5,
+      5,
+    );
+    telemetry.engagement.moodDelta.arousal = this.clampSigned(
+      telemetry.engagement.moodDelta.arousal + delta.arousal,
+      -5,
+      5,
+    );
+    telemetry.engagement.moodDelta.dominance = this.clampSigned(
+      telemetry.engagement.moodDelta.dominance + delta.dominance,
+      -5,
+      5,
+    );
+    telemetry.engagement.lastUpdatedAt = new Date().toISOString();
+
+    this.emitTelemetry({
+      type: 'engagement_impact',
+      seedId,
+      timestamp: telemetry.engagement.lastUpdatedAt,
+      action,
+      delta: {
+        valence: delta.valence,
+        arousal: delta.arousal,
+        dominance: delta.dominance,
+      },
+    });
+  }
+
+  private ensureInertiaState(seedId: string): AgentMoodInertia {
+    let state = this.moodInertiaState.get(seedId);
+    if (state) return state;
+
+    const now = Date.now();
+    state = {
+      global: { valence: 0, arousal: 0, dominance: 0, updatedAtMs: now },
+      threads: new Map<string, InertiaVector>(),
+    };
+    this.moodInertiaState.set(seedId, state);
+    return state;
+  }
+
+  private applyCrossThreadMoodInertia(
+    seedId: string,
+    event: StimulusEvent,
+    delta: MoodDelta,
+  ): MoodDelta {
+    const state = this.ensureInertiaState(seedId);
+    const now = Date.now();
+    const decayedGlobal = this.decayInertiaVector(state.global, now, 18 * 60_000);
+    const threadKey = this.getStimulusThreadKey(event);
+    const decayedThread = threadKey
+      ? this.decayInertiaVector(state.threads.get(threadKey), now, 7 * 60_000)
+      : { valence: 0, arousal: 0, dominance: 0, updatedAtMs: now };
+
+    const blended: MoodDelta = {
+      valence: this.clampSigned(delta.valence * 0.72 + decayedThread.valence * 0.18 + decayedGlobal.valence * 0.10, -0.35, 0.35),
+      arousal: this.clampSigned(delta.arousal * 0.72 + decayedThread.arousal * 0.18 + decayedGlobal.arousal * 0.10, -0.35, 0.35),
+      dominance: this.clampSigned(delta.dominance * 0.72 + decayedThread.dominance * 0.18 + decayedGlobal.dominance * 0.10, -0.35, 0.35),
+      trigger: `${delta.trigger}:inertia`,
+    };
+
+    state.global = {
+      valence: this.clampSigned(decayedGlobal.valence * 0.78 + blended.valence * 0.22, -0.35, 0.35),
+      arousal: this.clampSigned(decayedGlobal.arousal * 0.78 + blended.arousal * 0.22, -0.35, 0.35),
+      dominance: this.clampSigned(decayedGlobal.dominance * 0.78 + blended.dominance * 0.22, -0.35, 0.35),
+      updatedAtMs: now,
+    };
+
+    if (threadKey) {
+      state.threads.set(threadKey, {
+        valence: this.clampSigned(decayedThread.valence * 0.6 + blended.valence * 0.4, -0.35, 0.35),
+        arousal: this.clampSigned(decayedThread.arousal * 0.6 + blended.arousal * 0.4, -0.35, 0.35),
+        dominance: this.clampSigned(decayedThread.dominance * 0.6 + blended.dominance * 0.4, -0.35, 0.35),
+        updatedAtMs: now,
+      });
+
+      if (state.threads.size > 48) {
+        const entries = [...state.threads.entries()].sort((a, b) => a[1].updatedAtMs - b[1].updatedAtMs);
+        for (let i = 0; i < entries.length - 48; i++) {
+          state.threads.delete(entries[i]![0]);
+        }
+      }
+    }
+
+    return blended;
+  }
+
+  private decayInertiaVector(
+    vector: InertiaVector | undefined,
+    nowMs: number,
+    halfLifeMs: number,
+  ): InertiaVector {
+    if (!vector) {
+      return { valence: 0, arousal: 0, dominance: 0, updatedAtMs: nowMs };
+    }
+
+    const elapsed = Math.max(0, nowMs - vector.updatedAtMs);
+    const retain = Math.exp(-elapsed / Math.max(1, halfLifeMs));
+    return {
+      valence: vector.valence * retain,
+      arousal: vector.arousal * retain,
+      dominance: vector.dominance * retain,
+      updatedAtMs: nowMs,
+    };
+  }
+
+  private getStimulusThreadKey(event: StimulusEvent): string {
+    switch (event.payload.type) {
+      case 'agent_reply':
+        return `post:${event.payload.replyToPostId}`;
+      case 'agent_dm':
+        return `dm:${event.payload.threadId}`;
+      case 'channel_message':
+        return `channel:${event.payload.platform}:${event.payload.conversationId}`;
+      case 'tip':
+        return `tip:${event.payload.tipId}`;
+      case 'world_feed':
+        return `news:${event.payload.sourceName}:${event.payload.category}`;
+      case 'internal_thought':
+        return `thought:${event.payload.topic.slice(0, 40).toLowerCase()}`;
+      case 'cron_tick':
+      default:
+        return `cron:${event.payload.type === 'cron_tick' ? event.payload.scheduleName : 'tick'}`;
+    }
   }
 
   /**
@@ -1175,10 +1864,14 @@ export class WonderlandNetwork {
       finishedAt: sessionResult.finishedAt.toISOString(),
     };
 
-    // Resolve browsing votes + emojis to REAL published posts
-    const allPosts = [...this.posts.values()].filter(
-      (p) => p.status === 'published' && p.seedId !== seedId,
-    );
+    // Resolve browsing votes + emojis to REAL published posts, weighted toward newer ones
+    const allPosts = [...this.posts.values()]
+      .filter((p) => p.status === 'published' && p.seedId !== seedId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Build recency-weighted selection: newer posts get exponentially more chance
+    const postWeights = allPosts.map((_, i) => Math.exp(-i * 0.05));
+    const totalWeight = postWeights.reduce((sum, w) => sum + w, 0);
 
     // Avoid turning a single browsing session into a spam cannon: cap how many
     // "write" stimuli we emit (votes/reactions can stay high-volume).
@@ -1188,11 +1881,17 @@ export class WonderlandNetwork {
     const maxCreatePostStimuli = 1;
 
     for (const action of sessionResult.actions) {
-      // Pick a random real post as target (browsing engine uses synthetic IDs)
-      const realPost =
-        allPosts.length > 0
-          ? allPosts[Math.floor(Math.random() * allPosts.length)]
-          : undefined;
+      // Pick a recency-weighted real post as target (browsing engine uses synthetic IDs)
+      let realPost: typeof allPosts[number] | undefined;
+      if (allPosts.length > 0 && totalWeight > 0) {
+        const roll = Math.random() * totalWeight;
+        let cum = 0;
+        for (let j = 0; j < allPosts.length; j++) {
+          cum += postWeights[j];
+          if (roll <= cum) { realPost = allPosts[j]; break; }
+        }
+        if (!realPost) realPost = allPosts[0];
+      }
 
       // "create_post" doesn't require a target post — it's the agent's own initiative.
       if (action.action === 'create_post' && createPostStimuliSent < maxCreatePostStimuli) {
