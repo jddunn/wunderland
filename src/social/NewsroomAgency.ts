@@ -17,7 +17,9 @@ import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
 import { SafeGuardrails } from '../security/SafeGuardrails.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
+import { buildDynamicVoiceProfile, buildDynamicVoicePromptSection } from './DynamicVoiceProfile.js';
 import type { NewsroomConfig, StimulusEvent, WonderlandPost, ApprovalQueueEntry, InternalThoughtPayload, MoodLabel, PADState } from './types.js';
+import type { DynamicVoiceProfile, VoiceArchetype } from './DynamicVoiceProfile.js';
 import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
 import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos/core/tools/ITool';
 
@@ -69,6 +71,28 @@ export type ApprovalCallback = (entry: ApprovalQueueEntry) => void | Promise<voi
 export type PublishCallback = (post: WonderlandPost) => void | Promise<void>;
 
 /**
+ * Dynamic voice snapshot emitted whenever the writer phase computes a
+ * per-stimulus voice profile for prompt modulation.
+ */
+export interface DynamicVoiceSnapshot {
+  seedId: string;
+  timestamp: string;
+  stimulusEventId: string;
+  stimulusType: StimulusEvent['payload']['type'];
+  stimulusPriority: StimulusEvent['priority'];
+  previousArchetype?: VoiceArchetype;
+  switchedArchetype: boolean;
+  profile: DynamicVoiceProfile;
+  moodLabel?: MoodLabel;
+  moodState?: PADState;
+}
+
+/**
+ * Callback for dynamic voice profile emissions.
+ */
+export type DynamicVoiceCallback = (snapshot: DynamicVoiceSnapshot) => void | Promise<void>;
+
+/**
  * NewsroomAgency manages the Observer → Writer → Publisher pipeline for a single Citizen.
  *
  * Supports both placeholder mode (no LLM) and production mode (with LLM + tools).
@@ -79,10 +103,12 @@ export class NewsroomAgency {
   private firewall: ContextFirewall;
   private approvalCallbacks: ApprovalCallback[] = [];
   private publishCallbacks: PublishCallback[] = [];
+  private dynamicVoiceCallbacks: DynamicVoiceCallback[] = [];
   private pendingApprovals: Map<string, ApprovalQueueEntry> = new Map();
   private postsThisHour: number = 0;
   private rateLimitResetTime: number = Date.now() + 3600000;
   private lastPostAtMs: number = 0;
+  private lastVoiceArchetype?: VoiceArchetype;
 
   /** Optional LLM callback for production mode. */
   private llmInvoke?: LLMInvokeCallback;
@@ -290,6 +316,10 @@ export class NewsroomAgency {
     this.publishCallbacks.push(callback);
   }
 
+  onDynamicVoiceProfile(callback: DynamicVoiceCallback): void {
+    this.dynamicVoiceCallbacks.push(callback);
+  }
+
   getPendingApprovals(): ApprovalQueueEntry[] {
     return [...this.pendingApprovals.values()];
   }
@@ -485,6 +515,10 @@ Respond with exactly one word: YES or NO`;
     const traits = this.config.seedConfig.hexacoTraits;
     const x = traits.extraversion ?? 0.5;
     const subscribedTopics = this.config.worldFeedTopics ?? [];
+    const moodState = this.moodSnapshotProvider?.().state;
+    const liveArousal = moodState?.arousal;
+    const liveDominance = moodState?.dominance;
+    const liveValence = moodState?.valence;
 
     // 1. Stimulus priority (weight: 0.25)
     let priorityScore: number;
@@ -513,21 +547,25 @@ Respond with exactly one word: YES or NO`;
       topicRelevance = 0.3; // idle moment
     }
 
-    // 3. Mood arousal (weight: 0.15) — approximated from HEXACO if no real-time mood
+    // 3. Mood arousal (weight: 0.14) — prefer live PAD state when available
     // Arousal baseline: E*0.3 + X*0.3 - 0.1 (from MoodEngine)
     const e = traits.emotionality ?? 0.5;
     const arousalBaseline = e * 0.3 + x * 0.3 - 0.1;
-    const arousalScore = clamp01(0.5 + arousalBaseline); // normalize to 0-1
+    const arousalScore = clamp01(0.5 + (liveArousal ?? arousalBaseline)); // normalize to 0-1
 
     // 4. Mood dominance (weight: 0.10)
     const a = traits.agreeableness ?? 0.5;
     const dominanceBaseline = x * 0.4 - a * 0.2;
-    const dominanceScore = clamp01(0.5 + dominanceBaseline);
+    const dominanceScore = clamp01(0.5 + (liveDominance ?? dominanceBaseline));
 
-    // 5. Extraversion (weight: 0.10)
+    // 5. Mood valence (weight: 0.08) — positive valence slightly boosts posting urge.
+    const valenceBaseline = a * 0.4 + (traits.honesty_humility ?? 0.5) * 0.2 - 0.1;
+    const valenceScore = clamp01(0.5 + (liveValence ?? valenceBaseline));
+
+    // 6. Extraversion (weight: 0.08)
     const extraversionScore = x;
 
-    // 6. Time since last post (weight: 0.15)
+    // 7. Time since last post (weight: 0.14)
     const sinceLastPost = this.lastPostAtMs > 0 ? Date.now() - this.lastPostAtMs : Infinity;
     let timeSinceScore: number;
     if (sinceLastPost < 5 * 60_000) timeSinceScore = 0.0;       // <5 min: no urge
@@ -537,12 +575,13 @@ Respond with exactly one word: YES or NO`;
 
     // Weighted sum
     const urge =
-      priorityScore * 0.25 +
-      topicRelevance * 0.25 +
-      arousalScore * 0.15 +
+      priorityScore * 0.22 +
+      topicRelevance * 0.24 +
+      arousalScore * 0.14 +
       dominanceScore * 0.10 +
-      extraversionScore * 0.10 +
-      timeSinceScore * 0.15;
+      valenceScore * 0.08 +
+      extraversionScore * 0.08 +
+      timeSinceScore * 0.14;
 
     return clamp01(urge);
   }
@@ -582,7 +621,7 @@ Respond with exactly one word: YES or NO`;
     const toolsUsed: string[] = [];
 
     // Build HEXACO personality system prompt (uses baseSystemPrompt + bio + traits)
-    const systemPrompt = this.buildPersonaSystemPrompt();
+    const systemPrompt = this.buildPersonaSystemPrompt(stimulus);
 
     // Build user prompt from stimulus
     const userPrompt = this.buildStimulusPrompt(stimulus, topic);
@@ -767,7 +806,7 @@ Respond with exactly one word: YES or NO`;
    * Uses baseSystemPrompt (if set) as identity, bio as background, and HEXACO traits
    * mapped to concrete writing style instructions (not just trait descriptions).
    */
-  private buildPersonaSystemPrompt(): string {
+  private buildPersonaSystemPrompt(stimulus?: StimulusEvent): string {
     const { name, hexacoTraits: traits, baseSystemPrompt, description } = this.config.seedConfig;
     const h = traits.honesty_humility || 0.5;
     const e = traits.emotionality || 0.5;
@@ -858,6 +897,20 @@ Respond with exactly one word: YES or NO`;
       return `\n\n## Current Mood (PAD)\n${lines.join('\n')}\n\n## Mood Modulation\n- ${guidance.join('\n- ')}`;
     })();
 
+    // Dynamic voice overlay: a per-stimulus style profile that makes mood/news
+    // effects visible in writing (not just abstract trait labels).
+    const dynamicVoiceSection = (() => {
+      if (!stimulus) return '';
+      const profile = buildDynamicVoiceProfile({
+        baseTraits: traits,
+        stimulus,
+        moodLabel,
+        moodState,
+      });
+      this.emitDynamicVoiceSnapshot(stimulus, profile, moodLabel, moodState);
+      return `\n\n${buildDynamicVoicePromptSection(profile)}`;
+    })();
+
     const memoryHint = this.tools.has('memory_read')
       ? '\n8. If the memory_read tool is available, use it to recall your past posts, stance, and any relevant long-term context before drafting.'
       : '';
@@ -871,7 +924,7 @@ Respond with exactly one word: YES or NO`;
 - Agreeableness: ${(a * 100).toFixed(0)}%
 - Conscientiousness: ${(c * 100).toFixed(0)}%
 - Openness: ${(o * 100).toFixed(0)}%
-${moodSection}
+${moodSection}${dynamicVoiceSection}
 
 ## Behavior Rules
 1. You are FULLY AUTONOMOUS. No human wrote or edited this post.
@@ -924,13 +977,13 @@ ${moodSection}
   private buildStimulusPrompt(stimulus: StimulusEvent, topic: string): string {
     switch (stimulus.payload.type) {
       case 'world_feed':
-        return `React to this news:\n\nHeadline: "${stimulus.payload.headline}"\n${stimulus.payload.body ? `Body: ${stimulus.payload.body}\n` : ''}Source: ${stimulus.payload.sourceName}\nCategory: ${stimulus.payload.category}\n\nWrite a post sharing your perspective. You may use web search to find more context, or search for a relevant GIF/image to include.`;
+        return `React to this news:\n\nHeadline: "${stimulus.payload.headline}"\n${stimulus.payload.body ? `Body: ${stimulus.payload.body}\n` : ''}Source: ${stimulus.payload.sourceName}${stimulus.payload.sourceUrl ? `\nSource URL: ${stimulus.payload.sourceUrl}` : ''}\nCategory: ${stimulus.payload.category}\n\nWrite a post sharing your perspective. If the source has images or media, reference them. You may use web search to find more context, or search for a relevant GIF/image to include.`;
 
       case 'tip':
         return `A user tipped you with this topic:\n\n"${stimulus.payload.content}"\n\nWrite a post reacting to this tip. Research if needed, and consider adding a relevant image or GIF.`;
 
       case 'agent_reply':
-        return `You saw a post from agent "${stimulus.payload.replyFromSeedId}" while browsing:\n\nPost ID: ${stimulus.payload.replyToPostId}\n\n"${stimulus.payload.content}"\n\nWrite a reply comment to that post. Stay in character. Add value (agree and extend, or disagree with reasoning).`;
+        return `You saw a post from agent "${stimulus.payload.replyFromSeedId}" while browsing:\n\nPost ID: ${stimulus.payload.replyToPostId}\n\n"${stimulus.payload.content}"\n\nIf the post contains image/media links (![...](url)), acknowledge and react to the visual content too.\n\nWrite a reply comment to that post. Stay in character. Add value (agree and extend, or disagree with reasoning).`;
 
       case 'cron_tick':
         return `It's time for your scheduled "${stimulus.payload.scheduleName}" post (tick #${stimulus.payload.tickCount}).\n\nWrite something interesting. You may search for trending news, find a cool image, or share a thought.`;
@@ -1045,10 +1098,9 @@ ${moodSection}
 
     // Known placeholder patterns from old fallback code
     const lower = c.toLowerCase();
-    if (lower.startsWith('observation from ') && lower.includes(': scheduled post')) return true;
+    if (lower.startsWith('observation from ')) return true;
     if (lower.includes('] observation: scheduled post')) return true;
     if (lower.startsWith('[') && lower.includes('] observation:')) return true;
-    if (lower.startsWith('observation from ') && c.length < 80) return true;
 
     // LLM refusal / meta-commentary (not a real post)
     if (lower.startsWith("i'm sorry") || lower.startsWith("i cannot") || lower.startsWith("as an ai")) return true;
@@ -1127,6 +1179,39 @@ ${moodSection}
       default:
         // World feed can be high volume; sample more aggressively.
         return clamp01(0.12 + x * 0.18 + o * 0.06 + (1 - c) * 0.04);
+    }
+  }
+
+  private emitDynamicVoiceSnapshot(
+    stimulus: StimulusEvent,
+    profile: DynamicVoiceProfile,
+    moodLabel?: MoodLabel,
+    moodState?: PADState,
+  ): void {
+    const previous = this.lastVoiceArchetype;
+    const switchedArchetype = !!previous && previous !== profile.archetype;
+    this.lastVoiceArchetype = profile.archetype;
+
+    const snapshot: DynamicVoiceSnapshot = {
+      seedId: this.config.seedConfig.seedId,
+      timestamp: new Date().toISOString(),
+      stimulusEventId: stimulus.eventId,
+      stimulusType: stimulus.payload.type,
+      stimulusPriority: stimulus.priority,
+      previousArchetype: previous,
+      switchedArchetype,
+      profile,
+      moodLabel,
+      moodState: moodState ? { ...moodState } : undefined,
+    };
+
+    for (const cb of this.dynamicVoiceCallbacks) {
+      Promise.resolve(cb(snapshot)).catch((err) => {
+        console.error(
+          `[Newsroom:${this.config.seedConfig.seedId}] Dynamic voice callback error:`,
+          err,
+        );
+      });
     }
   }
 }
