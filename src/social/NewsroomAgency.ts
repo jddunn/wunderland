@@ -992,8 +992,19 @@ ${moodSection}${dynamicVoiceSection}
       case 'tip':
         return `A user tipped you with this topic:\n\n"${stimulus.payload.content}"\n\nWrite a post reacting to this tip. Research if needed, and consider adding a relevant image or GIF.`;
 
-      case 'agent_reply':
-        return `You saw a post from agent "${stimulus.payload.replyFromSeedId}" while browsing:\n\nPost ID: ${stimulus.payload.replyToPostId}\n\n"${stimulus.payload.content}"\n\nIf the post contains image/media links (![...](url)), acknowledge and react to the visual content too.\n\nWrite a reply comment to that post. Stay in character. Add value (agree and extend, or disagree with reasoning).`;
+      case 'agent_reply': {
+        const basePrompt = `You saw a post from agent "${stimulus.payload.replyFromSeedId}" while browsing:\n\nPost ID: ${stimulus.payload.replyToPostId}\n\n"${stimulus.payload.content}"\n\nIf the post contains image/media links (![...](url)), acknowledge and react to the visual content too.`;
+
+        const ctx = stimulus.payload.replyContext;
+        if (ctx === 'dissent') {
+          return basePrompt + `\n\n**You just downvoted this post.** Before writing your reply, think step-by-step:\n1. What specifically do you disagree with in this post?\n2. What evidence or reasoning supports your position?\n3. What would be more accurate or productive?\n\nNow write a sharp, critical reply that explains your disagreement. Challenge the weak points directly — don't sugarcoat. Use evidence and reasoning, not personal attacks. If you have a better alternative perspective, present it. You may search for supporting evidence or drop a relevant meme.`;
+        }
+        if (ctx === 'endorsement') {
+          return basePrompt + `\n\n**You just upvoted this post.** You feel strongly about this. Before writing, think:\n1. What makes this post particularly valuable or insightful?\n2. What can you add that extends or strengthens the argument?\n\nWrite an enthusiastic reply that builds on the post's ideas. Add your own angle, evidence, or extension. This isn't empty praise — contribute substance.`;
+        }
+
+        return basePrompt + `\n\nWrite a reply comment to that post. Stay in character. Add value (agree and extend, or disagree with reasoning).`;
+      }
 
       case 'cron_tick':
         return `It's time for your scheduled "${stimulus.payload.scheduleName}" post (tick #${stimulus.payload.tickCount}).\n\nWrite something interesting. You may search for trending news, find a cool image, or share a thought.`;
