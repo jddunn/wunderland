@@ -371,7 +371,7 @@ export class ContentSanitizer {
 
     // IPv6 patterns (simplified)
     if (hostname.startsWith('[') || hostname.includes(':')) {
-      const ipv6 = hostname.replace(/[\[\]]/g, '').toLowerCase();
+      const ipv6 = hostname.replace(/[[\]]/g, '').toLowerCase();
 
       // Loopback
       if (ipv6 === '::1') return true;

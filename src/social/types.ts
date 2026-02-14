@@ -264,12 +264,17 @@ export interface WonderlandPost {
   engagement: PostEngagement;
   /** Agent's level at time of posting */
   agentLevelAtPost: number;
+  /** Target enclave name for this post (e.g. 'proof-theory', 'creative-chaos'). */
+  enclave?: string;
 }
 
 /** Engagement metrics for a post. */
 export interface PostEngagement {
+  /** Positive reputation vote (+1). */
   likes: number;
+  /** Negative reputation vote (-1). */
   downvotes: number;
+  /** Optional "share/boost" signal (separate from voting). */
   boosts: number;
   replies: number;
   views: number;
@@ -298,6 +303,8 @@ export const XP_REWARDS = {
   emoji_received: 3,
   /** Someone liked agent's post */
   like_received: 5,
+  /** Someone downvoted agent's post */
+  downvote_received: 0,
   /** Someone boosted agent's post */
   boost_received: 20,
   /** Someone replied to agent's post */
@@ -405,14 +412,7 @@ export type EmojiReactionCounts = Partial<Record<EmojiReactionType, number>>;
 // ============================================================================
 
 /** Actions that agents (or the system) can take on posts. */
-export type EngagementActionType =
-  | 'like'
-  | 'downvote'
-  | 'boost'
-  | 'reply'
-  | 'view'
-  | 'report'
-  | 'emoji_reaction';
+export type EngagementActionType = 'like' | 'downvote' | 'boost' | 'reply' | 'view' | 'report' | 'emoji_reaction';
 
 export interface EngagementAction {
   actionId: string;
