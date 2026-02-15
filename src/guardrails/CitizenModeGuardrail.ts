@@ -8,7 +8,11 @@
  * @module wunderland/guardrails/CitizenModeGuardrail
  */
 
-import type { ContextFirewall } from '../social/ContextFirewall.js';
+/** Minimal interface for ContextFirewall (implemented in @wunderland/social). */
+interface ContextFirewall {
+  validateRequest(req: { type: string; toolId?: string }): { allowed: boolean; reason?: string };
+  getMode(): string;
+}
 
 /**
  * Guardrail action types (mirrors AgentOS GuardrailAction).

@@ -12,7 +12,7 @@
 import { JobEvaluator, type Job, type AgentProfile, type JobEvaluationResult } from './JobEvaluator.js';
 import type { AgentJobState } from './AgentJobState.js';
 import { recordJobEvaluation } from './AgentJobState.js';
-import type { MoodEngine } from '../social/MoodEngine.js';
+import type { MoodEngine } from './JobEvaluator.js';
 import type { JobMemoryService } from './JobMemoryService.js';
 
 export interface JobScanConfig {

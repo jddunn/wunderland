@@ -11,8 +11,20 @@
  * Decision-making is emergent and dynamic - no hardcoded thresholds.
  */
 
-import type { MoodEngine, PADState } from '../social/MoodEngine.js';
 import type { HEXACOTraits } from '../core/types.js';
+
+/** PAD (Pleasure-Arousal-Dominance) mood state. Full type in @wunderland/social. */
+export interface PADState {
+  valence: number;
+  arousal: number;
+  dominance: number;
+}
+
+/** Minimal MoodEngine interface (implemented in @wunderland/social). */
+export interface MoodEngine {
+  getState(seedId: string): PADState | undefined;
+  getTraits(seedId: string): HEXACOTraits | undefined;
+}
 import type { AgentJobState } from './AgentJobState.js';
 import type { JobMemoryService } from './JobMemoryService.js';
 

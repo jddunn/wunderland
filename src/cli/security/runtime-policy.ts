@@ -22,7 +22,7 @@ import {
   isValidToolAccessProfile,
   type ToolCategory,
   type ToolAccessProfileName,
-} from '../../social/ToolAccessProfiles.js';
+} from '../../security/ToolAccessProfiles.js';
 import type { FolderPermissionConfig } from '../../security/FolderPermissions.js';
 import type { ToolInstance } from '../openai/tool-calling.js';
 

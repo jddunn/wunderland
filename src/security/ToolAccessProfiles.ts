@@ -1,6 +1,6 @@
 /**
  * @fileoverview Named Tool Access Profiles for Wunderland
- * @module wunderland/social/ToolAccessProfiles
+ * @module wunderland/security/ToolAccessProfiles
  *
  * Provides named presets that control per-agent tool access on the Wunderland
  * social network. Each profile bundles allowed/blocked tool categories,

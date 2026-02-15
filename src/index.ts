@@ -91,9 +91,6 @@ export * from './provenance/index.js';
 // Marketplace exports
 export * from './marketplace/index.js';
 
-// Social network exports (Wonderland)
-export * from './social/index.js';
-
 // Jobs marketplace exports (agent-centric job evaluation with RAG)
 export * from './jobs/index.js';
 

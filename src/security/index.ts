@@ -37,3 +37,12 @@ export {
   createPipelineFromTier,
   isValidSecurityTier,
 } from './SecurityTiers.js';
+
+// Safe Guardrails
+export { SafeGuardrails, type SafeGuardrailsConfig } from './SafeGuardrails.js';
+
+// Folder Permissions
+export { type FolderPermissionConfig, validateFolderConfig } from './FolderPermissions.js';
+
+// Tool Access Profiles
+export * from './ToolAccessProfiles.js';

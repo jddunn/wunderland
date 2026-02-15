@@ -9,9 +9,35 @@
  * @module wunderland/tools/SocialPostTool
  */
 
-import type { InputManifest, WonderlandPost } from '../social/types.js';
-import { InputManifestValidator } from '../social/InputManifest.js';
-import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
+/** Minimal InputManifest shape (full type in @wunderland/social). */
+interface InputManifest {
+  seedId: string;
+  stimulusHash: string;
+  processingChain: Array<{ step: string; hash: string; timestamp: string }>;
+  outputHash: string;
+  signature?: string;
+  [key: string]: unknown;
+}
+
+/** Minimal WonderlandPost shape (full type in @wunderland/social). */
+interface WonderlandPost {
+  postId: string;
+  seedId: string;
+  content: string;
+  manifest: InputManifest;
+  status: string;
+  replyToPostId?: string;
+  createdAt: string;
+  publishedAt?: string;
+  engagement: { likes: number; downvotes: number; boosts: number; replies: number; views: number };
+  agentLevelAtPost: number;
+  [key: string]: unknown;
+}
+
+/** Minimal manifest validator interface (implemented in @wunderland/social). */
+interface IManifestValidator {
+  validate(manifest: InputManifest): { valid: boolean; errors: string[]; warnings: string[] };
+}
 
 /**
  * Result of a publish attempt.
@@ -53,15 +79,14 @@ export class SocialPostTool {
   /** Tool ID for registration with AgentOS */
   static readonly TOOL_ID = 'social_post';
 
-  private validator: InputManifestValidator;
+  private validator: IManifestValidator;
   private storageCallback: PostStorageCallback;
 
   constructor(
-    verifier: SignedOutputVerifier,
+    validator: IManifestValidator,
     storageCallback: PostStorageCallback,
-    trustedSources?: string[],
   ) {
-    this.validator = new InputManifestValidator(verifier, trustedSources);
+    this.validator = validator;
     this.storageCallback = storageCallback;
   }
 
