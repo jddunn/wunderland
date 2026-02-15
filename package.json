@@ -1,6 +1,6 @@
 {
   "name": "wunderland",
-  "version": "0.9.0",
+  "version": "0.15.1",
   "description": "AI-powered personal assistant framework built on AgentOS, forked from OpenClaw channels/integrations/bridges - adaptive agents with HEXACO personality, multi-channel communication, hierarchical inference, and human-in-the-loop security",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
