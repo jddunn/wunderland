@@ -112,7 +112,11 @@ async function cmdQuery(args: string[], flags: Record<string, string | boolean>)
   const collectionIds = collectionId ? [collectionId] : undefined;
   const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
 
-  const result = await ragFetch('/query', { method: 'POST', body: { query, topK, preset, collectionIds } });
+  const verbose = flags['verbose'] === true || flags['v'] === true;
+  const result = await ragFetch('/query', {
+    method: 'POST',
+    body: { query, topK, preset, collectionIds, includeAudit: verbose },
+  });
 
   if (format === 'json') {
     console.log(JSON.stringify(result, null, 2));
@@ -130,6 +134,32 @@ async function cmdQuery(args: string[], flags: Record<string, string | boolean>)
   }
   fmt.blank();
   fmt.note(`${result.totalResults} result(s) in ${result.processingTimeMs}ms`);
+
+  // Show audit trail when --verbose
+  if (verbose && result.auditTrail) {
+    const trail = result.auditTrail;
+    fmt.blank();
+    fmt.section('Audit Trail');
+    fmt.kvPair('Trail ID', trail.trailId);
+    fmt.kvPair('Summary', [
+      `${trail.summary.totalOperations} ops`,
+      `${trail.summary.totalLLMCalls} LLM calls`,
+      `${trail.summary.totalTokens} tokens`,
+      `$${trail.summary.totalCostUSD.toFixed(4)}`,
+      `${trail.summary.totalDurationMs}ms`,
+    ].join(' | '));
+    fmt.kvPair('Methods', trail.summary.operationTypes.join(', '));
+    fmt.kvPair('Sources', `${trail.summary.sourceSummary.uniqueDocuments} docs, ${trail.summary.sourceSummary.uniqueDataSources} data sources`);
+
+    for (const op of trail.operations) {
+      const typeLabel = op.operationType.padEnd(14);
+      const tokLabel = `${op.tokenUsage.totalTokens} tok`;
+      const costLabel = `$${op.costUSD.toFixed(4)}`;
+      const durLabel = `${op.durationMs}ms`;
+      const srcLabel = `${op.sources.length} src`;
+      fmt.kvPair(`  ${typeLabel}`, `${durLabel} | ${tokLabel} | ${costLabel} | ${srcLabel}`);
+    }
+  }
 }
 
 async function cmdQueryMedia(args: string[], flags: Record<string, string | boolean>): Promise<void> {
@@ -281,6 +311,86 @@ async function cmdGraph(args: string[], flags: Record<string, string | boolean>)
   }
 }
 
+async function cmdAudit(_args: string[], flags: Record<string, string | boolean>): Promise<void> {
+  const seedId = typeof flags['seed-id'] === 'string' ? flags['seed-id'] : undefined;
+  const limit = typeof flags['limit'] === 'string' ? parseInt(flags['limit'], 10) : 20;
+  const since = typeof flags['since'] === 'string' ? flags['since'] : undefined;
+  const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+  const verbose = flags['verbose'] === true || flags['v'] === true;
+
+  const params = new URLSearchParams();
+  if (seedId) params.set('seedId', seedId);
+  params.set('limit', String(limit));
+  if (since) params.set('since', since);
+
+  const result = await ragFetch(`/audit?${params.toString()}`);
+
+  if (format === 'json') {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  fmt.section('RAG Audit Trail');
+  if (!result.trails?.length) {
+    fmt.note('No audit entries found.');
+    return;
+  }
+
+  for (const trail of result.trails) {
+    // Trail header
+    const queryPreview = trail.query.length > 60 ? trail.query.slice(0, 57) + '...' : trail.query;
+    fmt.kvPair(
+      accent(`[${trail.trailId.slice(0, 12)}]`),
+      `"${queryPreview}" @ ${trail.timestamp}`,
+    );
+
+    // Summary line
+    fmt.kvPair('  Summary', [
+      `${trail.summary.totalOperations} ops`,
+      `${trail.summary.totalLLMCalls} LLM calls`,
+      `${trail.summary.totalTokens} tokens`,
+      `$${trail.summary.totalCostUSD.toFixed(4)}`,
+      `${trail.summary.totalDurationMs}ms`,
+    ].join(' | '));
+
+    fmt.kvPair('  Methods', trail.summary.operationTypes.join(', '));
+    fmt.kvPair('  Sources', `${trail.summary.sourceSummary.uniqueDocuments} docs, ${trail.summary.sourceSummary.uniqueDataSources} data sources`);
+
+    // Per-operation breakdown (when --verbose)
+    if (verbose) {
+      for (const op of trail.operations) {
+        const typeLabel = op.operationType.padEnd(14);
+        const tokLabel = `${op.tokenUsage.totalTokens} tok`;
+        const costLabel = `$${op.costUSD.toFixed(4)}`;
+        const durLabel = `${op.durationMs}ms`;
+        const srcLabel = `${op.sources.length} src`;
+        fmt.kvPair(`    ${typeLabel}`, `${durLabel} | ${tokLabel} | ${costLabel} | ${srcLabel}`);
+
+        if (op.retrievalMethod) {
+          fmt.kvPair('      method', `${op.retrievalMethod.strategy}${op.retrievalMethod.topK ? ` (topK=${op.retrievalMethod.topK})` : ''}`);
+        }
+        if (op.graphDetails) {
+          fmt.kvPair('      graph', `${op.graphDetails.entitiesMatched} entities, ${op.graphDetails.communitiesSearched} communities, ${op.graphDetails.traversalTimeMs}ms traversal`);
+        }
+        if (op.rerankDetails) {
+          fmt.kvPair('      rerank', `${op.rerankDetails.providerId}/${op.rerankDetails.modelId} (${op.rerankDetails.documentsReranked} docs)`);
+        }
+
+        // Show source snippets
+        for (const src of op.sources.slice(0, 3)) {
+          const snippet = src.contentSnippet.slice(0, 80).replace(/\n/g, ' ');
+          fmt.kvPair(`      [${(src.relevanceScore * 100).toFixed(0)}%]`, `${dim(src.documentId.slice(0, 16))} "${snippet}..."`);
+        }
+        if (op.sources.length > 3) {
+          fmt.note(`      ... and ${op.sources.length - 3} more source(s)`);
+        }
+      }
+    }
+
+    fmt.blank();
+  }
+}
+
 // -- Main dispatcher --------------------------------------------------------
 
 export default async function cmdRag(
@@ -306,6 +416,7 @@ export default async function cmdRag(
     ${dim('graph [local-search|global-search|stats]')}  GraphRAG
     ${dim('stats')}                    RAG statistics
     ${dim('health')}                   Service health
+    ${dim('audit')}                    View audit trail
 
   ${accent('Flags:')}
     ${dim('--collection <id>')}  Target collection
@@ -314,6 +425,10 @@ export default async function cmdRag(
     ${dim('--preset <p>')}       Retrieval preset (fast|balanced|accurate)
     ${dim('--modality <m>')}     Media filter (image|audio)
     ${dim('--category <c>')}     Document category
+    ${dim('--verbose, -v')}      Show audit trail (query) / per-op details (audit)
+    ${dim('--seed-id <id>')}     Filter by seed ID (audit)
+    ${dim('--limit <n>')}        Max results (audit, default: 20)
+    ${dim('--since <date>')}     Filter since ISO date (audit)
 `);
     return;
   }
@@ -329,6 +444,7 @@ export default async function cmdRag(
     else if (sub === 'graph') await cmdGraph(args.slice(1), flags);
     else if (sub === 'stats') await cmdStats(flags);
     else if (sub === 'health') await cmdHealth();
+    else if (sub === 'audit') await cmdAudit(args.slice(1), flags);
     else {
       fmt.errorBlock('Unknown subcommand', `"${sub}" is not valid. Run ${accent('wunderland rag')} for help.`);
       process.exitCode = 1;
