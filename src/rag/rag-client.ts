@@ -197,6 +197,52 @@ export interface GraphSearchResult {
   processingTimeMs: number;
 }
 
+/** Audit trail data shape returned by the API (plain object, no class import). */
+export interface RAGAuditTrailData {
+  trailId: string;
+  requestId: string;
+  seedId?: string;
+  sessionId?: string;
+  query: string;
+  timestamp: string;
+  operations: Array<{
+    operationId: string;
+    operationType: string;
+    startedAt: string;
+    durationMs: number;
+    retrievalMethod?: { strategy: string; hybridAlpha?: number; topK?: number; mmrLambda?: number };
+    sources: Array<{
+      chunkId: string;
+      documentId: string;
+      source?: string;
+      contentSnippet: string;
+      relevanceScore: number;
+      dataSourceId?: string;
+    }>;
+    tokenUsage: { embeddingTokens: number; llmPromptTokens: number; llmCompletionTokens: number; totalTokens: number };
+    costUSD: number;
+    resultsCount: number;
+    relevanceScores?: { min: number; max: number; avg: number };
+    dataSourceIds?: string[];
+    collectionIds?: string[];
+    graphDetails?: { entitiesMatched: number; communitiesSearched: number; traversalTimeMs: number };
+    rerankDetails?: { providerId: string; modelId: string; documentsReranked: number };
+  }>;
+  summary: {
+    totalOperations: number;
+    totalLLMCalls: number;
+    totalEmbeddingCalls: number;
+    totalTokens: number;
+    totalPromptTokens: number;
+    totalCompletionTokens: number;
+    totalEmbeddingTokens: number;
+    totalCostUSD: number;
+    totalDurationMs: number;
+    operationTypes: string[];
+    sourceSummary: { uniqueDocuments: number; uniqueCollections: number; uniqueDataSources: number };
+  };
+}
+
 export class WunderlandRAGClient {
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
@@ -431,6 +477,29 @@ export class WunderlandRAGClient {
 
   async graphStats(): Promise<Record<string, unknown>> {
     return this.request('GET', '/graphrag/stats');
+  }
+
+  // -- Audit Trail ----------------------------------------------------------
+
+  async queryWithAudit(input: RAGQueryInput): Promise<RAGQueryResult & { auditTrail?: RAGAuditTrailData }> {
+    return this.request('POST', '/query', { ...input, includeAudit: true });
+  }
+
+  async getAuditTrails(opts: {
+    seedId?: string;
+    limit?: number;
+    since?: string;
+  }): Promise<{ trails: RAGAuditTrailData[] }> {
+    const params = new URLSearchParams();
+    if (opts.seedId) params.set('seedId', opts.seedId);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    if (opts.since) params.set('since', opts.since);
+    const qs = params.toString();
+    return this.request('GET', `/audit${qs ? `?${qs}` : ''}`);
+  }
+
+  async getAuditTrail(trailId: string): Promise<{ trail: RAGAuditTrailData | null }> {
+    return this.request('GET', `/audit/${encodeURIComponent(trailId)}`);
   }
 
   // -- Admin ----------------------------------------------------------------
