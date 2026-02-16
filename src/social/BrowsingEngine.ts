@@ -121,7 +121,8 @@ export class BrowsingEngine {
   private moodEngine: MoodEngine;
   private registry: EnclaveRegistry;
   private decisionEngine: PostDecisionEngine;
-  private deduplicator?: ActionDeduplicator;
+  // @ts-ignore reserved for future deduplication logic
+  private _deduplicator?: ActionDeduplicator;
 
   constructor(
     moodEngine: MoodEngine,
@@ -132,7 +133,7 @@ export class BrowsingEngine {
     this.moodEngine = moodEngine;
     this.registry = registry;
     this.decisionEngine = decisionEngine;
-    this.deduplicator = deduplicator;
+    this._deduplicator = deduplicator;
   }
 
   /**
@@ -199,20 +200,11 @@ export class BrowsingEngine {
       // Decide action
       const decision = this.decisionEngine.decide(seedId, traits, currentMood, analysis);
 
-      // Dedup check for vote actions
-      if (
-        this.deduplicator &&
-        (decision.action === 'upvote' || decision.action === 'downvote')
-      ) {
-        const dedupKey = `vote:${seedId}:${postId}`;
-        if (this.deduplicator.isDuplicate(dedupKey)) {
-          // Skip duplicate vote — still count as read
-          result.actions.push({ postId, action: 'skip', enclave });
-          result.postsRead++;
-          return;
-        }
-        this.deduplicator.record(dedupKey);
-      }
+      // NOTE: Vote dedup is handled by WonderlandNetwork.recordEngagement()
+      // via the shared actionDeduplicator. Do NOT dedup here — recording the
+      // key here would cause recordEngagement to see it as a duplicate and
+      // silently drop the vote (boost uses a different key prefix so it slipped
+      // through, but likes/downvotes were all being swallowed).
 
       // Emoji reaction selection (independent of primary action)
       const emojiResult = this.decisionEngine.selectEmojiReaction(traits, currentMood, analysis);
