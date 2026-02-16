@@ -56,12 +56,59 @@ export interface JobEvaluationResult {
  */
 const CATEGORY_EFFORT_ESTIMATES: Record<string, { min: number; max: number }> = {
   development: { min: 8, max: 40 },
+  'github-bounty': { min: 8, max: 40 },
   research: { min: 4, max: 20 },
   data: { min: 3, max: 15 },
   design: { min: 2, max: 12 },
   content: { min: 1, max: 8 },
   other: { min: 2, max: 10 },
 };
+
+/**
+ * HEXACO personality → category affinity map.
+ *
+ * Each category has a formula based on HEXACO traits that produces a 0-1 affinity score.
+ * This replaces the flat 0.5 default for agents with no history in a given category,
+ * creating natural specialization driven by personality.
+ *
+ * - High conscientiousness → development, data
+ * - High openness → research, design, creative work
+ * - High extraversion → content, outreach
+ * - High agreeableness → content, collaborative tasks
+ * - High honesty-humility → research (intellectual integrity)
+ * - High emotionality → avoids high-pressure categories
+ */
+function calculatePersonalityCategoryAffinity(
+  hexaco: HEXACOTraits,
+  category: string,
+): number {
+  switch (category) {
+    case 'development':
+    case 'github-bounty':
+      // Builders: conscientiousness + openness, penalize high emotionality (stress sensitivity)
+      return 0.2 * hexaco.conscientiousness + 0.15 * hexaco.openness - 0.1 * hexaco.emotionality + 0.1;
+
+    case 'research':
+      // Thinkers: openness + honesty-humility (intellectual integrity), conscientiousness helps
+      return 0.25 * hexaco.openness + 0.15 * hexaco.honesty_humility + 0.1 * hexaco.conscientiousness;
+
+    case 'data':
+      // Detail-oriented: conscientiousness dominant, some openness for pattern recognition
+      return 0.25 * hexaco.conscientiousness + 0.1 * hexaco.openness + 0.05;
+
+    case 'design':
+      // Creative: openness dominant, extraversion for user empathy
+      return 0.25 * hexaco.openness + 0.1 * hexaco.extraversion + 0.05;
+
+    case 'content':
+      // Communicators: extraversion + agreeableness (audience empathy)
+      return 0.2 * hexaco.extraversion + 0.15 * hexaco.agreeableness + 0.05;
+
+    default:
+      // Generic: balanced across traits, slightly below midpoint
+      return 0.1 * hexaco.conscientiousness + 0.1 * hexaco.openness + 0.05 * hexaco.agreeableness + 0.05;
+  }
+}
 
 /**
  * Agent-centric job evaluator with mood and state awareness.
@@ -102,8 +149,15 @@ export class JobEvaluator {
     // RAG similarity bonus (if enabled)
     const ragBonus = await this.calculateRagBonus(job, agent);
 
+    // Competition penalty: jobs with many bids are less attractive
+    const competitionPenalty = this.calculateCompetitionPenalty(job);
+
     // Weighted job score (dynamic weights based on mood)
     const dominanceFactor = (mood?.dominance ?? 0) + 1; // 0-2 range
+
+    // RAG contribution: only meaningful when we have data (non-0.5 value).
+    // A neutral 0.5 contributes 0 so agents without history aren't boosted.
+    const ragContribution = 0.15 * (ragBonus - 0.5); // range: -0.075 to +0.075
 
     // High dominance → emphasize budget
     const jobScore =
@@ -111,8 +165,9 @@ export class JobEvaluator {
       (0.2 + dominanceFactor * 0.1) * budgetAttractiveness +
       0.15 * moodAlignment +
       0.1 * urgencyBonus +
-      0.15 * ragBonus - // RAG influence
-      0.15 * workloadPenalty;
+      ragContribution - // RAG: positive when history supports, negative when it discourages, 0 when unknown
+      0.15 * workloadPenalty -
+      0.1 * competitionPenalty;
 
     // Decision threshold is dynamic based on state
     const bidThreshold = this.calculateBidThreshold(state, mood);
@@ -159,6 +214,10 @@ export class JobEvaluator {
 
   /**
    * Complexity fit: Can agent complete this with current skills/experience?
+   *
+   * Uses personality-category affinity as the base (instead of flat 0.5)
+   * so agents naturally gravitate toward categories that match their HEXACO traits.
+   * Learned category preferences (from outcomes) override personality affinity once available.
    */
   private calculateComplexityFit(
     job: Job,
@@ -168,19 +227,15 @@ export class JobEvaluator {
     const categoryEstimate = CATEGORY_EFFORT_ESTIMATES[job.category] || CATEGORY_EFFORT_ESTIMATES.other;
     const estimatedHours = (categoryEstimate.min + categoryEstimate.max) / 2;
 
-    // Experience bonus
-    const experienceBonus = Math.min(agent.completedJobs / 30, 0.3);
+    // Experience bonus (scaled down — less generous for new agents)
+    const experienceBonus = Math.min(agent.completedJobs / 50, 0.2);
 
-    // Category preference (learned)
-    const categoryPreference = state.preferredCategories.get(job.category) || 0.5;
+    // Category preference: use learned preference if available, else personality affinity
+    const learnedPreference = state.preferredCategories.get(job.category);
+    const personalityAffinity = calculatePersonalityCategoryAffinity(agent.hexaco, job.category);
+    const categoryPreference = learnedPreference !== undefined ? learnedPreference : personalityAffinity;
 
-    // Openness increases willingness for novel categories
-    const opennessBonus = agent.hexaco.openness * 0.15;
-
-    // Conscientiousness helps with complex tasks
-    const conscientiousnessBonus = agent.hexaco.conscientiousness * 0.15;
-
-    let fit = categoryPreference + experienceBonus + opennessBonus + conscientiousnessBonus;
+    let fit = categoryPreference + experienceBonus;
 
     // Penalize if description suggests extreme complexity
     if (
@@ -188,7 +243,7 @@ export class JobEvaluator {
       job.description.toLowerCase().includes('advanced') ||
       job.description.toLowerCase().includes('expert')
     ) {
-      fit -= 0.2;
+      fit -= 0.15;
     }
 
     // Penalize if estimated hours exceed agent's available bandwidth
@@ -329,6 +384,18 @@ export class JobEvaluator {
   }
 
   /**
+   * Competition penalty: Jobs with many existing bids are less attractive.
+   * Diminishing returns — the first few bids barely matter, but 5+ is crowded.
+   */
+  private calculateCompetitionPenalty(job: Job): number {
+    if (job.bidsCount <= 1) return 0;
+    if (job.bidsCount <= 3) return 0.1;
+    if (job.bidsCount <= 5) return 0.25;
+    if (job.bidsCount <= 8) return 0.5;
+    return 0.75; // 9+ bids — very crowded
+  }
+
+  /**
    * Urgency bonus: Time pressure affects bidding.
    */
   private calculateUrgencyBonus(job: Job, mood: PADState | undefined): number {
@@ -349,15 +416,24 @@ export class JobEvaluator {
 
   /**
    * Dynamic bid threshold based on agent state and mood.
+   *
+   * New agents (0 completed jobs) start at a higher threshold (0.55) so they don't
+   * spam-bid on everything. As they gain experience, the threshold adjusts based
+   * on success rate, workload, and mood.
    */
   private calculateBidThreshold(state: AgentJobState, mood: PADState | undefined): number {
-    let threshold = 0.65; // Raised from 0.5 — agents are more selective by default
+    let threshold = 0.5; // Base threshold
+
+    // New agents are more conservative — don't bid on everything
+    if (state.totalJobsCompleted === 0) {
+      threshold += 0.05; // → 0.55 for brand-new agents
+    }
 
     // Success rate affects selectivity
     if (state.successRate > 0.8) {
-      threshold += 0.15; // High performers are more selective (→ 0.8)
-    } else if (state.successRate < 0.4) {
-      threshold -= 0.1; // Struggling agents bid more (→ 0.55)
+      threshold += 0.15; // High performers are more selective (→ 0.65-0.7)
+    } else if (state.successRate < 0.4 && state.totalJobsCompleted > 0) {
+      threshold -= 0.05; // Struggling agents bid slightly more
     }
 
     // Workload affects selectivity — busy agents are MUCH more selective
@@ -370,7 +446,7 @@ export class JobEvaluator {
     // Mood affects threshold
     if (mood) {
       // High valence → lower threshold (more optimistic)
-      if (mood.valence > 0.3) threshold -= 0.1;
+      if (mood.valence > 0.3) threshold -= 0.08;
       // Low valence → higher threshold (more cautious)
       if (mood.valence < -0.2) threshold += 0.1;
 
@@ -446,7 +522,7 @@ export class JobEvaluator {
    * Generate human-readable reasoning.
    */
   private generateReasoning(
-    _job: Job,
+    job: Job,
     jobScore: number,
     complexityFit: number,
     budgetAttractiveness: number,
@@ -481,6 +557,12 @@ export class JobEvaluator {
 
     if (workloadPenalty > 0.5) {
       reasons.push('Heavy workload reduces interest');
+    }
+
+    if (job.bidsCount > 5) {
+      reasons.push(`Crowded (${job.bidsCount} bids)`);
+    } else if (job.bidsCount > 2) {
+      reasons.push(`Competitive (${job.bidsCount} bids)`);
     }
 
     if (jobScore > 0.8) {
