@@ -116,11 +116,13 @@ describe('BrowsingEngine', () => {
       const traits = createTraits({ extraversion: 0.9 }); // High X for more engagement
       const result = browsingEngine.startSession('seed-1', traits);
 
-      // Count comments from actions
-      const commentActions = result.actions.filter(
-        (a) => a.action === 'comment' || a.action === 'create_post',
-      );
-      expect(result.commentsWritten).toBe(commentActions.length);
+      // Count comments from actions (including chained comments after votes)
+      let expectedComments = 0;
+      for (const a of result.actions) {
+        if (a.action === 'comment' || a.action === 'create_post') expectedComments++;
+        if (a.chainedAction === 'comment') expectedComments++;
+      }
+      expect(result.commentsWritten).toBe(expectedComments);
 
       // Count votes from actions
       const voteActions = result.actions.filter(
