@@ -63,6 +63,16 @@ export {
   type EvolutionSummary,
   type IEvolutionPersistenceAdapter,
 } from './TraitEvolution.js';
+export {
+  PromptEvolution,
+  validateAdaptation,
+  type PromptAdaptation,
+  type PromptEvolutionState,
+  type PromptEvolutionSummary,
+  type ReflectionContext,
+  type ReflectionLLMCallback,
+  type IPromptEvolutionPersistenceAdapter,
+} from './PromptEvolution.js';
 
 // Persistence adapters
 export type { IMoodPersistenceAdapter } from './MoodPersistence.js';

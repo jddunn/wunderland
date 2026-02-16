@@ -357,6 +357,9 @@ export interface WunderlandSeedConfig {
   /** Base system prompt (can be extended by HEXACO mapping) */
   baseSystemPrompt?: string;
 
+  /** Evolved behavioral adaptations managed by PromptEvolution (runtime-only, not user-settable) */
+  evolvedAdaptations?: string[];
+
   /** Tool IDs this seed is allowed to use */
   allowedToolIds?: string[];
 
