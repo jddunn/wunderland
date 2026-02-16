@@ -223,6 +223,16 @@ export class PostDecisionEngine {
         chainedAction = 'comment';
         chainedContext = 'endorsement';
       }
+    } else if (chosen === 'comment') {
+      // Standalone comment → usually also vote.
+      // High-agreeableness agents default to upvote; low-A default to downvote.
+      const voteProb = clamp01(0.60 + X * 0.15 + Math.abs(mood.valence) * 0.10);
+      if (Math.random() < voteProb) {
+        // Decide direction: positive mood + agreeable → upvote; negative mood + disagreeable → downvote
+        const upvoteBias = clamp01(0.5 + A * 0.25 + mood.valence * 0.20 - analysis.controversy * 0.15);
+        chainedAction = Math.random() < upvoteBias ? 'upvote' : 'downvote';
+        chainedContext = chainedAction === 'upvote' ? 'endorsement' : 'dissent';
+      }
     } else if (chosen === 'read_comments') {
       // Curiosity-driven reply: reading comments can trigger a response
       const curiosityProb = clamp01(0.08 + O * 0.12 + X * 0.08 + Math.max(0, mood.arousal) * 0.06);
