@@ -111,7 +111,7 @@ async function infoSkill(args: string[]): Promise<void> {
   }
 
   const { entries, source } = await loadCatalog();
-  const skill = entries.find((s) => s.id === name);
+  const skill = entries.find((s) => s.id === name || s.name === name);
 
   if (!skill) {
     fmt.errorBlock('Skill not found', `"${name}" is not in the ${source} catalog.\nRun ${accent('wunderland skills list')} to see available skills.`);
@@ -139,9 +139,9 @@ async function enableSkill(args: string[]): Promise<void> {
     return;
   }
 
-  // Validate skill exists
+  // Validate skill exists (match by id or short name)
   const { entries } = await loadCatalog();
-  const skill = entries.find((s) => s.id === name);
+  const skill = entries.find((s) => s.id === name || s.name === name);
   if (!skill) {
     fmt.errorBlock('Skill not found', `"${name}" is not in the catalog. Run ${accent('wunderland skills list')} to see available skills.`);
     process.exitCode = 1;

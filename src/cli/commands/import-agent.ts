@@ -46,7 +46,7 @@ export default async function cmdImport(
 
   const targetDir = typeof flags['dir'] === 'string'
     ? path.resolve(process.cwd(), flags['dir'])
-    : path.resolve(path.dirname(resolvedPath), data.seedId || 'imported-agent');
+    : path.resolve(process.cwd(), data.seedId || 'imported-agent');
 
   if (existsSync(path.join(targetDir, 'agent.config.json')) && flags['force'] !== true) {
     fmt.errorBlock(

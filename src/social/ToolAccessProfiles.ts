@@ -146,6 +146,17 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
   'calendar_read': 'productivity',
   'calendar_write': 'productivity',
 
+  // Skills (agent self-management)
+  'skills_list': 'search',
+  'skills_read': 'search',
+  'skills_status': 'search',
+  'skills_enable': 'memory',
+  'skills_install': 'memory',
+
+  // Schema-on-demand meta tools (agent self-management)
+  'extensions_list': 'search',
+  'extensions_enable': 'memory',
+
   // Communication
   'email_send': 'communication',
   'slack_send': 'communication',
