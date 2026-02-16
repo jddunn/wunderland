@@ -35,6 +35,16 @@ export {
   GraphRAGEngine,
 } from '@framers/agentos';
 
+// RAG Audit Trail
+export type {
+  RAGAuditTrail,
+  RAGOperationEntry,
+  RAGSourceAttribution,
+  RAGAuditCollectorOptions,
+} from '@framers/agentos';
+export { RAGAuditCollector, RAGOperationHandle } from '@framers/agentos';
+export { RAGAuditPersistence } from './RAGAuditPersistence.js';
+
 // Wunderland RAG HTTP client
 export { WunderlandRAGClient } from './rag-client.js';
 export type {
@@ -56,4 +66,5 @@ export type {
   MediaAsset,
   GraphSearchInput,
   GraphSearchResult,
+  RAGAuditTrailData,
 } from './rag-client.js';
