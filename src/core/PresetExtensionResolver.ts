@@ -166,6 +166,9 @@ export async function resolveExtensionsByNames(
       tools: validTools.length > 0 ? validTools : 'none',
       voice: validVoice.length > 0 ? validVoice : 'none',
       productivity: validProd.length > 0 ? validProd : 'none',
+      // Default channels to 'none' unless explicitly provided — prevents loading
+      // all channel extensions (and their noisy missing-token warnings).
+      channels: options?.channels ?? 'none',
       overrides: {
         ...options?.overrides,
         ...overrides,
