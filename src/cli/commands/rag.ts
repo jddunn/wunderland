@@ -238,7 +238,13 @@ async function cmdHealth(): Promise<void> {
     fmt.kvPair('Adapter', result.adapterKind ?? 'unknown');
     fmt.blank();
   } catch (err) {
-    fmt.errorBlock('RAG Unavailable', err instanceof Error ? err.message : String(err));
+    const message = err instanceof Error ? err.message : String(err);
+    const backendUrl = getBackendUrl();
+    let hint = '';
+    if (message.includes('fetch failed') || message.includes('ECONNREFUSED')) {
+      hint = `\n\nBackend not running at ${backendUrl}.\nStart it with: cd backend && npx tsx src/main.ts`;
+    }
+    fmt.errorBlock('RAG Unavailable', message + hint);
     process.exitCode = 1;
   }
 }

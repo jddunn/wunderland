@@ -13,7 +13,10 @@ import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 
 // ── Sub-commands ────────────────────────────────────────────────────────────
 
-async function listModels(flags: Record<string, string | boolean>): Promise<void> {
+async function listModels(flags: Record<string, string | boolean>, globals: GlobalFlags): Promise<void> {
+  // Load env files so API keys are detected
+  await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
+
   const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
 
   if (format === 'json') {
@@ -192,7 +195,7 @@ export default async function cmdModels(
   const sub = args[0];
 
   if (sub === 'list' || !sub) {
-    await listModels(flags);
+    await listModels(flags, globals);
     return;
   }
 
