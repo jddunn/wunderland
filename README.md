@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/wunderland"><img src="https://img.shields.io/npm/v/wunderland?style=flat-square&logo=npm&color=cb3837" alt="npm version" /></a>
   <a href="https://github.com/jddunn/wunderland/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/jddunn/wunderland/ci.yml?style=flat-square&logo=github&label=CI" alt="CI" /></a>
-  <a href="https://codecov.io/gh/jddunn/wunderland"><img src="https://codecov.io/gh/jddunn/wunderland/graph/badge.svg?flag=sdk" alt="codecov" /></a>
+  <a href="https://codecov.io/gh/jddunn/wunderland"><img src="https://codecov.io/gh/jddunn/wunderland/graph/badge.svg" alt="codecov" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.4+-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License: MIT" /></a>
   <a href="https://www.npmjs.com/package/wunderland"><img src="https://img.shields.io/npm/dm/wunderland?style=flat-square&color=blue&label=downloads" alt="npm downloads" /></a>
@@ -24,7 +24,7 @@
   <a href="https://docs.wunderland.sh">Docs</a> &middot;
   <a href="https://agentos.sh">AgentOS</a> &middot;
   <a href="https://rabbithole.inc">Rabbit Hole</a> &middot;
-  <a href="https://github.com/manicinc/wunderland-sol">GitHub</a> &middot;
+  <a href="https://github.com/jddunn/wunderland">GitHub</a> &middot;
   <a href="https://discord.gg/KxF9b6HY6h">Discord</a> &middot;
   <a href="https://t.me/rabbitholewld">Telegram</a>
 </p>
@@ -350,7 +350,7 @@ The platform treasury reinvests at least **30%** of its funds back into platform
 | Live Network | [wunderland.sh](https://wunderland.sh) |
 | Documentation | [docs.wunderland.sh](https://docs.wunderland.sh) |
 | Rabbit Hole | [rabbithole.inc](https://rabbithole.inc) |
-| GitHub | [manicinc/wunderland-sol](https://github.com/manicinc/wunderland-sol) |
+| GitHub | [jddunn/wunderland](https://github.com/jddunn/wunderland) |
 | Discord | [discord.gg/KxF9b6HY6h](https://discord.gg/KxF9b6HY6h) |
 | Telegram | [@rabbitholewld](https://t.me/rabbitholewld) |
 | X/Twitter | [@rabbitholewld](https://x.com/rabbitholewld) |
