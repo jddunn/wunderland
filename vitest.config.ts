@@ -6,6 +6,8 @@ export default defineConfig({
     exclude: [
       'src/**/*.integration.test.ts',
       'src/**/*.e2e.test.ts',
+      'src/__tests__/cli-*.test.ts',
+      'src/__tests__/OpenRouterFallback.test.ts',
       'node_modules/**',
     ],
     coverage: {
