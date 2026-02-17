@@ -361,6 +361,9 @@ export class WonderlandNetwork {
   /** Per-citizen LLM circuit breakers. */
   private citizenCircuitBreakers: Map<string, CircuitBreaker> = new Map();
 
+  /** Pending stuck-detection auto-recovery timers (seedId → timeout handle). */
+  private stuckRecoveryTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
   constructor(config: WonderlandNetworkConfig) {
     this.config = config;
     this.pairwiseInfluenceDamping = this.resolvePairwiseInfluenceDampingConfig(
@@ -441,6 +444,10 @@ export class WonderlandNetwork {
    */
   async stop(): Promise<void> {
     this.running = false;
+
+    // Cancel all pending stuck-recovery timers
+    for (const timer of this.stuckRecoveryTimers.values()) clearTimeout(timer);
+    this.stuckRecoveryTimers.clear();
 
     // Unsubscribe the network-level browse cron listener
     if (this.enclaveSystemInitialized) {
@@ -616,10 +623,60 @@ export class WonderlandNetwork {
     this.newsrooms.delete(seedId);
     this.citizenCircuitBreakers.delete(seedId);
     this.stuckDetector.clearAgent(seedId);
+    this.cancelStuckRecovery(seedId);
     this.moodInertiaState.delete(seedId);
     const citizen = this.citizens.get(seedId);
     if (citizen) {
       citizen.isActive = false;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Stuck-detection auto-recovery
+  // --------------------------------------------------------------------------
+
+  /** Cooldown before auto-resuming a stuck-paused agent (10 minutes). */
+  private static readonly STUCK_RECOVERY_MS = 10 * 60_000;
+
+  /**
+   * Schedule an auto-recovery for a stuck-paused agent.
+   * After the cooldown, the agent is resumed and its stuck history cleared
+   * so it gets a fresh start without immediately re-triggering.
+   */
+  private scheduleStuckRecovery(seedId: string): void {
+    // Cancel any existing timer for this agent (prevents stacking)
+    this.cancelStuckRecovery(seedId);
+
+    const timer = setTimeout(() => {
+      this.stuckRecoveryTimers.delete(seedId);
+      if (!this.running) return;
+
+      // Clear the stuck history *before* resuming so the agent starts clean
+      this.stuckDetector.clearAgent(seedId);
+      this.safetyEngine.resumeAgent(seedId, 'Auto-recovery: stuck detection cooldown expired');
+
+      this.auditLog.log({
+        seedId,
+        action: 'stuck_recovery',
+        outcome: 'success',
+        metadata: { cooldownMs: WonderlandNetwork.STUCK_RECOVERY_MS },
+      });
+
+      console.log(`[WonderlandNetwork] Auto-recovered stuck agent '${seedId}' after ${WonderlandNetwork.STUCK_RECOVERY_MS / 60_000}min cooldown`);
+    }, WonderlandNetwork.STUCK_RECOVERY_MS);
+
+    // Allow the Node process to exit even if recovery timers are pending
+    if (typeof timer === 'object' && 'unref' in timer) timer.unref();
+
+    this.stuckRecoveryTimers.set(seedId, timer);
+  }
+
+  /** Cancel a pending stuck-recovery timer for an agent. */
+  private cancelStuckRecovery(seedId: string): void {
+    const existing = this.stuckRecoveryTimers.get(seedId);
+    if (existing) {
+      clearTimeout(existing);
+      this.stuckRecoveryTimers.delete(seedId);
     }
   }
 
@@ -2610,7 +2667,7 @@ export class WonderlandNetwork {
         this.costGuard.recordCost(seedId, actualCost);
       }
 
-      // 5. Stuck detection on output
+      // 5. Stuck detection on output — pause + schedule auto-recovery
       if (response.content) {
         const stuckCheck = this.stuckDetector.recordOutput(seedId, response.content);
         if (stuckCheck.isStuck) {
@@ -2621,6 +2678,7 @@ export class WonderlandNetwork {
             outcome: 'failure',
             metadata: { reason: stuckCheck.reason, repetitionCount: stuckCheck.repetitionCount },
           });
+          this.scheduleStuckRecovery(seedId);
         }
       }
 
