@@ -479,8 +479,8 @@
       "category": "channel",
       "platform": "google-chat",
       "displayName": "Google Chat",
-      "description": "Google Workspace Chat via Cloud API — supports cards and threads.",
-      "sdkPackage": "@google-cloud/chat",
+      "description": "Google Chat bot via service account auth — supports threads; inbound events via webhook.",
+      "sdkPackage": "google-auth-library",
       "requiredSecrets": [
         "googlechat.serviceAccount"
       ],
@@ -493,8 +493,8 @@
       "category": "channel",
       "platform": "teams",
       "displayName": "Microsoft Teams",
-      "description": "Microsoft Teams bot via Teams AI library — supports adaptive cards.",
-      "sdkPackage": "@microsoft/teams-ai",
+      "description": "Microsoft Teams bot via Bot Framework — supports adaptive cards.",
+      "sdkPackage": "botbuilder",
       "requiredSecrets": [
         "teams.appId",
         "teams.appPassword"
@@ -508,8 +508,8 @@
       "category": "channel",
       "platform": "matrix",
       "displayName": "Matrix",
-      "description": "Matrix/Element via matrix-js-sdk — decentralized, federated messaging.",
-      "sdkPackage": "matrix-js-sdk",
+      "description": "Matrix/Element via matrix-bot-sdk — decentralized, federated messaging.",
+      "sdkPackage": "@vector-im/matrix-bot-sdk",
       "requiredSecrets": [
         "matrix.homeserverUrl",
         "matrix.accessToken"
@@ -523,11 +523,10 @@
       "category": "channel",
       "platform": "zalo",
       "displayName": "Zalo",
-      "description": "Zalo Official Account API — popular in Vietnam.",
+      "description": "Zalo Bot API — popular in Vietnam.",
       "sdkPackage": "zalo-api",
       "requiredSecrets": [
-        "zalo.appId",
-        "zalo.secretKey"
+        "zalo.botToken"
       ],
       "defaultPriority": 30,
       "available": false
@@ -573,7 +572,8 @@
       "description": "Nostr relay messaging via nostr-tools — decentralized, censorship-resistant protocol.",
       "sdkPackage": "nostr-tools",
       "requiredSecrets": [
-        "nostr.privateKey"
+        "nostr.privateKey",
+        "nostr.relayUrls"
       ],
       "defaultPriority": 20,
       "available": false
@@ -619,7 +619,9 @@
       "sdkPackage": "@larksuiteoapi/node-sdk",
       "requiredSecrets": [
         "feishu.appId",
-        "feishu.appSecret"
+        "feishu.appSecret",
+        "feishu.verificationToken",
+        "feishu.encryptKey"
       ],
       "defaultPriority": 20,
       "available": false
@@ -631,7 +633,7 @@
       "platform": "mattermost",
       "displayName": "Mattermost",
       "description": "Mattermost self-hosted chat via official client — supports text, threads, reactions.",
-      "sdkPackage": "@mattermost/client",
+      "sdkPackage": "ws",
       "requiredSecrets": [
         "mattermost.url",
         "mattermost.token"
@@ -666,6 +668,35 @@
         "tlon.shipUrl",
         "tlon.code"
       ],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-irc",
+      "name": "channel-irc",
+      "category": "channel",
+      "platform": "irc",
+      "displayName": "IRC",
+      "description": "IRC channel adapter — supports inbound/outbound messages and channel joins.",
+      "sdkPackage": "node:net",
+      "requiredSecrets": [
+        "irc.host",
+        "irc.port",
+        "irc.nick",
+        "irc.channels"
+      ],
+      "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-zalouser",
+      "name": "channel-zalouser",
+      "category": "channel",
+      "platform": "zalouser",
+      "displayName": "Zalo Personal",
+      "description": "Zalo personal account messaging via zca-cli (unofficial) — use at your own risk.",
+      "sdkPackage": "zca-cli",
+      "requiredSecrets": [],
       "defaultPriority": 20,
       "available": false
     },
