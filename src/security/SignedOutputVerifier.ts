@@ -18,6 +18,65 @@ import {
 } from './types.js';
 
 /**
+ * Stable JSON stringification for signature payloads.
+ *
+ * Ensures deterministic HMAC signing across processes by:
+ * - Sorting object keys lexicographically
+ * - Dropping `undefined` values (matches JSON.stringify behavior)
+ * - Encoding Dates as ISO strings
+ *
+ * This avoids relying on JS object insertion order for signature-critical paths.
+ */
+function stableStringify(value: unknown, seen = new WeakSet<object>()): string {
+  if (value === null) return 'null';
+
+  const t = typeof value;
+  if (t === 'string' || t === 'number' || t === 'boolean') {
+    // JSON.stringify handles escaping + NaN/Infinity -> null correctly for numbers.
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'bigint') {
+    // JSON does not support bigint; encode as string to be deterministic.
+    return JSON.stringify(value.toString());
+  }
+  if (t === 'undefined') return 'null';
+  if (t === 'function' || t === 'symbol') {
+    return 'null';
+  }
+
+  if (value instanceof Date) {
+    return JSON.stringify(value.toISOString());
+  }
+
+  if (Array.isArray(value)) {
+    const items = value.map((v) => stableStringify(v, seen));
+    return `[${items.join(',')}]`;
+  }
+
+  if (t === 'object') {
+    const obj = value as Record<string, unknown>;
+    if (seen.has(obj)) {
+      throw new Error('stableStringify: circular reference');
+    }
+    seen.add(obj);
+    try {
+      const keys = Object.keys(obj).sort();
+      const props: string[] = [];
+      for (const key of keys) {
+        const v = obj[key];
+        if (v === undefined) continue; // match JSON.stringify omission
+        props.push(`${JSON.stringify(key)}:${stableStringify(v, seen)}`);
+      }
+      return `{${props.join(',')}}`;
+    } finally {
+      seen.delete(obj);
+    }
+  }
+
+  return 'null';
+}
+
+/**
  * Default signing configuration.
  */
 const DEFAULT_SIGNING_CONFIG: OutputSigningConfig = {
@@ -174,6 +233,40 @@ export class SignedOutputVerifier {
   hash(data: string | object): string {
     const content = typeof data === 'string' ? data : JSON.stringify(data);
     return createHash(this.config.algorithm).update(content).digest('hex');
+  }
+
+  /**
+   * Signs an arbitrary payload deterministically (detached signature).
+   *
+   * This is useful for compact artifacts (e.g. InputManifest) where we want a
+   * verifiable signature over the payload itself without embedding intent-chain
+   * structures or per-signature randomness (outputId/timestamp).
+   */
+  signPayload(payload: unknown): string {
+    const body = stableStringify(payload);
+    return createHmac(this.config.algorithm, this.getSecretKey())
+      .update(body)
+      .digest('hex');
+  }
+
+  /**
+   * Verifies a detached payload signature.
+   *
+   * @returns true if signature matches, false otherwise
+   */
+  verifyPayload(payload: unknown, signature: string): boolean {
+    try {
+      const sig = typeof signature === 'string' ? signature.trim().toLowerCase() : '';
+      if (!sig) return false;
+      if (!/^[a-f0-9]+$/i.test(sig)) return false;
+
+      const expected = this.signPayload(payload);
+      if (sig.length !== expected.length) return false;
+
+      return timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'));
+    } catch {
+      return false;
+    }
   }
 
   /**

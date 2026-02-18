@@ -122,6 +122,15 @@ function isNetworkTool(tool: ToolInstance): boolean {
   if (Array.isArray(tool.requiredCapabilities)) {
     return tool.requiredCapabilities.some((c) => typeof c === 'string' && c.startsWith('capability:web_'));
   }
+  const cat = typeof tool.category === 'string' ? tool.category.trim().toLowerCase() : '';
+  if (cat === 'search' || cat === 'research') return true;
+  return false;
+}
+
+function isExternalApiSideEffectTool(tool: ToolInstance): boolean {
+  const cat = typeof tool.category === 'string' ? tool.category.trim().toLowerCase() : '';
+  // Communication tools generally send messages to external platforms.
+  if (cat.includes('communication')) return true;
   return false;
 }
 
@@ -196,6 +205,10 @@ export function filterToolMapByPolicy(opts: {
     }
     if (isNetworkTool(tool) && opts.permissions.network.httpRequests !== true) {
       dropped.push({ tool: tool.name, reason: 'blocked_by_permission_set:network.httpRequests=false' });
+      continue;
+    }
+    if (isExternalApiSideEffectTool(tool) && opts.permissions.network.externalApis !== true) {
+      dropped.push({ tool: tool.name, reason: 'blocked_by_permission_set:network.externalApis=false' });
       continue;
     }
 

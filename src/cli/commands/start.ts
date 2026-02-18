@@ -31,7 +31,8 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../../core/index.js';
-import { HumanInteractionManager } from '@framers/agentos';
+import { HumanInteractionManager, type ChannelMessage, type IChannelAdapter } from '@framers/agentos';
+import { PairingManager } from '../../pairing/PairingManager.js';
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
@@ -240,7 +241,14 @@ export default async function cmdStart(
           : !!llmApiKey || !!openrouterFallback;
 
   const preloadedPackages: string[] = [];
+  let activePacks: any[] = [];
   let allTools: ToolInstance[] = [];
+  type ExtensionHttpHandler = (
+    req: import('node:http').IncomingMessage,
+    res: import('node:http').ServerResponse,
+  ) => Promise<boolean> | boolean;
+  const loadedChannelAdapters: IChannelAdapter[] = [];
+  const loadedHttpHandlers: ExtensionHttpHandler[] = [];
   const hitlSecret = (() => {
     const fromCfg = (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl))
       ? String((cfg.hitl as any).secret || '').trim()
@@ -316,7 +324,15 @@ export default async function cmdStart(
             braveApiKey: process.env['BRAVE_API_KEY'],
           },
         },
-        'web-browser': { options: { headless: true } },
+        'web-browser': {
+          options: {
+            headless: true,
+            executablePath:
+              process.env['PUPPETEER_EXECUTABLE_PATH'] ||
+              process.env['CHROME_EXECUTABLE_PATH'] ||
+              process.env['CHROME_PATH'],
+          },
+        },
         giphy: { options: { giphyApiKey: process.env['GIPHY_API_KEY'] } },
         'image-search': {
           options: {
@@ -350,12 +366,28 @@ export default async function cmdStart(
         get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
       });
 
+      const channelsFromConfig = Array.isArray((cfg as any)?.channels)
+        ? ((cfg as any).channels as unknown[])
+        : Array.isArray((cfg as any)?.suggestedChannels)
+          ? ((cfg as any).suggestedChannels as unknown[])
+          : [];
+      const channelsToLoad = Array.from(new Set(
+        channelsFromConfig
+          .map((v) => String(v ?? '').trim())
+          .filter((v) => v.length > 0),
+      ));
+
+      const channelsAllowedByPolicy = permissions.network.externalApis === true;
+      if (!channelsAllowedByPolicy && channelsToLoad.length > 0) {
+        fmt.warning('Permission set blocks external API messaging — skipping channel extensions.');
+      }
+
       const resolved = await resolveExtensionsByNames(
         toolExtensions,
         voiceExtensions,
         productivityExtensions,
         mergedOverrides,
-        { secrets: secrets as any }
+        { secrets: secrets as any, channels: channelsAllowedByPolicy && channelsToLoad.length > 0 ? channelsToLoad : 'none' }
       );
 
       const packs: any[] = [];
@@ -417,6 +449,24 @@ export default async function cmdStart(
           )
           .filter(Boolean),
       );
+
+      activePacks = packs;
+
+      // Extract messaging-channel adapters (if any) for inbound/outbound channel runtime.
+      const adapters = packs
+        .flatMap((p: any) => (p?.descriptors || []))
+        .filter((d: { kind?: string; payload?: unknown }) => d?.kind === 'messaging-channel')
+        .map((d: { payload: unknown }) => d.payload)
+        .filter(Boolean) as IChannelAdapter[];
+      loadedChannelAdapters.push(...adapters);
+
+      // Extract HTTP handlers from packs (e.g., webhook endpoints).
+      const httpHandlers = packs
+        .flatMap((p: any) => (p?.descriptors || []))
+        .filter((d: { kind?: string; payload?: unknown }) => d?.kind === 'http-handler')
+        .map((d: { payload: unknown }) => d.payload)
+        .filter(Boolean) as ExtensionHttpHandler[];
+      loadedHttpHandlers.push(...httpHandlers);
 
       // Extract tools from packs
       allTools = packs
@@ -492,6 +542,7 @@ export default async function cmdStart(
   const systemPrompt = [
     typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
     'You are a local Wunderbot server.',
+    'If you are replying to an inbound channel message, respond with plain text. The runtime will deliver your final answer back to the same conversation. Do not call channel send tools unless you explicitly need to message a different conversation/channel.',
     lazyTools
       ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
       : 'Tools are preloaded, and you can also use extensions_enable to load additional packs on demand.',
@@ -506,6 +557,23 @@ export default async function cmdStart(
   ].filter(Boolean).join('\n\n');
 
   const sessions = new Map<string, Array<Record<string, unknown>>>();
+  const channelSessions = new Map<string, Array<Record<string, unknown>>>();
+  const channelQueues = new Map<string, Promise<void>>();
+  const channelUnsubs: Array<() => void> = [];
+  const pairingEnabled = cfg?.pairing?.enabled !== false;
+  const pairingGroupTrigger = (() => {
+    const raw = (cfg as any)?.pairing?.groupTrigger;
+    if (typeof raw === 'string') return raw.trim();
+    return '!pair';
+  })();
+  const pairingGroupTriggerEnabled =
+    pairingEnabled && !!pairingGroupTrigger && pairingGroupTrigger.toLowerCase() !== 'off';
+  const pairing = new PairingManager({
+    storeDir: path.join(workspaceBaseDir, workspaceAgentId, 'pairing'),
+    pendingTtlMs: Number.isFinite(cfg?.pairing?.pendingTtlMs) ? cfg.pairing.pendingTtlMs : undefined,
+    maxPending: Number.isFinite(cfg?.pairing?.maxPending) ? cfg.pairing.maxPending : undefined,
+    codeLength: Number.isFinite(cfg?.pairing?.codeLength) ? cfg.pairing.codeLength : undefined,
+  });
 
   type AgentosApprovalCategory = 'data_modification' | 'external_api' | 'financial' | 'communication' | 'system' | 'other';
   function toAgentosApprovalCategory(tool: ToolInstance): AgentosApprovalCategory {
@@ -521,6 +589,278 @@ export default async function cmdStart(
     return 'other';
   }
 
+  // ── Channel Runtime (inbound/outbound) ────────────────────────────────────
+
+  const adapterByPlatform = new Map<string, IChannelAdapter>();
+  for (const adapter of loadedChannelAdapters) {
+    const platform = (adapter as any)?.platform;
+    if (typeof platform !== 'string' || !platform.trim()) continue;
+    // Keep first adapter per platform (registry shouldn't load duplicates).
+    if (!adapterByPlatform.has(platform)) adapterByPlatform.set(platform, adapter);
+  }
+
+  function enqueueChannelTurn(key: string, fn: () => Promise<void>): void {
+    const prev = channelQueues.get(key) ?? Promise.resolve();
+    const next = prev
+      .catch(() => undefined)
+      .then(fn)
+      .catch((err) => {
+        console.warn(`[channels] Turn failed for ${key}:`, err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (channelQueues.get(key) === next) channelQueues.delete(key);
+      });
+    channelQueues.set(key, next);
+  }
+
+  function chunkText(text: string, maxLen = 1800): string[] {
+    const t = String(text ?? '');
+    if (t.length <= maxLen) return [t];
+    const chunks: string[] = [];
+    let i = 0;
+    while (i < t.length) {
+      chunks.push(t.slice(i, i + maxLen));
+      i += maxLen;
+    }
+    return chunks;
+  }
+
+  function getSenderLabel(m: ChannelMessage): string {
+    const d = (m.sender && typeof m.sender === 'object') ? m.sender : ({} as any);
+    const display = typeof d.displayName === 'string' && d.displayName.trim() ? d.displayName.trim() : '';
+    const user = typeof d.username === 'string' && d.username.trim() ? d.username.trim() : '';
+    return display || (user ? `@${user}` : '') || String(d.id || 'unknown');
+  }
+
+  async function sendChannelText(opts: {
+    platform: string;
+    conversationId: string;
+    text: string;
+    replyToMessageId?: string;
+  }): Promise<void> {
+    if (permissions.network.externalApis !== true) return;
+    const adapter = adapterByPlatform.get(opts.platform);
+    if (!adapter) return;
+
+    const parts = chunkText(opts.text, 1800).filter((p) => p.trim().length > 0);
+    for (const part of parts) {
+      await adapter.sendMessage(opts.conversationId, {
+        blocks: [{ type: 'text', text: part }],
+        ...(opts.replyToMessageId ? { replyToMessageId: opts.replyToMessageId } : null),
+      });
+    }
+  }
+
+  async function handleInboundChannelMessage(message: ChannelMessage): Promise<void> {
+    const platform = String(message.platform || '').trim();
+    const conversationId = String(message.conversationId || '').trim();
+    if (!platform || !conversationId) return;
+
+    const text = String(message.text || '').trim();
+    if (!text) return;
+
+    const senderId = String((message.sender as any)?.id || '').trim() || 'unknown';
+    const isGroupPairingRequest = (() => {
+      if (!pairingGroupTriggerEnabled) return false;
+      if (message.conversationType === 'direct') return false;
+      const t = text.trim();
+      if (!t) return false;
+      const trig = pairingGroupTrigger;
+      const lowerT = t.toLowerCase();
+      const lowerTrig = trig.toLowerCase();
+      if (lowerT === lowerTrig) return true;
+      if (lowerT.startsWith(`${lowerTrig} `)) return true;
+      return false;
+    })();
+
+    // Pairing / allowlist guardrail (default: enabled).
+    if (pairingEnabled) {
+      const isAllowed = await pairing.isAllowed(platform, senderId);
+      if (!isAllowed) {
+        // Avoid spamming group channels with pairing prompts from random participants.
+        if (message.conversationType !== 'direct' && !isGroupPairingRequest) {
+          return;
+        }
+
+        const meta: Record<string, string> = {
+          sender: getSenderLabel(message),
+          platform,
+          conversationId,
+        };
+
+        const { code, created } = await pairing.upsertRequest(platform, senderId, meta);
+        if (created) {
+          void broadcastHitlUpdate({ type: 'pairing_request', platform, senderId, conversationId });
+        }
+
+        const prompt =
+          code && code.trim()
+            ? isGroupPairingRequest
+              ? `Pairing requested.\n\nCode: ${code}\n\nAsk the assistant owner to approve this code.`
+              : `Pairing required.\n\nCode: ${code}\n\nAsk the assistant owner to approve this code, then retry.`
+            : 'Pairing queue is full. Ask the assistant owner to clear/approve pending requests, then retry.';
+
+        await sendChannelText({ platform, conversationId, text: prompt, replyToMessageId: message.messageId });
+        return;
+      }
+    }
+
+    const sessionKey = `${platform}:${conversationId}`;
+    let messages = channelSessions.get(sessionKey);
+    if (!messages) {
+      messages = [{ role: 'system', content: systemPrompt }];
+      channelSessions.set(sessionKey, messages);
+    }
+
+    // Soft cap to avoid unbounded memory.
+    if (messages.length > 200) {
+      messages = [messages[0]!, ...messages.slice(-120)];
+      channelSessions.set(sessionKey, messages);
+    }
+
+    const userPrefix = message.conversationType === 'direct' ? '' : `[${getSenderLabel(message)}] `;
+    messages.push({ role: 'user', content: `${userPrefix}${text}` });
+
+    // Optional typing indicator while processing.
+    try {
+      const adapter = adapterByPlatform.get(platform);
+      if (adapter) await adapter.sendTypingIndicator(conversationId, true);
+    } catch {
+      // ignore
+    }
+
+    let reply = '';
+    try {
+      if (canUseLLM) {
+        const toolContext = {
+          gmiId: `wunderland-channel-${sessionKey}`,
+          personaId: seed.seedId,
+          userContext: {
+            userId: senderId,
+            platform,
+            conversationId,
+          },
+          agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
+          permissionSet: policy.permissionSet,
+          securityTier: policy.securityTier,
+          executionMode: policy.executionMode,
+          toolAccessProfile: policy.toolAccessProfile,
+          interactiveSession: false,
+          turnApprovalMode,
+          ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
+          wrapToolOutputs: policy.wrapToolOutputs,
+        };
+
+        reply = await runToolCallingTurn({
+          providerId,
+          apiKey: llmApiKey,
+          model,
+          messages,
+          toolMap,
+          toolContext,
+          maxRounds: 8,
+          dangerouslySkipPermissions: autoApproveToolCalls,
+          askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
+            if (autoApproveToolCalls) return true;
+
+            const preview = safeJsonStringify(args, 1800);
+            const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
+            const actionId = `tool-${seedId}-${randomUUID()}`;
+            const decision = await hitlManager.requestApproval({
+              actionId,
+              description: `Allow ${tool.name} (${effectLabel})?\n\n${preview}`,
+              severity: tool.hasSideEffects === true ? 'high' : 'low',
+              category: toAgentosApprovalCategory(tool),
+              agentId: seed.seedId,
+              context: { toolName: tool.name, args, sessionId: sessionKey, platform, conversationId },
+              reversible: tool.hasSideEffects !== true,
+              requestedAt: new Date(),
+              timeoutMs: 5 * 60_000,
+            } as any);
+            return decision.approved === true;
+          },
+          askCheckpoint: turnApprovalMode === 'off' ? undefined : async ({ round, toolCalls }) => {
+            if (autoApproveToolCalls) return true;
+
+            const checkpointId = `checkpoint-${seedId}-${sessionKey}-${round}-${randomUUID()}`;
+            const completedWork = toolCalls.map((c) => {
+              const effect = c.hasSideEffects ? 'side effects' : 'read-only';
+              const preview = safeJsonStringify(c.args, 800);
+              return `${c.toolName} (${effect})\n${preview}`;
+            });
+
+            const timeoutMs = 5 * 60_000;
+            const checkpointPromise = hitlManager.checkpoint({
+              checkpointId,
+              workflowId: `channel-${sessionKey}`,
+              currentPhase: `tool-round-${round}`,
+              progress: Math.min(1, (round + 1) / 8),
+              completedWork,
+              upcomingWork: ['Continue to next LLM round'],
+              issues: [],
+              notes: 'Continue?',
+              checkpointAt: new Date(),
+            } as any).catch(() => ({ decision: 'abort' as const }));
+
+            const timeoutPromise = new Promise<{ decision: 'abort' }>((resolve) =>
+              setTimeout(() => resolve({ decision: 'abort' }), timeoutMs),
+            );
+
+            const decision = await Promise.race([checkpointPromise, timeoutPromise]);
+            if ((decision as any)?.decision !== 'continue') {
+              try {
+                await hitlManager.cancelRequest(checkpointId, 'checkpoint_timeout_or_abort');
+              } catch {
+                // ignore
+              }
+            }
+            return (decision as any)?.decision === 'continue';
+          },
+          baseUrl: llmBaseUrl,
+          fallback: providerId === 'openai' ? openrouterFallback : undefined,
+          onFallback: (err, provider) => {
+            console.warn(`[fallback] Primary provider failed (${err.message}), routing to ${provider}`);
+          },
+        });
+      } else {
+        reply = `No LLM credentials configured. You said: ${text}`;
+        messages.push({ role: 'assistant', content: reply });
+      }
+    } finally {
+      try {
+        const adapter = adapterByPlatform.get(platform);
+        if (adapter) await adapter.sendTypingIndicator(conversationId, false);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (typeof reply === 'string' && reply.trim()) {
+      await sendChannelText({ platform, conversationId, text: reply.trim(), replyToMessageId: message.messageId });
+    }
+  }
+
+  if (adapterByPlatform.size > 0 && permissions.network.externalApis === true) {
+    for (const [platform, adapter] of adapterByPlatform.entries()) {
+      try {
+        const unsub = adapter.on(async (event: any) => {
+          if (!event || event.type !== 'message') return;
+          const data = event.data as ChannelMessage;
+          if (!data) return;
+          const key = `${platform}:${String(data.conversationId || '').trim()}`;
+          enqueueChannelTurn(key, async () => {
+            await handleInboundChannelMessage(data);
+          });
+        }, ['message']);
+        channelUnsubs.push(unsub);
+      } catch (err) {
+        console.warn(`[channels] Failed to subscribe to ${platform} adapter:`, err instanceof Error ? err.message : String(err));
+      }
+    }
+  } else if (adapterByPlatform.size > 0) {
+    fmt.warning('Channel adapters loaded, but permission set blocks external APIs — inbound channel handling is disabled.');
+  }
+
   const server = createServer(async (req, res) => {
     try {
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -534,6 +874,261 @@ export default async function cmdStart(
       }
 
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+      if (url.pathname.startsWith('/pairing')) {
+        if (req.method === 'GET' && url.pathname === '/pairing') {
+          const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wunderland Pairing</title>
+    <style>
+      :root { --bg: #0b1020; --panel: #111833; --text: #e8ecff; --muted: #9aa6d8; --accent: #53d6c7; --danger: #ff6b6b; --ok: #63e6be; }
+      body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: radial-gradient(1200px 800px at 20% 20%, #18244a, var(--bg)); color: var(--text); }
+      header { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(6px); position: sticky; top: 0; background: rgba(11,16,32,0.7); }
+      h1 { margin: 0; font-size: 16px; letter-spacing: 0.2px; }
+      main { padding: 18px 20px; display: grid; gap: 16px; max-width: 1100px; margin: 0 auto; }
+      .row { display: grid; grid-template-columns: 1fr; gap: 16px; }
+      @media (min-width: 900px) { .row { grid-template-columns: 1fr 1fr; } }
+      .card { background: rgba(17,24,51,0.78); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.22); }
+      .card h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+      .item { border: 1px solid rgba(255,255,255,0.10); border-radius: 10px; padding: 12px; margin: 10px 0; background: rgba(0,0,0,0.14); }
+      .title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+      .id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; color: rgba(232,236,255,0.70); }
+      .desc { margin: 8px 0 10px; color: rgba(232,236,255,0.92); white-space: pre-wrap; }
+      .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+      button { appearance: none; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); color: var(--text); padding: 8px 10px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 12px; }
+      button:hover { border-color: rgba(83,214,199,0.55); }
+      button.ok { background: rgba(99,230,190,0.12); border-color: rgba(99,230,190,0.28); }
+      button.bad { background: rgba(255,107,107,0.10); border-color: rgba(255,107,107,0.30); }
+      .meta { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+      input { width: 320px; max-width: 100%; border-radius: 10px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.22); color: var(--text); padding: 8px 10px; }
+      .status { font-size: 12px; color: var(--muted); }
+      .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); }
+      .note { font-size: 12px; color: rgba(232,236,255,0.86); line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Wunderland Pairing</h1>
+      <div class="meta">
+        <span class="pill">Server: <span id="server"></span></span>
+        <span class="pill">Stream: <span id="streamStatus">disconnected</span></span>
+        <span class="pill">Pairing: <span id="pairingStatus">enabled</span></span>
+      </div>
+    </header>
+    <main>
+      <div class="card">
+        <h2>Admin Secret</h2>
+        <div class="meta">
+          <input id="secret" placeholder="Paste x-wunderland-hitl-secret" />
+          <button id="connect" class="ok">Connect</button>
+          <span class="status" id="hint"></span>
+        </div>
+        <div class="note" style="margin-top:10px">
+          Unknown senders in direct messages receive a pairing code automatically. In group/channel chats, send the pairing trigger (default <code>!pair</code>) to request one.
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="card">
+          <h2>Pending Requests</h2>
+          <div id="requests" class="status">Loading...</div>
+        </div>
+        <div class="card">
+          <h2>Allowlist</h2>
+          <div id="allowlist" class="status">Loading...</div>
+        </div>
+      </div>
+    </main>
+    <script>
+      const server = window.location.origin;
+      const serverEl = document.getElementById('server');
+      const streamStatus = document.getElementById('streamStatus');
+      const pairingStatus = document.getElementById('pairingStatus');
+      const secretInput = document.getElementById('secret');
+      const hint = document.getElementById('hint');
+      const requestsEl = document.getElementById('requests');
+      const allowEl = document.getElementById('allowlist');
+      serverEl.textContent = server;
+
+      const stored = localStorage.getItem('wunderland_hitl_secret');
+      if (stored) secretInput.value = stored;
+
+      async function api(path, method, body) {
+        const secret = secretInput.value.trim();
+        const url = new URL(server + path);
+        url.searchParams.set('secret', secret);
+        const res = await fetch(url.toString(), {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      }
+
+      function esc(s) {
+        return String(s || '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));
+      }
+
+      function renderRequests(payload) {
+        const by = (payload && payload.requestsByChannel) || {};
+        const channels = Object.keys(by).sort();
+        if (channels.length === 0) { requestsEl.innerHTML = '<div class=\"status\">No pending requests.</div>'; return; }
+        requestsEl.innerHTML = '';
+        for (const ch of channels) {
+          const list = by[ch] || [];
+          if (!list.length) continue;
+          const header = document.createElement('div');
+          header.className = 'status';
+          header.textContent = ch;
+          header.style.marginTop = '8px';
+          requestsEl.appendChild(header);
+          for (const r of list) {
+            const div = document.createElement('div');
+            div.className = 'item';
+            div.innerHTML = \`
+              <div class=\"title\">
+                <div><strong>\${esc(r.code || '')}</strong></div>
+                <div class=\"id\">\${esc(r.id || '')}</div>
+              </div>
+              <div class=\"desc\">\${esc(JSON.stringify(r.meta || {}, null, 2))}</div>
+              <div class=\"btns\">
+                <button class=\"ok\">Approve</button>
+                <button class=\"bad\">Reject</button>
+              </div>\`;
+            const [approveBtn, rejectBtn] = div.querySelectorAll('button');
+            approveBtn.onclick = async () => { await api('/pairing/approve', 'POST', { channel: ch, code: r.code }); await refresh(); };
+            rejectBtn.onclick = async () => { await api('/pairing/reject', 'POST', { channel: ch, code: r.code }); await refresh(); };
+            requestsEl.appendChild(div);
+          }
+        }
+      }
+
+      function renderAllowlist(payload) {
+        const by = (payload && payload.allowlistByChannel) || {};
+        const channels = Object.keys(by).sort();
+        if (channels.length === 0) { allowEl.innerHTML = '<div class=\"status\">No allowlist entries.</div>'; return; }
+        allowEl.innerHTML = '';
+        for (const ch of channels) {
+          const list = by[ch] || [];
+          const header = document.createElement('div');
+          header.className = 'status';
+          header.textContent = ch;
+          header.style.marginTop = '8px';
+          allowEl.appendChild(header);
+          const div = document.createElement('div');
+          div.className = 'item';
+          div.innerHTML = '<div class=\"desc\">' + esc(list.join('\\n') || '(empty)') + '</div>';
+          allowEl.appendChild(div);
+        }
+      }
+
+      async function refresh() {
+        try {
+          const reqs = await api('/pairing/requests', 'GET');
+          const allow = await api('/pairing/allowlist', 'GET');
+          pairingStatus.textContent = (reqs && reqs.pairingEnabled) ? 'enabled' : 'disabled';
+          renderRequests(reqs);
+          renderAllowlist(allow);
+        } catch (e) {
+          requestsEl.innerHTML = '<div class=\"status\">Paste the admin secret to view pairing requests.</div>';
+          allowEl.innerHTML = '';
+        }
+      }
+
+      let es;
+      function connect() {
+        const secret = secretInput.value.trim();
+        if (!secret) { hint.textContent = 'Paste secret from server logs.'; return; }
+        localStorage.setItem('wunderland_hitl_secret', secret);
+        if (es) es.close();
+        const u = new URL(server + '/hitl/stream');
+        u.searchParams.set('secret', secret);
+        es = new EventSource(u.toString());
+        es.onopen = () => { streamStatus.textContent = 'connected'; hint.textContent = ''; refresh(); };
+        es.onerror = () => { streamStatus.textContent = 'error'; };
+        es.addEventListener('hitl', () => refresh());
+      }
+
+      document.getElementById('connect').onclick = connect;
+      refresh();
+    </script>
+  </body>
+</html>`;
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(html);
+          return;
+        }
+
+        if (!isHitlAuthorized(req, url, hitlSecret)) {
+          sendJson(res, 401, { error: 'Unauthorized' });
+          return;
+        }
+
+        const channels = Array.from(adapterByPlatform.keys());
+
+        if (req.method === 'GET' && url.pathname === '/pairing/requests') {
+          const requestsByChannel: Record<string, unknown> = {};
+          for (const channel of channels) {
+            try {
+              requestsByChannel[channel] = await pairing.listRequests(channel);
+            } catch {
+              requestsByChannel[channel] = [];
+            }
+          }
+          sendJson(res, 200, { pairingEnabled, channels, requestsByChannel });
+          return;
+        }
+
+        if (req.method === 'GET' && url.pathname === '/pairing/allowlist') {
+          const allowlistByChannel: Record<string, unknown> = {};
+          for (const channel of channels) {
+            try {
+              allowlistByChannel[channel] = await pairing.readAllowlist(channel);
+            } catch {
+              allowlistByChannel[channel] = [];
+            }
+          }
+          sendJson(res, 200, { channels, allowlistByChannel });
+          return;
+        }
+
+        if (req.method === 'POST' && url.pathname === '/pairing/approve') {
+          const body = await readBody(req);
+          const parsed = body ? JSON.parse(body) : {};
+          const channel = typeof parsed?.channel === 'string' ? parsed.channel.trim() : '';
+          const code = typeof parsed?.code === 'string' ? parsed.code.trim() : '';
+          if (!channel || !code) {
+            sendJson(res, 400, { error: 'Missing channel/code' });
+            return;
+          }
+          const result = await pairing.approveCode(channel, code);
+          void broadcastHitlUpdate({ type: 'pairing_approved', channel, code });
+          sendJson(res, 200, { ok: true, result });
+          return;
+        }
+
+        if (req.method === 'POST' && url.pathname === '/pairing/reject') {
+          const body = await readBody(req);
+          const parsed = body ? JSON.parse(body) : {};
+          const channel = typeof parsed?.channel === 'string' ? parsed.channel.trim() : '';
+          const code = typeof parsed?.code === 'string' ? parsed.code.trim() : '';
+          if (!channel || !code) {
+            sendJson(res, 400, { error: 'Missing channel/code' });
+            return;
+          }
+          const ok = await pairing.rejectCode(channel, code);
+          void broadcastHitlUpdate({ type: 'pairing_rejected', channel, code });
+          sendJson(res, 200, { ok });
+          return;
+        }
+
+        sendJson(res, 404, { error: 'Not Found' });
+        return;
+      }
 
       if (url.pathname.startsWith('/hitl')) {
         if (req.method === 'GET' && url.pathname === '/hitl') {
@@ -952,6 +1547,17 @@ export default async function cmdStart(
         return;
       }
 
+      // Let extension-provided HTTP handlers try to handle the request (webhooks, etc).
+      for (const handler of loadedHttpHandlers) {
+        try {
+          const handled = await handler(req, res);
+          if (handled) return;
+        } catch (err) {
+          sendJson(res, 500, { error: err instanceof Error ? err.message : 'HTTP handler error' });
+          return;
+        }
+      }
+
       sendJson(res, 404, { error: 'Not Found' });
     } catch (err) {
       sendJson(res, 500, { error: err instanceof Error ? err.message : 'Server error' });
@@ -965,6 +1571,19 @@ export default async function cmdStart(
   // Best-effort OTEL shutdown on exit.
   const handleExit = async () => {
     try {
+      // Channel subscriptions + extension teardown (best-effort)
+      for (const unsub of channelUnsubs) {
+        try { unsub(); } catch { /* ignore */ }
+      }
+      await Promise.allSettled(
+        (activePacks || [])
+          .map((p: any) =>
+            typeof p?.onDeactivate === 'function'
+              ? p.onDeactivate({ logger: console })
+              : null
+          )
+          .filter(Boolean),
+      );
       await shutdownWunderlandOtel();
     } finally {
       process.exit(0);
@@ -985,6 +1604,8 @@ export default async function cmdStart(
   }
   fmt.kvPair('Port', String(port));
   fmt.kvPair('Tools', `${toolMap.size} loaded`);
+  fmt.kvPair('Channels', `${adapterByPlatform.size} loaded`);
+  fmt.kvPair('Pairing', pairingEnabled ? sColor('enabled') : wColor('disabled'));
   fmt.kvPair(
     'Authorization',
     autoApproveToolCalls
@@ -993,10 +1614,8 @@ export default async function cmdStart(
         ? sColor('human-all (approve every tool call)')
         : sColor('human-dangerous (approve Tier 3 tools)'),
   );
-  if (!autoApproveToolCalls) {
-    fmt.kvPair('HITL Secret', accent(hitlSecret));
-    if (turnApprovalMode !== 'off') fmt.kvPair('Turn Checkpoints', sColor(turnApprovalMode));
-  }
+  fmt.kvPair('Admin Secret', accent(hitlSecret));
+  if (turnApprovalMode !== 'off') fmt.kvPair('Turn Checkpoints', sColor(turnApprovalMode));
   if (isOllamaProvider) {
     fmt.kvPair('Ollama', sColor('http://localhost:11434'));
   }
@@ -1004,6 +1623,7 @@ export default async function cmdStart(
   fmt.ok(`Health: ${iColor(`http://localhost:${port}/health`)}`);
   fmt.ok(`Chat:   ${iColor(`POST http://localhost:${port}/chat`)}`);
   fmt.ok(`HITL:   ${iColor(`http://localhost:${port}/hitl`)}`);
+  fmt.ok(`Pairing: ${iColor(`http://localhost:${port}/pairing`)}`);
   if (!autoApproveToolCalls) {
     fmt.note(`CLI HITL: ${accent(`wunderland hitl watch --server http://localhost:${port} --secret ${hitlSecret}`)}`);
   }

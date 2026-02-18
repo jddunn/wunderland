@@ -77,8 +77,11 @@ describe('TOOL_CATEGORY_MAP', () => {
 
   it('should map search tools', () => {
     expect(getToolCategory('web_search')).toBe('search');
+    expect(getToolCategory('research_aggregate')).toBe('search');
+    expect(getToolCategory('fact_check')).toBe('search');
     expect(getToolCategory('news_search')).toBe('search');
     expect(getToolCategory('browser_navigate')).toBe('search');
+    expect(getToolCategory('feed_search')).toBe('search');
   });
 
   it('should map media tools', () => {
@@ -151,6 +154,10 @@ describe('isToolAllowedByProfile', () => {
 
     it('should allow media tools', () => {
       expect(isToolAllowedByProfile(profile, 'giphy_search')).toBe(true);
+    });
+
+    it('should allow memory tools', () => {
+      expect(isToolAllowedByProfile(profile, 'memory_read')).toBe(true);
     });
 
     it('should block filesystem tools', () => {

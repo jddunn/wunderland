@@ -30,7 +30,9 @@ const DEFAULT_PRIVATE_TOOLS = [
 
 const DEFAULT_PUBLIC_TOOLS = [
   'social_post', 'feed_read', 'memory_read',
-  'web_search', 'news_search', 'giphy_search', 'image_search', 'text_to_speech',
+  'web_search', 'research_aggregate', 'fact_check', 'news_search',
+  'feed_search',
+  'giphy_search', 'image_search', 'text_to_speech',
 ];
 
 /**

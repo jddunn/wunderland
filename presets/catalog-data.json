@@ -588,6 +588,7 @@
       "sdkPackage": "tmi.js",
       "requiredSecrets": [
         "twitch.oauthToken",
+        "twitch.username",
         "twitch.channel"
       ],
       "defaultPriority": 20,
@@ -666,6 +667,93 @@
         "tlon.code"
       ],
       "defaultPriority": 20,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-reddit",
+      "name": "channel-reddit",
+      "category": "channel",
+      "platform": "reddit",
+      "displayName": "Reddit",
+      "description": "Bidirectional Reddit interaction via snoowrap — supports posting, commenting, voting, searching, subscriptions, and messaging.",
+      "sdkPackage": "snoowrap",
+      "requiredSecrets": [
+        "reddit.clientId",
+        "reddit.clientSecret",
+        "reddit.username",
+        "reddit.password"
+      ],
+      "defaultPriority": 10,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-twitter",
+      "name": "channel-twitter",
+      "category": "channel",
+      "platform": "twitter",
+      "displayName": "Twitter / X",
+      "description": "Twitter/X integration via twitter-api-v2 — post, reply, quote, thread, search, and DMs.",
+      "sdkPackage": "twitter-api-v2",
+      "requiredSecrets": [
+        "twitter.bearerToken"
+      ],
+      "defaultPriority": 10,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-instagram",
+      "name": "channel-instagram",
+      "category": "channel",
+      "platform": "instagram",
+      "displayName": "Instagram",
+      "description": "Instagram Graph API integration — publish content, manage DMs, research hashtags, and track engagement (API + optional automation).",
+      "sdkPackage": "axios",
+      "requiredSecrets": [
+        "instagram.accessToken"
+      ],
+      "defaultPriority": 10,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-tiktok",
+      "name": "channel-tiktok",
+      "category": "channel",
+      "platform": "tiktok",
+      "displayName": "TikTok",
+      "description": "TikTok integration — upload videos, discover trends, search content, and track analytics via TikTok API for Business.",
+      "sdkPackage": "axios",
+      "requiredSecrets": [
+        "tiktok.accessToken"
+      ],
+      "defaultPriority": 10,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-youtube",
+      "name": "channel-youtube",
+      "category": "channel",
+      "platform": "youtube",
+      "displayName": "YouTube",
+      "description": "YouTube Data API v3 integration — upload videos/Shorts, comment, search, trending, analytics, playlists, scheduling.",
+      "sdkPackage": "googleapis",
+      "requiredSecrets": [
+        "youtube.apiKey"
+      ],
+      "defaultPriority": 10,
+      "available": false
+    },
+    {
+      "packageName": "@framers/agentos-ext-channel-pinterest",
+      "name": "channel-pinterest",
+      "category": "channel",
+      "platform": "pinterest",
+      "displayName": "Pinterest",
+      "description": "Pinterest API integration — create pins, manage boards, search content, trends, analytics, and scheduling.",
+      "sdkPackage": "axios",
+      "requiredSecrets": [
+        "pinterest.accessToken"
+      ],
+      "defaultPriority": 10,
       "available": false
     }
   ],

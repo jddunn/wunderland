@@ -47,6 +47,7 @@ export const WUNDERLAND_TOOL_IDS = {
   TEXT_TO_SPEECH: 'text_to_speech',
   SOCIAL_POST: 'social_post',
   FEED_READ: 'feed_read',
+  FEED_SEARCH: 'feed_search',
   MEMORY_READ: 'memory_read',
 } as const;
 
