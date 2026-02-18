@@ -47,7 +47,7 @@ Tier registry lives in `packages/wunderland/src/security/SecurityTiers.ts`.
 | `dangerous` | Pre-LLM: off, Audit: off, Signing: off | Tier 1 | `unrestricted` | `1.0` |
 | `permissive` | Pre-LLM: on, Audit: off, Signing: off | Tier 1 | `autonomous` | `0.9` |
 | `balanced` | Pre-LLM: on, Audit: off, Signing: on | Tier 2 | `supervised` | `0.7` |
-| `strict` | Pre-LLM: on, Audit: on, Signing: on | Tier 2 | `read-only` | `0.5` |
+| `strict` | Pre-LLM: on, Audit: on, Signing: on | Tier 2 | `supervised` | `0.5` |
 | `paranoid` | Pre-LLM: on, Audit: on, Signing: on | Tier 3 | `minimal` | `0.3` |
 
 ## Permission Sets

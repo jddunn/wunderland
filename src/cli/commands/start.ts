@@ -111,6 +111,8 @@ export default async function cmdStart(
   const p = cfg.personality || {};
   const policy = normalizeRuntimePolicy(cfg);
   const permissions = getPermissionsForSet(policy.permissionSet);
+  const LOCAL_ONLY_CHANNELS = new Set<string>(['webchat']);
+  const CLI_REQUIRED_CHANNELS = new Set<string>(['signal', 'zalouser']);
   const turnApprovalMode = (() => {
     const raw = (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl))
       ? (cfg.hitl as any).turnApprovalMode ?? (cfg.hitl as any).turnApproval
@@ -377,9 +379,24 @@ export default async function cmdStart(
           .filter((v) => v.length > 0),
       ));
 
-      const channelsAllowedByPolicy = permissions.network.externalApis === true;
-      if (!channelsAllowedByPolicy && channelsToLoad.length > 0) {
-        fmt.warning('Permission set blocks external API messaging — skipping channel extensions.');
+      const blockedChannels: Array<{ platform: string; reason: string }> = [];
+
+      const allowedChannels = channelsToLoad.filter((platform) => {
+        if (LOCAL_ONLY_CHANNELS.has(platform)) return true;
+        if (permissions.network.externalApis !== true) {
+          blockedChannels.push({ platform, reason: 'blocked_by_permission_set:network.externalApis=false' });
+          return false;
+        }
+        if (CLI_REQUIRED_CHANNELS.has(platform) && permissions.system.cliExecution !== true) {
+          blockedChannels.push({ platform, reason: 'blocked_by_permission_set:system.cliExecution=false' });
+          return false;
+        }
+        return true;
+      });
+
+      if (blockedChannels.length > 0) {
+        const list = blockedChannels.map((c) => c.platform).join(', ');
+        fmt.warning(`Permission set blocks some configured channels — skipping: ${list}`);
       }
 
       const resolved = await resolveExtensionsByNames(
@@ -387,7 +404,7 @@ export default async function cmdStart(
         voiceExtensions,
         productivityExtensions,
         mergedOverrides,
-        { secrets: secrets as any, channels: channelsAllowedByPolicy && channelsToLoad.length > 0 ? channelsToLoad : 'none' }
+        { secrets: secrets as any, channels: allowedChannels.length > 0 ? allowedChannels : 'none' }
       );
 
       const packs: any[] = [];
@@ -632,13 +649,20 @@ export default async function cmdStart(
     return display || (user ? `@${user}` : '') || String(d.id || 'unknown');
   }
 
+  function isChannelAllowedByPolicy(platform: string): boolean {
+    if (LOCAL_ONLY_CHANNELS.has(platform)) return true;
+    if (permissions.network.externalApis !== true) return false;
+    if (CLI_REQUIRED_CHANNELS.has(platform) && permissions.system.cliExecution !== true) return false;
+    return true;
+  }
+
   async function sendChannelText(opts: {
     platform: string;
     conversationId: string;
     text: string;
     replyToMessageId?: string;
   }): Promise<void> {
-    if (permissions.network.externalApis !== true) return;
+    if (!isChannelAllowedByPolicy(opts.platform)) return;
     const adapter = adapterByPlatform.get(opts.platform);
     if (!adapter) return;
 
@@ -840,8 +864,9 @@ export default async function cmdStart(
     }
   }
 
-  if (adapterByPlatform.size > 0 && permissions.network.externalApis === true) {
+  if (adapterByPlatform.size > 0) {
     for (const [platform, adapter] of adapterByPlatform.entries()) {
+      if (!isChannelAllowedByPolicy(platform)) continue;
       try {
         const unsub = adapter.on(async (event: any) => {
           if (!event || event.type !== 'message') return;
@@ -857,8 +882,6 @@ export default async function cmdStart(
         console.warn(`[channels] Failed to subscribe to ${platform} adapter:`, err instanceof Error ? err.message : String(err));
       }
     }
-  } else if (adapterByPlatform.size > 0) {
-    fmt.warning('Channel adapters loaded, but permission set blocks external APIs — inbound channel handling is disabled.');
   }
 
   const server = createServer(async (req, res) => {
