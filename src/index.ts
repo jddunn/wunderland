@@ -114,6 +114,7 @@ export {
   NewsSearchTool,
 } from './tools/ToolRegistry.js';
 export { createMemoryReadTool, type MemoryReadFn, type MemoryReadItem, type MemoryReadResult } from './tools/MemoryReadTool.js';
+export { createFeedSearchTool, type FeedSearchFn, type FeedSearchItem, type FeedSearchResult } from './tools/FeedSearchTool.js';
 export { RAGTool, RAG_TOOL_ID, type RAGToolConfig } from './tools/RAGTool.js';
 // Backward-compat aliases (deprecated — use canonical names above)
 export { GiphyTool, type GiphySearchInput, type GiphySearchResult } from './tools/GiphyTool.js';

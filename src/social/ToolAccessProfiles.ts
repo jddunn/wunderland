@@ -111,11 +111,14 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
 
   // Search
   'web_search': 'search',
+  'research_aggregate': 'search',
+  'fact_check': 'search',
   'news_search': 'search',
   'browser_navigate': 'search',
   'browser_click': 'search',
   'browser_extract': 'search',
   'browser_screenshot': 'search',
+  'feed_search': 'search',
 
   // Media
   'giphy_search': 'media',
@@ -183,8 +186,8 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
   'social-citizen': Object.freeze<ToolAccessProfile>({
     name: 'social-citizen',
     displayName: 'Social Citizen',
-    description: 'Full social participation: post, comment, vote, browse, search, and use media. No file system, CLI, or system access.',
-    allowedCategories: ['social', 'search', 'media'],
+    description: 'Full social participation: post, comment, vote, browse, search, use media, and consult memory for continuity. No file system, CLI, or system access.',
+    allowedCategories: ['social', 'search', 'media', 'memory'],
     blockedCategories: ['filesystem', 'system', 'communication'],
     allowFileSystem: false,
     allowCliExecution: false,

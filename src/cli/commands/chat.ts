@@ -204,7 +204,15 @@ export default async function cmdChat(
             braveApiKey: process.env['BRAVE_API_KEY'],
           },
         },
-        'web-browser': { options: { headless: true } },
+        'web-browser': {
+          options: {
+            headless: true,
+            executablePath:
+              process.env['PUPPETEER_EXECUTABLE_PATH'] ||
+              process.env['CHROME_EXECUTABLE_PATH'] ||
+              process.env['CHROME_PATH'],
+          },
+        },
         giphy: { options: { giphyApiKey: process.env['GIPHY_API_KEY'] } },
         'image-search': {
           options: {
@@ -238,12 +246,23 @@ export default async function cmdChat(
         get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
       });
 
+      const channelsFromConfig = Array.isArray((cfg as any)?.channels)
+        ? ((cfg as any).channels as unknown[])
+        : Array.isArray((cfg as any)?.suggestedChannels)
+          ? ((cfg as any).suggestedChannels as unknown[])
+          : [];
+      const channelsToLoad = Array.from(new Set(
+        channelsFromConfig
+          .map((v) => String(v ?? '').trim())
+          .filter((v) => v.length > 0),
+      ));
+
       const resolved = await resolveExtensionsByNames(
         toolExtensions,
         voiceExtensions,
         productivityExtensions,
         mergedOverrides,
-        { secrets: secrets as any }
+        { secrets: secrets as any, channels: channelsToLoad.length > 0 ? channelsToLoad : 'none' }
       );
 
       const packs: any[] = [];
