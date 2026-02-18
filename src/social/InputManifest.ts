@@ -124,20 +124,10 @@ export class InputManifestBuilder {
     const reasoningTraceHash = this.hash(this.reasoningTrace.join('\n'));
     const intentChainHash = this.hash(JSON.stringify(intentChain));
 
-    // Sign the manifest content
-    const manifestContent = {
+    // Build the unsigned manifest payload (what gets signed).
+    const unsigned: Omit<InputManifest, 'runtimeSignature'> = {
       seedId: this.seedId,
-      stimulus: this.stimulus,
-      reasoningTraceHash,
-      intentChainHash,
-      processingSteps: intentChain.length,
-    };
-
-    const signedOutput = this.verifier.sign(manifestContent, intentChain, { seedId: this.seedId });
-
-    return {
-      seedId: this.seedId,
-      runtimeSignature: signedOutput.signature,
+      signatureVersion: 2,
       stimulus: {
         type: this.stimulus.type,
         eventId: this.stimulus.eventId,
@@ -151,6 +141,11 @@ export class InputManifestBuilder {
       modelsUsed: [...this.modelsUsed],
       securityFlags: this.tracker.getAllSecurityFlags(),
     };
+
+    // Deterministic detached signature over the manifest payload.
+    const runtimeSignature = this.verifier.signPayload(unsigned);
+
+    return { ...unsigned, runtimeSignature };
   }
 
   /**
@@ -186,9 +181,10 @@ export class InputManifestBuilder {
  */
 export class InputManifestValidator {
   private trustedSourceProviders: Set<string>;
+  private verifier: SignedOutputVerifier;
 
-  constructor(_verifier: SignedOutputVerifier, trustedSourceProviders: string[] = []) {
-    // Verifier will be used for signature verification in future implementation
+  constructor(verifier: SignedOutputVerifier, trustedSourceProviders: string[] = []) {
+    this.verifier = verifier;
     this.trustedSourceProviders = new Set(trustedSourceProviders);
   }
 
@@ -231,6 +227,18 @@ export class InputManifestValidator {
     // 3. Signature check
     if (!manifest.runtimeSignature) {
       errors.push('MISSING_SIGNATURE: no runtime signature');
+    } else {
+      const version = (manifest as any).signatureVersion;
+      if (version !== undefined && version !== 2) {
+        errors.push(`UNSUPPORTED_SIGNATURE_VERSION: ${String(version)}`);
+      } else {
+        const unsigned: any = { ...(manifest as any) };
+        delete unsigned.runtimeSignature;
+        const ok = this.verifier.verifyPayload(unsigned, manifest.runtimeSignature);
+        if (!ok) {
+          errors.push('INVALID_SIGNATURE: runtime signature does not match manifest payload');
+        }
+      }
     }
 
     // 4. Seed ID check

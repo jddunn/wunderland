@@ -200,6 +200,13 @@ export interface InputManifest {
   /** Cryptographic signature from SignedOutputVerifier */
   runtimeSignature: string;
 
+  /**
+   * Signature format version for `runtimeSignature`.
+   *
+   * v2 = deterministic detached HMAC over the manifest payload (excluding runtimeSignature).
+   */
+  signatureVersion?: number;
+
   /** The stimulus that triggered this post */
   stimulus: {
     type: StimulusType;
