@@ -997,6 +997,109 @@ Respond with exactly one word: YES or NO`;
         : '';
     })();
 
+    // Surface style — concrete formatting rules that make each agent's text LOOK different.
+    // Driven by HEXACO traits + deterministic hash for per-agent variety.
+    const surfaceStyleSection = (() => {
+      const raw = typeof seedId === 'string' ? seedId.trim() : '';
+      if (!raw) return '';
+
+      // FNV-1a with XOR offset so it's independent from signature tics hash.
+      let sh32 = 2166136261;
+      for (let i = 0; i < raw.length; i += 1) {
+        sh32 ^= raw.charCodeAt(i);
+        sh32 = Math.imul(sh32, 16777619);
+      }
+      sh32 = (sh32 ^ 0xA5A5A5A5) >>> 0;
+      let sx32 = sh32 || 0xDEADBEEF;
+      const nextF = () => {
+        sx32 ^= sx32 << 13;
+        sx32 ^= sx32 >>> 17;
+        sx32 ^= sx32 << 5;
+        sx32 >>>= 0;
+        return (sx32 & 0x7FFFFFFF) / 0x7FFFFFFF;
+      };
+
+      const rules: string[] = [];
+
+      // ── Casing ──
+      const casingScore = c * 0.55 + (1 - x) * 0.25 + nextF() * 0.2;
+      if (casingScore < 0.28) {
+        rules.push('Write ENTIRELY in lowercase. No capital letters ever — not even for "I" or proper nouns. This is non-negotiable.');
+      } else if (casingScore < 0.42) {
+        rules.push('Use minimal capitalization. Only capitalize the first word of your post. Everything else stays lowercase.');
+      } else if (casingScore > 0.88 && e > 0.6) {
+        rules.push('Use ALL CAPS for emphasis on key words (1-2 per post). e.g. "this is EXACTLY the problem" or "absolutely NOT".');
+      }
+
+      // ── Register & Slang ──
+      const slangScore = x * 0.30 + (1 - c) * 0.30 + (1 - h) * 0.10 + nextF() * 0.30;
+      if (slangScore > 0.78) {
+        rules.push('Write in internet-speak. Use slang freely: "ngl", "fr", "lowkey", "highkey", "tbh", "imo", "idk", "gonna", "wanna", "kinda", "vibes", "fire", "mid". Write like you text your friends.');
+      } else if (slangScore > 0.58) {
+        rules.push('Use casual language with light slang: "gonna", "tbh", "kinda", "imo", "ngl". Conversational, not formal.');
+      } else if (slangScore < 0.22) {
+        rules.push('Use formal vocabulary. No contractions. No slang. Write in complete, grammatically precise sentences.');
+      } else if (slangScore < 0.38) {
+        rules.push('Use standard contractions (don\'t, can\'t, it\'s) but avoid slang. Clean and direct.');
+      }
+
+      // ── Punctuation ──
+      const punctScore = e * 0.35 + x * 0.25 + (1 - c) * 0.20 + nextF() * 0.20;
+      if (punctScore > 0.78) {
+        rules.push('Use expressive punctuation — exclamation marks (!), em-dashes (—), ellipses (...). Let your energy show through punctuation.');
+      } else if (punctScore < 0.25) {
+        rules.push('Use minimal punctuation. Drop trailing periods. Let line breaks and spacing do the work.');
+      }
+
+      // ── Emoji ──
+      const emojiScore = x * 0.25 + e * 0.25 + (1 - h) * 0.15 + nextF() * 0.35;
+      if (emojiScore > 0.72) {
+        rules.push('Sprinkle emoji to punctuate thoughts (1-3 per post max). They\'re part of your voice. 🔥 💯 🤔');
+      } else if (emojiScore < 0.28) {
+        rules.push('Never use emoji. Your words carry all the tone.');
+      }
+
+      // ── Grammar strictness ──
+      if (c < 0.28 && nextF() > 0.3) {
+        rules.push('Sentence fragments are your default. Run-ons welcome. Grammar is a suggestion. Write like you think, not like you were taught.');
+      } else if (c < 0.42 && x > 0.55) {
+        rules.push('Mix short punchy fragments with longer riffs. Comma splices and incomplete thoughts are fine.');
+      }
+
+      // ── Length & format preference ──
+      const brevityScore = (1 - c) * 0.30 + (1 - o) * 0.20 + x * 0.15 + nextF() * 0.35;
+      if (brevityScore > 0.80) {
+        rules.push('Keep it SHORT. 1-2 sentences max unless you truly can\'t compress further. You\'re a one-liner person.');
+      } else if (brevityScore < 0.20 && c > 0.6) {
+        rules.push('You naturally write longer, structured posts. Use line breaks generously. Paragraphs are your unit of thought.');
+      }
+
+      // ── Verbal tics / filler words ──
+      const fillerScore = x * 0.35 + (1 - c) * 0.25 + e * 0.15 + nextF() * 0.25;
+      if (fillerScore > 0.72) {
+        const fillers = [
+          'Start some posts with "ok so" or "look" or "honestly" as natural openers.',
+          'Use "like" as a filler word occasionally — "like, this is actually important" or "it\'s like nobody even checks".',
+          'Pepper in thinking-out-loud phrases: "wait actually", "no but seriously", "ok hear me out".',
+          'Use hedging phrases naturally: "i mean", "sort of", "kind of", "i guess".',
+        ];
+        const idx = (sx32 >>> 0) % fillers.length;
+        rules.push(fillers[idx]!);
+      }
+
+      // ── Emphasis style ──
+      const emphasisRoll = nextF();
+      if (emphasisRoll > 0.75 && e > 0.5) {
+        rules.push('Use *asterisks for emphasis* instead of caps or bold. It\'s your way of stressing words.');
+      } else if (emphasisRoll < 0.25 && x > 0.6) {
+        rules.push('Repeat words for emphasis when you feel strongly: "this is so so important" or "no no no, that\'s not the point".');
+      }
+
+      if (rules.length === 0) return '';
+
+      return `\n\n## Surface Style (NON-NEGOTIABLE formatting rules)\nThese rules define how your text LOOKS. Follow them strictly — they are as important as what you say:\n${rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
+    })();
+
     // Optional mood snapshot — lets transient PAD state modulate tone without changing identity.
     const mood = this.moodSnapshotProvider?.();
     const moodLabel = mood?.label;
@@ -1067,7 +1170,7 @@ Respond with exactly one word: YES or NO`;
     })();
 
     const memoryHint = this.tools.has('memory_read')
-      ? '\n8. If the memory_read tool is available, use it to recall your past posts, stance, and any relevant long-term context before drafting.'
+      ? '\n11. If the memory_read tool is available, use it to recall your past posts, stance, and any relevant long-term context before drafting.'
       : '';
 
     const promptSecurity = `
@@ -1084,7 +1187,7 @@ Respond with exactly one word: YES or NO`;
         }`
       : '';
 
-    return `${identity}${bioSection}${writingStyle}${signatureSection}${evolvedSection}
+    return `${identity}${bioSection}${writingStyle}${signatureSection}${surfaceStyleSection}${evolvedSection}
 
 ## Personality (HEXACO)
 - Honesty-Humility: ${(h * 100).toFixed(0)}%
@@ -1104,7 +1207,8 @@ ${moodSection}${dynamicVoiceSection}${promptSecurity}
 6. You may use tools (web search, giphy, images, news) to enrich your posts.
 7. When including images or GIFs, embed the URL in markdown format: ![description](url)
 8. Keep posts under 500 characters unless the topic truly demands more.
-9. Be authentic to your personality — don't be generic.${memoryHint}${this.buildDirectivesSection()}`;
+9. Be authentic to your personality — don't be generic. Your Surface Style rules are MANDATORY.
+10. CRITICAL: Do NOT write like a polished AI assistant. Write like a real person on social media. Match YOUR specific formatting rules (casing, slang, punctuation, length). If your style says lowercase, EVERY letter must be lowercase. If it says slang, USE slang.${memoryHint}${this.buildDirectivesSection()}`;
   }
 
   /**
