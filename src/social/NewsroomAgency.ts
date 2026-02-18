@@ -875,7 +875,7 @@ Respond with exactly one word: YES or NO`;
    * mapped to concrete writing style instructions (not just trait descriptions).
    */
   private buildPersonaSystemPrompt(stimulus?: StimulusEvent): string {
-    const { name, hexacoTraits: traits, baseSystemPrompt, description } = this.config.seedConfig;
+    const { seedId, name, hexacoTraits: traits, baseSystemPrompt, description } = this.config.seedConfig;
     const h = traits.honesty_humility || 0.5;
     const e = traits.emotionality || 0.5;
     const x = traits.extraversion || 0.5;
@@ -948,6 +948,54 @@ Respond with exactly one word: YES or NO`;
     const writingStyle = styleTraits.length > 0
       ? `\n\n## Your Writing Style\n${styleTraits.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
       : '';
+
+    // Stable per-agent signature tics — increases distinct voice even for similar HEXACO.
+    const signatureSection = (() => {
+      const raw = typeof seedId === 'string' ? seedId.trim() : '';
+      if (!raw) return '';
+
+      // FNV-1a 32-bit hash
+      let h32 = 2166136261;
+      for (let i = 0; i < raw.length; i += 1) {
+        h32 ^= raw.charCodeAt(i);
+        h32 = Math.imul(h32, 16777619);
+      }
+      h32 >>>= 0;
+
+      // Xorshift32 PRNG for deterministic sampling
+      let x32 = h32 || 0x9e3779b9;
+      const nextU32 = () => {
+        x32 ^= x32 << 13;
+        x32 ^= x32 >>> 17;
+        x32 ^= x32 << 5;
+        x32 >>>= 0;
+        return x32;
+      };
+
+      const pool = [
+        'Use one short parenthetical aside when it naturally adds nuance.',
+        'Occasionally lead with a one-line thesis, then unpack it.',
+        'Prefer em dashes for emphasis (at most one per post).',
+        'End with a single genuine question when you want replies.',
+        'Use a tiny “signal/noise” framing when assessing claims.',
+        'Drop a compact numbered list when making a structured argument.',
+        'Use a short “My take:” or “Hot take:” prefix sparingly (no more than 1 in 5 posts).',
+        'Use one crisp analogy when it clarifies (not decorative metaphors).',
+        'Use short line breaks for rhythm when the post feels dense.',
+        'When disagreeing, quote one phrase and rebut it directly.',
+      ];
+
+      const picks: string[] = [];
+      while (picks.length < 3 && picks.length < pool.length) {
+        const idx = nextU32() % pool.length;
+        const tic = pool[idx]!;
+        if (!picks.includes(tic)) picks.push(tic);
+      }
+
+      return picks.length > 0
+        ? `\n\n## Your Signature Tics\nThese are stable quirks that make your voice recognizable. Use them naturally — do not force all of them into every post:\n${picks.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+        : '';
+    })();
 
     // Optional mood snapshot — lets transient PAD state modulate tone without changing identity.
     const mood = this.moodSnapshotProvider?.();
@@ -1036,7 +1084,7 @@ Respond with exactly one word: YES or NO`;
         }`
       : '';
 
-    return `${identity}${bioSection}${writingStyle}${evolvedSection}
+    return `${identity}${bioSection}${writingStyle}${signatureSection}${evolvedSection}
 
 ## Personality (HEXACO)
 - Honesty-Humility: ${(h * 100).toFixed(0)}%
