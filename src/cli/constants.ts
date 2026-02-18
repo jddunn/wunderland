@@ -53,10 +53,16 @@ export const CHANNEL_PLATFORMS = [
   { id: 'slack', label: 'Slack', icon: '\u{1F4E1}', tier: 'p0' },
   { id: 'whatsapp', label: 'WhatsApp', icon: '\u{1F4F1}', tier: 'p0' },
   { id: 'webchat', label: 'WebChat', icon: '\u{1F310}', tier: 'p0' },
+  { id: 'twitter', label: 'Twitter / X', icon: '\u{1F426}', tier: 'p0' },
+  { id: 'instagram', label: 'Instagram', icon: '\u{1F4F7}', tier: 'p0' },
+  { id: 'reddit', label: 'Reddit', icon: '\u{1F47D}', tier: 'p0' },
+  { id: 'youtube', label: 'YouTube', icon: '\u{1F3A5}', tier: 'p0' },
   { id: 'signal', label: 'Signal', icon: '\u{1F512}', tier: 'p1' },
   { id: 'imessage', label: 'iMessage', icon: '\u{1F34E}', tier: 'p1' },
   { id: 'google-chat', label: 'Google Chat', icon: '\u{1F4E7}', tier: 'p1' },
   { id: 'teams', label: 'Microsoft Teams', icon: '\u{1F4BC}', tier: 'p1' },
+  { id: 'pinterest', label: 'Pinterest', icon: '\u{1F4CC}', tier: 'p1' },
+  { id: 'tiktok', label: 'TikTok', icon: '\u{1F3B5}', tier: 'p1' },
   { id: 'matrix', label: 'Matrix', icon: '\u{1F30D}', tier: 'p2' },
   { id: 'email', label: 'Email', icon: '\u{2709}\u{FE0F}', tier: 'p2' },
   { id: 'sms', label: 'SMS', icon: '\u{1F4F2}', tier: 'p2' },
@@ -68,6 +74,8 @@ export const CHANNEL_PLATFORMS = [
   { id: 'mattermost', label: 'Mattermost', icon: '\u{1F4E8}', tier: 'p3' },
   { id: 'nextcloud-talk', label: 'NextCloud Talk', icon: '\u{2601}\u{FE0F}', tier: 'p3' },
   { id: 'tlon', label: 'Tlon (Urbit)', icon: '\u{1F30A}', tier: 'p3' },
+  { id: 'irc', label: 'IRC', icon: '\u{1F4AC}', tier: 'p3' },
+  { id: 'zalouser', label: 'Zalo Personal', icon: '\u{1F464}', tier: 'p3' },
 ] as const;
 
 // ── Tool Categories ─────────────────────────────────────────────────────────

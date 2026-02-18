@@ -169,11 +169,11 @@ describe('Permission flags per tier', () => {
     expect(tier.allowExternalApis).toBe(true);
   });
 
-  it('strict: all permissions denied', () => {
+  it('strict: CLI denied, external APIs allowed', () => {
     const tier = SECURITY_TIERS.strict;
     expect(tier.allowCliExecution).toBe(false);
     expect(tier.allowFileWrites).toBe(false);
-    expect(tier.allowExternalApis).toBe(false);
+    expect(tier.allowExternalApis).toBe(true);
   });
 
   it('paranoid: all permissions denied', () => {

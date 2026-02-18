@@ -109,8 +109,8 @@ web-search, weather, summarize, github, coding-agent, git, slack-helper, discord
 **Available tools:**
 web-search, web-browser, cli-executor, giphy, image-search, voice-synthesis, news-search
 
-**Available channels (20 platforms):**
-telegram, whatsapp, discord, slack, webchat, signal, imessage, google-chat, teams, matrix, zalo, email, sms, nostr, twitch, line, feishu, mattermost, nextcloud-talk, tlon
+**Available channels (28 platforms):**
+telegram, whatsapp, discord, slack, webchat, signal, imessage, google-chat, teams, matrix, zalo, email, sms, nostr, twitch, line, feishu, mattermost, nextcloud-talk, tlon, irc, zalouser, reddit, twitter, instagram, tiktok, youtube, pinterest
 
 **Security tiers:**
 - dangerous: All protections OFF (testing only)
@@ -293,6 +293,66 @@ export async function extractAgentConfig(
     if (extracted.toolAccessProfile && !validProfiles.includes(extracted.toolAccessProfile)) {
       console.warn(`Invalid tool access profile "${extracted.toolAccessProfile}", defaulting to assistant`);
       extracted.toolAccessProfile = 'assistant';
+    }
+
+    // Validate channel platforms (best-effort)
+    const validChannels = new Set<string>([
+      'telegram',
+      'whatsapp',
+      'discord',
+      'slack',
+      'webchat',
+      'signal',
+      'imessage',
+      'google-chat',
+      'teams',
+      'matrix',
+      'zalo',
+      'email',
+      'sms',
+      'nostr',
+      'twitch',
+      'line',
+      'feishu',
+      'mattermost',
+      'nextcloud-talk',
+      'tlon',
+      'irc',
+      'zalouser',
+      'reddit',
+      'twitter',
+      'instagram',
+      'tiktok',
+      'youtube',
+      'pinterest',
+    ]);
+
+    const channelAliases: Record<string, string> = {
+      x: 'twitter',
+      'twitter/x': 'twitter',
+      'zalo-personal': 'zalouser',
+      zalo_personal: 'zalouser',
+      'zalo personal': 'zalouser',
+      nextcloud: 'nextcloud-talk',
+      'nextcloud talk': 'nextcloud-talk',
+      'google chat': 'google-chat',
+      'ms teams': 'teams',
+      'microsoft teams': 'teams',
+    };
+
+    if (Array.isArray((extracted as any).channels)) {
+      const raw = (extracted as any).channels as unknown[];
+      const normalized = raw
+        .map((v) => String(v ?? '').trim().toLowerCase())
+        .filter(Boolean)
+        .map((v) => channelAliases[v] ?? v);
+
+      const invalid = normalized.filter((c) => !validChannels.has(c));
+      const filtered = normalized.filter((c) => validChannels.has(c));
+      if (invalid.length > 0) {
+        console.warn(`Invalid channels [${invalid.join(', ')}], ignoring`);
+      }
+      extracted.channels = filtered.length > 0 ? filtered : undefined;
     }
 
     // Generate seedId from displayName if not provided
