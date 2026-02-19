@@ -47,7 +47,7 @@ async function addChannel(args: string[], globals: GlobalFlags): Promise<void> {
     // Interactive mode — use @clack/prompts
     const p = await import('@clack/prompts');
     const options = CHANNEL_PLATFORMS.map((ch) => ({
-      value: ch.id,
+      value: ch.id as string,
       label: `${ch.icon}  ${ch.label}`,
       hint: ch.tier === 'p0' ? 'recommended' : ch.tier === 'p1' ? 'beta' : 'experimental',
     }));
