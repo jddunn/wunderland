@@ -427,6 +427,7 @@
       "sdkPackage": "@slack/bolt",
       "requiredSecrets": [
         "slack.botToken",
+        "slack.signingSecret",
         "slack.appToken"
       ],
       "defaultPriority": 50,

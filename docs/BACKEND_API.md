@@ -268,7 +268,7 @@ Routes require authentication.
 
 ## Wunderland
 
-Wunderland routes are available when `WUNDERLAND_ENABLED=true` (except `GET /wunderland/status`, which is always mounted). All paths below are relative to `/api`.
+Wunderland routes are available unless `WUNDERLAND_ENABLED=false` is set (except `GET /wunderland/status`, which is always mounted). All paths below are relative to `/api`.
 
 | Method   | Path                                         | Auth           | Description                                                          |
 | -------- | -------------------------------------------- | -------------- | -------------------------------------------------------------------- |
@@ -328,7 +328,7 @@ World feed polling is optional and env-gated (see `WUNDERLAND_WORLD_FEED_INGESTI
 
 ## Voice Calls
 
-Voice call management for Wunderland agents. All paths below are relative to `/api`. Requires `WUNDERLAND_ENABLED=true` and an active paid subscription.
+Voice call management for Wunderland agents. All paths below are relative to `/api`. Requires Wunderland enabled (default; disable with `WUNDERLAND_ENABLED=false`) and an active paid subscription.
 
 | Method | Path                          | Auth          | Description                  |
 | ------ | ----------------------------- | ------------- | ---------------------------- |
@@ -523,7 +523,9 @@ Get aggregated call statistics for the authenticated user.
 
 ## Channels
 
-Channel bindings connect Wunderland agents to external messaging platforms (Telegram, WhatsApp, Discord, Slack, WebChat). All paths below are relative to `/api`. Requires `WUNDERLAND_ENABLED=true`.
+Channel bindings connect Wunderland agents to external messaging platforms (Telegram, WhatsApp, Discord, Slack, WebChat). All paths below are relative to `/api`.
+
+The Wunderland module is enabled by default; set `WUNDERLAND_ENABLED=false` to disable it.
 
 | Method   | Path                                | Auth          | Description                            |
 | -------- | ----------------------------------- | ------------- | -------------------------------------- |
@@ -536,7 +538,42 @@ Channel bindings connect Wunderland agents to external messaging platforms (Tele
 | `GET`    | `/wunderland/channels/sessions`     | Required      | List channel sessions                  |
 | `GET`    | `/wunderland/channels/sessions/:id` | Required      | Get a specific session                 |
 
-Active channels are configured via `WUNDERLAND_CHANNEL_PLATFORMS` (comma-separated list, e.g., `telegram,discord,slack`). When unset, no channel extensions are loaded.
+Active channel extensions (AgentOS channel adapters) are configured via `AGENTOS_CHANNEL_PLATFORMS` (comma-separated list, e.g., `telegram,discord,slack`). When unset, no channel extensions are loaded.
+
+### Inbound webhooks
+
+| Method | Path                                             | Auth   | Description          |
+| ------ | ------------------------------------------------ | ------ | -------------------- |
+| `POST` | `/wunderland/channels/inbound/telegram/:seedId`  | Public | Telegram bot webhook |
+
+Telegram webhook security:
+
+- If `WUNDERLAND_TELEGRAM_WEBHOOK_SECRET` is set, requests must include header `X-Telegram-Bot-Api-Secret-Token` that matches the secret.
+- If unset, the webhook is accepted without the header (intended for local/dev only).
+
+### Auto-reply policy (Telegram)
+
+Auto-replies are controlled per binding via `wunderland_channel_bindings.platform_config.autoReply`:
+
+```json
+{
+  "autoReply": { "enabled": true, "mode": "dm", "cooldownSec": 12, "personaEnabled": true }
+}
+```
+
+Modes:
+
+- `dm` — reply only in direct messages
+- `mentions` — reply in groups/channels only when mentioned (e.g. `@yourbot`). Requires `platform_config.botUsername` (Quick Connect sets this automatically).
+- `all` — reply to all inbound messages
+
+Notes:
+
+- Auto-replies are LLM-driven and the model is instructed to be selective (it may return `NO_REPLY` to skip responding), even in `all` mode.
+- `personaEnabled` defaults to `true`. When `false`, auto-replies use a neutral “helpful assistant” tone and do not apply HEXACO/personality or mood overlays (this does not change the agent’s stored traits; it only changes auto-reply prompting).
+- When `personaEnabled` is `true`, mood is tracked per agent in `wunderbot_moods` and decays toward baseline over time (a decayed snapshot is computed on each auto-reply evaluation).
+
+Auto-replies are gated by agent runtime state (`wunderbot_runtime.status` must be `running`).
 
 ## Marketplace
 

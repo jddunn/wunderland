@@ -88,8 +88,8 @@ describe('normalizeRuntimePolicy', () => {
 // ── filterToolMapByPolicy ───────────────────────────────────────────────────
 
 describe('filterToolMapByPolicy', () => {
-  function makeTool(name: string, category?: string): any {
-    return { name, category, description: `Tool ${name}` };
+  function makeTool(name: string, category?: string, hasSideEffects?: boolean): any {
+    return { name, category, hasSideEffects, description: `Tool ${name}` };
   }
 
   function makeToolMap(tools: any[]): Map<string, any> {
@@ -217,5 +217,47 @@ describe('filterToolMapByPolicy', () => {
     expect(filtered.has('file_read')).toBe(false);
     expect(filtered.has('read_file')).toBe(false);
     expect(dropped.every(d => d.reason.includes('filesystem.read'))).toBe(true);
+  });
+
+  it('permission set should block external API side effects when externalApis=false', () => {
+    const toolMap = makeToolMap([
+      makeTool('web_search', 'search', false),
+      makeTool('twitterPost', 'social', true),
+      makeTool('slackChannelSendMessage', 'communication', true),
+    ]);
+
+    const perms = getPermissionsForSet('read-only');
+    expect(perms.network.externalApis).toBe(false);
+
+    const { toolMap: filtered, dropped } = filterToolMapByPolicy({
+      toolMap,
+      toolAccessProfile: 'unrestricted',
+      permissions: perms,
+    });
+
+    expect(filtered.has('web_search')).toBe(true);
+    expect(filtered.has('twitterPost')).toBe(false);
+    expect(filtered.has('slackChannelSendMessage')).toBe(false);
+    expect(dropped.some((d) => d.reason.includes('network.externalApis=false'))).toBe(true);
+  });
+
+  it('permission set should block memory writes when data.memoryWrite=false', () => {
+    const toolMap = makeToolMap([
+      makeTool('memory_read', 'memory'),
+      makeTool('memory_write', 'memory', true),
+    ]);
+
+    const perms = getPermissionsForSet('read-only');
+    expect(perms.data.memoryWrite).toBe(false);
+
+    const { toolMap: filtered, dropped } = filterToolMapByPolicy({
+      toolMap,
+      toolAccessProfile: 'assistant',
+      permissions: perms,
+    });
+
+    expect(filtered.has('memory_read')).toBe(true);
+    expect(filtered.has('memory_write')).toBe(false);
+    expect(dropped.some((d) => d.reason.includes('data.memoryWrite=false'))).toBe(true);
   });
 });

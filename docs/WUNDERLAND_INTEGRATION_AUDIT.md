@@ -139,19 +139,18 @@ For local/dev wallet signing without a browser wallet, use the CLI helper:
 
 - `apps/wunderland-sh/scripts/submit-tip.ts` (reads `CONTENT_HASH_HEX`, `TIPPER_KEYPAIR_PATH`, `TIP_AMOUNT_*`, etc.)
 
-### Channel bindings (Phases 2–2.5 — implemented)
+### Channel bindings (Phases 2–2.5 — partial)
 
-External messaging channel support is now available end-to-end:
+Channel bindings and session tracking are implemented; full multi-platform inbound/outbound adapters are still in progress.
 
-- **Backend**: `ChannelsModule` (controller + service + ChannelBridgeService) provides CRUD for channel bindings and session tracking via `/api/wunderland/channels/*`.
-- **AgentOS**: `EXTENSION_KIND_MESSAGING_CHANNEL` extension kind, `IChannelAdapter` interface, `ChannelRouter` for inbound/outbound routing, `channel_message` stimulus type.
-- **Extensions registry**: `@framers/agentos-extensions-registry` bundle package with `createCuratedManifest()` — dynamically imports available channel extensions.
-- **P0 channels**: Telegram (grammY), WhatsApp (Baileys), Discord (discord.js), Slack (Bolt), WebChat (Socket.IO gateway).
-- **DB tables**: `wunderland_channel_bindings`, `wunderland_channel_sessions`.
-- **Gateway events**: `subscribe:channel`, `channel:send`, `channel:message`, `channel:status`.
-- **Env config**: `WUNDERLAND_CHANNEL_PLATFORMS=telegram,discord,slack` (comma-separated; default: none).
-- **RabbitHole UI**: `/wunderland/dashboard/[seedId]/channels` — full CRUD for channel bindings with platform selection, credential linking, active/broadcast toggles, stats bar.
-- **Dashboard integration**: Channels quick-action card on agent manage page, channel count badges on agent list.
+- **Backend (CRUD + sessions)**: `ChannelsModule` provides CRUD for bindings and session tracking via `/api/wunderland/channels/*` using `wunderland_channel_bindings` + `wunderland_channel_sessions`.
+- **Backend (Telegram webhook)**: `POST /api/wunderland/channels/inbound/telegram/:seedId` receives Telegram updates, dedupes deliveries, and updates sessions.
+- **Backend (Telegram outbound auto-reply)**: Optional LLM-driven auto-replies (modes: `dm` / `mentions` / `all`) with per-conversation cooldown and a per-binding `personaEnabled` toggle (HEXACO + mood overlay on/off).
+- **Env config**:
+  - `AGENTOS_CHANNEL_PLATFORMS=telegram,discord,slack` loads AgentOS channel adapter extensions into the runtime (when unset, no channel extensions are loaded).
+  - `WUNDERLAND_TELEGRAM_WEBHOOK_SECRET` (optional) secures the Telegram webhook via `X-Telegram-Bot-Api-Secret-Token`.
+- **RabbitHole UI**: `/app/dashboard/[seedId]/channels` — manage bindings, toggle active/broadcast, and configure Telegram auto-reply + persona per binding.
+- **Separation from social feed**: inbound channel chat is treated as operational messaging and does not feed the `wunderland-sol` social stimulus pipeline by default.
 
 ### Agent immutability (Phase 2.5 — implemented)
 
