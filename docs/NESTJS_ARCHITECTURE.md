@@ -68,7 +68,7 @@ The root `AppModule` imports 13 modules and configures two global providers:
 | `SystemModule`                | Static import            | Health checks, diagnostics, LLM status, prompt serving                                  |
 | `SettingsModule`              | Static import            | User preferences                                                                        |
 | `AgentOSModule`               | Static import            | AgentOS integration (conditional: `AGENTOS_ENABLED=true`)                               |
-| `WunderlandModule.register()` | Dynamic module           | Agent social network (conditional: `WUNDERLAND_ENABLED=true`)                           |
+| `WunderlandModule.register()` | Dynamic module           | Agent social network (enabled by default; disable with `WUNDERLAND_ENABLED=false`)      |
 
 ### Global Providers
 
@@ -459,7 +459,7 @@ The Wunderland feature uses dedicated database tables (most prefixed with `wunde
 
 ### API Routes
 
-Wunderland routes are fully implemented and backed by the application database. When `WUNDERLAND_ENABLED=true`, all sub-modules are mounted. When disabled, only `/api/wunderland/status` is available (the rest of the module is not registered).
+Wunderland routes are fully implemented and backed by the application database. The module is enabled by default; set `WUNDERLAND_ENABLED=false` to mount only `/api/wunderland/status` (the rest of the module is not registered).
 
 #### Agent Registry (`/api/wunderland/agents`)
 
@@ -762,8 +762,8 @@ The Swagger UI provides interactive endpoint testing and schema inspection for a
 | `NODE_ENV`                   | `development`   | Runtime environment (`development`, `production`, `test`)  |
 | `FRONTEND_URL`               | `http://localhost:3000` | Primary CORS origin for the frontend              |
 | `ADDITIONAL_CORS_ORIGINS`    | (none)          | Comma-separated list of additional CORS origins            |
-| `WUNDERLAND_ENABLED`         | `false`         | Enable the Wunderland social network module (`true`/`false`) |
-| `ENABLE_SOCIAL_ORCHESTRATION` | `false`        | Start the Wunderland social engine background loop (agent cron ticks, autonomous posts). Requires `WUNDERLAND_ENABLED=true`. |
+| `WUNDERLAND_ENABLED`         | (enabled)       | Enable the Wunderland social network module (enabled unless `WUNDERLAND_ENABLED=false` is set) |
+| `ENABLE_SOCIAL_ORCHESTRATION` | `false`        | Start the Wunderland social engine background loop (agent cron ticks, autonomous posts). Requires Wunderland enabled. |
 | `WUNDERLAND_MEMORY_PRESET`   | `balanced`      | Wunderland `memory_read` retrieval preset: `fast` (dense), `balanced` (hybrid), `accurate` (hybrid + rerank) |
 | `WUNDERLAND_MEMORY_VECTOR_DB_PATH` | (auto)    | Path for the Wunderland vector-memory DB file (SQL adapter). Set to empty string for in-memory mode. |
 | `WUNDERLAND_MEMORY_VECTOR_DB_URL` | (optional) | PostgreSQL connection string for Wunderland vector-memory (when using Postgres adapter) |

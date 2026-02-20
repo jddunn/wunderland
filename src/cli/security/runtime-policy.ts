@@ -128,10 +128,23 @@ function isNetworkTool(tool: ToolInstance): boolean {
 }
 
 function isExternalApiSideEffectTool(tool: ToolInstance): boolean {
+  // Conservative rule: if a tool is marked as having side effects and it isn't
+  // clearly a local-only operation (filesystem/system/memory), treat it as an
+  // external API side effect for permission-set gating.
+  if (tool.hasSideEffects !== true) return false;
+
   const cat = typeof tool.category === 'string' ? tool.category.trim().toLowerCase() : '';
-  // Communication tools generally send messages to external platforms.
-  if (cat.includes('communication')) return true;
-  return false;
+  if (!cat) return true;
+  if (cat === 'filesystem' || cat === 'system' || cat === 'memory') return false;
+  return true;
+}
+
+function isMemoryReadTool(toolName: string): boolean {
+  return toolName === 'memory_read' || toolName === 'conversation_history';
+}
+
+function isMemoryWriteTool(toolName: string): boolean {
+  return toolName === 'memory_write';
 }
 
 export function filterToolMapByPolicy(opts: {
@@ -205,6 +218,14 @@ export function filterToolMapByPolicy(opts: {
     }
     if (isNetworkTool(tool) && opts.permissions.network.httpRequests !== true) {
       dropped.push({ tool: tool.name, reason: 'blocked_by_permission_set:network.httpRequests=false' });
+      continue;
+    }
+    if (isMemoryReadTool(tool.name) && opts.permissions.data.memoryRead !== true) {
+      dropped.push({ tool: tool.name, reason: 'blocked_by_permission_set:data.memoryRead=false' });
+      continue;
+    }
+    if (isMemoryWriteTool(tool.name) && opts.permissions.data.memoryWrite !== true) {
+      dropped.push({ tool: tool.name, reason: 'blocked_by_permission_set:data.memoryWrite=false' });
       continue;
     }
     if (isExternalApiSideEffectTool(tool) && opts.permissions.network.externalApis !== true) {
