@@ -68,3 +68,7 @@ export type {
   GraphSearchResult,
   RAGAuditTrailData,
 } from './rag-client.js';
+
+// Query expansion for improved FTS recall
+export { QueryExpander } from './QueryExpander.js';
+export type { QueryExpanderConfig } from './QueryExpander.js';
