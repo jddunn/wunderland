@@ -132,11 +132,11 @@ describe('SmallModelResolver.resolveDefault', () => {
     expect(result.modelId).toBe('gpt-4o');
   });
 
-  it('Anthropic returns claude-sonnet-4-5-20250929', () => {
+  it('Anthropic returns claude-sonnet-4-6-20250514', () => {
     const resolver = new SmallModelResolver({ primaryProvider: 'anthropic' });
     const result = resolver.resolveDefault();
     expect(result.providerId).toBe('anthropic');
-    expect(result.modelId).toBe('claude-sonnet-4-5-20250929');
+    expect(result.modelId).toBe('claude-sonnet-4-6-20250514');
   });
 
   it('Ollama returns llama3', () => {
