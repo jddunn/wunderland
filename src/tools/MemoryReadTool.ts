@@ -27,11 +27,35 @@ export type MemoryReadResult = {
   context: string;
 };
 
+/**
+ * Returned when the underlying memory source does not exist (e.g., file ENOENT).
+ * Callers can check `exists === false` to distinguish "no data" from "error".
+ */
+export type MemoryReadNotFound = {
+  exists: false;
+  content: null;
+};
+
 export type MemoryReadFn = (input: {
   query: string;
   topK: number;
   context: ToolExecutionContext;
 }) => Promise<MemoryReadResult>;
+
+/**
+ * Checks whether an error is an ENOENT (file not found) error.
+ * Works with Node.js `fs` errors and any error with a `code` property.
+ */
+function isEnoentError(error: unknown): boolean {
+  if (error && typeof error === 'object') {
+    const err = error as Record<string, unknown>;
+    return err.code === 'ENOENT' || err.errno === -2;
+  }
+  if (error instanceof Error && error.message) {
+    return /ENOENT|no such file|not found/i.test(error.message);
+  }
+  return false;
+}
 
 export function createMemoryReadTool(read: MemoryReadFn): ITool {
   const inputSchema: JSONSchemaObject = {
@@ -74,6 +98,14 @@ export function createMemoryReadTool(read: MemoryReadFn): ITool {
         const result = await read({ query, topK, context: ctx });
         return { success: true, output: result };
       } catch (error: any) {
+        // Gracefully handle ENOENT (file/source not found) errors.
+        // Return a structured "not found" response instead of a hard error
+        // so calling code can distinguish "no memory exists yet" from "something broke".
+        if (isEnoentError(error)) {
+          const notFound: MemoryReadNotFound = { exists: false, content: null };
+          return { success: true, output: notFound };
+        }
+
         return {
           success: false,
           error: error?.message ? String(error.message) : 'Memory read failed.',
