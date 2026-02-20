@@ -90,6 +90,10 @@
       "import": "./dist/marketplace/index.js",
       "types": "./dist/marketplace/index.d.ts"
     },
+    "./api": {
+      "import": "./dist/api/index.js",
+      "types": "./dist/api/index.d.ts"
+    },
     "./presets": {
       "import": "./dist/core/PresetLoader.js",
       "types": "./dist/core/PresetLoader.d.ts"
