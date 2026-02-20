@@ -261,9 +261,13 @@ export class SignedOutputVerifier {
       if (!/^[a-f0-9]+$/i.test(sig)) return false;
 
       const expected = this.signPayload(payload);
-      if (sig.length !== expected.length) return false;
 
-      return timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'));
+      // Hash both sides before comparison to prevent length-leak side channel
+      // (OpenClaw upstream fix: SHA-256 hash before timingSafeEqual)
+      const sigHash = createHash('sha256').update(sig).digest();
+      const expectedHash = createHash('sha256').update(expected).digest();
+
+      return timingSafeEqual(sigHash, expectedHash);
     } catch {
       return false;
     }
@@ -343,11 +347,12 @@ export class SignedOutputVerifier {
         .update(JSON.stringify(payload))
         .digest('hex');
 
-      // Timing-safe comparison
-      const signatureValid = timingSafeEqual(
-        Buffer.from(signedOutput.signature, 'hex'),
-        Buffer.from(expectedSignature, 'hex')
-      );
+      // Timing-safe comparison: hash both sides first to prevent length-leak side channel
+      // (OpenClaw upstream fix: SHA-256 hash before timingSafeEqual)
+      const actualSigHash = createHash('sha256').update(signedOutput.signature).digest();
+      const expectedSigHash = createHash('sha256').update(expectedSignature).digest();
+
+      const signatureValid = timingSafeEqual(actualSigHash, expectedSigHash);
 
       if (!signatureValid) {
         return false;
@@ -358,10 +363,10 @@ export class SignedOutputVerifier {
         .update(JSON.stringify({ ...payload, signature: signedOutput.signature }))
         .digest('hex');
 
-      return timingSafeEqual(
-        Buffer.from(signedOutput.verificationHash, 'hex'),
-        Buffer.from(expectedVerificationHash, 'hex')
-      );
+      const actualVHash = createHash('sha256').update(signedOutput.verificationHash).digest();
+      const expectedVHash = createHash('sha256').update(expectedVerificationHash).digest();
+
+      return timingSafeEqual(actualVHash, expectedVHash);
     } catch {
       return false;
     }

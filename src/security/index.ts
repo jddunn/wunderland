@@ -42,4 +42,16 @@ export {
 export { SafeGuardrails, type SafeGuardrailsConfig } from './SafeGuardrails.js';
 
 // Folder Permissions
-export { type FolderPermissionConfig, validateFolderConfig } from './FolderPermissions.js';
+export {
+  type FolderPermissionConfig,
+  validateFolderConfig,
+  isContainedPath,
+  validatePluginPath,
+} from './FolderPermissions.js';
+
+// Tool Loop Detector
+export {
+  ToolLoopDetector,
+  type ToolLoopDetectorConfig,
+  type LoopDetectionResult,
+} from './ToolLoopDetector.js';

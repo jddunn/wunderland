@@ -326,6 +326,53 @@ export function validateFolderConfig(config: FolderPermissionConfig): Validation
 }
 
 /**
+ * Validates that a resolved path stays within its expected parent directory.
+ * Prevents path traversal attacks via symlinks or `..` sequences.
+ *
+ * Ported from OpenClaw upstream security fix for plugin/hook path containment.
+ *
+ * @param resolvedPath - The path to validate (already resolved via path.resolve)
+ * @param allowedBase - The base directory the path must stay within
+ * @returns True if the path is contained within allowedBase
+ *
+ * @example
+ * isContainedPath('/home/user/workspace/file.txt', '/home/user/workspace') → true
+ * isContainedPath('/etc/passwd', '/home/user/workspace') → false
+ */
+export function isContainedPath(resolvedPath: string, allowedBase: string): boolean {
+  const normalizedPath = path.resolve(resolvedPath);
+  const normalizedBase = path.resolve(allowedBase);
+
+  return normalizedPath === normalizedBase || normalizedPath.startsWith(normalizedBase + path.sep);
+}
+
+/**
+ * Validates a plugin or hook path stays within allowed directories.
+ *
+ * @param pluginPath - Path to the plugin/hook file
+ * @param allowedDirs - Directories the plugin is allowed to be in
+ * @returns Validation result
+ */
+export function validatePluginPath(
+  pluginPath: string,
+  allowedDirs: string[]
+): { allowed: boolean; reason?: string } {
+  const resolved = path.resolve(expandTilde(pluginPath));
+
+  for (const dir of allowedDirs) {
+    const resolvedDir = path.resolve(expandTilde(dir));
+    if (isContainedPath(resolved, resolvedDir)) {
+      return { allowed: true };
+    }
+  }
+
+  return {
+    allowed: false,
+    reason: `Plugin path "${resolved}" is not within any allowed directory: ${allowedDirs.join(', ')}`,
+  };
+}
+
+/**
  * Create a default folder permission config for a security tier
  *
  * @param tierName - Security tier name
