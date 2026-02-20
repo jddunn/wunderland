@@ -457,14 +457,25 @@ export class StepUpAuthorizationManager {
   }
 
   /**
+   * Escapes backticks and dollar signs in command previews to prevent
+   * shell injection when displayed in terminal or HITL approval UI.
+   *
+   * Ported from OpenClaw upstream security fix (openclaw#20854).
+   */
+  private escapeCommandPreview(text: string): string {
+    return text.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  }
+
+  /**
    * Summarizes tool arguments for display.
+   * Escapes shell-sensitive characters for safe terminal rendering.
    */
   private summarizeArgs(args: Record<string, unknown>): string {
     const entries = Object.entries(args).slice(0, 3);
     const summary = entries
       .map(([k, v]) => {
         const value = typeof v === 'string' ? v.substring(0, 50) : JSON.stringify(v);
-        return `${k}=${value}`;
+        return `${k}=${this.escapeCommandPreview(value)}`;
       })
       .join(', ');
 

@@ -37,6 +37,14 @@ export interface PreLLMClassifierConfig {
 
   /** Enable logging of classifications */
   enableLogging?: boolean;
+
+  /**
+   * Maximum allowed prompt size in bytes.
+   * Inputs exceeding this limit are blocked before any processing to
+   * prevent memory-exhaustion DoS (OpenClaw OC-53).
+   * Default: 2 MiB (2_097_152 bytes).
+   */
+  maxPromptSizeBytes?: number;
 }
 
 /**
@@ -71,12 +79,18 @@ export class PreLLMClassifier implements IGuardrailService {
   private readonly riskThreshold: number;
   private readonly blockThreshold: number;
   private readonly enableLogging: boolean;
+  private readonly maxPromptSizeBytes: number;
+
+  /** Default: 2 MiB */
+  static readonly DEFAULT_MAX_PROMPT_SIZE_BYTES = 2_097_152;
 
   constructor(config: PreLLMClassifierConfig = {}) {
     this.patterns = [...DEFAULT_INJECTION_PATTERNS, ...(config.customPatterns ?? [])];
     this.riskThreshold = config.riskThreshold ?? 0.7;
     this.blockThreshold = config.blockThreshold ?? 0.95;
     this.enableLogging = config.enableLogging ?? false;
+    this.maxPromptSizeBytes =
+      config.maxPromptSizeBytes ?? PreLLMClassifier.DEFAULT_MAX_PROMPT_SIZE_BYTES;
   }
 
   /**
@@ -88,6 +102,26 @@ export class PreLLMClassifier implements IGuardrailService {
     const textInput = this.extractTextInput(payload);
     if (!textInput) {
       return null; // No text to evaluate
+    }
+
+    // Guard: Prompt size DoS prevention (OpenClaw OC-53)
+    const inputByteLength = Buffer.byteLength(textInput, 'utf8');
+    if (inputByteLength > this.maxPromptSizeBytes) {
+      if (this.enableLogging) {
+        console.log('[PreLLMClassifier] Prompt too large:', {
+          bytes: inputByteLength,
+          maxBytes: this.maxPromptSizeBytes,
+        });
+      }
+      return {
+        action: 'block' as GuardrailAction,
+        reason: `Prompt size (${inputByteLength} bytes) exceeds maximum (${this.maxPromptSizeBytes} bytes). This may be an attempt to exhaust memory.`,
+        reasonCode: 'PROMPT_TOO_LARGE',
+        metadata: {
+          inputByteLength,
+          maxPromptSizeBytes: this.maxPromptSizeBytes,
+        },
+      };
     }
 
     const classification = this.classifyInput(textInput);
