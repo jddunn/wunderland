@@ -25,12 +25,23 @@ const SMALL_MODEL_MAP: Record<string, string> = {
   venice: 'venice-fast',
   'cloudflare-ai': '@cf/meta/llama-3.1-8b-instruct',
   'xiaomi-mimo': 'mimo-v2-flash',
+  // New providers (OpenClaw upstream parity)
+  nvidia: 'nvidia/llama-3.1-8b-instruct',
+  glm: 'glm-4-flash',
+  xai: 'grok-3-mini',
+  deepseek: 'deepseek-chat',
+  groq: 'llama-3.1-8b-instant',
+  together: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+  fireworks: 'accounts/fireworks/models/llama-v3p1-8b-instruct',
+  perplexity: 'llama-3.1-sonar-small-128k-online',
+  mistral: 'mistral-small-latest',
+  cohere: 'command-r',
 };
 
 /** Default model IDs per provider (the primary/powerful model). */
 const DEFAULT_MODEL_MAP: Record<string, string> = {
   openai: 'gpt-4o',
-  anthropic: 'claude-sonnet-4-5-20250929',
+  anthropic: 'claude-sonnet-4-6-20250514',
   ollama: 'llama3',
   openrouter: 'auto',
   bedrock: 'anthropic.claude-sonnet',
@@ -42,6 +53,17 @@ const DEFAULT_MODEL_MAP: Record<string, string> = {
   venice: 'venice-default',
   'cloudflare-ai': '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   'xiaomi-mimo': 'mimo-v2-flash',
+  // New providers (OpenClaw upstream parity)
+  nvidia: 'nvidia/llama-3.1-nemotron-70b-instruct',
+  glm: 'glm-5',
+  xai: 'grok-3',
+  deepseek: 'deepseek-chat',
+  groq: 'llama-3.3-70b-versatile',
+  together: 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
+  fireworks: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
+  perplexity: 'llama-3.1-sonar-large-128k-online',
+  mistral: 'mistral-large-latest',
+  cohere: 'command-r-plus',
 };
 
 // ============================================================================
