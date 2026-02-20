@@ -7,12 +7,13 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import { accent, warn as wColor, muted, dim } from '../ui/theme.js';
+import { accent, warn as wColor, muted, dim, info as iColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadConfig } from '../config/config-manager.js';
 import { loadEnv, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
+import { TokenUsageTracker, type TokenUsageSummary } from '../../core/TokenUsageTracker.js';
 
 export default async function cmdStatus(
   _args: string[],
@@ -89,5 +90,73 @@ export default async function cmdStatus(
     }
   }
 
+  // Token Usage (from global tracker singleton if available)
+  displayTokenUsage();
+
   fmt.blank();
+}
+
+// ── Token Usage Display ──────────────────────────────────────────────────────
+
+/**
+ * Global token usage tracker instance.
+ * Other modules (e.g., chat, start) can import and record usage against this
+ * singleton so that `wunderland status` reflects cumulative session usage.
+ */
+export const globalTokenTracker = new TokenUsageTracker();
+
+/**
+ * Format a USD cost to a human-readable string.
+ */
+function formatCost(usd: number | null): string {
+  if (usd === null) return muted('unknown');
+  if (usd < 0.01) return dim(`< $0.01`);
+  return iColor(`$${usd.toFixed(4)}`);
+}
+
+/**
+ * Format a token count with thousands separators.
+ */
+function formatTokenCount(count: number): string {
+  return count.toLocaleString('en-US');
+}
+
+/**
+ * Display token usage section in the status output.
+ * Shows per-model breakdowns with cost estimates if usage has been recorded.
+ */
+function displayTokenUsage(): void {
+  const usage: TokenUsageSummary = globalTokenTracker.getUsage();
+
+  fmt.section('Token Usage');
+
+  if (!globalTokenTracker.hasUsage()) {
+    fmt.skip('No token usage recorded this session');
+    fmt.note(
+      `${muted('Token tracking activates when chat or start commands make LLM calls')}`,
+    );
+    return;
+  }
+
+  // Per-model breakdown
+  for (const model of usage.perModel) {
+    fmt.kvPair(
+      model.model,
+      `${accent(formatTokenCount(model.totalTokens))} tokens ${dim(`(${formatTokenCount(model.promptTokens)} prompt + ${formatTokenCount(model.completionTokens)} completion)`)}`,
+    );
+    fmt.kvPair(
+      '',
+      `${dim(`${model.callCount} call${model.callCount !== 1 ? 's' : ''}`)} ${dim('|')} est. ${formatCost(model.estimatedCostUSD)}`,
+    );
+  }
+
+  // Totals
+  if (usage.perModel.length > 1) {
+    fmt.hr();
+    fmt.kvPair('Total Prompt', accent(formatTokenCount(usage.totalPromptTokens)));
+    fmt.kvPair('Total Completion', accent(formatTokenCount(usage.totalCompletionTokens)));
+    fmt.kvPair('Total Combined', accent(formatTokenCount(usage.totalTokens)));
+    fmt.kvPair('Total Calls', String(usage.totalCalls));
+    fmt.kvPair('Estimated Cost', formatCost(usage.estimatedCostUSD));
+  }
 }
