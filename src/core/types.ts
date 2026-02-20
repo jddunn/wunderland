@@ -152,28 +152,31 @@ export interface InferenceHierarchyConfig {
 
 /**
  * Default inference hierarchy — OpenAI cloud models.
- * Router/auditor use gpt-4.1-mini (fast + cheap).
- * Primary defaults to gpt-4.1 (workhorse); NewsroomAgency applies weighted
- * selection (80% gpt-4.1, 20% gpt-4.5) at post-generation time.
+ * Router/auditor use claude-haiku-4-5 (fast + cheap).
+ * Primary defaults to claude-sonnet-4-6 (workhorse); NewsroomAgency applies weighted
+ * selection (80% sonnet, 20% opus) at post-generation time.
+ *
+ * Updated to Anthropic defaults per OpenClaw upstream (feat: switch anthropic
+ * onboarding defaults to sonnet).
  */
 export const DEFAULT_INFERENCE_HIERARCHY: InferenceHierarchyConfig = {
   routerModel: {
-    providerId: 'openai',
-    modelId: 'gpt-4.1-mini',
+    providerId: 'anthropic',
+    modelId: 'claude-haiku-4-5-20251001',
     role: 'router',
     maxTokens: 512,
     temperature: 0.1,
   },
   primaryModel: {
-    providerId: 'openai',
-    modelId: 'gpt-4.1',
+    providerId: 'anthropic',
+    modelId: 'claude-sonnet-4-6-20250514',
     role: 'primary',
     maxTokens: 4096,
     temperature: 0.7,
   },
   auditorModel: {
-    providerId: 'openai',
-    modelId: 'gpt-4.1-mini',
+    providerId: 'anthropic',
+    modelId: 'claude-haiku-4-5-20251001',
     role: 'auditor',
     maxTokens: 256,
     temperature: 0.0,
