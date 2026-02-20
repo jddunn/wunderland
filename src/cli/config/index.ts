@@ -4,5 +4,6 @@
  */
 
 export * from './config-manager.js';
+export * from './config-validator.js';
 export * from './env-manager.js';
 export * from './secrets.js';
