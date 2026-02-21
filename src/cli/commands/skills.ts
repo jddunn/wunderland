@@ -6,10 +6,10 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import chalk from 'chalk';
 import type { GlobalFlags } from '../types.js';
-import { accent, dim, muted, success as sColor, warn as wColor } from '../ui/theme.js';
+import { accent, muted, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { printTable } from '../ui/table.js';
 
 // ── Fallback catalog when @framers/agentos-skills-registry is not installed ─
 
@@ -83,19 +83,28 @@ async function listSkills(flags: Record<string, string | boolean>): Promise<void
     return;
   }
 
-  fmt.section('Available Skills');
   if (source === 'builtin') {
     fmt.note('Showing built-in catalog (install @framers/agentos-skills-registry for full list)');
   }
-  fmt.blank();
 
-  console.log(`    ${chalk.white('ID'.padEnd(22))} ${chalk.white('Name'.padEnd(22))} ${chalk.white('Ver'.padEnd(8))} ${chalk.white('Description')}`);
-  console.log(`    ${dim('\u2500'.repeat(22))} ${dim('\u2500'.repeat(22))} ${dim('\u2500'.repeat(8))} ${dim('\u2500'.repeat(36))}`);
-
-  for (const skill of entries) {
-    const verified = skill.verified ? sColor('\u2713') : muted('\u25CB');
-    console.log(`    ${accent(skill.id.padEnd(22))} ${skill.name.padEnd(22)} ${muted(skill.version.padEnd(8))} ${muted(skill.description)} ${verified}`);
-  }
+  printTable({
+    title: 'Available Skills',
+    compact: true,
+    columns: [
+      { label: 'ID', width: 24 },
+      { label: 'Name', width: 24 },
+      { label: 'Ver', width: 10 },
+      { label: 'Description' },
+      { label: '\u2713', width: 4, align: 'center' },
+    ],
+    rows: entries.map((skill) => [
+      accent(skill.id),
+      skill.name,
+      muted(skill.version),
+      muted(skill.description),
+      skill.verified ? sColor('\u2713') : muted('\u25CB'),
+    ]),
+  });
 
   fmt.blank();
   fmt.kvPair('Total', `${entries.length} skills`);

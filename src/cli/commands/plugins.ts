@@ -3,10 +3,10 @@
  * @module wunderland/cli/commands/plugins
  */
 
-import chalk from 'chalk';
 import type { GlobalFlags } from '../types.js';
-import { accent, dim, muted, success as sColor } from '../ui/theme.js';
+import { accent, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { printTable } from '../ui/table.js';
 
 // ── Fallback catalog when the registry is not available ─────────────────────
 
@@ -102,38 +102,36 @@ export default async function cmdPlugins(
   let totalInstalled = 0;
   let totalAvailable = 0;
 
-  // Print in category order
-  for (const cat of CATEGORY_ORDER) {
+  // Collect all categories in order
+  const allCats = [...CATEGORY_ORDER, ...[...grouped.keys()].filter((c) => !CATEGORY_ORDER.includes(c))];
+
+  for (const cat of allCats) {
     const group = grouped.get(cat);
     if (!group || group.length === 0) continue;
 
-    const catLabel = CATEGORY_LABELS[cat] || cat;
-    console.log(`    ${chalk.white(catLabel)}`);
-    console.log(`    ${dim('\u2500'.repeat(60))}`);
-
     for (const ext of group) {
-      const statusIcon = ext.available ? sColor('\u2713') : muted('\u25CB');
-      const statusLabel = ext.available ? sColor('installed') : muted('not installed');
-      console.log(`    ${statusIcon} ${accent(ext.name.padEnd(22))} ${ext.displayName.padEnd(22)} ${statusLabel}`);
       totalAvailable++;
       if (ext.available) totalInstalled++;
     }
-    console.log();
-  }
 
-  // Print any remaining categories not in the order list
-  for (const [cat, group] of grouped) {
-    if (CATEGORY_ORDER.includes(cat)) continue;
     const catLabel = CATEGORY_LABELS[cat] || cat;
-    console.log(`    ${chalk.white(catLabel)}`);
-    console.log(`    ${dim('\u2500'.repeat(60))}`);
-    for (const ext of group) {
-      const statusIcon = ext.available ? sColor('\u2713') : muted('\u25CB');
-      const statusLabel = ext.available ? sColor('installed') : muted('not installed');
-      console.log(`    ${statusIcon} ${accent(ext.name.padEnd(22))} ${ext.displayName.padEnd(22)} ${statusLabel}`);
-      totalAvailable++;
-      if (ext.available) totalInstalled++;
-    }
+    printTable({
+      title: catLabel,
+      compact: true,
+      zebra: false,
+      columns: [
+        { label: '', width: 4 },
+        { label: 'Name', width: 24 },
+        { label: 'Display Name', width: 24 },
+        { label: 'Status', width: 16 },
+      ],
+      rows: group.map((ext) => [
+        ext.available ? sColor('\u2713') : muted('\u25CB'),
+        accent(ext.name),
+        ext.displayName,
+        ext.available ? sColor('installed') : muted('not installed'),
+      ]),
+    });
     console.log();
   }
 
