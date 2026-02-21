@@ -90,10 +90,10 @@ async function installOllamaLinux(): Promise<boolean> {
 
 // ── Simple readline prompt (no external dep) ────────────────────────────
 
-function prompt(question: string): Promise<string> {
+async function prompt(question: string): Promise<string> {
+  const { createInterface } = await import('node:readline');
   return new Promise((resolve) => {
-    const readline = require('node:readline');
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
     rl.question(question, (answer: string) => {
       rl.close();
       resolve(answer.trim());
@@ -216,7 +216,7 @@ export default async function ollamaSetup(
   if (missingModels.length > 0 && !skipPull) {
     blank();
     section('Model Download');
-    note(`Need to pull ${missingModels.length} model(s): ${missingModels.map(accent).join(', ')}`);
+    note(`Need to pull ${missingModels.length} model(s): ${missingModels.map((m) => accent(m)).join(', ')}`);
 
     const shouldPull = autoYes || (await prompt(
       '  Download recommended models now? [Y/n] '
