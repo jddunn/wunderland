@@ -581,33 +581,93 @@ Active channel extensions (AgentOS channel adapters) are configured via `AGENTOS
 | Method | Path                                             | Auth   | Description          |
 | ------ | ------------------------------------------------ | ------ | -------------------- |
 | `POST` | `/wunderland/channels/inbound/telegram/:seedId`  | Public | Telegram bot webhook |
+| `POST` | `/wunderland/channels/inbound/slack`             | Public | Slack Events API webhook |
+| `POST` | `/wunderland/channels/inbound/slack/:seedId`     | Public | Slack Events API webhook (seed-scoped) |
 
 Telegram webhook security:
 
 - If `WUNDERLAND_TELEGRAM_WEBHOOK_SECRET` is set, requests must include header `X-Telegram-Bot-Api-Secret-Token` that matches the secret.
 - If unset, the webhook is accepted without the header in non-production environments (local/dev). In production, requests are rejected unless `WUNDERLAND_TELEGRAM_WEBHOOK_ALLOW_UNAUTHENTICATED=true`.
 
-### Auto-reply policy (Telegram)
+Slack webhook security:
+
+- Requests must include `X-Slack-Request-Timestamp` and `X-Slack-Signature`.
+- Preferred: set `SLACK_SIGNING_SECRET` (Slack app “Signing Secret”) and use `/wunderland/channels/inbound/slack`.
+- Alternate (seed-scoped): store a vault credential `slack_signing_secret` and use `/wunderland/channels/inbound/slack/:seedId`.
+- In production, requests are rejected unless a signing secret is available, or `WUNDERLAND_SLACK_WEBHOOK_ALLOW_UNAUTHENTICATED=true`.
+- `url_verification` payloads are supported (returns `{ "challenge": "..." }`).
+
+Inbound Slack supports `event_callback` with `message` and `app_mention` events. Bot/system messages and edits/deletes are ignored.
+
+### Auto-reply policy (Telegram + Slack)
 
 Auto-replies are controlled per binding via `wunderland_channel_bindings.platform_config.autoReply`:
 
 ```json
 {
-  "autoReply": { "enabled": true, "mode": "dm", "cooldownSec": 12, "personaEnabled": true }
+  "autoReply": {
+    "enabled": true,
+    "mode": "dm",
+    "cooldownSec": 12,
+    "personaEnabled": true,
+    "strategy": "solo",
+    "outputMode": "single"
+  }
 }
 ```
 
 Modes:
 
 - `dm` — reply only in direct messages
-- `mentions` — reply in groups/channels only when mentioned (e.g. `@yourbot`). Requires `platform_config.botUsername` (Quick Connect sets this automatically).
+- `mentions` — reply in groups/channels only when mentioned.
+  - Telegram: requires `platform_config.botUsername` (Telegram Quick Connect sets this automatically).
+  - Slack: requires `platform_config.botUserId` (Slack OAuth Quick Connect sets this automatically).
 - `all` — reply to all inbound messages
 
 Notes:
 
 - Auto-replies are LLM-driven and the model is instructed to be selective (it may return `NO_REPLY` to skip responding), even in `all` mode.
 - `personaEnabled` defaults to `true`. When `false`, auto-replies use a neutral “helpful assistant” tone and do not apply HEXACO/personality or mood overlays (this does not change the agent’s stored traits; it only changes auto-reply prompting).
-- When `personaEnabled` is `true`, mood is tracked per agent in `wunderbot_moods` and decays toward baseline over time (a decayed snapshot is computed on each auto-reply evaluation).
+- When `personaEnabled` is `true`, each queued inbound message triggers a separate (cheap) sentiment call that updates `wunderbot_moods` and appends `wunderbot_mood_history`, even if the agent ultimately decides `NO_REPLY` or cooldown prevents responding. Override the sentiment model via `CHANNEL_SENTIMENT_MODEL`.
+- Slack auto-replies default to replying in a thread for non-DM contexts to reduce channel spam.
+- `strategy`:
+  - `solo` (default) — single LLM call generates the reply.
+  - `agency` — runs an AgentOS multi-seat “Agency” (roles/roster) and then synthesizes one outward reply in the agent’s persona.
+- `outputMode`:
+  - `single` (default) — one outbound message.
+  - `segmented` — multiple outbound messages (the synthesizer may return a JSON array of strings).
+
+Agency config (optional; used when `strategy="agency"`):
+
+```json
+{
+  "autoReply": {
+    "enabled": true,
+    "mode": "mentions",
+    "personaEnabled": true,
+    "strategy": "agency",
+    "outputMode": "single",
+    "agency": {
+      "coordinationStrategy": "static",
+      "maxSegments": 4,
+      "maxSeatOutputChars": 1200,
+      "exposeSeatOutputs": false,
+      "roles": [
+        { "roleId": "triage", "personaId": "v_researcher", "instruction": "Decide if a reply is needed; draft one if so." },
+        { "roleId": "editor", "personaId": "v_researcher", "instruction": "Improve clarity and tone; keep it short." },
+        { "roleId": "safety", "personaId": "v_researcher", "instruction": "Check safety/privacy; suggest safer phrasing or NO_REPLY." }
+      ]
+    }
+  }
+}
+```
+
+Additional agency notes:
+
+- If `agency.roles` is omitted/empty, the backend uses a default roster (`triage`/`editor`/`safety`).
+- `coordinationStrategy` supports `static` (recommended for low latency) or `emergent` (higher latency/cost).
+- For Slack only: when `outputMode="segmented"` and `agency.exposeSeatOutputs=true`, seat outputs are optionally posted as thread replies (non-DM contexts) after the synthesized message.
+- If the selected provider is `ollama` (per-user tunnel baseUrl), agency currently falls back to `solo`.
 
 Auto-replies are gated by agent runtime state (`wunderbot_runtime.status` must be `running`).
 
