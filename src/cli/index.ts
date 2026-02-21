@@ -91,6 +91,8 @@ function printHelp(): void {
     ${d('--yes, -y')}              Auto-approve tool calls (fully autonomous)
     ${d('--no-color')}             Disable colors (also: NO_COLOR env)
     ${d('--dry-run')}              Preview without writing
+    ${d('--tui')}                  Force interactive TUI mode
+    ${d('--no-tui')}               Force print-and-exit (skip TUI)
     ${d('--config <path>')}        Config directory path
 
   ${c('Command Options:')}
@@ -104,6 +106,7 @@ function printHelp(): void {
     ${d('--force')}                Overwrite existing files
     ${d('--skills-dir <path>')}    Load skills from directory
     ${d('--no-skills')}            Disable skill loading
+    ${d('--export-png <path>')}    Export command output as styled PNG screenshot
     ${d('--dangerously-skip-permissions')}  Auto-approve tool calls
     ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
 
@@ -172,8 +175,14 @@ export async function main(argv: string[]): Promise<void> {
   const command = positional[0];
   const subArgs = positional.slice(1);
 
-  // No command → full banner + help
+  // No command → TUI dashboard (if TTY) or help text
   if (!command) {
+    const shouldTui = globals.tui || (!globals.noTui && !globals.quiet && process.stdout.isTTY);
+    if (shouldTui) {
+      const { launchTui } = await import('./tui/index.js');
+      await launchTui(globals);
+      return;
+    }
     if (!globals.quiet) await printBanner();
     printHelp();
     return;
@@ -216,7 +225,16 @@ export async function main(argv: string[]): Promise<void> {
 
   try {
     const mod = await loader();
-    await mod.default(subArgs, flags, globals);
+    const handler = mod.default;
+
+    // PNG export interception
+    if (typeof flags['export-png'] === 'string') {
+      const { withExport } = await import('./export/export-middleware.js');
+      await withExport(handler, subArgs, flags, globals);
+      return;
+    }
+
+    await handler(subArgs, flags, globals);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     fmt.errorBlock('Command failed', message);
