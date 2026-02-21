@@ -80,6 +80,8 @@ function printHelp(): void {
     ${chalk.white('export')}                 Export agent as shareable manifest
     ${chalk.white('import')} ${d('<manifest>')}     Import agent from manifest file
     ${chalk.white('plugins')}                List installed extension packs
+    ${chalk.white('export-session')}         Export chat session to file
+    ${chalk.white('ollama-setup')}           Configure Ollama (local LLM)
     ${chalk.white('version')}                Show version
 
   ${c('Global Options:')}
@@ -98,12 +100,12 @@ function printHelp(): void {
     ${d('--security-tier <tier>')} Security tier (dangerous/permissive/balanced/strict/paranoid)
     ${d('--dir <path>')}           Working directory (seal)
     ${d('--format <json|table>')}  Output format (list-presets, skills, models, plugins)
-	    ${d('--lazy-tools')}           Start with only schema-on-demand meta tools
-	    ${d('--force')}                Overwrite existing files
-	    ${d('--skills-dir <path>')}    Load skills from directory
-	    ${d('--no-skills')}            Disable skill loading
-	    ${d('--dangerously-skip-permissions')}  Auto-approve tool calls
-	    ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
+    ${d('--lazy-tools')}           Start with only schema-on-demand meta tools
+    ${d('--force')}                Overwrite existing files
+    ${d('--skills-dir <path>')}    Load skills from directory
+    ${d('--no-skills')}            Disable skill loading
+    ${d('--dangerously-skip-permissions')}  Auto-approve tool calls
+    ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
 
   ${c('Links:')}
     ${muted(URLS.website)}${dim('  \u00B7  ')}${muted(URLS.saas)}${dim('  \u00B7  ')}${muted(URLS.docs)}
@@ -141,7 +143,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   plugins:        () => import('./commands/plugins.js'),
   'export':       () => import('./commands/export-agent.js'),
   'import':       () => import('./commands/import-agent.js'),
-  'ollama-setup': () => import('./commands/ollama-setup.js'),
+  'ollama-setup':    () => import('./commands/ollama-setup.js'),
+  'export-session':  () => import('./commands/export-session.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */

@@ -249,7 +249,7 @@ async function runOllamaAutoConfig(state: WizardState): Promise<void> {
     fmt.ok('All recommended models are already installed.');
   } else {
     fmt.blank();
-    fmt.note(`Models to pull: ${needed.map(accent).join(', ')}`);
+    fmt.note(`Models to pull: ${needed.map((m) => accent(m)).join(', ')}`);
 
     const confirmPull = await p.confirm({
       message: `Pull ${needed.length} recommended model${needed.length > 1 ? 's' : ''}?`,
