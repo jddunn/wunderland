@@ -3,11 +3,11 @@
  * @module wunderland/cli/commands/models
  */
 
-import chalk from 'chalk';
 import type { GlobalFlags } from '../types.js';
 import { LLM_PROVIDERS } from '../constants.js';
 import { accent, dim, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { printTable } from '../ui/table.js';
 import { loadConfig, updateConfig } from '../config/config-manager.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 
@@ -24,20 +24,33 @@ async function listModels(flags: Record<string, string | boolean>, globals: Glob
     return;
   }
 
-  fmt.section('LLM Providers & Models');
+  printTable({
+    title: 'LLM Providers & Models',
+    compact: true,
+    columns: [
+      { label: '', width: 4 },
+      { label: 'Provider', width: 20 },
+      { label: 'Label', width: 20 },
+      { label: 'Key Status', width: 16 },
+      { label: 'Models' },
+    ],
+    rows: LLM_PROVIDERS.map((provider) => {
+      const envSet = provider.envVar ? !!process.env[provider.envVar] : true;
+      const statusIcon = envSet ? sColor('\u2713') : muted('\u25CB');
+      const envHint = provider.envVar
+        ? (envSet ? sColor('configured') : muted('not set'))
+        : muted('no key');
+      return [
+        statusIcon,
+        accent(provider.id),
+        provider.label,
+        envHint,
+        provider.models.map((m) => dim(m)).join(', '),
+      ];
+    }),
+  });
+
   fmt.blank();
-
-  for (const provider of LLM_PROVIDERS) {
-    const envSet = provider.envVar ? !!process.env[provider.envVar] : true;
-    const statusIcon = envSet ? sColor('\u2713') : muted('\u25CB');
-    const envHint = provider.envVar ? (envSet ? sColor('configured') : muted('not set')) : muted('no key needed');
-
-    console.log(`    ${statusIcon} ${accent(provider.id.padEnd(18))} ${chalk.white(provider.label)}`);
-    console.log(`      ${muted('Key:')} ${envHint}${provider.envVar ? dim(` (${provider.envVar})`) : ''}`);
-    console.log(`      ${muted('Models:')} ${provider.models.map((m) => dim(m)).join(', ')}`);
-    console.log();
-  }
-
   fmt.kvPair('Total Providers', `${LLM_PROVIDERS.length}`);
   fmt.blank();
 }
