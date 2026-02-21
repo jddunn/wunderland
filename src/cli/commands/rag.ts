@@ -113,9 +113,12 @@ async function cmdQuery(args: string[], flags: Record<string, string | boolean>)
   const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
 
   const verbose = flags['verbose'] === true || flags['v'] === true;
+  const includeGraphRag = flags['graph'] === true;
+  const debug = flags['debug'] === true;
+
   const result = await ragFetch('/query', {
     method: 'POST',
-    body: { query, topK, preset, collectionIds, includeAudit: verbose },
+    body: { query, topK, preset, collectionIds, includeAudit: verbose, includeGraphRag, debug },
   });
 
   if (format === 'json') {
@@ -134,6 +137,52 @@ async function cmdQuery(args: string[], flags: Record<string, string | boolean>)
   }
   fmt.blank();
   fmt.note(`${result.totalResults} result(s) in ${result.processingTimeMs}ms`);
+
+  // Show GraphRAG context when --graph
+  if (result.graphContext) {
+    const gc = result.graphContext;
+    fmt.blank();
+    fmt.section('GraphRAG Context');
+    const cleanName = (s: string) => s.replace(/[\n\r]+/g, ' ').trim().slice(0, 40);
+    if (gc.entities?.length) {
+      fmt.kvPair('Entities', String(gc.entities.length));
+      for (const e of gc.entities.slice(0, 8)) {
+        const score = typeof e.relevanceScore === 'number' ? ` ${(e.relevanceScore * 100).toFixed(0)}%` : '';
+        const desc = e.description?.replace(/[\n\r]+/g, ' ').trim().slice(0, 80) ?? '';
+        fmt.kvPair(`  ${cleanName(e.name)}`, `(${e.type})${score} ${desc}`);
+      }
+      if (gc.entities.length > 8) fmt.note(`  ... and ${gc.entities.length - 8} more entities`);
+    }
+    if (gc.relationships?.length) {
+      fmt.kvPair('Relationships', String(gc.relationships.length));
+      for (const r of gc.relationships.slice(0, 6)) {
+        const desc = r.description?.replace(/[\n\r]+/g, ' ').trim().slice(0, 80) ?? '';
+        fmt.kvPair(`  ${cleanName(r.source)} → ${cleanName(r.target)}`, `[${r.type}] ${desc}`);
+      }
+      if (gc.relationships.length > 6) fmt.note(`  ... and ${gc.relationships.length - 6} more relationships`);
+    }
+    if (gc.communityContext) {
+      const ctx = typeof gc.communityContext === 'string'
+        ? gc.communityContext
+        : Array.isArray(gc.communityContext)
+          ? (gc.communityContext as any[]).map((c: any) => c.title ?? c.summary ?? JSON.stringify(c).slice(0, 80)).join('; ')
+          : JSON.stringify(gc.communityContext);
+      fmt.kvPair('Community Context', ctx.slice(0, 300) + (ctx.length > 300 ? '...' : ''));
+    }
+  }
+
+  // Show debug pipeline trace when --debug
+  if (result.debugTrace?.length) {
+    fmt.blank();
+    fmt.section('Debug Pipeline Trace');
+    for (const step of result.debugTrace) {
+      const dataEntries = Object.entries(step.data)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`)
+        .join(', ');
+      fmt.kvPair(`  [+${step.ms}ms] ${step.step}`, dataEntries);
+    }
+  }
 
   // Show audit trail when --verbose
   if (verbose && result.auditTrail) {
@@ -252,11 +301,15 @@ async function cmdStats(flags: Record<string, string | boolean>): Promise<void> 
   const result = await ragFetch('/stats');
   if (format === 'json') { console.log(JSON.stringify(result, null, 2)); return; }
   fmt.section('RAG Statistics');
+  fmt.kvPair('Storage', result.storageAdapter ?? 'unknown');
   fmt.kvPair('Documents', String(result.totalDocuments ?? 0));
   fmt.kvPair('Chunks', String(result.totalChunks ?? 0));
-  fmt.kvPair('Collections', String(result.totalCollections ?? 0));
-  fmt.kvPair('Vector Store', result.vectorStoreProvider ?? 'unknown');
-  fmt.kvPair('Embedding', result.embeddingProvider ?? 'unknown');
+  fmt.kvPair('Collections', String(result.collections?.length ?? result.totalCollections ?? 0));
+  if (result.collections?.length) {
+    for (const c of result.collections) {
+      fmt.kvPair(`  ${c.collectionId}`, `${c.documentCount} docs, ${c.chunkCount} chunks`);
+    }
+  }
   fmt.blank();
 }
 
@@ -264,8 +317,24 @@ async function cmdHealth(): Promise<void> {
   try {
     const result = await ragFetch('/health');
     fmt.section('RAG Health');
-    fmt.kvPair('Available', result.available ? sColor('yes') : eColor('no'));
-    fmt.kvPair('Adapter', result.adapterKind ?? 'unknown');
+    const ready = result.status === 'ready' || result.available;
+    fmt.kvPair('Status', ready ? sColor(result.status ?? 'ready') : eColor(result.status ?? 'unavailable'));
+    fmt.kvPair('Adapter', result.storageAdapter ?? result.adapterKind ?? 'unknown');
+    fmt.kvPair('Vector Provider', result.vectorProvider ?? 'sql');
+    if (result.hnswParams) {
+      fmt.kvPair('  HNSW M', String(result.hnswParams.M));
+      fmt.kvPair('  HNSW efConstruction', String(result.hnswParams.efConstruction));
+      fmt.kvPair('  HNSW efSearch', String(result.hnswParams.efSearch));
+      fmt.kvPair('  HNSW Persist Dir', result.hnswParams.persistDir);
+    }
+    fmt.kvPair('Vector Store', result.vectorStoreConnected ? sColor('connected') : eColor('disconnected'));
+    fmt.kvPair('Embeddings', result.embeddingServiceAvailable ? sColor('available') : eColor('unavailable'));
+    fmt.kvPair('GraphRAG', result.graphRagEnabled ? sColor('enabled') : dim('disabled'));
+    if (result.stats) {
+      fmt.kvPair('Documents', String(result.stats.totalDocuments ?? 0));
+      fmt.kvPair('Chunks', String(result.stats.totalChunks ?? 0));
+      fmt.kvPair('Collections', String(result.stats.collectionCount ?? 0));
+    }
     fmt.blank();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -288,22 +357,61 @@ async function cmdGraph(args: string[], flags: Record<string, string | boolean>)
     if (!query) { fmt.errorBlock('Missing query', 'Usage: wunderland rag graph local-search <text>'); process.exitCode = 1; return; }
     const result = await ragFetch('/graphrag/local-search', { method: 'POST', body: { query } });
     if (format === 'json') { console.log(JSON.stringify(result, null, 2)); return; }
-    fmt.section(`GraphRAG Local: "${query}"`);
-    for (const r of result.results ?? []) { fmt.kvPair(`(${(r.score * 100).toFixed(0)}%)`, r.content?.slice(0, 200) ?? ''); }
+    const r = result.result ?? result;
+    fmt.section(`GraphRAG Local Search: "${query}"`);
+    if (r.entities?.length) {
+      fmt.kvPair('Entities Found', String(r.entities.length));
+      for (const e of r.entities.slice(0, 8)) {
+        fmt.kvPair(`  ${e.name}`, `(${e.type}) ${e.description?.slice(0, 120) ?? ''}`);
+      }
+      if (r.entities.length > 8) fmt.note(`  ... and ${r.entities.length - 8} more entities`);
+    }
+    if (r.relationships?.length) {
+      fmt.kvPair('Relationships', String(r.relationships.length));
+    }
+    if (r.communityContext?.length) {
+      fmt.kvPair('Communities', String(r.communityContext.length));
+      for (const c of r.communityContext.slice(0, 3)) {
+        fmt.kvPair(`  ${c.communityId?.slice(0, 16) ?? '?'}`, c.title?.slice(0, 120) ?? '');
+      }
+    }
+    if (r.diagnostics) {
+      fmt.note(`Search: ${r.diagnostics.searchTimeMs}ms, traversal: ${r.diagnostics.graphTraversalTimeMs ?? 0}ms`);
+    }
     fmt.blank();
   } else if (sub === 'global-search') {
     const query = args.slice(1).join(' ');
     if (!query) { fmt.errorBlock('Missing query', 'Usage: wunderland rag graph global-search <text>'); process.exitCode = 1; return; }
     const result = await ragFetch('/graphrag/global-search', { method: 'POST', body: { query } });
     if (format === 'json') { console.log(JSON.stringify(result, null, 2)); return; }
-    fmt.section(`GraphRAG Global: "${query}"`);
-    for (const r of result.results ?? []) { fmt.kvPair(`(${(r.score * 100).toFixed(0)}%)`, r.content?.slice(0, 200) ?? ''); }
+    const r = result.result ?? result;
+    fmt.section(`GraphRAG Global Search: "${query}"`);
+    fmt.kvPair('Communities Searched', String(r.totalCommunitiesSearched ?? 0));
+    if (r.answer) {
+      fmt.kvPair('Answer', r.answer.slice(0, 500));
+    }
+    if (r.communitySummaries?.length) {
+      for (const cs of r.communitySummaries.slice(0, 5)) {
+        fmt.kvPair(`  ${cs.communityId?.slice(0, 16) ?? '?'}`, cs.title?.slice(0, 120) ?? cs.summary?.slice(0, 120) ?? '');
+      }
+    }
+    if (!r.answer && !r.communitySummaries?.length) {
+      fmt.note('No global summary available. Enable AGENTOS_GRAPHRAG_LLM_ENABLED=true for LLM-powered community summaries.');
+    }
+    if (r.diagnostics) {
+      fmt.note(`Search: ${r.diagnostics.searchTimeMs}ms`);
+    }
     fmt.blank();
   } else if (sub === 'stats') {
     const result = await ragFetch('/graphrag/stats');
     if (format === 'json') { console.log(JSON.stringify(result, null, 2)); return; }
+    const stats = result.stats ?? result;
     fmt.section('GraphRAG Statistics');
-    for (const [k, v] of Object.entries(result)) { fmt.kvPair(k, String(v)); }
+    fmt.kvPair('Entities', String(stats.totalEntities ?? 0));
+    fmt.kvPair('Relationships', String(stats.totalRelationships ?? 0));
+    fmt.kvPair('Communities', String(stats.totalCommunities ?? 0));
+    fmt.kvPair('Community Levels', String(stats.communityLevels ?? 0));
+    fmt.kvPair('Documents Indexed', String(stats.documentsIngested ?? 0));
     fmt.blank();
   } else {
     fmt.errorBlock('Unknown subcommand', `"${sub ?? '(none)'}". Use: local-search, global-search, stats`);
@@ -423,6 +531,8 @@ export default async function cmdRag(
     ${dim('--format json|table')}  Output format
     ${dim('--top-k <n>')}        Max results (default: 5)
     ${dim('--preset <p>')}       Retrieval preset (fast|balanced|accurate)
+    ${dim('--graph')}             Include GraphRAG context in query results
+    ${dim('--debug')}             Show pipeline debug trace (query)
     ${dim('--modality <m>')}     Media filter (image|audio)
     ${dim('--category <c>')}     Document category
     ${dim('--verbose, -v')}      Show audit trail (query) / per-op details (audit)
