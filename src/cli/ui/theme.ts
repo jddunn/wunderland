@@ -67,3 +67,32 @@ export const bright = chalk.hex(HEX.white).bold;
 
 /** Separator line. */
 export const separator = muted('─'.repeat(60));
+
+// ── Table style tokens ──────────────────────────────────────────────────────
+
+export const tableStyle = {
+  border: HEX.dim,
+  header: HEX.white,
+  zebraLight: HEX.white,
+  zebraDark: HEX.muted,
+} as const;
+
+// ── Panel style tokens ──────────────────────────────────────────────────────
+
+export const panelStyles = {
+  brand:   { border: HEX.purple,  title: HEX.purple  },
+  success: { border: HEX.green,   title: HEX.green   },
+  warning: { border: HEX.gold,    title: HEX.gold    },
+  error:   { border: HEX.red,     title: HEX.red     },
+  info:    { border: HEX.cyan,    title: HEX.cyan    },
+} as const;
+
+// ── Interactive / TUI style tokens ──────────────────────────────────────────
+
+export const interactiveStyle = {
+  cursor: HEX.brightCyan,
+  selected: HEX.purple,
+  border: HEX.dim,
+  focusBorder: HEX.cyan,
+  hint: HEX.muted,
+} as const;

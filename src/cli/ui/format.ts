@@ -123,3 +123,27 @@ export function successBlock(title: string, detail?: string): void {
   }
   console.log();
 }
+
+// ── Component wrappers ─────────────────────────────────────────────────────
+
+import type { TableOptions } from './table.js';
+import type { PanelOptions } from './panel.js';
+import type { StepProgress } from './progress.js';
+
+/** Print a styled table (delegates to table.ts). */
+export async function table(opts: TableOptions): Promise<void> {
+  const { printTable } = await import('./table.js');
+  printTable(opts);
+}
+
+/** Print a bordered panel (delegates to panel.ts). */
+export async function panel(opts: PanelOptions): Promise<void> {
+  const { printPanel } = await import('./panel.js');
+  printPanel(opts);
+}
+
+/** Create a step progress tracker (delegates to progress.ts). */
+export async function steps(labels: string[]): Promise<StepProgress> {
+  const { createStepProgress } = await import('./progress.js');
+  return createStepProgress(labels);
+}
