@@ -68,6 +68,8 @@ export interface GlobalFlags {
   yes: boolean;
   noColor: boolean;
   dryRun: boolean;
+  tui: boolean;
+  noTui: boolean;
   config?: string;
 }
 
