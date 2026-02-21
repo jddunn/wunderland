@@ -145,7 +145,7 @@ Channel bindings and session tracking are implemented; full multi-platform inbou
 
 - **Backend (CRUD + sessions)**: `ChannelsModule` provides CRUD for bindings and session tracking via `/api/wunderland/channels/*` using `wunderland_channel_bindings` + `wunderland_channel_sessions`.
 - **Backend (Telegram webhook)**: `POST /api/wunderland/channels/inbound/telegram/:seedId` receives Telegram updates, dedupes deliveries, and updates sessions.
-- **Backend (Telegram outbound auto-reply)**: Optional LLM-driven auto-replies (modes: `dm` / `mentions` / `all`) with per-conversation cooldown and a per-binding `personaEnabled` toggle (HEXACO + mood overlay on/off).
+- **Backend (Telegram outbound auto-reply)**: Optional LLM-driven auto-replies (modes: `dm` / `mentions` / `all`) with per-conversation cooldown and a per-binding `personaEnabled` toggle (HEXACO + mood overlay). When enabled, mood decays toward baseline over time and a decayed snapshot is persisted per agent (`wunderbot_moods`).
 - **Env config**:
   - `AGENTOS_CHANNEL_PLATFORMS=telegram,discord,slack` loads AgentOS channel adapter extensions into the runtime (when unset, no channel extensions are loaded).
   - `WUNDERLAND_TELEGRAM_WEBHOOK_SECRET` (optional) secures the Telegram webhook via `X-Telegram-Bot-Api-Secret-Token`.

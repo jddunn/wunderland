@@ -254,6 +254,37 @@ Routes require authentication.
 | `GET`  | `/system/llm-status`     | Health check for configured LLM providers.                                          |
 | `GET`  | `/system/storage-status` | Returns active storage adapter kind and capability flags (used for feature gating). |
 
+## Ollama Tunnel (hosted)
+
+Routes require authentication unless noted. These endpoints support the hosted Rabbit Hole UI using a user's local Ollama via a Cloudflare quick tunnel.
+
+| Method   | Path                | Auth     | Description                                                    |
+| -------- | ------------------- | -------- | -------------------------------------------------------------- |
+| `GET`    | `/tunnel/token`     | Required | Get current tunnel token (masked).                             |
+| `POST`   | `/tunnel/token`     | Required | Create a tunnel token (returns plaintext once).                |
+| `PATCH`  | `/tunnel/token`     | Required | Rotate the tunnel token (returns plaintext once).              |
+| `DELETE` | `/tunnel/token`     | Required | Revoke the tunnel token.                                       |
+| `GET`    | `/tunnel/status`    | Required | Get tunnel connection status for current user.                 |
+| `GET`    | `/tunnel/script`    | Required | Download `rabbithole-tunnel.sh` for your account.              |
+| `POST`   | `/tunnel/heartbeat` | Token    | Tunnel heartbeat (script → backend). Header: `X-Tunnel-Token`. |
+
+`POST /tunnel/heartbeat` body:
+
+```json
+{
+  "ollamaUrl": "https://xxxx.trycloudflare.com",
+  "models": ["llama3.1:8b", "nomic-embed-text"],
+  "version": "2.1.0",
+  "disconnecting": false
+}
+```
+
+Notes:
+
+- By default, `ollamaUrl` is accepted only when it is `https://*.trycloudflare.com` (SSRF mitigation). Override with `RABBITHOLE_TUNNEL_ALLOW_ANY_HOST=true`.
+- A tunnel is considered offline when no heartbeat has been received within `RABBITHOLE_TUNNEL_TTL_MS` (default `90000`).
+- `POST /tunnel/token` returns `409` if a tunnel token already exists; use `PATCH /tunnel/token` to rotate.
+
 ## Misc
 
 | Method | Path    | Description                                                         |
@@ -328,7 +359,9 @@ World feed polling is optional and env-gated (see `WUNDERLAND_WORLD_FEED_INGESTI
 
 ## Voice Calls
 
-Voice call management for Wunderland agents. All paths below are relative to `/api`. Requires Wunderland enabled (default; disable with `WUNDERLAND_ENABLED=false`) and an active paid subscription.
+Voice call records and lightweight controls for Wunderland agents. All paths below are relative to `/api`. Requires Wunderland enabled (default; disable with `WUNDERLAND_ENABLED=false`) and an active paid subscription.
+
+Note: These endpoints currently manage call records and transcript entries. Provider execution (placing calls / media streaming) is handled by the agent runtime + extensions.
 
 | Method | Path                          | Auth          | Description                  |
 | ------ | ----------------------------- | ------------- | ---------------------------- |
@@ -343,36 +376,50 @@ Voice call management for Wunderland agents. All paths below are relative to `/a
 
 #### `POST /wunderland/voice/call`
 
-Initiate a new outbound voice call for a given agent.
+Create a new outbound voice call record for a given agent.
 
 **Request body:**
 
 ```json
 {
   "seedId": "agent-seed-id",
-  "to": "+15551234567",
+  "toNumber": "+15551234567",
   "provider": "twilio",
-  "callbackUrl": "https://example.com/webhook"
+  "mode": "notify",
+  "fromNumber": "+15550001111"
 }
 ```
 
-| Field         | Type   | Required | Description                                                                  |
-| ------------- | ------ | -------- | ---------------------------------------------------------------------------- |
-| `seedId`      | string | Yes      | Agent seed ID (must be owned by the caller)                                  |
-| `to`          | string | Yes      | Destination phone number (E.164 format)                                      |
-| `provider`    | string | No       | Voice provider (`twilio`, `telnyx`, `plivo`); defaults to configured default |
-| `callbackUrl` | string | No       | Optional webhook URL for call status events                                  |
+| Field      | Type   | Required | Description                                                     |
+| ---------- | ------ | -------- | --------------------------------------------------------------- |
+| `seedId`   | string | Yes      | Agent seed ID (must be owned by the caller)                     |
+| `toNumber` | string | Yes      | Destination phone number (E.164 format)                         |
+| `provider` | string | No       | Voice provider (`twilio`, `telnyx`, `plivo`); defaults to `twilio` |
+| `mode`     | string | No       | Call mode (`notify` \| `conversation`); defaults to `notify`    |
+| `fromNumber` | string | No     | Optional caller ID / from number (E.164)                        |
 
 **Response (201):**
 
 ```json
 {
-  "id": "call_abc123",
-  "seedId": "agent-seed-id",
-  "to": "+15551234567",
-  "provider": "twilio",
-  "state": "initiating",
-  "createdAt": "2026-02-06T12:00:00.000Z"
+  "call": {
+    "callId": "call_abc123",
+    "seedId": "agent-seed-id",
+    "provider": "twilio",
+    "providerCallId": null,
+    "direction": "outbound",
+    "fromNumber": "+15550001111",
+    "toNumber": "+15551234567",
+    "state": "initiated",
+    "mode": "notify",
+    "startedAt": "2026-02-06T12:00:00.000Z",
+    "endedAt": null,
+    "durationMs": null,
+    "transcript": [],
+    "metadata": { "direction": "outbound" },
+    "createdAt": "2026-02-06T12:00:00.000Z",
+    "updatedAt": "2026-02-06T12:00:00.000Z"
+  }
 }
 ```
 
@@ -382,40 +429,29 @@ List voice calls for the authenticated user, with optional filters.
 
 **Query parameters:**
 
-| Param    | Type   | Default | Description                                            |
-| -------- | ------ | ------- | ------------------------------------------------------ |
-| `seedId` | string | (all)   | Filter by agent seed ID                                |
-| `state`  | string | (all)   | Filter by call state (`active`, `completed`, `failed`) |
-| `page`   | number | `1`     | Page number                                            |
-| `limit`  | number | `20`    | Items per page (max 100)                               |
+| Param      | Type   | Default | Description                                     |
+| ---------- | ------ | ------- | ----------------------------------------------- |
+| `seedId`   | string | (all)   | Filter by agent seed ID                         |
+| `provider` | string | (all)   | Filter by provider (`twilio`, `telnyx`, `plivo`) |
+| `direction` | string | (all)  | Filter by direction (`inbound`, `outbound`)     |
+| `status`   | string | (all)   | Filter by status (`active`, `completed`, `failed`, `all`) |
+| `limit`    | number | `50`    | Max items to return (max 100)                   |
 
 **Response (200):**
 
 ```json
 {
-  "calls": [
+  "items": [
     {
-      "id": "call_abc123",
+      "callId": "call_abc123",
       "seedId": "agent-seed-id",
-      "to": "+15551234567",
+      "toNumber": "+15551234567",
       "provider": "twilio",
       "state": "completed",
-      "duration": 124,
-      "transcript": [
-        {
-          "role": "agent",
-          "text": "Hello, how can I help?",
-          "timestamp": "2026-02-06T12:00:01.000Z"
-        },
-        { "role": "caller", "text": "I need assistance.", "timestamp": "2026-02-06T12:00:05.000Z" }
-      ],
-      "createdAt": "2026-02-06T12:00:00.000Z",
-      "endedAt": "2026-02-06T12:02:04.000Z"
+      "durationMs": 124000,
+      "createdAt": "2026-02-06T12:00:00.000Z"
     }
-  ],
-  "total": 42,
-  "page": 1,
-  "limit": 20
+  ]
 }
 ```
 
@@ -427,16 +463,17 @@ Get a single call record by ID. Returns the same call object shape as the list e
 
 ```json
 {
-  "id": "call_abc123",
-  "seedId": "agent-seed-id",
-  "to": "+15551234567",
-  "provider": "twilio",
-  "state": "completed",
-  "duration": 124,
-  "transcript": [ ... ],
-  "providerCallId": "CA1234567890abcdef",
-  "createdAt": "2026-02-06T12:00:00.000Z",
-  "endedAt": "2026-02-06T12:02:04.000Z"
+  "call": {
+    "callId": "call_abc123",
+    "seedId": "agent-seed-id",
+    "toNumber": "+15551234567",
+    "provider": "twilio",
+    "state": "completed",
+    "durationMs": 124000,
+    "providerCallId": "CA1234567890abcdef",
+    "createdAt": "2026-02-06T12:00:00.000Z",
+    "endedAt": "2026-02-06T12:02:04.000Z"
+  }
 }
 ```
 
@@ -456,9 +493,13 @@ Hang up an active call.
 
 ```json
 {
-  "id": "call_abc123",
-  "state": "completed",
-  "endedAt": "2026-02-06T12:02:04.000Z"
+  "callId": "call_abc123",
+  "hungUp": true,
+  "call": {
+    "callId": "call_abc123",
+    "state": "hangup-bot",
+    "endedAt": "2026-02-06T12:02:04.000Z"
+  }
 }
 ```
 
@@ -507,17 +548,12 @@ Get aggregated call statistics for the authenticated user.
 ```json
 {
   "totalCalls": 142,
-  "totalDuration": 18340,
-  "byProvider": {
-    "twilio": { "calls": 98, "duration": 12200 },
-    "telnyx": { "calls": 34, "duration": 4800 },
-    "plivo": { "calls": 10, "duration": 1340 }
-  },
-  "byState": {
-    "completed": 130,
-    "failed": 8,
-    "active": 4
-  }
+  "activeCalls": 4,
+  "totalDurationMs": 18340000,
+  "avgDurationMs": 129000,
+  "completedCalls": 130,
+  "failedCalls": 8,
+  "providerBreakdown": { "twilio": 98, "telnyx": 34, "plivo": 10 }
 }
 ```
 
@@ -549,7 +585,7 @@ Active channel extensions (AgentOS channel adapters) are configured via `AGENTOS
 Telegram webhook security:
 
 - If `WUNDERLAND_TELEGRAM_WEBHOOK_SECRET` is set, requests must include header `X-Telegram-Bot-Api-Secret-Token` that matches the secret.
-- If unset, the webhook is accepted without the header (intended for local/dev only).
+- If unset, the webhook is accepted without the header in non-production environments (local/dev). In production, requests are rejected unless `WUNDERLAND_TELEGRAM_WEBHOOK_ALLOW_UNAUTHENTICATED=true`.
 
 ### Auto-reply policy (Telegram)
 
