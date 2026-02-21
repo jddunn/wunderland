@@ -1,26 +1,21 @@
 /**
  * @fileoverview `wunderland doctor` — health check: keys, tools, channels, connectivity.
+ * Uses animated step progress with spinners for each diagnostic check.
  * @module wunderland/cli/commands/doctor
  */
 
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
-import type { GlobalFlags, DiagnosticSection, DiagnosticCheck } from '../types.js';
-import { success as sColor, error as eColor, muted, dim, accent, info as iColor } from '../ui/theme.js';
+import type { GlobalFlags } from '../types.js';
+import { info as iColor, bright } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { createStepProgress } from '../ui/progress.js';
 import { getConfigPath } from '../config/config-manager.js';
 import { getEnvPath, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
 import { URLS } from '../constants.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-function checkLabel(c: DiagnosticCheck): string {
-  const icon = c.status === 'pass' ? sColor('\u2713') : c.status === 'fail' ? eColor('\u2717') : muted('\u25CB');
-  const label = c.status === 'fail' ? eColor(c.label) : c.status === 'skip' ? muted(c.label) : c.label;
-  const detail = c.detail ? `  ${dim(c.detail)}` : '';
-  return `  ${icon} ${label.padEnd(24)}${detail}`;
-}
 
 async function checkReachable(url: string, timeoutMs = 5000): Promise<{ ok: boolean; latency: number }> {
   const start = Date.now();
@@ -45,112 +40,128 @@ export default async function cmdDoctor(
   // Load env files so secrets are available
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
-  const sections: DiagnosticSection[] = [];
+  fmt.section('Wunderland Doctor');
+  fmt.blank();
 
-  // 1. Configuration files
-  const configChecks: DiagnosticCheck[] = [];
+  // Build all step labels
   const configPath = getConfigPath(globals.config);
-  configChecks.push({
-    label: configPath,
-    status: existsSync(configPath) ? 'pass' : 'skip',
-    detail: existsSync(configPath) ? undefined : 'not created yet (run wunderland setup)',
-  });
   const envPath = getEnvPath(globals.config);
-  configChecks.push({
-    label: envPath,
-    status: existsSync(envPath) ? 'pass' : 'skip',
-    detail: existsSync(envPath) ? undefined : 'not created yet (run wunderland setup)',
-  });
   const localConfig = path.resolve(process.cwd(), 'agent.config.json');
-  configChecks.push({
-    label: 'agent.config.json',
-    status: existsSync(localConfig) ? 'pass' : 'skip',
-    detail: existsSync(localConfig) ? 'project config found' : 'not in current directory',
-  });
-  sections.push({ title: 'Configuration', checks: configChecks });
 
-  // 2. API Keys
   const secretStatus = checkEnvSecrets();
-  const keyChecks: DiagnosticCheck[] = [];
-
-  // Show important keys first
   const importantKeys = ['openai.apiKey', 'anthropic.apiKey', 'openrouter.apiKey', 'elevenlabs.apiKey'];
-  for (const keyId of importantKeys) {
-    const s = secretStatus.find((x) => x.id === keyId);
-    if (!s) continue;
-    keyChecks.push({
-      label: s.envVar,
-      status: s.isSet ? 'pass' : (s.optional ? 'skip' : 'fail'),
-      detail: s.isSet ? `set (${s.maskedValue})` : (s.optional ? 'not set (optional)' : 'not set'),
-    });
-  }
-  sections.push({ title: 'API Keys', checks: keyChecks });
+  const keyEntries = importantKeys.map((id) => secretStatus.find((x) => x.id === id)).filter(Boolean) as Array<(typeof secretStatus)[number]>;
 
-  // 3. Channels
   const channelSecrets = secretStatus.filter((s) =>
     s.providers.some((p) => ['telegram', 'discord', 'slack', 'whatsapp', 'signal', 'imessage'].includes(p))
   );
-  const channelChecks: DiagnosticCheck[] = [];
   const seenPlatforms = new Set<string>();
+  const platformChecks: { platform: string; allSet: boolean; anySet: boolean }[] = [];
   for (const s of channelSecrets) {
     const platform = s.providers[0];
     if (seenPlatforms.has(platform)) continue;
     seenPlatforms.add(platform);
     const platformSecrets = channelSecrets.filter((x) => x.providers.includes(platform));
-    const allSet = platformSecrets.every((x) => x.isSet);
-    const anySet = platformSecrets.some((x) => x.isSet);
-    channelChecks.push({
-      label: platform,
-      status: allSet ? 'pass' : anySet ? 'pass' : 'skip',
-      detail: allSet ? 'configured' : anySet ? 'partially configured' : 'not configured',
+    platformChecks.push({
+      platform,
+      allSet: platformSecrets.every((x) => x.isSet),
+      anySet: platformSecrets.some((x) => x.isSet),
     });
   }
-  sections.push({ title: 'Channels', checks: channelChecks });
 
-  // 4. Connectivity
-  const connectivityChecks: DiagnosticCheck[] = [];
   const endpoints = [
     { label: 'OpenAI API', url: 'https://api.openai.com/v1/models' },
     { label: URLS.website, url: URLS.website },
   ];
-  for (const ep of endpoints) {
-    const result = await checkReachable(ep.url);
-    connectivityChecks.push({
-      label: ep.label,
-      status: result.ok ? 'pass' : 'fail',
-      detail: result.ok ? `reachable (${result.latency}ms)` : `unreachable (${result.latency}ms)`,
-    });
+
+  // Build step labels
+  const stepLabels: string[] = [
+    // Configuration
+    `Config: ${path.basename(configPath)}`,
+    `Config: .env`,
+    `Config: agent.config.json`,
+    // API Keys
+    ...keyEntries.map((k) => `Key: ${k.envVar}`),
+    // Channels
+    ...platformChecks.map((p) => `Channel: ${p.platform}`),
+    // Connectivity
+    ...endpoints.map((ep) => `Connectivity: ${ep.label}`),
+  ];
+
+  const progress = createStepProgress(stepLabels);
+  let stepIdx = 0;
+
+  // 1. Configuration files
+  console.log(`  ${iColor('\u25C7')} ${bright('Configuration')}`);
+  progress.start(stepIdx);
+  if (existsSync(configPath)) {
+    progress.pass(stepIdx);
+  } else {
+    progress.skip(stepIdx, 'not created yet (run wunderland setup)');
   }
-  sections.push({ title: 'Connectivity', checks: connectivityChecks });
+  stepIdx++;
 
-  // Render
-  fmt.section('Wunderland Doctor');
-  fmt.blank();
+  progress.start(stepIdx);
+  if (existsSync(envPath)) {
+    progress.pass(stepIdx);
+  } else {
+    progress.skip(stepIdx, 'not created yet (run wunderland setup)');
+  }
+  stepIdx++;
 
-  let passed = 0;
-  let failed = 0;
-  let skipped = 0;
+  progress.start(stepIdx);
+  if (existsSync(localConfig)) {
+    progress.pass(stepIdx, 'project config found');
+  } else {
+    progress.skip(stepIdx, 'not in current directory');
+  }
+  stepIdx++;
+  console.log();
 
-  for (const s of sections) {
-    console.log(`  ${iColor('\u25C7')} ${s.title}`);
-    for (const c of s.checks) {
-      console.log(checkLabel(c));
-      if (c.status === 'pass') passed++;
-      else if (c.status === 'fail') failed++;
-      else skipped++;
+  // 2. API Keys
+  console.log(`  ${iColor('\u25C7')} ${bright('API Keys')}`);
+  for (const k of keyEntries) {
+    progress.start(stepIdx);
+    if (k.isSet) {
+      progress.pass(stepIdx, `set (${k.maskedValue})`);
+    } else if (k.optional) {
+      progress.skip(stepIdx, 'not set (optional)');
+    } else {
+      progress.fail(stepIdx, 'not set');
     }
-    console.log();
+    stepIdx++;
+  }
+  console.log();
+
+  // 3. Channels
+  console.log(`  ${iColor('\u25C7')} ${bright('Channels')}`);
+  for (const pc of platformChecks) {
+    progress.start(stepIdx);
+    if (pc.allSet) {
+      progress.pass(stepIdx, 'configured');
+    } else if (pc.anySet) {
+      progress.pass(stepIdx, 'partially configured');
+    } else {
+      progress.skip(stepIdx, 'not configured');
+    }
+    stepIdx++;
+  }
+  console.log();
+
+  // 4. Connectivity (async checks with live spinners)
+  console.log(`  ${iColor('\u25C7')} ${bright('Connectivity')}`);
+  for (const ep of endpoints) {
+    progress.start(stepIdx);
+    const result = await checkReachable(ep.url);
+    if (result.ok) {
+      progress.pass(stepIdx, `reachable (${result.latency}ms)`);
+    } else {
+      progress.fail(stepIdx, `unreachable (${result.latency}ms)`);
+    }
+    stepIdx++;
   }
 
   // Summary
-  const summary = [
-    sColor(`${passed} passed`),
-    skipped > 0 ? muted(`${skipped} optional skipped`) : '',
-    failed > 0 ? eColor(`${failed} errors`) : '',
-  ].filter(Boolean).join(dim(', '));
-
-  console.log(`  ${accent('\u25C6')} ${summary}`);
+  progress.complete();
   fmt.blank();
-
-  if (failed > 0) process.exitCode = 1;
 }
