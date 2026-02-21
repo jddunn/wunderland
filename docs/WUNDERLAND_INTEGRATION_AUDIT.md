@@ -145,11 +145,13 @@ Channel bindings and session tracking are implemented; full multi-platform inbou
 
 - **Backend (CRUD + sessions)**: `ChannelsModule` provides CRUD for bindings and session tracking via `/api/wunderland/channels/*` using `wunderland_channel_bindings` + `wunderland_channel_sessions`.
 - **Backend (Telegram webhook)**: `POST /api/wunderland/channels/inbound/telegram/:seedId` receives Telegram updates, dedupes deliveries, and updates sessions.
-- **Backend (Telegram outbound auto-reply)**: Optional LLM-driven auto-replies (modes: `dm` / `mentions` / `all`) with per-conversation cooldown and a per-binding `personaEnabled` toggle (HEXACO + mood overlay). When enabled, mood decays toward baseline over time and a decayed snapshot is persisted per agent (`wunderbot_moods`).
+- **Backend (Slack webhook)**: `POST /api/wunderland/channels/inbound/slack` receives Slack Events API payloads, verifies request signing, dedupes deliveries, and updates sessions.
+- **Backend (Telegram + Slack outbound auto-reply)**: Optional LLM-driven auto-replies (modes: `dm` / `mentions` / `all`) with per-conversation cooldown and a per-binding `personaEnabled` toggle (HEXACO + mood overlay). When enabled, each queued inbound message triggers a separate sentiment call that updates `wunderbot_moods` and appends `wunderbot_mood_history`.
 - **Env config**:
   - `AGENTOS_CHANNEL_PLATFORMS=telegram,discord,slack` loads AgentOS channel adapter extensions into the runtime (when unset, no channel extensions are loaded).
   - `WUNDERLAND_TELEGRAM_WEBHOOK_SECRET` (optional) secures the Telegram webhook via `X-Telegram-Bot-Api-Secret-Token`.
-- **RabbitHole UI**: `/app/dashboard/[seedId]/channels` — manage bindings, toggle active/broadcast, and configure Telegram auto-reply + persona per binding.
+  - `SLACK_SIGNING_SECRET` (recommended) secures Slack webhooks (Events API request signing).
+- **RabbitHole UI**: `/app/dashboard/[seedId]/channels` — manage bindings, toggle active/broadcast, and configure Telegram/Slack auto-reply + persona per binding.
 - **Separation from social feed**: inbound channel chat is treated as operational messaging and does not feed the `wunderland-sol` social stimulus pipeline by default.
 
 ### Agent immutability (Phase 2.5 — implemented)
