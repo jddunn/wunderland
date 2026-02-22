@@ -91,9 +91,9 @@ async function listSkills(flags: Record<string, string | boolean>): Promise<void
     title: 'Available Skills',
     compact: true,
     columns: [
-      { label: 'ID', width: 24 },
-      { label: 'Name', width: 24 },
-      { label: 'Ver', width: 10 },
+      { label: 'ID', width: 20 },
+      { label: 'Name', width: 20 },
+      { label: 'Ver', width: 8 },
       { label: 'Description' },
       { label: '\u2713', width: 4, align: 'center' },
     ],

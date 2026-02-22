@@ -113,10 +113,17 @@ export interface WizardState {
     outputSigning: boolean;
     riskThreshold: number;
   };
-  /** Voice config. */
+  /** Voice / TTS config. */
   voice?: {
     provider: string;
-    apiKey: string;
+    apiKey?: string;
+    model?: string;
+    voice?: string;
+  };
+  /** STT config. */
+  stt?: {
+    provider: string;
+    apiKey?: string;
     model?: string;
   };
   /** Agent name. */
@@ -125,6 +132,8 @@ export interface WizardState {
   extensions?: {
     tools?: string[];
     voice?: string[];
+    tts?: string[];
+    stt?: string[];
     productivity?: string[];
   };
   /** Selected skills. */
