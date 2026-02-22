@@ -30,6 +30,7 @@ interface DashboardState {
   llmInfo: string;
   channelCount: number;
   keys: { label: string; isSet: boolean }[];
+  isSetUp: boolean;
 }
 
 // ── Color Palette (hex values for chalk.hex) ───────────────────────────────
@@ -59,16 +60,17 @@ const accentBorder = chalk.hex(C.lavender);
 // ── Quick Actions ──────────────────────────────────────────────────────────
 
 const ACTIONS: QuickAction[] = [
-  { label: 'Start agent server',  command: 'start',      hint: 'wunderland start',      shortcut: '1' },
+  { label: 'Setup onboarding',    command: 'setup',      hint: 'wunderland setup',      shortcut: '1' },
   { label: 'Open chat',           command: 'chat',       hint: 'wunderland chat',       shortcut: '2' },
+  { label: 'Start server',        command: 'start',      hint: 'wunderland start',      shortcut: '3' },
   { label: 'Run health check',    command: 'doctor',     hint: 'wunderland doctor',     shortcut: 'd' },
-  { label: 'Browse skills',       command: 'skills',     hint: 'wunderland skills',     shortcut: '3' },
-  { label: 'Browse extensions',   command: 'extensions', hint: 'wunderland extensions', shortcut: '4' },
-  { label: 'View models',         command: 'models',     hint: 'wunderland models',     shortcut: '5' },
-  { label: 'Query RAG memory',    command: 'rag',        hint: 'wunderland rag',        shortcut: '6' },
+  { label: 'Browse skills',       command: 'skills',     hint: 'wunderland skills',     shortcut: '4' },
+  { label: 'Browse extensions',   command: 'extensions', hint: 'wunderland extensions', shortcut: '5' },
+  { label: 'View models',         command: 'models',     hint: 'wunderland models',     shortcut: '6' },
+  { label: 'Query RAG memory',    command: 'rag',        hint: 'wunderland rag',        shortcut: '7' },
   { label: 'Voice providers',     command: 'voice',      hint: 'wunderland voice',      shortcut: 'v' },
-  { label: 'Configure settings',  command: 'setup',      hint: 'wunderland setup',      shortcut: '7' },
   { label: 'View status',         command: 'status',     hint: 'wunderland status',     shortcut: 's' },
+  { label: 'Help',                command: 'help',       hint: 'wunderland --help',     shortcut: 'h' },
 ];
 
 // ── ASCII Banner ───────────────────────────────────────────────────────────
@@ -96,6 +98,7 @@ export class Dashboard {
     llmInfo: 'not configured',
     channelCount: 0,
     keys: [],
+    isSetUp: false,
   };
   private introPlayed = false;
 
@@ -124,14 +127,15 @@ export class Dashboard {
         'd':       () => { this.onSelect('doctor'); },
         's':       () => { this.onSelect('status'); },
         'v':       () => { this.onSelect('voice'); },
+        'h':       () => { this.onSelect('help'); },
         'r':       () => { this.refresh(); },
         '1':       () => { this.selectIndex(0); },
         '2':       () => { this.selectIndex(1); },
-        '3':       () => { this.selectIndex(3); },
+        '3':       () => { this.selectIndex(2); },
         '4':       () => { this.selectIndex(4); },
         '5':       () => { this.selectIndex(5); },
         '6':       () => { this.selectIndex(6); },
-        '7':       () => { this.selectIndex(8); },
+        '7':       () => { this.selectIndex(7); },
       },
     });
   }
@@ -145,6 +149,10 @@ export class Dashboard {
         this.state.llmInfo = `${config.llmProvider} / ${config.llmModel}`;
       } else if (config.llmProvider) {
         this.state.llmInfo = config.llmProvider;
+      }
+      this.state.isSetUp = !!(config.agentName && config.llmProvider);
+      if (Array.isArray(config.channels)) {
+        this.state.channelCount = config.channels.length;
       }
     } catch { /* config not available */ }
 
@@ -449,16 +457,33 @@ export class Dashboard {
       const selected = i === this.cursor;
 
       const cursor = selected ? chalk.hex(C.brightCyan)('▸') : ' ';
-      const label  = selected ? chalk.hex(C.white).bold(action.label) : chalk.hex(C.text)(action.label);
+
+      // Shortcut key badge
+      const shortcutBadge = action.shortcut
+        ? chalk.hex(C.dim)(`[${action.shortcut}]`) + ' '
+        : '    ';
+
+      // Setup action shows configuration status
+      let label: string;
+      if (action.command === 'setup') {
+        const tag = this.state.isSetUp
+          ? chalk.hex(C.green)(' (configured ✓)')
+          : chalk.hex(C.dim)(' (not configured)');
+        label = (selected ? chalk.hex(C.white).bold(action.label) : chalk.hex(C.text)(action.label)) + tag;
+      } else {
+        label = selected ? chalk.hex(C.white).bold(action.label) : chalk.hex(C.text)(action.label);
+      }
+
       const hint   = selected ? chalk.hex(C.cyan)(action.hint) : chalk.hex(C.dim)(action.hint);
 
-      const labelVis = visibleLength(label);
+      const fullLabel = shortcutBadge + label;
+      const labelVis = visibleLength(fullLabel);
       const hintVis  = visibleLength(hint);
       const dotsLen  = Math.max(2, innerWidth - 9 - labelVis - hintVis);
       const dotColor = selected ? C.dark : C.darker;
       const dots     = chalk.hex(dotColor)('·'.repeat(dotsLen));
 
-      contentLines.push(frameLine(`   ${cursor} ${label} ${dots} ${hint}  `));
+      contentLines.push(frameLine(`   ${cursor} ${fullLabel} ${dots} ${hint}  `));
     }
 
     contentLines.push(emptyFrame());
@@ -474,13 +499,14 @@ export class Dashboard {
       `${chalk.hex(C.magenta)('d')} doctor`,
       `${chalk.hex(C.brightCyan)('s')} status`,
       `${chalk.hex(C.fuchsia)('v')} voice`,
+      `${chalk.hex(C.lightCyan)('h')} help`,
       `${chalk.hex(C.cyan)('r')} refresh`,
       `${chalk.hex(C.purple)('q')} quit`,
     ];
     const hintShort = [
       `${chalk.hex(C.purple)('↑↓')} nav`,
       `${chalk.hex(C.lavender)('⏎')} sel`,
-      `${chalk.hex(C.magenta)('d')} doc`,
+      `${chalk.hex(C.lightCyan)('h')} help`,
       `${chalk.hex(C.purple)('q')} quit`,
     ];
     // Choose hint set that fits

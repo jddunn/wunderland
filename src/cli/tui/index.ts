@@ -82,7 +82,7 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
       cleanup();
       try {
         const { main } = await import('../index.js');
-        await main([command]);
+        await main([command === 'help' ? '--help' : command]);
       } catch (err) {
         console.error('Command failed:', err instanceof Error ? err.message : String(err));
       }
