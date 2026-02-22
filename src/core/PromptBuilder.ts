@@ -55,6 +55,21 @@ export interface PromptBuilderInput {
   /** Skill names (for summary line). */
   skillNames?: string[];
 
+  // -- Capability Discovery ---------------------------------------------------
+  /**
+   * Dynamic capability discovery result (replaces static skillContents when present).
+   * Contains tiered context: Tier 0 (categories) + Tier 1 (summaries) + Tier 2 (full details).
+   * When provided, buildCapabilitiesSection() is used instead of buildSkillsSection().
+   */
+  capabilityDiscoveryResult?: {
+    /** Tier 0: always included category overview. */
+    tier0: string;
+    /** Tier 1: retrieved summaries (token-budgeted). */
+    tier1: Array<{ summaryText: string }>;
+    /** Tier 2: full detailed references (token-budgeted). */
+    tier2: Array<{ fullText: string }>;
+  };
+
   // -- Goals & Souvenirs ------------------------------------------------------
   /** GOALS.md content. */
   goalsMd?: string;
@@ -163,8 +178,12 @@ export class PromptBuilder {
       sections.push({ id: 'personality', heading: 'Personality', content: personalityContent, priority: SECTION_PRIORITY.personality });
     }
 
-    // Skills section
-    const skillsContent = this.buildSkillsSection(input);
+    // Skills / Capabilities section
+    // When capabilityDiscoveryResult is present, use tiered discovery context
+    // instead of static skill dumps. Falls back to buildSkillsSection() otherwise.
+    const skillsContent = input.capabilityDiscoveryResult
+      ? this.buildCapabilitiesSection(input.capabilityDiscoveryResult)
+      : this.buildSkillsSection(input);
     if (skillsContent) {
       sections.push({ id: 'skills', heading: 'Skills & Capabilities', content: skillsContent, priority: SECTION_PRIORITY.skills });
     }
@@ -347,6 +366,42 @@ export class PromptBuilder {
     }
 
     return parts.join('\n\n');
+  }
+
+  /**
+   * Build the capabilities section from a CapabilityDiscoveryResult.
+   * Replaces static skill dumps with tiered, token-budgeted context.
+   */
+  private buildCapabilitiesSection(result: {
+    tier0: string;
+    tier1: Array<{ summaryText: string }>;
+    tier2: Array<{ fullText: string }>;
+  }): string {
+    const parts: string[] = [];
+
+    // Tier 0: Always present — category summaries
+    parts.push(result.tier0);
+
+    // Tier 1: Retrieved summaries
+    if (result.tier1.length > 0) {
+      parts.push('');
+      parts.push('Relevant capabilities:');
+      for (const item of result.tier1) {
+        parts.push(item.summaryText);
+      }
+    }
+
+    // Tier 2: Full details
+    if (result.tier2.length > 0) {
+      parts.push('');
+      parts.push('--- Detailed Capability Reference ---');
+      for (const item of result.tier2) {
+        parts.push('');
+        parts.push(item.fullText);
+      }
+    }
+
+    return parts.join('\n');
   }
 
   private buildSecuritySection(input: PromptBuilderInput): string {
