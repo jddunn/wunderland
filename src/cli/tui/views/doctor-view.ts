@@ -50,7 +50,10 @@ export class DoctorView {
     const localConfig = path.resolve(process.cwd(), 'agent.config.json');
 
     const secretStatus = checkEnvSecrets();
-    const importantKeys = ['openai.apiKey', 'anthropic.apiKey', 'openrouter.apiKey', 'elevenlabs.apiKey'];
+    const importantKeys = [
+      'openai.apiKey', 'anthropic.apiKey', 'openrouter.apiKey',
+      'elevenlabs.apiKey', 'deepgram.apiKey', 'assemblyai.apiKey',
+    ];
     const keyEntries = importantKeys.map((id) => secretStatus.find((x) => x.id === id)).filter(Boolean) as any[];
 
     // Build check list

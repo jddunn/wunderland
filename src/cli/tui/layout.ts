@@ -4,6 +4,7 @@
  */
 
 import { dim, accent, bright } from '../ui/theme.js';
+import { stripAnsi, visibleLength, ansiPadEnd } from '../ui/ansi-utils.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -66,9 +67,9 @@ export function drawBox(
   width: number,
   height: number,
   title?: string,
-  style: 'normal' | 'focused' = 'normal',
+  style: 'normal' | 'focused' | 'brand' = 'normal',
 ): string[] {
-  const borderColor = style === 'focused' ? accent : dim;
+  const borderColor = style === 'brand' ? accent : style === 'focused' ? accent : dim;
   const lines: string[] = [];
 
   // Top border
@@ -90,19 +91,21 @@ export function drawBox(
 
 /**
  * Truncate a string to fit within a width, adding ellipsis if needed.
+ * ANSI-safe: uses visible length, not raw string length.
  */
 export function truncate(text: string, maxWidth: number): string {
-  if (text.length <= maxWidth) return text;
+  const vLen = visibleLength(text);
+  if (vLen <= maxWidth) return text;
   if (maxWidth <= 1) return '\u2026';
-  return text.slice(0, maxWidth - 1) + '\u2026';
+  return stripAnsi(text).slice(0, maxWidth - 1) + '\u2026';
 }
 
 /**
- * Pad a string to a fixed width.
+ * Pad a string to a fixed visible width.
+ * ANSI-safe: uses visible length for padding calculation.
  */
 export function padTo(text: string, width: number): string {
-  if (text.length >= width) return text.slice(0, width);
-  return text + ' '.repeat(width - text.length);
+  return ansiPadEnd(text, width);
 }
 
 /**
@@ -111,4 +114,27 @@ export function padTo(text: string, width: number): string {
 export function horizontalLine(width: number, style: 'normal' | 'focused' = 'normal'): string {
   const color = style === 'focused' ? accent : dim;
   return color('─'.repeat(width));
+}
+
+/**
+ * Compose two sets of lines side-by-side with a gap between them.
+ * ANSI-safe: uses visibleLength for alignment.
+ */
+export function composeSideBySide(
+  leftLines: string[],
+  rightLines: string[],
+  leftWidth: number,
+  gap = 2,
+): string[] {
+  const maxRows = Math.max(leftLines.length, rightLines.length);
+  const result: string[] = [];
+  const gapStr = ' '.repeat(gap);
+
+  for (let i = 0; i < maxRows; i++) {
+    const left = i < leftLines.length ? leftLines[i] : '';
+    const right = i < rightLines.length ? rightLines[i] : '';
+    result.push(ansiPadEnd(left, leftWidth) + gapStr + right);
+  }
+
+  return result;
 }
