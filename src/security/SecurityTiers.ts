@@ -7,7 +7,7 @@
  *
  * Usage:
  * ```typescript
- * import { createPipelineFromTier, SECURITY_TIERS } from 'wunderland';
+ * import { createPipelineFromTier, SECURITY_TIERS } from 'wunderland/advanced/security';
  *
  * // Quick pipeline creation
  * const pipeline = createPipelineFromTier('balanced', myAuditorInvoker);

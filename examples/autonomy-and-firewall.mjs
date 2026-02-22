@@ -12,7 +12,7 @@ import {
   ToolRiskTier,
   ContextFirewall,
   CitizenModeGuardrail,
-} from 'wunderland';
+} from 'wunderland/advanced';
 
 function fmtTier(tier) {
   switch (tier) {
@@ -63,4 +63,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-

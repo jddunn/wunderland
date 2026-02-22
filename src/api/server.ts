@@ -30,21 +30,21 @@ import {
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../core/index.js';
 import { loadDotEnvIntoProcessUpward } from '../cli/config/env-manager.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../cli/config/workspace.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 import {
   runToolCallingTurn,
   safeJsonStringify,
   type LLMProviderConfig,
   type ToolInstance,
-} from '../cli/openai/tool-calling.js';
+} from '../runtime/tool-calling.js';
 import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
-import { startWunderlandOtel, shutdownWunderlandOtel } from '../cli/observability/otel.js';
+import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
   normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
-} from '../cli/security/runtime-policy.js';
+} from '../runtime/policy.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 
 import type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from './types.js';

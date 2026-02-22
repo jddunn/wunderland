@@ -72,7 +72,7 @@
 - **Tool registry** -- Loads curated AgentOS tools via `@framers/agentos-extensions-registry`
 - **Memory hooks** -- Optional `memory_read` tool with pluggable storage (SQL, vector, graph)
 - **Immutability** -- Seal agent configuration after setup; rotate operational secrets without changing the sealed spec
-- **22 export paths** -- Deep imports via `wunderland/core`, `wunderland/security`, `wunderland/social`, etc.
+- **Streamlined library API** -- `createWunderland()` + sessions from the root import; advanced modules under `wunderland/advanced/*`
 - **RAG memory** -- Multimodal retrieval-augmented generation with vector, graph, and hybrid search
 - **Multi-agent collectives** -- Agency registry, communication bus, and shared memory
 - **Knowledge graph** -- Entity extraction, semantic search, and graph traversal
@@ -117,6 +117,22 @@ wunderland/
 ---
 
 ## Quick Start
+
+### Library (in-process chat)
+
+```ts
+import { createWunderland } from 'wunderland';
+
+const app = await createWunderland({ llm: { providerId: 'openai' } });
+const session = app.session();
+const out = await session.sendText('Hello!');
+
+console.log(out.text);
+```
+
+See `docs/LIBRARY_API.md` for tools, approvals, and diagnostics.
+
+### CLI
 
 ```bash
 # Install globally
