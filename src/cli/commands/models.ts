@@ -30,8 +30,8 @@ async function listModels(flags: Record<string, string | boolean>, globals: Glob
     columns: [
       { label: '', width: 4 },
       { label: 'Provider', width: 20 },
-      { label: 'Label', width: 20 },
-      { label: 'Key Status', width: 16 },
+      { label: 'Label', width: 24 },
+      { label: 'Key Status', width: 14 },
       { label: 'Models' },
     ],
     rows: LLM_PROVIDERS.map((provider) => {

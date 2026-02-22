@@ -7,42 +7,7 @@
 import gradient from 'gradient-string';
 import { VERSION, URLS } from '../constants.js';
 import { dim, muted } from './theme.js';
-
-// ── ANSI helpers ─────────────────────────────────────────────────────────────
-
-const ESC = String.fromCharCode(27);
-const ANSI_RE = new RegExp(`${ESC}\\[[0-9;]*m`, 'g');
-const ANSI_PREFIX_RE = new RegExp(`^${ESC}\\[[0-9;]*m`);
-
-function stripAnsi(str: string): string {
-  return str.replace(ANSI_RE, '');
-}
-
-/**
- * Slice an ANSI-colored string by visible character positions.
- * All ANSI escape codes preceding visible characters up to `end` are preserved.
- */
-function sliceAnsi(str: string, _start: number, end: number): string {
-  let visible = 0;
-  let result = '';
-  let i = 0;
-
-  while (i < str.length && visible < end) {
-    const rest = str.slice(i);
-    const m = rest.match(ANSI_PREFIX_RE);
-    if (m) {
-      result += m[0];
-      i += m[0].length;
-    } else {
-      result += str[i];
-      visible++;
-      i++;
-    }
-  }
-
-  result += '\x1b[0m';
-  return result;
-}
+import { stripAnsi, sliceAnsi } from './ansi-utils.js';
 
 // ── Static ASCII banner (fallback when cfonts unavailable) ───────────────────
 

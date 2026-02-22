@@ -14,7 +14,7 @@ import * as fmt from './ui/format.js';
 
 // ── Help text ───────────────────────────────────────────────────────────────
 
-function printHelp(): void {
+function printHelp(opts?: { isExporting?: boolean }): void {
   const c = accent;
   const d = dim;
 
@@ -106,8 +106,7 @@ function printHelp(): void {
     ${d('--force')}                Overwrite existing files
     ${d('--skills-dir <path>')}    Load skills from directory
     ${d('--no-skills')}            Disable skill loading
-    ${d('--export-png <path>')}    Export command output as styled PNG screenshot
-    ${d('--dangerously-skip-permissions')}  Auto-approve tool calls
+${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}    ${d('--dangerously-skip-permissions')}  Auto-approve tool calls
     ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
 
   ${c('Links:')}
@@ -177,6 +176,13 @@ export async function main(argv: string[]): Promise<void> {
 
   // No command → TUI dashboard (if TTY) or help text
   if (!command) {
+    // --export-png with no command = export help
+    if (typeof flags['export-png'] === 'string') {
+      const { withExport } = await import('./export/export-middleware.js');
+      const helpHandler = async () => { printCompactHeader(); printHelp({ isExporting: true }); };
+      await withExport(helpHandler, [], flags, globals, '--help');
+      return;
+    }
     const shouldTui = globals.tui || (!globals.noTui && !globals.quiet && process.stdout.isTTY);
     if (shouldTui) {
       const { launchTui } = await import('./tui/index.js');
@@ -190,6 +196,12 @@ export async function main(argv: string[]): Promise<void> {
 
   // Help flag on any command
   if (globals.help && command !== 'help') {
+    if (typeof flags['export-png'] === 'string') {
+      const { withExport } = await import('./export/export-middleware.js');
+      const helpHandler = async () => { printCompactHeader(); printHelp({ isExporting: true }); };
+      await withExport(helpHandler, [], flags, globals, '--help');
+      return;
+    }
     if (!globals.quiet) printCompactHeader();
     printHelp();
     return;
@@ -197,11 +209,23 @@ export async function main(argv: string[]): Promise<void> {
 
   // Help / version as commands
   if (command === 'help' || command === '--help') {
+    if (typeof flags['export-png'] === 'string') {
+      const { withExport } = await import('./export/export-middleware.js');
+      const helpHandler = async () => { if (!globals.quiet) await printBanner(); printHelp({ isExporting: true }); };
+      await withExport(helpHandler, subArgs, flags, globals, '--help');
+      return;
+    }
     if (!globals.quiet) await printBanner();
     printHelp();
     return;
   }
   if (command === 'version' || command === '--version') {
+    if (typeof flags['export-png'] === 'string') {
+      const { withExport } = await import('./export/export-middleware.js');
+      const versionHandler = async () => { console.log(`wunderland v${VERSION}`); };
+      await withExport(versionHandler, subArgs, flags, globals, 'version');
+      return;
+    }
     console.log(`wunderland v${VERSION}`);
     return;
   }
@@ -230,7 +254,7 @@ export async function main(argv: string[]): Promise<void> {
     // PNG export interception
     if (typeof flags['export-png'] === 'string') {
       const { withExport } = await import('./export/export-middleware.js');
-      await withExport(handler, subArgs, flags, globals);
+      await withExport(handler, subArgs, flags, globals, command);
       return;
     }
 
