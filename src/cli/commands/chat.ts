@@ -9,8 +9,10 @@ import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import { accent, success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
+import chalk from 'chalk';
+import { success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { visibleLength } from '../ui/ansi-utils.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
@@ -29,6 +31,155 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../../core/index.js';
+
+// ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
+
+const C = {
+  purple:     '#a855f7',
+  lavender:   '#c084fc',
+  magenta:    '#e879f9',
+  cyan:       '#06b6d4',
+  brightCyan: '#22d3ee',
+  green:      '#22c55e',
+  white:      '#f9fafb',
+  text:       '#c9d1d9',
+  muted:      '#6b7280',
+  dim:        '#4b5563',
+  dark:       '#374151',
+  darker:     '#1f2937',
+} as const;
+
+const frameBorder  = chalk.hex(C.cyan);
+const accentBorder = chalk.hex(C.lavender);
+
+/** Get terminal width, floored at 60. */
+function getChatWidth(): number {
+  return Math.max((process.stdout.columns || 80) - 4, 60);
+}
+
+/** Frame a content line inside ║ ... ║ borders. */
+function frameLine(content: string, innerWidth: number): string {
+  const vLen = visibleLength(content);
+  const pad = Math.max(0, innerWidth - vLen);
+  return `  ${frameBorder('║')}${content}${' '.repeat(pad)}${frameBorder('║')}`;
+}
+
+/** Print the framed chat startup header. */
+function printChatHeader(info: {
+  provider: string;
+  model: string;
+  tools: number;
+  skills: boolean;
+  fallback: boolean;
+  lazyTools: boolean;
+  autoApprove: boolean;
+  turnApproval: string;
+}): void {
+  const contentWidth = getChatWidth();
+  const innerWidth = contentWidth - 2;
+
+  const topBorder = `  ${frameBorder('╔')}${frameBorder('═'.repeat(innerWidth))}${frameBorder('╗')}`;
+  const botBorder = `  ${frameBorder('╚')}${frameBorder('═'.repeat(innerWidth))}${frameBorder('╝')}`;
+  const empty = frameLine(' '.repeat(innerWidth), innerWidth);
+
+  // Title
+  const titleText = chalk.hex(C.magenta).bold('INTERACTIVE CHAT');
+  const titleVis = 16; // "INTERACTIVE CHAT"
+  const titlePadL = Math.max(0, Math.floor((innerWidth - titleVis) / 2));
+
+  // Divider
+  const divDeco = ` ${chalk.hex(C.magenta)('<>')} `;
+  const divDecoVis = 4;
+  const divHalfL = Math.max(0, Math.floor((innerWidth - divDecoVis) / 2));
+  const divHalfR = Math.max(0, innerWidth - divDecoVis - divHalfL);
+  const divContent = accentBorder('─'.repeat(divHalfL)) + divDeco + accentBorder('─'.repeat(divHalfR));
+
+  // Key-value pairs
+  const kvLine = (label: string, value: string): string => {
+    const kvContent = `   ${chalk.hex(C.brightCyan)('●')} ${chalk.hex(C.muted)(label.padEnd(18))} ${value}`;
+    return frameLine(kvContent, innerWidth);
+  };
+
+  const lines: string[] = [];
+  lines.push(topBorder);
+  lines.push(empty);
+  lines.push(frameLine(`${' '.repeat(titlePadL)}${titleText}`, innerWidth));
+  lines.push(empty);
+  lines.push(frameLine(divContent, innerWidth));
+  lines.push(empty);
+  lines.push(kvLine('Provider', chalk.hex(C.cyan)(info.provider)));
+  lines.push(kvLine('Model', chalk.hex(C.cyan)(info.model)));
+  lines.push(kvLine('Tools', `${info.tools} loaded`));
+  lines.push(kvLine('Skills', info.skills ? sColor('on') : chalk.hex(C.muted)('off')));
+  if (info.fallback) lines.push(kvLine('Fallback', sColor('OpenRouter (auto)')));
+  lines.push(kvLine('Lazy Tools', info.lazyTools ? sColor('on') : chalk.hex(C.muted)('off')));
+  lines.push(kvLine('Authorization', info.autoApprove ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)')));
+  if (info.turnApproval !== 'off') lines.push(kvLine('Turn Checkpoints', sColor(info.turnApproval)));
+  lines.push(empty);
+
+  // Help hint
+  const helpHint = `   Type ${chalk.hex(C.cyan)('/help')} for commands, ${chalk.hex(C.cyan)('/exit')} to quit`;
+  lines.push(frameLine(helpHint, innerWidth));
+  lines.push(empty);
+  lines.push(botBorder);
+  lines.push('');
+
+  console.log(lines.join('\n'));
+}
+
+/** Print a framed assistant response. */
+function printAssistantReply(text: string): void {
+  const contentWidth = getChatWidth();
+  const innerWidth = contentWidth - 2;
+  const maxTextWidth = innerWidth - 6; // 3 indent + 3 margin
+
+  // Word-wrap the reply text
+  const wrappedLines: string[] = [];
+  for (const paragraph of text.split('\n')) {
+    if (paragraph.trim() === '') {
+      wrappedLines.push('');
+      continue;
+    }
+    const words = paragraph.split(/\s+/);
+    let current = '';
+    for (const word of words) {
+      if (current.length + word.length + 1 > maxTextWidth && current.length > 0) {
+        wrappedLines.push(current);
+        current = word;
+      } else {
+        current = current ? `${current} ${word}` : word;
+      }
+    }
+    if (current) wrappedLines.push(current);
+  }
+
+  const topLine = `  ${accentBorder('┌')}${accentBorder('─'.repeat(innerWidth - 2))}${accentBorder('┐')}`;
+  const botLine = `  ${accentBorder('└')}${accentBorder('─'.repeat(innerWidth - 2))}${accentBorder('┘')}`;
+  const replyFrame = (content: string): string => {
+    const vLen = visibleLength(content);
+    const pad = Math.max(0, innerWidth - 2 - vLen);
+    return `  ${accentBorder('│')}${content}${' '.repeat(pad)}${accentBorder('│')}`;
+  };
+  const emptyReply = replyFrame(' '.repeat(innerWidth - 2));
+
+  const lines: string[] = [];
+  lines.push('');
+  lines.push(topLine);
+  lines.push(emptyReply);
+  for (const wl of wrappedLines) {
+    lines.push(replyFrame(`   ${chalk.hex(C.text)(wl)}`));
+  }
+  lines.push(emptyReply);
+  lines.push(botLine);
+  lines.push('');
+
+  console.log(lines.join('\n'));
+}
+
+/** Styled chat prompt string. */
+function chatPrompt(): string {
+  return `  ${frameBorder('║')} ${chalk.hex(C.brightCyan)('▸')} `;
+}
 
 // ── Command ─────────────────────────────────────────────────────────────────
 
@@ -455,18 +606,16 @@ export default async function cmdChat(
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
 
-  fmt.section('Interactive Chat');
-  fmt.kvPair('Provider', accent(providerId));
-  fmt.kvPair('Model', accent(model));
-  fmt.kvPair('Tools', `${toolMap.size} loaded`);
-  fmt.kvPair('Skills', enableSkills ? sColor('on') : muted('off'));
-  if (providerId === 'openai' && openrouterFallback) fmt.kvPair('Fallback', sColor('OpenRouter (auto)'));
-  fmt.kvPair('Lazy Tools', lazyTools ? sColor('on') : muted('off'));
-  fmt.kvPair('Authorization', autoApproveToolCalls ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)'));
-  if (turnApprovalMode !== 'off') fmt.kvPair('Turn Checkpoints', sColor(turnApprovalMode));
-  fmt.blank();
-  fmt.note(`Type ${accent('/help')} for commands, ${accent('/exit')} to quit`);
-  fmt.blank();
+  printChatHeader({
+    provider: providerId,
+    model,
+    tools: toolMap.size,
+    skills: enableSkills,
+    fallback: providerId === 'openai' && !!openrouterFallback,
+    lazyTools,
+    autoApprove: autoApproveToolCalls,
+    turnApproval: turnApprovalMode,
+  });
 
   const askPermission = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
     const preview = safeJsonStringify(args, 800);
@@ -490,26 +639,35 @@ export default async function cmdChat(
       };
 
   for (;;) {
-    const line = await rl.question(`  ${accent('\u276F')} `);
+    const line = await rl.question(chatPrompt());
     const input = (line || '').trim();
     if (!input) continue;
 
     if (input === '/exit' || input === 'exit' || input === 'quit') break;
 
     if (input === '/help') {
-      fmt.blank();
-      fmt.note(`${accent('/help')}    Show this help`);
-      fmt.note(`${accent('/tools')}   List available tools`);
-      fmt.note(`${accent('/exit')}    Quit`);
-      fmt.blank();
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const helpLines: string[] = [];
+      helpLines.push('');
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/help')}    ${chalk.hex(C.text)('Show this help')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/tools')}   ${chalk.hex(C.text)('List available tools')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/exit')}    ${chalk.hex(C.text)('Quit')}`, iw));
+      helpLines.push('');
+      console.log(helpLines.join('\n'));
       continue;
     }
 
     if (input === '/tools') {
       const names = [...toolMap.keys()].sort();
-      fmt.blank();
-      for (const n of names) fmt.toolName(n);
-      fmt.blank();
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const toolLines: string[] = [''];
+      for (const n of names) {
+        toolLines.push(frameLine(`   ${chalk.hex(C.magenta)(n)}`, iw));
+      }
+      toolLines.push('');
+      console.log(toolLines.join('\n'));
       continue;
     }
 
@@ -529,25 +687,29 @@ export default async function cmdChat(
       baseUrl: llmBaseUrl,
       fallback: providerId === 'openai' ? openrouterFallback : undefined,
       onFallback: (_err, provider) => {
-        console.log(`  ${wColor('\u26A0')} Primary provider failed, falling back to ${provider}`);
+        console.log(`  ${frameBorder('║')} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`);
       },
       onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
         console.log(
-          `  ${tColor('\u25B6')} ${tColor(tool.name)} ${dim(truncateString(JSON.stringify(args), 120))}`
+          `  ${frameBorder('║')} ${chalk.hex(C.magenta)('>')} ${chalk.hex(C.magenta)(tool.name)} ${chalk.hex(C.dim)(truncateString(JSON.stringify(args), 120))}`
         );
       },
     });
 
     if (reply) {
-      console.log();
-      console.log(`  ${reply}`);
-      console.log();
+      printAssistantReply(reply);
     }
   }
 
   rl.close();
   await shutdownWunderlandOtel();
-  fmt.blank();
-  fmt.ok('Session ended.');
-  fmt.blank();
+
+  // Session ended banner
+  const cw = getChatWidth();
+  const iw = cw - 2;
+  const endDivL = Math.max(0, Math.floor((iw - 18) / 2));
+  const endDivR = Math.max(0, iw - 18 - endDivL);
+  console.log('');
+  console.log(`  ${frameBorder('─'.repeat(endDivL))} ${chalk.hex(C.muted)('Session ended.')} ${frameBorder('─'.repeat(endDivR))}`);
+  console.log('');
 }
