@@ -16,6 +16,7 @@ const VIEW_MAP: Record<string, () => Promise<any>> = {
   rag:        () => import('./views/rag-view.js'),
   extensions: () => import('./views/extensions-view.js'),
   status:     () => import('./views/status-view.js'),
+  voice:      () => import('./views/voice-view.js'),
 };
 
 /**
@@ -63,7 +64,8 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
         const viewModule = await viewLoader();
         const ViewClass = viewModule.DoctorView || viewModule.ModelsView
           || viewModule.SkillsView || viewModule.RagView
-          || viewModule.ExtensionsView || viewModule.StatusView;
+          || viewModule.ExtensionsView || viewModule.StatusView
+          || viewModule.VoiceView;
 
         if (ViewClass) {
           activeView = new ViewClass({
@@ -84,6 +86,8 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
       } catch (err) {
         console.error('Command failed:', err instanceof Error ? err.message : String(err));
       }
+      // TUI has been torn down; cleanly exit after the command finishes
+      process.exit(process.exitCode ?? 0);
     },
     onQuit: () => {
       cleanup();
@@ -110,7 +114,8 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
     }
   });
 
-  // Initial render
+  // Pre-load config/secrets, then render with animated intro
+  await dashboard.init();
   await dashboard.render();
 
   // Wait for exit

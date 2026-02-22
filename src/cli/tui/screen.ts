@@ -102,10 +102,11 @@ export class Screen {
     process.stdin.resume();
   }
 
-  /** Render content string to the full screen (clears first). */
+  /** Render content string to the full screen. Overwrites in-place to reduce flicker. */
   render(content: string): void {
-    this.clear();
+    process.stdout.write('\x1b[H');   // cursor home (no clear — overwrite in place)
     process.stdout.write(content);
+    process.stdout.write('\x1b[J');   // clear from cursor to end of screen
   }
 
   /** Clean up: restore cursor, exit alt screen, release stdin. */

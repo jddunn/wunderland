@@ -96,6 +96,33 @@ export class StatusView {
       }
     }
 
+    // Voice section
+    lines.push('');
+    lines.push(`  ${iColor('◇')} ${bright('Voice')}`);
+    const voiceTts = config.voiceProvider;
+    const voiceModel = config.voiceModel;
+    if (voiceTts) {
+      lines.push(`    ${muted('TTS Provider'.padEnd(20))} ${accent(voiceTts)}${voiceModel ? dim(` / ${voiceModel}`) : ''}`);
+    } else {
+      lines.push(`    ${muted('TTS Provider'.padEnd(20))} ${muted('not configured')}`);
+    }
+
+    const ttsKeys = [
+      { envVar: 'OPENAI_API_KEY',     label: 'OpenAI TTS' },
+      { envVar: 'ELEVENLABS_API_KEY', label: 'ElevenLabs' },
+      { envVar: 'DEEPGRAM_API_KEY',   label: 'Deepgram STT' },
+      { envVar: 'ASSEMBLYAI_API_KEY', label: 'AssemblyAI STT' },
+    ];
+    for (const k of ttsKeys) {
+      const isSet = !!(env[k.envVar] || process.env[k.envVar]);
+      if (isSet) {
+        lines.push(`    ${sColor('✓')} ${k.label.padEnd(18)} ${dim('configured')}`);
+      }
+    }
+
+    // Show local providers as always available
+    lines.push(`    ${sColor('●')} ${'Piper / Whisper.cpp'.padEnd(18)} ${dim('local (no key)')}`);
+
     lines.push('');
     lines.push(`  ${dim('r')} refresh  ${dim('esc')} back  ${dim('q')} quit`);
 
