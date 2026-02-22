@@ -10,7 +10,7 @@ export interface PngRenderOptions {
 }
 
 const DEFAULTS: Required<PngRenderOptions> = {
-  width: 800,
+  width: 1200,
   deviceScaleFactor: 2,
 };
 
