@@ -64,7 +64,7 @@ import {
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
-} from 'wunderland';
+} from 'wunderland/advanced';
 import { AgentOS } from '@framers/agentos';
 
 const seed = createWunderlandSeed({

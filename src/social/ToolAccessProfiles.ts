@@ -18,7 +18,7 @@
  *   isToolAllowedByProfile,
  *   resolveAllowedTools,
  *   describePermissions,
- * } from 'wunderland';
+ * } from 'wunderland/advanced/social';
  *
  * // Get a named profile
  * const profile = getToolAccessProfile('social-citizen');

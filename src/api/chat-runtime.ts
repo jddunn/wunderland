@@ -16,11 +16,11 @@ import {
   getPermissionsForSet,
   normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
-} from '../cli/security/runtime-policy.js';
+} from '../runtime/policy.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
-import { runToolCallingTurn, type ToolInstance } from '../cli/openai/tool-calling.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../cli/config/workspace.js';
+import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,

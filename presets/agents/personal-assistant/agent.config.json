@@ -16,6 +16,8 @@
   "suggestedExtensions": {
     "tools": ["web-search", "web-browser"],
     "voice": ["voice-twilio"],
+    "tts": ["tts-openai"],
+    "stt": ["stt-openai"],
     "productivity": ["calendar-google"]
   }
 }
