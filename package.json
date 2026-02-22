@@ -10,89 +10,21 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./core": {
-      "import": "./dist/core/index.js",
-      "types": "./dist/core/index.d.ts"
-    },
-    "./security": {
-      "import": "./dist/security/index.js",
-      "types": "./dist/security/index.d.ts"
-    },
-    "./inference": {
-      "import": "./dist/inference/index.js",
-      "types": "./dist/inference/index.d.ts"
-    },
-    "./authorization": {
-      "import": "./dist/authorization/index.js",
-      "types": "./dist/authorization/index.d.ts"
-    },
-    "./browser": {
-      "import": "./dist/browser/index.js",
-      "types": "./dist/browser/index.d.ts"
-    },
-    "./pairing": {
-      "import": "./dist/pairing/index.js",
-      "types": "./dist/pairing/index.d.ts"
-    },
-    "./skills": {
-      "import": "./dist/skills/index.js",
-      "types": "./dist/skills/index.d.ts"
-    },
-    "./social": {
-      "import": "./dist/social/index.js",
-      "types": "./dist/social/index.d.ts"
-    },
-    "./guardrails": {
-      "import": "./dist/guardrails/CitizenModeGuardrail.js",
-      "types": "./dist/guardrails/CitizenModeGuardrail.d.ts"
+    "./api": {
+      "import": "./dist/api/index.js",
+      "types": "./dist/api/index.d.ts"
     },
     "./tools": {
       "import": "./dist/tools/index.js",
       "types": "./dist/tools/index.d.ts"
     },
-    "./scheduling": {
-      "import": "./dist/scheduling/index.js",
-      "types": "./dist/scheduling/index.d.ts"
+    "./advanced": {
+      "import": "./dist/advanced/index.js",
+      "types": "./dist/advanced/index.d.ts"
     },
-    "./rag": {
-      "import": "./dist/rag/index.js",
-      "types": "./dist/rag/index.d.ts"
-    },
-    "./agency": {
-      "import": "./dist/agency/index.js",
-      "types": "./dist/agency/index.d.ts"
-    },
-    "./workflows": {
-      "import": "./dist/workflows/index.js",
-      "types": "./dist/workflows/index.d.ts"
-    },
-    "./structured": {
-      "import": "./dist/structured/index.js",
-      "types": "./dist/structured/index.d.ts"
-    },
-    "./knowledge": {
-      "import": "./dist/knowledge/index.js",
-      "types": "./dist/knowledge/index.d.ts"
-    },
-    "./planning": {
-      "import": "./dist/planning/index.js",
-      "types": "./dist/planning/index.d.ts"
-    },
-    "./evaluation": {
-      "import": "./dist/evaluation/index.js",
-      "types": "./dist/evaluation/index.d.ts"
-    },
-    "./provenance": {
-      "import": "./dist/provenance/index.js",
-      "types": "./dist/provenance/index.d.ts"
-    },
-    "./marketplace": {
-      "import": "./dist/marketplace/index.js",
-      "types": "./dist/marketplace/index.d.ts"
-    },
-    "./api": {
-      "import": "./dist/api/index.js",
-      "types": "./dist/api/index.d.ts"
+    "./advanced/*": {
+      "import": "./dist/advanced/*.js",
+      "types": "./dist/advanced/*.d.ts"
     },
     "./presets": {
       "import": "./dist/core/PresetLoader.js",
