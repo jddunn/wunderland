@@ -14,6 +14,8 @@ export interface AnsiToHtmlOptions {
   padding?: number;
   width?: number;
   watermark?: boolean;
+  /** Command string to show in a title bar, e.g. "wunderland doctor" */
+  commandHeader?: string;
 }
 
 const DEFAULTS: Required<AnsiToHtmlOptions> = {
@@ -21,8 +23,9 @@ const DEFAULTS: Required<AnsiToHtmlOptions> = {
   fontSize: 14,
   background: '#0a0a0f',
   padding: 32,
-  width: 800,
+  width: 1200,
   watermark: true,
+  commandHeader: '',
 };
 
 /**
@@ -62,6 +65,13 @@ export function ansiToHtml(ansi: string, opts?: AnsiToHtmlOptions): string {
     ? `<div class="watermark">wunderland.sh</div>`
     : '';
 
+  const commandHeaderHtml = o.commandHeader
+    ? `<div class="cmd-bar">
+  <span class="cmd-dots"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span></span>
+  <span class="cmd-text">❯ ${escapeHtml(o.commandHeader)}</span>
+</div>`
+    : '';
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -74,11 +84,40 @@ export function ansiToHtml(ansi: string, opts?: AnsiToHtmlOptions): string {
     font-family: ${o.fontFamily};
     font-size: ${o.fontSize}px;
     line-height: 1.5;
-    padding: ${o.padding}px;
     width: ${o.width}px;
     min-height: 100px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  .cmd-bar {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-radius: 8px 8px 0 0;
+  }
+  .cmd-dots {
+    display: flex;
+    gap: 6px;
+  }
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+  .dot-red { background: #ff5f57; }
+  .dot-yellow { background: #febc2e; }
+  .dot-green { background: #28c840; }
+  .cmd-text {
+    color: ${HEX.brightCyan};
+    font-size: 13px;
+    font-family: ${o.fontFamily};
+    letter-spacing: 0.3px;
+  }
+  .content {
+    padding: ${o.padding}px;
   }
   pre {
     white-space: pre-wrap;
@@ -99,8 +138,19 @@ export function ansiToHtml(ansi: string, opts?: AnsiToHtmlOptions): string {
 </style>
 </head>
 <body>
+${commandHeaderHtml}
+<div class="content">
 <pre>${htmlContent}</pre>
 ${watermarkHtml}
+</div>
 </body>
 </html>`;
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
