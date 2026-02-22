@@ -18,6 +18,7 @@ import { QueryExpander } from '../rag/QueryExpander.js';
 import { RateLimiter } from '../api/rate-limiter.js';
 import type { HEXACOTraits, SecurityProfile, ChannelBinding } from '../core/types.js';
 import type { CommunicationStyleProfile } from '../core/StyleAdaptation.js';
+import type { CapabilityDiscoveryResult } from '@framers/agentos/discovery/types.js';
 
 // ============================================================================
 // PromptBuilder
@@ -601,6 +602,88 @@ describe('PromptBuilder', () => {
     });
 
     expect(overlay).not.toContain('[Mood');
+  });
+
+  // --- Capability Discovery integration ---
+
+  it('uses buildCapabilitiesSection when capabilityDiscoveryResult is present', () => {
+    const result = builder.build({
+      agentName: 'DiscoveryBot',
+      capabilityDiscoveryResult: {
+        tier0: 'Available capability categories:\n- Information: web-search (1)',
+        tier1: [
+          {
+            capability: {} as any,
+            relevanceScore: 0.87,
+            summaryText: '1. web-search (tool, 0.87): Search the web',
+          },
+        ],
+        tier2: [
+          {
+            capability: {} as any,
+            fullText: '# Web Search\nKind: tool | Category: information\nSearch the web for information',
+          },
+        ],
+        tokenEstimate: { tier0Tokens: 20, tier1Tokens: 15, tier2Tokens: 30, totalTokens: 65 },
+        diagnostics: { queryTimeMs: 5, embeddingTimeMs: 10, graphTraversalTimeMs: 1, candidatesScanned: 10, capabilitiesRetrieved: 2 },
+      },
+    });
+
+    expect(result.systemPrompt).toContain('Available capability categories:');
+    expect(result.systemPrompt).toContain('Relevant capabilities:');
+    expect(result.systemPrompt).toContain('web-search (tool, 0.87)');
+    expect(result.systemPrompt).toContain('--- Detailed Capability Reference ---');
+    expect(result.systemPrompt).toContain('# Web Search');
+    expect(result.includedSections).toContain('skills');
+  });
+
+  it('falls back to buildSkillsSection when capabilityDiscoveryResult is absent', () => {
+    const result = builder.build({
+      agentName: 'FallbackBot',
+      skillNames: ['web-search', 'github'],
+      skillContents: ['Search the web for information.'],
+    });
+
+    expect(result.systemPrompt).toContain('Active skills: web-search, github');
+    expect(result.systemPrompt).toContain('Search the web for information.');
+    expect(result.includedSections).toContain('skills');
+    expect(result.systemPrompt).not.toContain('Relevant capabilities:');
+  });
+
+  it('handles capabilityDiscoveryResult with empty tier1 and tier2', () => {
+    const result = builder.build({
+      agentName: 'EmptyDiscoveryBot',
+      capabilityDiscoveryResult: {
+        tier0: 'Available capability categories:\n- General: none (0)',
+        tier1: [],
+        tier2: [],
+        tokenEstimate: { tier0Tokens: 15, tier1Tokens: 0, tier2Tokens: 0, totalTokens: 15 },
+        diagnostics: { queryTimeMs: 1, embeddingTimeMs: 5, graphTraversalTimeMs: 0, candidatesScanned: 0, capabilitiesRetrieved: 0 },
+      },
+    });
+
+    expect(result.systemPrompt).toContain('Available capability categories:');
+    expect(result.systemPrompt).not.toContain('Relevant capabilities:');
+    expect(result.systemPrompt).not.toContain('--- Detailed Capability Reference ---');
+  });
+
+  it('capabilityDiscoveryResult overrides static skillNames/skillContents', () => {
+    const result = builder.build({
+      agentName: 'OverrideBot',
+      skillNames: ['should-not-appear'],
+      skillContents: ['This static skill content should not appear.'],
+      capabilityDiscoveryResult: {
+        tier0: 'Dynamic discovery active',
+        tier1: [],
+        tier2: [],
+        tokenEstimate: { tier0Tokens: 10, tier1Tokens: 0, tier2Tokens: 0, totalTokens: 10 },
+        diagnostics: { queryTimeMs: 1, embeddingTimeMs: 2, graphTraversalTimeMs: 0, candidatesScanned: 0, capabilitiesRetrieved: 0 },
+      },
+    });
+
+    expect(result.systemPrompt).toContain('Dynamic discovery active');
+    expect(result.systemPrompt).not.toContain('should-not-appear');
+    expect(result.systemPrompt).not.toContain('This static skill content should not appear.');
   });
 });
 
