@@ -551,6 +551,105 @@ export function buildDynamicVoiceProfile(options: BuildDynamicVoiceOptions): Dyn
   };
 }
 
+// ============================================================================
+// TTS Parameter Mapping — convert voice profile to TTS synthesis params
+// ============================================================================
+
+/**
+ * Partial TTS synthesis input derived from a DynamicVoiceProfile.
+ *
+ * This maps personality-driven voice characteristics (archetype, stance,
+ * tempo, mood trajectory) to concrete TTS parameters (speed, stability,
+ * style hints) so spoken audio reflects the agent's emotional state.
+ */
+export interface TtsVoiceParams {
+  /** Speed multiplier (0.5–2.0). Maps from tempo. */
+  speed: number;
+  /** Stability parameter (0.0–1.0). Higher = less expressive variation. */
+  stability: number;
+  /** Style exaggeration hint (0.0–1.0). Provider-specific. */
+  styleExaggeration: number;
+  /** SSML prosody rate hint (e.g. 'fast', 'medium', 'slow'). */
+  prosodyRate: 'x-slow' | 'slow' | 'medium' | 'fast' | 'x-fast';
+  /** SSML prosody pitch hint. */
+  prosodyPitch: 'x-low' | 'low' | 'medium' | 'high' | 'x-high';
+  /** Optional provider-specific style preset name. */
+  stylePreset?: string;
+}
+
+/**
+ * Convert a DynamicVoiceProfile into TTS synthesis parameters.
+ *
+ * Mapping logic:
+ * - **Tempo → Speed**: rapid=1.15, staccato=1.1, measured=1.0, calm=0.9, layered=0.95
+ * - **Stance → Stability**: decisive/combative=0.7 (expressive), analytical=0.85 (stable),
+ *   energetic=0.55 (very expressive), de-escalatory=0.8, exploratory=0.65, pragmatic=0.75
+ * - **Urgency → Speed boost**: high urgency adds up to +0.15 speed
+ * - **Mood trajectory → Pitch modulation**: rising=high, falling=low, oscillating=medium
+ * - **Archetype → Style preset hint**: maps to provider-specific style names
+ */
+export function voiceProfileToTtsParams(profile: DynamicVoiceProfile): TtsVoiceParams {
+  // ── Speed from tempo + urgency ──
+  const tempoSpeed: Record<DynamicVoiceProfile['tempo'], number> = {
+    rapid: 1.15,
+    staccato: 1.1,
+    measured: 1.0,
+    calm: 0.9,
+    layered: 0.95,
+  };
+  const baseSpeed = tempoSpeed[profile.tempo];
+  const urgencyBoost = profile.urgency * 0.15; // 0–0.15
+  const speed = Math.min(2.0, Math.max(0.5, baseSpeed + urgencyBoost));
+
+  // ── Stability from stance (inversely related to expressiveness) ──
+  const stanceStability: Record<DynamicVoiceProfile['stance'], number> = {
+    decisive: 0.7,
+    analytical: 0.85,
+    energetic: 0.55,
+    'de-escalatory': 0.8,
+    exploratory: 0.65,
+    combative: 0.7,
+    pragmatic: 0.75,
+  };
+  const stability = stanceStability[profile.stance];
+
+  // ── Style exaggeration from emotionality + controversy ──
+  const emotionality = profile.expressedTraits.emotionality;
+  const styleExaggeration = clamp01(emotionality * 0.5 + profile.controversy * 0.3 + (1 - stability) * 0.2);
+
+  // ── Prosody rate from speed ──
+  let prosodyRate: TtsVoiceParams['prosodyRate'];
+  if (speed >= 1.2) prosodyRate = 'x-fast';
+  else if (speed >= 1.08) prosodyRate = 'fast';
+  else if (speed >= 0.95) prosodyRate = 'medium';
+  else if (speed >= 0.85) prosodyRate = 'slow';
+  else prosodyRate = 'x-slow';
+
+  // ── Prosody pitch from mood trajectory + sentiment ──
+  let prosodyPitch: TtsVoiceParams['prosodyPitch'];
+  if (profile.moodTrajectory === 'rising' || profile.sentiment > 0.3) {
+    prosodyPitch = 'high';
+  } else if (profile.moodTrajectory === 'falling' || profile.sentiment < -0.3) {
+    prosodyPitch = 'low';
+  } else {
+    prosodyPitch = 'medium';
+  }
+
+  // ── Style preset from archetype ──
+  const archetypeStyles: Record<VoiceArchetype, string> = {
+    signal_commander: 'authoritative',
+    forensic_cartographer: 'analytical',
+    pulse_broadcaster: 'enthusiastic',
+    calm_diplomat: 'soothing',
+    speculative_weaver: 'curious',
+    contrarian_prosecutor: 'assertive',
+    grounded_correspondent: 'neutral',
+  };
+  const stylePreset = archetypeStyles[profile.archetype];
+
+  return { speed, stability, styleExaggeration, prosodyRate, prosodyPitch, stylePreset };
+}
+
 export function buildDynamicVoicePromptSection(profile: DynamicVoiceProfile): string {
   const traits = profile.expressedTraits;
   const pct = (value: number): string => `${Math.round(clamp01(value) * 100)}%`;
