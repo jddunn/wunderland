@@ -5,7 +5,7 @@
 
 import type { GlobalFlags } from '../types.js';
 import { PERSONALITY_PRESETS } from '../constants.js';
-import { accent, muted } from '../ui/theme.js';
+import { accent, muted, info, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { printTable } from '../ui/table.js';
 import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
@@ -57,16 +57,16 @@ export default async function cmdListPresets(
       title: 'Agent Presets',
       compact: true,
       columns: [
-        { label: 'ID', width: 24 },
-        { label: 'Name', width: 24 },
-        { label: 'Security', width: 14 },
+        { label: 'ID', width: 22 },
+        { label: 'Name', width: 26 },
+        { label: 'Security', width: 12 },
         { label: 'Skills' },
       ],
       rows: agentPresets.map((p) => [
         accent(p.id),
         p.name,
         muted(p.securityTier),
-        p.suggestedSkills.length > 0 ? muted(p.suggestedSkills.join(', ')) : muted('none'),
+        p.suggestedSkills.length > 0 ? info(p.suggestedSkills.join(dim(', '))) : dim('none'),
       ]),
     });
     fmt.blank();
@@ -77,8 +77,8 @@ export default async function cmdListPresets(
     title: 'Personality Presets',
     compact: true,
     columns: [
-      { label: 'ID', width: 28 },
-      { label: 'Label', width: 26 },
+      { label: 'ID', width: 24 },
+      { label: 'Label', width: 24 },
       { label: 'Description' },
     ],
     rows: PERSONALITY_PRESETS.map((p) => [
@@ -90,29 +90,29 @@ export default async function cmdListPresets(
 
   fmt.blank();
 
-  // ── HEXACO Trait Presets ────────────────────────────────────────────────
+  // ── HEXACO Trait Presets ──────────────────────────────────────────────
   const hexacoKeys = Object.keys(HEXACO_PRESETS);
   if (hexacoKeys.length > 0) {
     printTable({
       title: 'HEXACO Trait Presets',
       compact: true,
       columns: [
-        { label: 'ID', width: 28 },
-        { label: 'H', width: 8, align: 'right' },
-        { label: 'E', width: 8, align: 'right' },
-        { label: 'X', width: 8, align: 'right' },
-        { label: 'A', width: 8, align: 'right' },
-        { label: 'C', width: 8, align: 'right' },
-        { label: 'O', width: 8, align: 'right' },
+        { label: 'ID', width: 24 },
+        { label: 'H', width: 7, align: 'right' },
+        { label: 'E', width: 7, align: 'right' },
+        { label: 'X', width: 7, align: 'right' },
+        { label: 'A', width: 7, align: 'right' },
+        { label: 'C', width: 7, align: 'right' },
+        { label: 'O', width: 7, align: 'right' },
       ],
       rows: Object.entries(HEXACO_PRESETS).map(([key, values]) => [
         accent(key),
-        muted(values.honesty_humility?.toFixed(1) ?? '—'),
-        muted(values.emotionality?.toFixed(1) ?? '—'),
-        muted(values.extraversion?.toFixed(1) ?? '—'),
-        muted(values.agreeableness?.toFixed(1) ?? '—'),
-        muted(values.conscientiousness?.toFixed(1) ?? '—'),
-        muted(values.openness?.toFixed(1) ?? '—'),
+        info(values.honesty_humility?.toFixed(1) ?? '\u2014'),
+        info(values.emotionality?.toFixed(1) ?? '\u2014'),
+        info(values.extraversion?.toFixed(1) ?? '\u2014'),
+        info(values.agreeableness?.toFixed(1) ?? '\u2014'),
+        info(values.conscientiousness?.toFixed(1) ?? '\u2014'),
+        info(values.openness?.toFixed(1) ?? '\u2014'),
       ]),
     });
     fmt.blank();

@@ -121,7 +121,7 @@ export default async function cmdPlugins(
       zebra: false,
       columns: [
         { label: '', width: 4 },
-        { label: 'Name', width: 24 },
+        { label: 'Name', width: 28 },
         { label: 'Display Name', width: 24 },
         { label: 'Status', width: 16 },
       ],
