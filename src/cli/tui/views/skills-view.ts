@@ -98,7 +98,7 @@ export class SkillsView {
     }
 
     lines.push('');
-    lines.push(`  ${dim('↑↓')} navigate  ${dim('⏎')} expand  ${dim('esc')} back`);
+    lines.push(`  ${dim('↑↓')} navigate  ${dim('⏎')} expand  ${dim('esc')} back  ${dim('q')} quit`);
 
     this.screen.render(lines.join('\n'));
   }

@@ -70,7 +70,7 @@ export class ModelsView {
     }
 
     lines.push('');
-    lines.push(`  ${dim('↑↓')} navigate  ${dim('⏎')} expand/collapse  ${dim('esc')} back`);
+    lines.push(`  ${dim('↑↓')} navigate  ${dim('⏎')} expand/collapse  ${dim('esc')} back  ${dim('q')} quit`);
 
     this.screen.render(lines.join('\n'));
   }
