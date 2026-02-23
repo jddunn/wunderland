@@ -83,6 +83,28 @@ export type WunderlandAgentConfig = {
       exportLogs: boolean;
     }>;
   }>;
+
+  /** Capability discovery configuration. */
+  discovery?: {
+    /** Enable/disable discovery. Default: auto-detect based on embedding availability. */
+    enabled?: boolean;
+    /** Tier 0 token budget. Default: 200. */
+    tier0Budget?: number;
+    /** Tier 1 token budget. Default: 800. */
+    tier1Budget?: number;
+    /** Tier 2 token budget. Default: 2000. */
+    tier2Budget?: number;
+    /** Number of Tier 1 candidates. Default: 5. */
+    tier1TopK?: number;
+    /** Number of Tier 2 candidates. Default: 2. */
+    tier2TopK?: number;
+    /** Embedding provider override. */
+    embeddingProvider?: string;
+    /** Embedding model override. */
+    embeddingModel?: string;
+    /** Scan ~/.wunderland/capabilities/ for manifests. Default: true. */
+    scanManifests?: boolean;
+  };
 };
 
 export type WunderlandProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic';

@@ -36,6 +36,8 @@ import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runti
 import type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from '../api/types.js';
 import { WunderlandConfigError } from '../config/errors.js';
 import { loadAgentConfig, resolveLlmConfig } from '../config/load.js';
+import { WunderlandDiscoveryManager } from '../discovery/index.js';
+import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../discovery/index.js';
 
 // =============================================================================
 // Public Types
@@ -91,6 +93,7 @@ export type WunderlandDiagnostics = {
     baseDir: string;
     workingDirectory: string;
   };
+  discovery?: WunderlandDiscoveryStats;
 };
 
 export type ToolApprovalRequest = {
@@ -149,6 +152,8 @@ export type WunderlandOptions = {
     warn?: (msg: string, meta?: unknown) => void;
     error?: (msg: string, meta?: unknown) => void;
   };
+  /** Capability discovery configuration. */
+  discovery?: WunderlandDiscoveryConfig;
 };
 
 export type WunderlandSession = {
@@ -313,6 +318,45 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     logger,
   });
 
+  // Capability discovery — semantic search + graph re-ranking for tool/skill context
+  const discoveryOpts: WunderlandDiscoveryConfig = { ...opts.discovery };
+  if (agentConfig.discovery) {
+    const d = agentConfig.discovery;
+    discoveryOpts.enabled ??= d.enabled;
+    discoveryOpts.embeddingProvider ??= d.embeddingProvider;
+    discoveryOpts.embeddingModel ??= d.embeddingModel;
+    discoveryOpts.scanManifestDirs ??= d.scanManifests;
+    if (d.tier0Budget || d.tier1Budget || d.tier2Budget || d.tier1TopK || d.tier2TopK) {
+      discoveryOpts.config = {
+        ...(discoveryOpts.config ?? {}),
+        ...(d.tier0Budget !== undefined ? { tier0TokenBudget: d.tier0Budget } : {}),
+        ...(d.tier1Budget !== undefined ? { tier1TokenBudget: d.tier1Budget } : {}),
+        ...(d.tier2Budget !== undefined ? { tier2TokenBudget: d.tier2Budget } : {}),
+        ...(d.tier1TopK !== undefined ? { tier1TopK: d.tier1TopK } : {}),
+        ...(d.tier2TopK !== undefined ? { tier2TopK: d.tier2TopK } : {}),
+      };
+    }
+  }
+  const discoveryManager = new WunderlandDiscoveryManager(discoveryOpts);
+  try {
+    await discoveryManager.initialize({
+      toolMap,
+      llmConfig: {
+        providerId: llm.providerId,
+        apiKey: llm.apiKey,
+        baseUrl: llm.baseUrl,
+      },
+    });
+    const metaTool = discoveryManager.getMetaTool();
+    if (metaTool) {
+      toolMap.set(metaTool.name, toToolInstance(metaTool));
+    }
+  } catch (err) {
+    logger.warn?.('[wunderland] Discovery initialization failed (continuing without)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const baseToolContext: Record<string, unknown> = {
     agentId: workspace.agentId,
     securityTier: policy.securityTier,
@@ -346,6 +390,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       availability,
     },
     workspace: { agentId: workspace.agentId, baseDir: workspace.baseDir, workingDirectory },
+    discovery: discoveryManager.getStats(),
   });
 
   const session = (sessionId?: string): WunderlandSession => {
@@ -435,6 +480,31 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         permissions,
       };
 
+      // Capability discovery — inject tiered context for this turn
+      try {
+        const discoveryResult = await discoveryManager.discoverForTurn(userText);
+        if (discoveryResult) {
+          // Remove stale discovery context from previous turns
+          for (let i = history.length - 1; i >= 1; i--) {
+            if (typeof history[i]?.content === 'string' && String(history[i]!.content).startsWith('[Capability Context]')) {
+              history.splice(i, 1);
+            }
+          }
+          // Build tiered context string
+          const ctxParts: string[] = ['[Capability Context]', discoveryResult.tier0];
+          if (discoveryResult.tier1.length > 0) {
+            ctxParts.push('Relevant capabilities:\n' + discoveryResult.tier1.map((r) => r.summaryText).join('\n'));
+          }
+          if (discoveryResult.tier2.length > 0) {
+            ctxParts.push(discoveryResult.tier2.map((r) => r.fullText).join('\n'));
+          }
+          // Insert after system prompt but before conversation history
+          history.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
+        }
+      } catch {
+        // Non-fatal — continue without discovery context
+      }
+
       const reply = await runToolCallingTurn({
         providerId: llm.providerId,
         apiKey: llm.apiKey,
@@ -473,7 +543,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   };
 
   const close = async () => {
-    // No external resources yet (best-effort compatibility hook).
+    await discoveryManager.close();
     sessions.clear();
   };
 

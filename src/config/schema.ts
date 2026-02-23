@@ -73,6 +73,30 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
     }
   }
 
+  if (cfg.discovery !== undefined) {
+    if (!isPlainObject(cfg.discovery)) {
+      issues.push({ path: 'discovery', message: 'Expected object.' });
+    } else {
+      const disc = cfg.discovery as Record<string, unknown>;
+      if (disc.enabled !== undefined && typeof disc.enabled !== 'boolean') {
+        issues.push({ path: 'discovery.enabled', message: 'Expected boolean.' });
+      }
+      for (const numField of ['tier0Budget', 'tier1Budget', 'tier2Budget', 'tier1TopK', 'tier2TopK']) {
+        if (disc[numField] !== undefined && typeof disc[numField] !== 'number') {
+          issues.push({ path: `discovery.${numField}`, message: 'Expected number.' });
+        }
+      }
+      for (const strField of ['embeddingProvider', 'embeddingModel']) {
+        if (disc[strField] !== undefined && typeof disc[strField] !== 'string') {
+          issues.push({ path: `discovery.${strField}`, message: 'Expected string.' });
+        }
+      }
+      if (disc.scanManifests !== undefined && typeof disc.scanManifests !== 'boolean') {
+        issues.push({ path: 'discovery.scanManifests', message: 'Expected boolean.' });
+      }
+    }
+  }
+
   return { config: input as WunderlandAgentConfig, issues };
 }
 

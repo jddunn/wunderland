@@ -34,6 +34,7 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../../core/index.js';
+import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig } from '../../discovery/index.js';
 
 // ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
 
@@ -540,6 +541,43 @@ export default async function cmdChat(
     for (const [k, v] of filtered.toolMap.entries()) toolMap.set(k, v);
   }
 
+  // Capability discovery — semantic search + graph re-ranking
+  const discoveryOpts: WunderlandDiscoveryConfig = {};
+  if (cfg?.discovery) {
+    const d = cfg.discovery as Record<string, unknown>;
+    if (typeof d.enabled === 'boolean') discoveryOpts.enabled = d.enabled;
+    if (typeof d.embeddingProvider === 'string') discoveryOpts.embeddingProvider = d.embeddingProvider;
+    if (typeof d.embeddingModel === 'string') discoveryOpts.embeddingModel = d.embeddingModel;
+    if (typeof d.scanManifests === 'boolean') discoveryOpts.scanManifestDirs = d.scanManifests;
+    const budgetFields = { tier0Budget: 'tier0TokenBudget', tier1Budget: 'tier1TokenBudget', tier2Budget: 'tier2TokenBudget', tier1TopK: 'tier1TopK', tier2TopK: 'tier2TopK' } as const;
+    const configOverrides: Record<string, number> = {};
+    for (const [src, dest] of Object.entries(budgetFields)) {
+      if (typeof d[src] === 'number') configOverrides[dest] = d[src] as number;
+    }
+    if (Object.keys(configOverrides).length > 0) discoveryOpts.config = configOverrides as any;
+  }
+  const discoveryManager = new WunderlandDiscoveryManager(discoveryOpts);
+  try {
+    await discoveryManager.initialize({
+      toolMap,
+      llmConfig: { providerId, apiKey: llmApiKey, baseUrl: llmBaseUrl },
+    });
+    const metaTool = discoveryManager.getMetaTool();
+    if (metaTool) {
+      toolMap.set(metaTool.name, {
+        name: metaTool.name,
+        description: metaTool.description,
+        inputSchema: metaTool.inputSchema as any,
+        hasSideEffects: metaTool.hasSideEffects,
+        category: 'productivity',
+        execute: metaTool.execute as any,
+      });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    fmt.warning(`Discovery initialization failed (continuing without): ${msg}`);
+  }
+
   // Skills — load from filesystem dirs + config-declared skills
   let skillsPrompt = '';
   if (enableSkills) {
@@ -677,9 +715,10 @@ export default async function cmdChat(
       const iw = cw - 2;
       const helpLines: string[] = [];
       helpLines.push('');
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/help')}    ${chalk.hex(C.text)('Show this help')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/tools')}   ${chalk.hex(C.text)('List available tools')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/exit')}    ${chalk.hex(C.text)('Quit')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/help')}      ${chalk.hex(C.text)('Show this help')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/tools')}     ${chalk.hex(C.text)('List available tools')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/discover')}  ${chalk.hex(C.text)('Show discovery stats')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw));
       helpLines.push('');
       console.log(helpLines.join('\n'));
       continue;
@@ -698,7 +737,49 @@ export default async function cmdChat(
       continue;
     }
 
+    if (input === '/discover') {
+      const dStats = discoveryManager.getStats();
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const dLines: string[] = [''];
+      dLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Discovery Stats')}`, iw));
+      dLines.push(frameLine(`   Enabled:       ${dStats.enabled ? sColor('yes') : wColor('no')}`, iw));
+      dLines.push(frameLine(`   Initialized:   ${dStats.initialized ? sColor('yes') : wColor('no')}`, iw));
+      dLines.push(frameLine(`   Capabilities:  ${dStats.capabilityCount}`, iw));
+      dLines.push(frameLine(`   Graph nodes:   ${dStats.graphNodes}`, iw));
+      dLines.push(frameLine(`   Graph edges:   ${dStats.graphEdges}`, iw));
+      dLines.push(frameLine(`   Preset co-occ: ${dStats.presetCoOccurrences}`, iw));
+      if (dStats.manifestDirs.length > 0) {
+        dLines.push(frameLine(`   Manifest dirs: ${dStats.manifestDirs.join(', ')}`, iw));
+      }
+      dLines.push('');
+      console.log(dLines.join('\n'));
+      continue;
+    }
+
     messages.push({ role: 'user', content: input });
+
+    // Capability discovery — inject tiered context for this turn
+    try {
+      const discoveryResult = await discoveryManager.discoverForTurn(input);
+      if (discoveryResult) {
+        for (let i = messages.length - 1; i >= 1; i--) {
+          if (typeof messages[i]?.content === 'string' && String(messages[i]!.content).startsWith('[Capability Context]')) {
+            messages.splice(i, 1);
+          }
+        }
+        const ctxParts: string[] = ['[Capability Context]', discoveryResult.tier0];
+        if (discoveryResult.tier1.length > 0) {
+          ctxParts.push('Relevant capabilities:\n' + discoveryResult.tier1.map((r) => r.summaryText).join('\n'));
+        }
+        if (discoveryResult.tier2.length > 0) {
+          ctxParts.push(discoveryResult.tier2.map((r) => r.fullText).join('\n'));
+        }
+        messages.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
+      }
+    } catch {
+      // Non-fatal
+    }
 
     const reply = await runToolCallingTurn({
       providerId,
@@ -729,6 +810,7 @@ export default async function cmdChat(
   }
 
   rl.close();
+  await discoveryManager.close();
   await shutdownWunderlandOtel();
 
   // Session ended banner
