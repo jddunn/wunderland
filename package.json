@@ -26,6 +26,10 @@
       "import": "./dist/advanced/*.js",
       "types": "./dist/advanced/*.d.ts"
     },
+    "./discovery": {
+      "import": "./dist/discovery/index.js",
+      "types": "./dist/discovery/index.d.ts"
+    },
     "./presets": {
       "import": "./dist/core/PresetLoader.js",
       "types": "./dist/core/PresetLoader.d.ts"
