@@ -9,6 +9,7 @@ import type { Screen } from '../screen.js';
 import type { KeybindingManager } from '../keybindings.js';
 import { accent, dim, muted, bright, success as sColor, error as eColor, info as iColor } from '../../ui/theme.js';
 import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
+import { wrapInFrame } from '../layout.js';
 import { getConfigPath } from '../../config/config-manager.js';
 import { getEnvPath, loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { checkEnvSecrets } from '../../config/secrets.js';
@@ -169,9 +170,11 @@ export class DoctorView {
     lines.push('');
     lines.push(`  ${dim('?')} help  ${dim('esc')} back  ${dim('q')} quit`);
 
+    const framed = wrapInFrame(lines, cols, 'DOCTOR');
+
     const stamped = this.modal
       ? stampOverlay({
-          screenLines: lines,
+          screenLines: framed,
           overlayLines: renderOverlayBox({
             title: this.modal.title,
             width: Math.min(Math.max(44, Math.min(74, cols - 8)), Math.max(24, cols - 4)),
@@ -180,7 +183,7 @@ export class DoctorView {
           cols,
           rows,
         })
-      : lines;
+      : framed;
 
     this.screen.render(stamped.join('\n'));
   }
