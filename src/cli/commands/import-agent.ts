@@ -48,6 +48,16 @@ export default async function cmdImport(
     ? path.resolve(process.cwd(), flags['dir'])
     : path.resolve(process.cwd(), data.seedId || 'imported-agent');
 
+  const sealedPath = path.join(targetDir, 'sealed.json');
+  if (existsSync(sealedPath)) {
+    fmt.errorBlock(
+      'Refusing to overwrite sealed agent',
+      `${sealedPath} exists.\nThis agent is sealed and should be treated as immutable.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   if (existsSync(path.join(targetDir, 'agent.config.json')) && flags['force'] !== true) {
     fmt.errorBlock(
       'Target already has an agent',

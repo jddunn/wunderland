@@ -94,7 +94,7 @@ In `wunderland start`, approvals are still controlled by `executionMode`:
 
 - `human-dangerous`: approve Tier 3 tools only
 - `human-all`: approve every tool call
-- `autonomous` (or `--yes`): auto-approve everything (no HITL)
+- `autonomous` (or `--auto-approve-tools`): auto-approve everything (no HITL)
 
 HITL auth:
 
@@ -205,4 +205,4 @@ A typical `agent.config.json` written by `wunderland init` includes (abbreviated
 - For `wunderland start`, approvals show up via HITL:
   - Open `http://localhost:3777/hitl` and paste the `HITL Secret` printed on server start, or
   - Run: `wunderland hitl watch --server http://localhost:3777 --secret <token>`
-- If you run `wunderland start --yes` (or set `executionMode: "autonomous"`), approvals are disabled by design.
+- If you run `wunderland start --auto-approve-tools` (or set `executionMode: "autonomous"`), approvals are disabled by design.

@@ -61,12 +61,47 @@ export async function updateConfig(updates: Partial<CliConfig>, override?: strin
 /** Get a single config value by key. */
 export async function getConfigValue(key: string, override?: string): Promise<unknown> {
   const config = await loadConfig(override);
+  if (!key) return undefined;
+
+  // Support dot-path keys (e.g. "ui.theme").
+  if (key.includes('.')) {
+    const parts = key.split('.').filter(Boolean);
+    let cur: unknown = config as unknown;
+    for (const p of parts) {
+      if (typeof cur !== 'object' || cur === null) return undefined;
+      cur = (cur as Record<string, unknown>)[p];
+      if (cur === undefined) return undefined;
+    }
+    return cur;
+  }
+
   return (config as Record<string, unknown>)[key];
 }
 
 /** Set a single config value by key. */
 export async function setConfigValue(key: string, value: unknown, override?: string): Promise<void> {
   const config = await loadConfig(override);
-  (config as Record<string, unknown>)[key] = value;
+  if (!key) return;
+
+  // Support dot-path keys (e.g. "ui.theme").
+  if (key.includes('.')) {
+    const parts = key.split('.').filter(Boolean);
+    let cur: Record<string, unknown> = config as unknown as Record<string, unknown>;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i]!;
+      const isLast = i === parts.length - 1;
+      if (isLast) {
+        cur[p] = value;
+        break;
+      }
+      const next = cur[p];
+      if (typeof next !== 'object' || next === null || Array.isArray(next)) {
+        cur[p] = {};
+      }
+      cur = cur[p] as Record<string, unknown>;
+    }
+  } else {
+    (config as Record<string, unknown>)[key] = value;
+  }
   await saveConfig(config, override);
 }

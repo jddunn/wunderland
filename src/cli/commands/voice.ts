@@ -186,8 +186,8 @@ async function voiceClone(): Promise<void> {
   fmt.note(
     `Voice cloning requires explicit consent from the voice owner.\n` +
     `    Supported providers:\n` +
-    `      ${accent('ElevenLabs')}  — Instant voice cloning via API (cloud)\n` +
-    `      ${accent('XTTS v2')}     — Local voice cloning via Coqui TTS (offline)\n`,
+    `      ${accent('ElevenLabs')}  - Instant voice cloning via API (cloud)\n` +
+    `      ${accent('XTTS v2')}     - Local voice cloning via Coqui TTS (offline)\n`,
   );
   fmt.blank();
 

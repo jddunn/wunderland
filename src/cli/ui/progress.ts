@@ -5,6 +5,8 @@
 
 import { createSpinner } from 'nanospinner';
 import { success as sColor, error as eColor, muted, dim, accent } from './theme.js';
+import { glyphs } from './glyphs.js';
+import { isAscii } from './runtime.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -30,7 +32,7 @@ export interface StepProgress {
  * When stdout is NOT a TTY, spinners are skipped and results print directly.
  */
 export function createStepProgress(steps: string[]): StepProgress {
-  const isTTY = process.stdout.isTTY;
+  const isTTY = !!process.stdout.isTTY && !isAscii();
   const results: ('pass' | 'fail' | 'skip' | null)[] = steps.map(() => null);
   const details: (string | undefined)[] = steps.map(() => undefined);
   let activeSpinner: ReturnType<typeof createSpinner> | null = null;
@@ -44,17 +46,18 @@ export function createStepProgress(steps: string[]): StepProgress {
   }
 
   function printResult(index: number): void {
+    const g = glyphs();
     const step = steps[index];
     const result = results[index];
     const detail = details[index];
     const detailStr = detail ? `  ${dim(detail)}` : '';
 
     if (result === 'pass') {
-      console.log(`  ${sColor('✓')} ${step}${detailStr}`);
+      console.log(`  ${sColor(g.ok)} ${step}${detailStr}`);
     } else if (result === 'fail') {
-      console.log(`  ${eColor('✗')} ${eColor(step)}${detailStr}`);
+      console.log(`  ${eColor(g.fail)} ${eColor(step)}${detailStr}`);
     } else if (result === 'skip') {
-      console.log(`  ${muted('○')} ${muted(step)}${detailStr}`);
+      console.log(`  ${muted(g.circle)} ${muted(step)}${detailStr}`);
     }
   }
 
@@ -118,6 +121,7 @@ export function createStepProgress(steps: string[]): StepProgress {
     },
 
     complete(): void {
+      const g = glyphs();
       stopActive();
       const passed = results.filter((r) => r === 'pass').length;
       const failed = results.filter((r) => r === 'fail').length;
@@ -130,7 +134,7 @@ export function createStepProgress(steps: string[]): StepProgress {
       ].filter(Boolean).join(dim(', '));
 
       console.log();
-      console.log(`  ${accent('◆')} ${parts}`);
+      console.log(`  ${accent(g.bullet)} ${parts}`);
     },
   };
 }

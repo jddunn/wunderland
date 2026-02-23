@@ -9,12 +9,18 @@ import type { Screen } from './screen.js';
 import type { KeybindingManager } from './keybindings.js';
 import { truncate, composeSideBySide } from './layout.js';
 import {
+  HEX,
   success as sColor,
 } from '../ui/theme.js';
+import { ASCII_BANNER, ASCII_BANNER_ASCII } from '../ui/brand.js';
 import { stripAnsi, sliceAnsi, visibleLength, ansiPadEnd } from '../ui/ansi-utils.js';
 import { VERSION, URLS } from '../constants.js';
-import { loadConfig } from '../config/config-manager.js';
+import { loadConfig, updateConfig } from '../config/config-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
+import { renderOverlayBox, stampOverlay } from './widgets/overlay.js';
+import { glyphs } from '../ui/glyphs.js';
+import { getUiRuntime } from '../ui/runtime.js';
+import { getTourControlsLine, getTourSteps, shouldAutoLaunchTour, type TourStatus } from './tour.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -35,22 +41,7 @@ interface DashboardState {
 
 // ── Color Palette (hex values for chalk.hex) ───────────────────────────────
 
-const C = {
-  purple:     '#a855f7',
-  lavender:   '#c084fc',
-  magenta:    '#e879f9',
-  fuchsia:    '#f0abfc',
-  cyan:       '#06b6d4',
-  brightCyan: '#22d3ee',
-  lightCyan:  '#67e8f9',
-  green:      '#22c55e',
-  white:      '#f9fafb',
-  text:       '#c9d1d9',
-  muted:      '#6b7280',
-  dim:        '#4b5563',
-  dark:       '#374151',
-  darker:     '#1f2937',
-} as const;
+const C = HEX;
 
 // ── Solid Border Colors ──────────────────────────────────────────────────
 
@@ -71,17 +62,16 @@ const ACTIONS: QuickAction[] = [
   { label: 'Voice providers',     command: 'voice',      hint: 'wunderland voice',      shortcut: 'v' },
   { label: 'View status',         command: 'status',     hint: 'wunderland status',     shortcut: 's' },
   { label: 'Help',                command: 'help',       hint: 'wunderland --help',     shortcut: 'h' },
+  { label: 'Tour / onboarding',   command: 'tour',       hint: 'press t',               shortcut: 't' },
 ];
 
 // ── ASCII Banner ───────────────────────────────────────────────────────────
 
-const ASCII_BANNER = [
-  ' ██╗    ██╗██╗   ██╗███╗   ██╗██████╗ ███████╗██████╗ ██╗      █████╗ ███╗   ██╗██████╗ ',
-  ' ██║    ██║██║   ██║████╗  ██║██╔══██╗██╔════╝██╔══██╗██║     ██╔══██╗████╗  ██║██╔══██╗',
-  ' ██║ █╗ ██║██║   ██║██╔██╗ ██║██║  ██║█████╗  ██████╔╝██║     ███████║██╔██╗ ██║██║  ██║',
-  ' ╚██╗╚█╗██╔╝╚██████╔╝██║╚████║██████╔╝███████╗██║  ██║███████╗██║  ██║██║╚████║██████╔╝',
-  '  ╚═╝ ╚═╝    ╚═════╝ ╚═╝ ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝ ╚═══╝╚═════╝',
-];
+function getAsciiBannerLines(): string[] {
+  const ui = getUiRuntime();
+  const banner = ui.ascii ? ASCII_BANNER_ASCII : ASCII_BANNER;
+  return banner.split('\n').filter((l) => l.trim().length > 0);
+}
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
 
@@ -89,10 +79,17 @@ export class Dashboard {
   private cursor = 0;
   private scrollOffset = 0;
   private actionLineOffset = 0;
+  private searchMode = false;
+  private filter = '';
+  private showHelp = false;
+  private tourActive = false;
+  private tourStep = 0;
+  private tourAutoLaunch = false;
   private screen: Screen;
   private keys: KeybindingManager;
   private onSelect: (command: string) => void;
   private onQuit: () => void;
+  private configDir?: string;
   private state: DashboardState = {
     agentName: 'not configured',
     llmInfo: 'not configured',
@@ -107,35 +104,63 @@ export class Dashboard {
     keys: KeybindingManager;
     onSelect: (command: string) => void;
     onQuit: () => void;
+    configDir?: string;
   }) {
     this.screen = opts.screen;
     this.keys = opts.keys;
     this.onSelect = opts.onSelect;
     this.onQuit = opts.onQuit;
+    this.configDir = opts.configDir;
 
     this.keys.push({
       name: 'dashboard',
       bindings: {
         'up':      () => { this.moveCursor(-1); },
         'down':    () => { this.moveCursor(1); },
-        'k':       () => { this.moveCursor(-1); },
-        'j':       () => { this.moveCursor(1); },
+        'k':       () => { if (this.searchMode) return false; this.moveCursor(-1); return true; },
+        'j':       () => { if (this.searchMode) return false; this.moveCursor(1); return true; },
         'return':  () => { this.selectCurrent(); },
-        'q':       () => { this.onQuit(); },
+        't':       () => { if (this.searchMode) return false; this.openTour(); return true; },
+        '__text__': (key) => {
+          if (!this.searchMode) return false;
+          this.filter += key.sequence;
+          this.cursor = 0;
+          this.renderDashboard();
+          return true;
+        },
+        '/':       () => { if (this.searchMode) return false; this.enterSearch(); return true; },
+        '?':       () => { if (this.searchMode) return false; this.showHelp = !this.showHelp; this.renderDashboard(); return true; },
+        'backspace': () => {
+          if (!this.searchMode) return false;
+          this.filter = this.filter.slice(0, -1);
+          this.cursor = 0;
+          this.renderDashboard();
+          return true;
+        },
+        'q':       () => {
+          if (this.showHelp) { this.showHelp = false; this.renderDashboard(); return true; }
+          if (this.searchMode) return false;
+          this.onQuit();
+          return true;
+        },
         'ctrl+c':  () => { this.onQuit(); },
-        'escape':  () => { this.onQuit(); },
-        'd':       () => { this.onSelect('doctor'); },
-        's':       () => { this.onSelect('status'); },
-        'v':       () => { this.onSelect('voice'); },
-        'h':       () => { this.onSelect('help'); },
-        'r':       () => { this.refresh(); },
-        '1':       () => { this.selectIndex(0); },
-        '2':       () => { this.selectIndex(1); },
-        '3':       () => { this.selectIndex(2); },
-        '4':       () => { this.selectIndex(4); },
-        '5':       () => { this.selectIndex(5); },
-        '6':       () => { this.selectIndex(6); },
-        '7':       () => { this.selectIndex(7); },
+        'escape':  () => {
+          if (this.showHelp) { this.showHelp = false; this.renderDashboard(); return; }
+          if (this.searchMode) { this.exitSearch(); return; }
+          this.onQuit();
+        },
+        'd':       () => { if (this.searchMode) return false; this.onSelect('doctor'); return true; },
+        's':       () => { if (this.searchMode) return false; this.onSelect('status'); return true; },
+        'v':       () => { if (this.searchMode) return false; this.onSelect('voice'); return true; },
+        'h':       () => { if (this.searchMode) return false; this.onSelect('help'); return true; },
+        'r':       () => { if (this.searchMode) return false; this.refresh(); return true; },
+        '1':       () => { if (this.searchMode) return false; this.selectIndex(0); return true; },
+        '2':       () => { if (this.searchMode) return false; this.selectIndex(1); return true; },
+        '3':       () => { if (this.searchMode) return false; this.selectIndex(2); return true; },
+        '4':       () => { if (this.searchMode) return false; this.selectIndex(4); return true; },
+        '5':       () => { if (this.searchMode) return false; this.selectIndex(5); return true; },
+        '6':       () => { if (this.searchMode) return false; this.selectIndex(6); return true; },
+        '7':       () => { if (this.searchMode) return false; this.selectIndex(7); return true; },
       },
     });
   }
@@ -143,7 +168,7 @@ export class Dashboard {
   /** Pre-load config and secrets. Call once before first render. */
   async init(): Promise<void> {
     try {
-      const config = await loadConfig();
+      const config = await loadConfig(this.configDir);
       if (config.agentName) this.state.agentName = config.agentName;
       if (config.llmProvider && config.llmModel) {
         this.state.llmInfo = `${config.llmProvider} / ${config.llmModel}`;
@@ -154,6 +179,7 @@ export class Dashboard {
       if (Array.isArray(config.channels)) {
         this.state.channelCount = config.channels.length;
       }
+      this.tourAutoLaunch = shouldAutoLaunchTour(config);
     } catch { /* config not available */ }
 
     const secrets = checkEnvSecrets();
@@ -173,7 +199,15 @@ export class Dashboard {
   async render(): Promise<void> {
     if (!this.introPlayed) {
       this.introPlayed = true;
-      await this.playIntro();
+      const ui = getUiRuntime();
+      const canAnimate = ui.theme === 'cyberpunk' && !ui.noColor && !ui.ascii && !!process.stdout.isTTY;
+      if (canAnimate) {
+        await this.playIntro();
+      }
+    }
+    if (this.tourAutoLaunch) {
+      this.tourAutoLaunch = false;
+      this.openTour();
     }
     this.renderDashboard();
   }
@@ -198,7 +232,7 @@ export class Dashboard {
     } catch { /* cfonts unavailable */ }
 
     if (bannerLines.length === 0) {
-      bannerLines = ASCII_BANNER.map((line) => accentBorder(line));
+      bannerLines = getAsciiBannerLines().map((line) => accentBorder(line));
     }
 
     while (bannerLines.length > 0 && stripAnsi(bannerLines[bannerLines.length - 1]).trim() === '') {
@@ -323,10 +357,19 @@ export class Dashboard {
   // ── Static Dashboard Render ───────────────────────────────────────────
 
   private renderDashboard(): void {
+    const ui = getUiRuntime();
+    if (ui.ascii) {
+      this.renderDashboardAscii();
+      return;
+    }
     const { rows, cols } = this.screen.getSize();
     const contentLines: string[] = [];
     const contentWidth = Math.max(cols - 4, 60);
     const innerWidth = contentWidth - 2;
+    const g = glyphs();
+    const upDown = ui.ascii ? 'Up/Down' : '↑/↓';
+    const enter = ui.ascii ? 'Enter' : '⏎';
+    const arrow = ui.ascii ? '->' : '→';
 
     const bL = frameBorder('║');
     const bR = frameBorder('║');
@@ -348,7 +391,7 @@ export class Dashboard {
     contentLines.push(`  ${frameBorder('╔')}${frameBorder('═'.repeat(innerWidth))}${frameBorder('╗')}`);
 
     // ═══ Banner ═══════════════════════════════════════════════════════
-    let bannerLines: string[] = ASCII_BANNER.map((l) => accentBorder(l));
+    let bannerLines: string[] = getAsciiBannerLines().map((l) => accentBorder(l));
     bannerLines = bannerLines.map((l) => {
       const vLen = visibleLength(l);
       if (vLen > innerWidth - 4) return sliceAnsi(l, 0, innerWidth - 4);
@@ -401,8 +444,8 @@ export class Dashboard {
       for (let i = 0; i < this.state.keys.length; i += 2) {
         const k1 = this.state.keys[i];
         const k2 = this.state.keys[i + 1];
-        const s1 = k1 ? `${k1.isSet ? sColor('✓') : chalk.hex(C.dim)('○')} ${k1.label}` : '';
-        const s2 = k2 ? `${k2.isSet ? sColor('✓') : chalk.hex(C.dim)('○')} ${k2.label}` : '';
+        const s1 = k1 ? `${k1.isSet ? sColor(g.ok) : chalk.hex(C.dim)(g.circle)} ${k1.label}` : '';
+        const s2 = k2 ? `${k2.isSet ? sColor(g.ok) : chalk.hex(C.dim)(g.circle)} ${k2.label}` : '';
         keyPairs.push(`  ${ansiPadEnd(s1, 14)}${s2}`);
       }
 
@@ -425,7 +468,7 @@ export class Dashboard {
       ];
 
       const keyLine = this.state.keys.map((k) =>
-        `${k.isSet ? sColor('✓') : chalk.hex(C.dim)('○')} ${k.label}`
+        `${k.isSet ? sColor(g.ok) : chalk.hex(C.dim)(g.circle)} ${k.label}`
       ).join('  ');
       const keyPairs = [`  ${keyLine}`];
 
@@ -447,16 +490,33 @@ export class Dashboard {
     const actHeaderContent = accentBorder('─'.repeat(actHalfL)) + actTitle + accentBorder('─'.repeat(actHalfR));
     contentLines.push(frameLine(actHeaderContent));
 
-    contentLines.push(emptyFrame());
+    if (this.searchMode) {
+      const q = this.filter.trim();
+      const placeholder = q ? chalk.hex(C.white)(q) : chalk.hex(C.dim)(`type to filter${g.ellipsis}`);
+      const searchLine =
+        `   ${chalk.hex(C.lightCyan)(g.search)} ${chalk.hex(C.muted)('Search:')} ${placeholder}  ${chalk.hex(C.dim)('(esc to exit)')}`;
+      contentLines.push(frameLine(truncate(searchLine, innerWidth)));
+      contentLines.push(emptyFrame());
+    } else {
+      contentLines.push(emptyFrame());
+    }
 
     // ═══ Quick Actions ════════════════════════════════════════════════
     this.actionLineOffset = contentLines.length;
 
-    for (let i = 0; i < ACTIONS.length; i++) {
-      const action = ACTIONS[i];
-      const selected = i === this.cursor;
+    const filtered = this.getFilteredActions();
+    if (this.cursor > filtered.length - 1) this.cursor = Math.max(0, filtered.length - 1);
 
-      const cursor = selected ? chalk.hex(C.brightCyan)('▸') : ' ';
+    if (filtered.length === 0) {
+      const msg = `   ${chalk.hex(C.dim)('No matches. Press / to search or esc to exit.')}`;
+      contentLines.push(frameLine(truncate(msg, innerWidth)));
+    }
+
+    for (let pos = 0; pos < filtered.length; pos++) {
+      const { action } = filtered[pos];
+      const selected = pos === this.cursor;
+
+      const cursor = selected ? chalk.hex(C.brightCyan)(g.cursor) : ' ';
 
       // Shortcut key badge
       const shortcutBadge = action.shortcut
@@ -467,7 +527,7 @@ export class Dashboard {
       let label: string;
       if (action.command === 'setup') {
         const tag = this.state.isSetUp
-          ? chalk.hex(C.green)(' (configured ✓)')
+          ? chalk.hex(C.green)(` (configured ${g.ok})`)
           : chalk.hex(C.dim)(' (not configured)');
         label = (selected ? chalk.hex(C.white).bold(action.label) : chalk.hex(C.text)(action.label)) + tag;
       } else {
@@ -481,7 +541,7 @@ export class Dashboard {
       const hintVis  = visibleLength(hint);
       const dotsLen  = Math.max(2, innerWidth - 9 - labelVis - hintVis);
       const dotColor = selected ? C.dark : C.darker;
-      const dots     = chalk.hex(dotColor)('·'.repeat(dotsLen));
+      const dots     = chalk.hex(dotColor)(g.dot.repeat(dotsLen));
 
       contentLines.push(frameLine(`   ${cursor} ${fullLabel} ${dots} ${hint}  `));
     }
@@ -492,20 +552,26 @@ export class Dashboard {
     contentLines.push(`  ${frameBorder('╚')}${frameBorder('═'.repeat(innerWidth))}${frameBorder('╝')}`);
 
     // ═══ Footer Keybinding Bar (pinned at bottom) ═════════════════════
-    const hintSep = chalk.hex(C.dark)('  ·  ');
+    const hintSep = chalk.hex(C.dark)(`  ${g.dot}  `);
     const hintFull = [
       `${chalk.hex(C.purple)('↑↓')} navigate`,
       `${chalk.hex(C.lavender)('⏎')} select`,
+      `${chalk.hex(C.lightCyan)('/')} search`,
+      `${chalk.hex(C.lightCyan)('?')} help`,
       `${chalk.hex(C.magenta)('d')} doctor`,
       `${chalk.hex(C.brightCyan)('s')} status`,
       `${chalk.hex(C.fuchsia)('v')} voice`,
       `${chalk.hex(C.lightCyan)('h')} help`,
+      `${chalk.hex(C.lightCyan)('t')} tour`,
       `${chalk.hex(C.cyan)('r')} refresh`,
       `${chalk.hex(C.purple)('q')} quit`,
     ];
     const hintShort = [
       `${chalk.hex(C.purple)('↑↓')} nav`,
       `${chalk.hex(C.lavender)('⏎')} sel`,
+      `${chalk.hex(C.lightCyan)('/')} search`,
+      `${chalk.hex(C.lightCyan)('?')} help`,
+      `${chalk.hex(C.lightCyan)('t')} tour`,
       `${chalk.hex(C.lightCyan)('h')} help`,
       `${chalk.hex(C.purple)('q')} quit`,
     ];
@@ -542,17 +608,214 @@ export class Dashboard {
 
     // Scroll indicators
     if (this.scrollOffset > 0) {
-      const indicator = chalk.hex(C.dim)('▲ scroll up');
+      const indicator = chalk.hex(C.dim)(`${g.triUp} scroll up`);
       const indPad = Math.max(0, Math.floor((contentWidth - 11) / 2));
       visibleContent[0] = `  ${' '.repeat(indPad)}${indicator}`;
     }
     if (this.scrollOffset + viewportHeight < contentLines.length) {
-      const indicator = chalk.hex(C.dim)('▼ scroll down');
+      const indicator = chalk.hex(C.dim)(`${g.triDown} scroll down`);
       const indPad = Math.max(0, Math.floor((contentWidth - 13) / 2));
       visibleContent[visibleContent.length - 1] = `  ${' '.repeat(indPad)}${indicator}`;
     }
 
-    this.screen.render([...visibleContent, ...footerLines].join('\n'));
+    let outLines = [...visibleContent, ...footerLines];
+
+    if (this.showHelp) {
+      const overlayWidth = Math.min(Math.max(44, Math.min(74, cols - 8)), Math.max(24, cols - 4));
+      const overlay = renderOverlayBox({
+        title: 'Dashboard Help',
+        width: overlayWidth,
+        lines: [
+          `${chalk.hex(C.lightCyan)(upDown)} navigate  ${chalk.hex(C.lavender)(enter)} select  ${chalk.hex(C.dim)('/')} palette`,
+          `${chalk.hex(C.magenta)('d')} doctor  ${chalk.hex(C.brightCyan)('s')} status  ${chalk.hex(C.fuchsia)('v')} voice  ${chalk.hex(C.lightCyan)('h')} help  ${chalk.hex(C.lightCyan)('t')} tour`,
+          `${chalk.hex(C.cyan)('r')} refresh  ${chalk.hex(C.purple)('q')} quit  ${chalk.hex(C.dim)('esc')} close`,
+          '',
+          `${chalk.hex(C.dim)('First run:')} ${chalk.hex(C.white).bold('setup')} ${arrow} ${chalk.hex(C.white).bold('doctor')} ${arrow} ${chalk.hex(C.white).bold('chat')} ${arrow} ${chalk.hex(C.white).bold('start')}`,
+          `${chalk.hex(C.dim)('Guides:')} ${chalk.hex(C.cyan)('wunderland help getting-started')}, ${chalk.hex(C.cyan)('wunderland help tui')}`,
+        ],
+      });
+
+      const viewportHeight = Math.max(1, rows - footerLines.length);
+      outLines = stampOverlay({
+        screenLines: outLines,
+        overlayLines: overlay,
+        cols,
+        rows,
+        y: Math.max(0, Math.floor((viewportHeight - overlay.length) / 2)),
+      });
+    }
+
+    if (this.tourActive) {
+      const steps = getTourSteps({ ascii: ui.ascii });
+      const step = steps[Math.max(0, Math.min(this.tourStep, steps.length - 1))];
+      const overlayWidth = Math.min(Math.max(50, Math.min(78, cols - 8)), Math.max(24, cols - 4));
+      const overlay = renderOverlayBox({
+        title: `Tour: ${step.title} (${this.tourStep + 1}/${steps.length})`,
+        width: overlayWidth,
+        lines: [
+          ...step.lines,
+          '',
+          chalk.hex(C.dim)(getTourControlsLine({ ascii: ui.ascii })),
+        ],
+      });
+
+      const viewportHeight = Math.max(1, rows - footerLines.length);
+      outLines = stampOverlay({
+        screenLines: outLines,
+        overlayLines: overlay,
+        cols,
+        rows,
+        y: Math.max(0, Math.floor((viewportHeight - overlay.length) / 2)),
+      });
+    }
+
+    this.screen.render(outLines.join('\n'));
+  }
+
+  private renderDashboardAscii(): void {
+    const g = glyphs();
+    const ui = getUiRuntime();
+    const { rows, cols } = this.screen.getSize();
+
+    const contentLines: string[] = [];
+    const width = Math.max(40, cols);
+    const innerWidth = Math.max(0, width - 2);
+
+    const fit = (line: string): string => {
+      const vLen = visibleLength(line);
+      if (vLen > cols) return sliceAnsi(line, 0, Math.max(0, cols));
+      return line;
+    };
+
+    const headerSep = chalk.hex(C.dim)(g.hr.repeat(Math.max(10, Math.min(innerWidth, 70))));
+    const upDown = ui.ascii ? 'Up/Down' : '↑/↓';
+    const enter = ui.ascii ? 'Enter' : '⏎';
+    const arrow = ui.ascii ? '->' : '→';
+
+    contentLines.push('');
+    contentLines.push(fit(`  ${chalk.hex(C.magenta).bold('WUNDERLAND')}`));
+    contentLines.push(fit(`  ${buildTagline(Math.max(24, Math.min(innerWidth, 96)))}`));
+    contentLines.push(fit(`  ${headerSep}`));
+    contentLines.push('');
+
+    // Status
+    contentLines.push(fit(`  Agent: ${chalk.hex(C.white)(this.state.agentName)}`));
+    contentLines.push(fit(`  LLM:   ${chalk.hex(C.white)(this.state.llmInfo)}`));
+    contentLines.push(fit(`  Chan:  ${this.state.channelCount > 0 ? sColor(`${this.state.channelCount} active`) : chalk.hex(C.dim)('0 active')}`));
+
+    const keySummary = this.state.keys
+      .map((k) => `${k.isSet ? sColor(g.ok) : chalk.hex(C.dim)(g.circle)} ${k.label}`)
+      .join('  ');
+    if (keySummary.trim().length > 0) {
+      contentLines.push(fit(`  Keys:  ${keySummary}`));
+    }
+
+    contentLines.push('');
+
+    // Actions header
+    contentLines.push(fit(`  ${chalk.hex(C.magenta).bold('ACTIONS')}`));
+    contentLines.push(fit(`  ${chalk.hex(C.dim)(g.hr.repeat(Math.max(10, Math.min(innerWidth, 70))))}`));
+
+    if (this.searchMode) {
+      const q = this.filter.trim();
+      const placeholder = q ? chalk.hex(C.white)(q) : chalk.hex(C.dim)('type to filter...');
+      contentLines.push(fit(`  ${chalk.hex(C.lightCyan)(g.search)} Search: ${placeholder}  ${chalk.hex(C.dim)('(esc to exit)')}`));
+      contentLines.push('');
+    } else {
+      contentLines.push('');
+    }
+
+    // Actions list
+    this.actionLineOffset = contentLines.length;
+    const filtered = this.getFilteredActions();
+    if (this.cursor > filtered.length - 1) this.cursor = Math.max(0, filtered.length - 1);
+
+    if (filtered.length === 0) {
+      contentLines.push(fit(`  ${chalk.hex(C.dim)('No matches. Press / to search or esc to exit.')}`));
+    }
+
+    for (let pos = 0; pos < filtered.length; pos++) {
+      const { action } = filtered[pos];
+      const selected = pos === this.cursor;
+      const cursor = selected ? chalk.hex(C.brightCyan)(g.cursor) : ' ';
+      const shortcut = action.shortcut ? chalk.hex(C.dim)(`[${action.shortcut}]`) + ' ' : '';
+
+      let label = selected ? chalk.hex(C.white).bold(action.label) : chalk.hex(C.text)(action.label);
+      if (action.command === 'setup') {
+        label += this.state.isSetUp ? chalk.hex(C.green)(` (configured ${g.ok})`) : chalk.hex(C.dim)(' (not configured)');
+      }
+
+      const hint = selected ? chalk.hex(C.cyan)(action.hint) : chalk.hex(C.dim)(action.hint);
+
+      const left = `  ${cursor} ${shortcut}${label}`;
+      const leftLen = visibleLength(left);
+      const hintLen = visibleLength(hint);
+      const dotsLen = Math.max(2, Math.min(40, innerWidth - leftLen - hintLen - 2));
+      const dots = chalk.hex(selected ? C.dark : C.darker)('.'.repeat(dotsLen));
+
+      contentLines.push(fit(`${left} ${dots} ${hint}`));
+    }
+
+    // Footer
+    const footerLines: string[] = [
+      '',
+      fit(`  ${chalk.hex(C.dim)(g.hr.repeat(Math.max(10, Math.min(innerWidth, 70))))}`),
+      fit(`  ${chalk.hex(C.dim)(`${upDown} nav  ${enter} run  / search  ? help  t tour  r refresh  q quit  esc close`)}`),
+      '',
+    ];
+
+    const viewportHeight = Math.max(1, rows - footerLines.length);
+    this.ensureCursorVisible(viewportHeight, contentLines.length);
+
+    const visibleContent = contentLines.slice(this.scrollOffset, this.scrollOffset + viewportHeight);
+    while (visibleContent.length < viewportHeight) visibleContent.push('');
+
+    if (this.scrollOffset > 0) {
+      visibleContent[0] = fit(`  ${chalk.hex(C.dim)(`${g.triUp} scroll up`)}`);
+    }
+    if (this.scrollOffset + viewportHeight < contentLines.length) {
+      visibleContent[visibleContent.length - 1] = fit(`  ${chalk.hex(C.dim)(`${g.triDown} scroll down`)}`);
+    }
+
+    let outLines = [...visibleContent, ...footerLines];
+
+    if (this.showHelp) {
+      const overlayWidth = Math.min(Math.max(44, Math.min(74, cols - 8)), Math.max(24, cols - 4));
+      const overlay = renderOverlayBox({
+        title: 'Dashboard Help',
+        width: overlayWidth,
+        lines: [
+          `${chalk.hex(C.lightCyan)(upDown)} navigate  ${chalk.hex(C.lavender)(enter)} select  ${chalk.hex(C.dim)('/')} palette`,
+          `${chalk.hex(C.magenta)('d')} doctor  ${chalk.hex(C.brightCyan)('s')} status  ${chalk.hex(C.fuchsia)('v')} voice  ${chalk.hex(C.lightCyan)('h')} help  ${chalk.hex(C.lightCyan)('t')} tour`,
+          `${chalk.hex(C.cyan)('r')} refresh  ${chalk.hex(C.purple)('q')} quit  ${chalk.hex(C.dim)('esc')} close`,
+          '',
+          `${chalk.hex(C.dim)('First run:')} ${chalk.hex(C.white).bold('setup')} ${arrow} ${chalk.hex(C.white).bold('doctor')} ${arrow} ${chalk.hex(C.white).bold('chat')} ${arrow} ${chalk.hex(C.white).bold('start')}`,
+          `${chalk.hex(C.dim)('Guides:')} ${chalk.hex(C.cyan)('wunderland help getting-started')}, ${chalk.hex(C.cyan)('wunderland help tui')}`,
+        ],
+      });
+
+      outLines = stampOverlay({ screenLines: outLines, overlayLines: overlay, cols, rows });
+    }
+
+    if (this.tourActive) {
+      const steps = getTourSteps({ ascii: ui.ascii });
+      const step = steps[Math.max(0, Math.min(this.tourStep, steps.length - 1))];
+      const overlayWidth = Math.min(Math.max(50, Math.min(78, cols - 8)), Math.max(24, cols - 4));
+      const overlayLines = [
+        ...step.lines,
+        '',
+        chalk.hex(C.dim)(getTourControlsLine({ ascii: ui.ascii })),
+      ];
+      const overlay = renderOverlayBox({
+        title: `Tour: ${step.title} (${this.tourStep + 1}/${steps.length})`,
+        width: overlayWidth,
+        lines: overlayLines,
+      });
+
+      outLines = stampOverlay({ screenLines: outLines, overlayLines: overlay, cols, rows });
+    }
+
+    this.screen.render(outLines.map(fit).join('\n'));
   }
 
   // ── Scroll ──────────────────────────────────────────────────────────────
@@ -577,7 +840,8 @@ export class Dashboard {
 
   private moveCursor(delta: number): void {
     const prev = this.cursor;
-    this.cursor = Math.max(0, Math.min(ACTIONS.length - 1, this.cursor + delta));
+    const filteredLen = this.getFilteredActions().length;
+    this.cursor = Math.max(0, Math.min(Math.max(0, filteredLen - 1), this.cursor + delta));
 
     // When cursor is already at boundary, scroll the viewport instead
     if (this.cursor === prev && delta !== 0) {
@@ -588,15 +852,22 @@ export class Dashboard {
   }
 
   private selectCurrent(): void {
-    const action = ACTIONS[this.cursor];
-    if (action) this.onSelect(action.command);
+    const filtered = this.getFilteredActions();
+    const action = filtered[this.cursor]?.action;
+    if (!action) return;
+    if (action.command === 'tour') {
+      this.openTour();
+      return;
+    }
+    this.onSelect(action.command);
   }
 
   private selectIndex(index: number): void {
-    if (index >= 0 && index < ACTIONS.length) {
-      this.cursor = index;
-      this.selectCurrent();
-    }
+    if (index < 0 || index >= ACTIONS.length) return;
+    this.searchMode = false;
+    this.filter = '';
+    this.cursor = index;
+    this.selectCurrent();
   }
 
   private async refresh(): Promise<void> {
@@ -606,6 +877,99 @@ export class Dashboard {
 
   dispose(): void {
     this.keys.pop();
+  }
+
+  // ── Tour ───────────────────────────────────────────────────────────────
+
+  private openTour(): void {
+    if (this.tourActive) return;
+
+    this.tourActive = true;
+    this.tourStep = 0;
+    this.showHelp = false;
+    this.searchMode = false;
+    this.filter = '';
+
+    this.keys.push({
+      name: 'dashboard-tour',
+      bindings: {
+        '__text__': () => { return true; },
+        '__any__':  () => { return true; },
+        'ctrl+c': () => { this.onQuit(); return true; },
+        'escape': () => { this.closeTour('skipped'); return true; },
+        'q':      () => { this.closeTour('skipped'); return true; },
+        's':      () => { this.closeTour('skipped'); return true; },
+        'x':      () => { this.closeTour('never'); return true; },
+        'b':      () => {
+          if (this.tourStep > 0) {
+            this.tourStep -= 1;
+            this.renderDashboard();
+          }
+          return true;
+        },
+        'return': () => {
+          const steps = getTourSteps({ ascii: getUiRuntime().ascii });
+          if (this.tourStep >= steps.length - 1) {
+            this.closeTour('completed');
+            return true;
+          }
+          this.tourStep += 1;
+          this.renderDashboard();
+          return true;
+        },
+      },
+    });
+
+    this.renderDashboard();
+  }
+
+  private closeTour(status: TourStatus): void {
+    if (!this.tourActive) return;
+    this.tourActive = false;
+    this.tourStep = 0;
+    this.keys.pop();
+    this.persistTourStatus(status);
+    this.renderDashboard();
+  }
+
+  private persistTourStatus(status: TourStatus): void {
+    const when = new Date().toISOString();
+    void (async () => {
+      try {
+        const existing = await loadConfig(this.configDir);
+        const ui = existing.ui ?? {};
+        const tour = { ...(ui.tour ?? {}), status, lastShownAt: when };
+        await updateConfig({ ui: { ...ui, tour } }, this.configDir);
+      } catch {
+        // ignore persistence errors in TUI mode
+      }
+    })();
+  }
+
+  private enterSearch(): void {
+    this.searchMode = true;
+    this.showHelp = false;
+    this.filter = '';
+    this.cursor = 0;
+    this.renderDashboard();
+  }
+
+  private exitSearch(): void {
+    this.searchMode = false;
+    this.filter = '';
+    this.cursor = 0;
+    this.renderDashboard();
+  }
+
+  private getFilteredActions(): Array<{ index: number; action: QuickAction }> {
+    const q = this.filter.trim().toLowerCase();
+    if (!q) return ACTIONS.map((action, index) => ({ index, action }));
+    return ACTIONS
+      .map((action, index) => ({ index, action }))
+      .filter(({ action }) => {
+        const hay = `${action.label} ${action.command} ${action.hint}`.toLowerCase();
+        return hay.includes(q);
+      });
   }
 }
 
@@ -617,7 +981,8 @@ function sleep(ms: number): Promise<void> {
 
 /** Build the tagline with individually colored segments, adapted to available width. */
 function buildTagline(maxWidth: number): string {
-  const sep = `  ${chalk.hex(C.dim)('·')}  `;
+  const g = glyphs();
+  const sep = `  ${chalk.hex(C.dim)(g.dot)}  `;
   const sepVis = 5;
 
   // Full tagline: v0.25.0 · https://wunderland.sh · https://rabbithole.inc · https://docs.wunderland.sh
@@ -665,20 +1030,24 @@ function buildHeavyPanel(
   borderColor: (s: string) => string,
   titleColor: (s: string) => string,
 ): string[] {
+  const g = glyphs();
   const titleStr = ` ${titleColor(title)} `;
   const titleLen = title.length + 2;
   const result: string[] = [];
 
   result.push(
-    borderColor('┏') + titleStr + borderColor('━'.repeat(Math.max(0, width - 2 - titleLen))) + borderColor('┓'),
+    borderColor(g.boxHeavy.tl)
+      + titleStr
+      + borderColor(g.boxHeavy.h.repeat(Math.max(0, width - 2 - titleLen)))
+      + borderColor(g.boxHeavy.tr),
   );
 
   for (const line of content) {
     const vLen = visibleLength(line);
     const pad = Math.max(0, width - 2 - vLen);
-    result.push(borderColor('┃') + line + ' '.repeat(pad) + borderColor('┃'));
+    result.push(borderColor(g.boxHeavy.v) + line + ' '.repeat(pad) + borderColor(g.boxHeavy.v));
   }
 
-  result.push(borderColor('┗') + borderColor('━'.repeat(Math.max(0, width - 2))) + borderColor('┛'));
+  result.push(borderColor(g.boxHeavy.bl) + borderColor(g.boxHeavy.h.repeat(Math.max(0, width - 2))) + borderColor(g.boxHeavy.br));
   return result;
 }

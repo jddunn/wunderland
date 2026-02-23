@@ -53,7 +53,7 @@ Wunderland adds an explicit `executionMode` that controls when approvals are req
 Notes:
 
 - `wunderland chat` is interactive and can prompt for approvals.
-- `wunderland start` exposes HITL over HTTP (`/hitl`, `/hitl/stream`, approvals endpoints). Tier 3 tool calls pause until an operator approves/rejects, unless you opt into `--yes` / `--dangerously-skip-permissions` (fully autonomous).
+- `wunderland start` exposes HITL over HTTP (`/hitl`, `/hitl/stream`, approvals endpoints). Tier 3 tool calls pause until an operator approves/rejects, unless you opt into `--auto-approve-tools` / `--dangerously-skip-permissions` (fully autonomous).
 - Optional: `hitl.turnApprovalMode` adds per-round checkpoints ("human after each turn") for multi-step tool loops.
 
 Reference:

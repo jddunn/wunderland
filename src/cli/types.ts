@@ -3,6 +3,8 @@
  * @module wunderland/cli/types
  */
 
+import type { UiTheme } from './ui/runtime.js';
+
 // ── Config ──────────────────────────────────────────────────────────────────
 
 /** Global CLI configuration persisted at ~/.wunderland/config.json */
@@ -50,6 +52,21 @@ export interface CliConfig {
     /** Wizard-selected preset. */
     preset?: ObservabilityPreset;
   };
+
+  /** CLI/TUI UI preferences. */
+  ui?: {
+    /** UI theme. */
+    theme?: UiTheme;
+    /** Force ASCII-only glyphs (no box drawing / unicode icons). */
+    ascii?: boolean;
+    /** TUI onboarding tour preferences. */
+    tour?: {
+      /** One of: unseen (default), skipped, completed, never. */
+      status?: 'unseen' | 'skipped' | 'completed' | 'never';
+      /** ISO timestamp when the tour was last shown. */
+      lastShownAt?: string;
+    };
+  };
 }
 
 /** Parsed CLI arguments. */
@@ -66,11 +83,15 @@ export interface GlobalFlags {
   version: boolean;
   quiet: boolean;
   yes: boolean;
+  /** Auto-approve tool calls (fully autonomous). */
+  autoApproveTools: boolean;
   noColor: boolean;
   dryRun: boolean;
   tui: boolean;
   noTui: boolean;
   config?: string;
+  theme?: UiTheme;
+  ascii: boolean;
 }
 
 /** Command handler signature. */

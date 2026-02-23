@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { accent, dim, success as sColor, error as eColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { getUiRuntime } from '../ui/runtime.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 
 function getBackendUrl(): string {
@@ -16,6 +17,10 @@ function getBackendUrl(): string {
 
 function ragUrl(base: string): string {
   return base.replace(/\/+$/, '') + '/agentos/rag';
+}
+
+function arrow(): string {
+  return getUiRuntime().ascii ? '->' : '→';
 }
 
 async function ragFetch(urlPath: string, options?: { method?: string; body?: unknown }): Promise<any> {
@@ -28,7 +33,7 @@ async function ragFetch(urlPath: string, options?: { method?: string; body?: unk
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`${method} ${urlPath} → ${res.status}: ${text}`);
+    throw new Error(`${method} ${urlPath} ${arrow()} ${res.status}: ${text}`);
   }
   return res.json();
 }
@@ -60,7 +65,7 @@ async function cmdIngest(args: string[], flags: Record<string, string | boolean>
   const category = typeof flags['category'] === 'string' ? flags['category'] : undefined;
 
   const result = await ragFetch('/ingest', { method: 'POST', body: { content, collectionId, category } });
-  fmt.ok(`Ingested → document ${dim(result.documentId)} (${result.chunksCreated} chunks)`);
+  fmt.ok(`Ingested ${arrow()} document ${dim(result.documentId)} (${result.chunksCreated} chunks)`);
 }
 
 async function cmdIngestImage(args: string[]): Promise<void> {
@@ -78,7 +83,7 @@ async function cmdIngestImage(args: string[]): Promise<void> {
   const res = await fetch(`${base}/multimodal/images/ingest`, { method: 'POST', body: formData });
   if (!res.ok) throw new Error(`Image ingest failed (${res.status})`);
   const result = await res.json() as any;
-  fmt.ok(`Image ingested → asset ${dim(result.assetId)} (${result.chunksCreated} chunks)`);
+  fmt.ok(`Image ingested ${arrow()} asset ${dim(result.assetId)} (${result.chunksCreated} chunks)`);
 }
 
 async function cmdIngestAudio(args: string[]): Promise<void> {
@@ -96,7 +101,7 @@ async function cmdIngestAudio(args: string[]): Promise<void> {
   const res = await fetch(`${base}/multimodal/audio/ingest`, { method: 'POST', body: formData });
   if (!res.ok) throw new Error(`Audio ingest failed (${res.status})`);
   const result = await res.json() as any;
-  fmt.ok(`Audio ingested → asset ${dim(result.assetId)} (${result.chunksCreated} chunks)`);
+  fmt.ok(`Audio ingested ${arrow()} asset ${dim(result.assetId)} (${result.chunksCreated} chunks)`);
 }
 
 async function cmdQuery(args: string[], flags: Record<string, string | boolean>): Promise<void> {
@@ -157,7 +162,7 @@ async function cmdQuery(args: string[], flags: Record<string, string | boolean>)
       fmt.kvPair('Relationships', String(gc.relationships.length));
       for (const r of gc.relationships.slice(0, 6)) {
         const desc = r.description?.replace(/[\n\r]+/g, ' ').trim().slice(0, 80) ?? '';
-        fmt.kvPair(`  ${cleanName(r.source)} → ${cleanName(r.target)}`, `[${r.type}] ${desc}`);
+        fmt.kvPair(`  ${cleanName(r.source)} ${arrow()} ${cleanName(r.target)}`, `[${r.type}] ${desc}`);
       }
       if (gc.relationships.length > 6) fmt.note(`  ... and ${gc.relationships.length - 6} more relationships`);
     }
@@ -249,7 +254,8 @@ async function cmdCollections(args: string[], flags: Record<string, string | boo
     fmt.section('RAG Collections');
     if (!result.collections?.length) { fmt.note('No collections.'); return; }
     for (const c of result.collections) {
-      fmt.kvPair(c.collectionId, `${c.documentCount} docs, ${c.chunkCount} chunks — ${c.displayName || ''}`);
+      const name = c.displayName ? ` - ${c.displayName}` : '';
+      fmt.kvPair(c.collectionId, `${c.documentCount} docs, ${c.chunkCount} chunks${name}`);
     }
     fmt.blank();
   } else if (sub === 'create') {

@@ -261,7 +261,7 @@ export interface StepUpAuthorizationConfig {
    * side effects, capabilities, or escalation triggers. Everything executes
    * as Tier 1 (autonomous) with no human intervention.
    *
-   * Use with `--dangerously-skip-permissions` or `--yes` CLI flags.
+   * Use with `--auto-approve-tools` or `--dangerously-skip-permissions` CLI flags.
    */
   autoApproveAll?: boolean;
 }
@@ -307,7 +307,7 @@ export const DEFAULT_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
  * destructive commands, build commands, and every other tool type.
  * No escalation triggers, no tier gates, no HITL.
  *
- * Used when `--dangerously-skip-permissions` or `--yes` is passed.
+ * Used when `--dangerously-skip-permissions` is passed.
  */
 export const FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
   defaultTier: ToolRiskTier.TIER_1_AUTONOMOUS,

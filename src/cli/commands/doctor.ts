@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { info as iColor, bright } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { createStepProgress } from '../ui/progress.js';
 import { getConfigPath } from '../config/config-manager.js';
 import { getEnvPath, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
@@ -90,9 +91,10 @@ export default async function cmdDoctor(
 
   const progress = createStepProgress(stepLabels);
   let stepIdx = 0;
+  const g = glyphs();
 
   // 1. Configuration files
-  console.log(`  ${iColor('\u25C7')} ${bright('Configuration')}`);
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('Configuration')}`);
   progress.start(stepIdx);
   if (existsSync(configPath)) {
     progress.pass(stepIdx);
@@ -119,7 +121,7 @@ export default async function cmdDoctor(
   console.log();
 
   // 2. API Keys
-  console.log(`  ${iColor('\u25C7')} ${bright('API Keys')}`);
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('API Keys')}`);
   for (const k of keyEntries) {
     progress.start(stepIdx);
     if (k.isSet) {
@@ -134,7 +136,7 @@ export default async function cmdDoctor(
   console.log();
 
   // 3. Channels
-  console.log(`  ${iColor('\u25C7')} ${bright('Channels')}`);
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('Channels')}`);
   for (const pc of platformChecks) {
     progress.start(stepIdx);
     if (pc.allSet) {
@@ -149,7 +151,7 @@ export default async function cmdDoctor(
   console.log();
 
   // 4. Connectivity (async checks with live spinners)
-  console.log(`  ${iColor('\u25C7')} ${bright('Connectivity')}`);
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('Connectivity')}`);
   for (const ep of endpoints) {
     progress.start(stepIdx);
     const result = await checkReachable(ep.url);

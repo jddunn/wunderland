@@ -7,6 +7,7 @@ import type { GlobalFlags } from '../types.js';
 import { CHANNEL_PLATFORMS } from '../constants.js';
 import { accent, success as sColor, channel as cColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { getUiRuntime } from '../ui/runtime.js';
 import { loadConfig, updateConfig } from '../config/config-manager.js';
 import { loadEnv, mergeEnv } from '../config/env-manager.js';
 import { getSecretsForPlatform } from '../config/secrets.js';
@@ -16,6 +17,7 @@ import { getSecretsForPlatform } from '../config/secrets.js';
 async function listChannels(globals: GlobalFlags): Promise<void> {
   const config = await loadConfig(globals.config);
   const env = await loadEnv(globals.config);
+  const ui = getUiRuntime();
   const activeChannels = config.channels || [];
 
   fmt.section('Channel Bindings');
@@ -31,7 +33,7 @@ async function listChannels(globals: GlobalFlags): Promise<void> {
 
   for (const channelId of activeChannels) {
     const platform = CHANNEL_PLATFORMS.find((p) => p.id === channelId);
-    const label = platform ? `${platform.icon}  ${platform.label}` : channelId;
+    const label = platform ? `${ui.ascii ? '' : `${platform.icon}  `}${platform.label}` : channelId;
     const secrets = getSecretsForPlatform(channelId);
     const allSet = secrets.length === 0 || secrets.every((s) => !!env[s.envVar]);
     const status = allSet ? sColor('ready') : wColor('needs credentials');
@@ -45,10 +47,11 @@ async function addChannel(args: string[], globals: GlobalFlags): Promise<void> {
 
   if (!platformId) {
     // Interactive mode — use @clack/prompts
+    const ui = getUiRuntime();
     const p = await import('@clack/prompts');
     const options = CHANNEL_PLATFORMS.map((ch) => ({
       value: ch.id as string,
-      label: `${ch.icon}  ${ch.label}`,
+      label: `${ui.ascii ? '' : `${ch.icon}  `}${ch.label}`,
       hint: ch.tier === 'p0' ? 'recommended' : ch.tier === 'p1' ? 'beta' : 'experimental',
     }));
 

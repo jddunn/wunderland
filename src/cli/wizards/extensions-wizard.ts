@@ -7,6 +7,8 @@ import * as p from '@clack/prompts';
 import type { WizardState } from '../types.js';
 import * as fmt from '../ui/format.js';
 import { accent, muted } from '../ui/theme.js';
+import { glyphs } from '../ui/glyphs.js';
+import { getUiRuntime } from '../ui/runtime.js';
 
 // ============================================================================
 // Types
@@ -147,6 +149,11 @@ export async function selectFromCatalog(
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    const ui = getUiRuntime();
+    const g = glyphs();
+    const leftArrow = ui.ascii ? '<-' : '←';
+    const rightArrow = ui.ascii ? '->' : '→';
+
     // Filter items by category
     const filtered = filterByCategory(items, category);
 
@@ -183,32 +190,32 @@ export async function selectFromCatalog(
     // Add navigation options
     const navOptions: any[] = [];
 
-    if (totalPages > 1) {
-      if (page > 0) {
-        navOptions.push({
-          value: '__prev__',
-          label: muted('← Previous Page'),
-          hint: `page ${page} of ${totalPages}`,
-        });
+      if (totalPages > 1) {
+        if (page > 0) {
+          navOptions.push({
+            value: '__prev__',
+            label: muted(`${leftArrow} Previous Page`),
+            hint: `page ${page} of ${totalPages}`,
+          });
+        }
+        if (page < totalPages - 1) {
+          navOptions.push({
+            value: '__next__',
+            label: muted(`${rightArrow} Next Page`),
+            hint: `page ${page + 2} of ${totalPages}`,
+          });
+        }
       }
-      if (page < totalPages - 1) {
-        navOptions.push({
-          value: '__next__',
-          label: muted('→ Next Page'),
-          hint: `page ${page + 2} of ${totalPages}`,
-        });
-      }
-    }
 
     navOptions.push({
       value: '__filter__',
-      label: muted('⊙ Change Category'),
+      label: muted(`${g.circle} Change Category`),
       hint: `current: ${category}`,
     });
 
     navOptions.push({
       value: '__done__',
-      label: accent('✓ Done'),
+      label: accent(`${g.ok} Done`),
       hint: `${selected.size} selected`,
     });
 

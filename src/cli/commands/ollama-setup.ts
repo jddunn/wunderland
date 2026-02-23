@@ -114,7 +114,7 @@ export default async function ollamaSetup(
   // Positional arg can specify a model to pull directly (e.g. `wunderland ollama-setup mistral`)
   const requestedModel = args.length > 0 ? args[0] : null;
 
-  section('Ollama Setup — Offline-First Agent Configuration');
+  section('Ollama Setup - Offline-First Agent Configuration');
   blank();
 
   // Show current configuration state
@@ -274,12 +274,12 @@ export default async function ollamaSetup(
   blank();
   section('Setup Complete');
   blank();
-  console.log(chalk.green('  ✓ ') + 'Ollama is installed and running');
-  console.log(chalk.green('  ✓ ') + `Tier: ${chalk.bold(recommendation.tier)} — ${dim(recommendation.reason)}`);
-  console.log(chalk.green('  ✓ ') + `Router:  ${accent(recommendation.router)}`);
-  console.log(chalk.green('  ✓ ') + `Primary: ${accent(recommendation.primary)}`);
-  console.log(chalk.green('  ✓ ') + `Auditor: ${accent(recommendation.auditor)}`);
-  console.log(chalk.green('  ✓ ') + 'Provider configured: ' + sColor('ollama'));
+  ok('Ollama is installed and running');
+  ok(`Tier: ${chalk.bold(recommendation.tier)} - ${dim(recommendation.reason)}`);
+  ok(`Router:  ${accent(recommendation.router)}`);
+  ok(`Primary: ${accent(recommendation.primary)}`);
+  ok(`Auditor: ${accent(recommendation.auditor)}`);
+  ok('Provider configured: ' + sColor('ollama'));
   blank();
   note('Next steps:');
   note(`  ${accent('wunderland init my-agent --provider ollama')}  Create an offline agent`);

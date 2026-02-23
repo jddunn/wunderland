@@ -1,16 +1,16 @@
 /**
  * @fileoverview `wunderland seal` — seal the agent configuration with an integrity hash.
- * Computes a SHA-256 hash of the config JSON and writes a sealed.json file.
+ * Computes a deterministic SHA-256 hash of the canonical config JSON and writes a sealed.json file.
  * @module wunderland/cli/commands/seal
  */
 
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { canonicalizeJsonString, sha256HexUtf8, signSealHashIfConfigured, type SealSignature } from '../seal-utils.js';
 
 // ── Command ─────────────────────────────────────────────────────────────────
 
@@ -52,13 +52,35 @@ export default async function cmdSeal(
     return;
   }
 
-  // Compute deterministic hash (sorted keys)
-  const canonical = JSON.stringify(config, Object.keys(config as Record<string, unknown>).sort(), 0);
-  const configHash = createHash('sha256').update(canonical, 'utf8').digest('hex');
+  // Compute deterministic hash (deep key-sorted canonical JSON)
+  let canonical: string;
+  try {
+    canonical = canonicalizeJsonString(configRaw).canonical;
+  } catch (err) {
+    fmt.errorBlock('Invalid config', `Failed to canonicalize ${configPath}: ${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
+    return;
+  }
+  const configHash = sha256HexUtf8(canonical);
+
+  // Optional signature (Ed25519) if configured.
+  let signature: SealSignature | null = null;
+  try {
+    signature = signSealHashIfConfigured(configHash);
+  } catch (err) {
+    fmt.errorBlock(
+      'Seal signing failed',
+      err instanceof Error ? err.message : 'Invalid WUNDERLAND_SEAL_SIGNING_SEED_BASE64',
+    );
+    process.exitCode = 1;
+    return;
+  }
 
   const sealed = {
+    format: 'wunderland.sealed.v2',
     sealedAt: new Date().toISOString(),
     configHash,
+    signature,
     config,
   };
 
@@ -69,7 +91,8 @@ export default async function cmdSeal(
   fmt.kvPair('Config', accent(configPath));
   fmt.kvPair('Sealed File', accent(sealedPath));
   fmt.kvPair('SHA-256', sColor(configHash));
+  if (signature) fmt.kvPair('Signature', sColor('ed25519'));
   fmt.blank();
-  fmt.note('The sealed.json file can be used to verify agent integrity at deploy time.');
+  fmt.note('Run wunderland verify-seal to verify integrity and signature.');
   fmt.blank();
 }

@@ -24,6 +24,7 @@ import {
   getPermissionsForSet,
   normalizeRuntimePolicy,
 } from '../security/runtime-policy.js';
+import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
 import {
   createWunderlandSeed,
@@ -84,6 +85,18 @@ function isHitlAuthorized(req: import('node:http').IncomingMessage, url: URL, hi
   return extractHitlSecret(req, url) === hitlSecret;
 }
 
+function extractChatSecret(req: import('node:http').IncomingMessage, url: URL): string {
+  const fromHeader = getHeaderString(req, 'x-wunderland-chat-secret');
+  if (fromHeader) return fromHeader;
+  const fromQuery = (url.searchParams.get('chat_secret') || url.searchParams.get('secret') || '').trim();
+  return fromQuery;
+}
+
+function isChatAuthorized(req: import('node:http').IncomingMessage, url: URL, chatSecret: string): boolean {
+  if (!chatSecret) return true;
+  return extractChatSecret(req, url) === chatSecret;
+}
+
 // ── Command ─────────────────────────────────────────────────────────────────
 
 export default async function cmdStart(
@@ -104,7 +117,53 @@ export default async function cmdStart(
     return;
   }
 
-  const cfg = JSON.parse(await readFile(configPath, 'utf8'));
+  const configDir = path.dirname(configPath);
+  const sealedPath = path.join(configDir, 'sealed.json');
+
+  let configRaw = '';
+  try {
+    configRaw = await readFile(configPath, 'utf8');
+  } catch (err) {
+    fmt.errorBlock('Read failed', err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+    return;
+  }
+
+  if (existsSync(sealedPath)) {
+    let sealedRaw = '';
+    try {
+      sealedRaw = await readFile(sealedPath, 'utf8');
+    } catch (err) {
+      fmt.errorBlock('Read failed', err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+      return;
+    }
+
+    const verification = verifySealedConfig({ configRaw, sealedRaw });
+    if (!verification.ok) {
+      fmt.errorBlock(
+        'Seal verification failed',
+        `${verification.error || 'Verification failed.'}\nRun: ${accent('wunderland verify-seal')}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    if (!verification.signaturePresent) {
+      fmt.warning('Sealed config has no signature (hash-only verification).');
+    }
+  }
+
+  let cfg: any;
+  try {
+    cfg = JSON.parse(configRaw);
+  } catch (err) {
+    fmt.errorBlock(
+      'Invalid config file',
+      err instanceof Error ? err.message : String(err),
+    );
+    process.exitCode = 1;
+    return;
+  }
   const seedId = String(cfg.seedId || 'seed_local_agent');
   const displayName = String(cfg.displayName || 'My Agent');
   const description = String(cfg.bio || 'Autonomous Wunderbot');
@@ -185,7 +244,7 @@ export default async function cmdStart(
     if (ollamaBin) {
       const running = await isOllamaRunning();
       if (!running) {
-        fmt.note('Ollama is configured but not running — starting...');
+        fmt.note('Ollama is configured but not running - starting...');
         try {
           await startOllama();
           fmt.ok('Ollama server started at http://localhost:11434');
@@ -216,7 +275,7 @@ export default async function cmdStart(
   const dangerouslySkipCommandSafety =
     flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
   const autoApproveToolCalls =
-    globals.yes || dangerouslySkipPermissions || policy.executionMode === 'autonomous';
+    globals.autoApproveTools || dangerouslySkipPermissions || policy.executionMode === 'autonomous';
   const enableSkills = flags['no-skills'] !== true;
   const lazyTools = flags['lazy-tools'] === true || cfg?.lazyTools === true;
   const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
@@ -257,6 +316,13 @@ export default async function cmdStart(
       : '';
     const fromEnv = String(process.env['WUNDERLAND_HITL_SECRET'] || '').trim();
     return fromCfg || fromEnv || randomUUID();
+  })();
+  const chatSecret = (() => {
+    const fromCfg = (cfg?.chat && typeof cfg.chat === 'object' && !Array.isArray(cfg.chat))
+      ? String((cfg.chat as any).secret || '').trim()
+      : '';
+    const fromEnv = String(process.env['WUNDERLAND_CHAT_SECRET'] || '').trim();
+    return fromCfg || fromEnv || '';
   })();
   const sseClients = new Set<import('node:http').ServerResponse>();
 
@@ -396,7 +462,7 @@ export default async function cmdStart(
 
       if (blockedChannels.length > 0) {
         const list = blockedChannels.map((c) => c.platform).join(', ');
-        fmt.warning(`Permission set blocks some configured channels — skipping: ${list}`);
+        fmt.warning(`Permission set blocks some configured channels - skipping: ${list}`);
       }
 
       const resolved = await resolveExtensionsByNames(
@@ -783,7 +849,7 @@ export default async function cmdStart(
           toolMap,
           toolContext,
           maxRounds: 8,
-          dangerouslySkipPermissions: autoApproveToolCalls,
+          dangerouslySkipPermissions,
           askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
             if (autoApproveToolCalls) return true;
 
@@ -888,7 +954,10 @@ export default async function cmdStart(
     try {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Wunderland-HITL-Secret');
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        'Content-Type, X-Wunderland-HITL-Secret, X-Wunderland-Chat-Secret',
+      );
 
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
@@ -1441,6 +1510,11 @@ export default async function cmdStart(
       }
 
       if (req.method === 'POST' && url.pathname === '/chat') {
+        if (!isChatAuthorized(req, url, chatSecret)) {
+          sendJson(res, 401, { error: 'Unauthorized' });
+          return;
+        }
+
         const body = await readBody(req);
         const parsed = JSON.parse(body || '{}');
         const message = typeof parsed.message === 'string' ? parsed.message.trim() : '';
@@ -1496,7 +1570,7 @@ export default async function cmdStart(
             toolMap,
             toolContext,
             maxRounds: 8,
-            dangerouslySkipPermissions: autoApproveToolCalls,
+            dangerouslySkipPermissions,
             askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
               if (autoApproveToolCalls) return true;
 

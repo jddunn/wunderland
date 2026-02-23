@@ -5,6 +5,7 @@
 
 import { dim, accent, bright } from '../ui/theme.js';
 import { stripAnsi, visibleLength, ansiPadEnd } from '../ui/ansi-utils.js';
+import { glyphs } from '../ui/glyphs.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -69,22 +70,27 @@ export function drawBox(
   title?: string,
   style: 'normal' | 'focused' | 'brand' = 'normal',
 ): string[] {
+  const g = glyphs();
   const borderColor = style === 'brand' ? accent : style === 'focused' ? accent : dim;
   const lines: string[] = [];
 
   // Top border
   const titleStr = title ? ` ${bright(title)} ` : '';
   const titleLen = title ? title.length + 2 : 0;
-  const topLine = borderColor('┌') + titleStr + borderColor('─'.repeat(Math.max(0, width - 2 - titleLen))) + borderColor('┐');
+  const topLine =
+    borderColor(g.box.tl)
+    + titleStr
+    + borderColor(g.box.h.repeat(Math.max(0, width - 2 - titleLen)))
+    + borderColor(g.box.tr);
   lines.push(topLine);
 
   // Content lines
   for (let i = 0; i < height - 2; i++) {
-    lines.push(borderColor('│') + ' '.repeat(Math.max(0, width - 2)) + borderColor('│'));
+    lines.push(borderColor(g.box.v) + ' '.repeat(Math.max(0, width - 2)) + borderColor(g.box.v));
   }
 
   // Bottom border
-  lines.push(borderColor('└') + borderColor('─'.repeat(Math.max(0, width - 2))) + borderColor('┘'));
+  lines.push(borderColor(g.box.bl) + borderColor(g.box.h.repeat(Math.max(0, width - 2))) + borderColor(g.box.br));
 
   return lines;
 }
@@ -94,10 +100,13 @@ export function drawBox(
  * ANSI-safe: uses visible length, not raw string length.
  */
 export function truncate(text: string, maxWidth: number): string {
+  const g = glyphs();
   const vLen = visibleLength(text);
   if (vLen <= maxWidth) return text;
-  if (maxWidth <= 1) return '\u2026';
-  return stripAnsi(text).slice(0, maxWidth - 1) + '\u2026';
+  const ell = g.ellipsis;
+  const ellLen = visibleLength(ell);
+  if (maxWidth <= ellLen) return ell.slice(0, Math.max(0, maxWidth));
+  return stripAnsi(text).slice(0, Math.max(0, maxWidth - ellLen)) + ell;
 }
 
 /**
@@ -112,8 +121,9 @@ export function padTo(text: string, width: number): string {
  * Create a horizontal separator line.
  */
 export function horizontalLine(width: number, style: 'normal' | 'focused' = 'normal'): string {
+  const g = glyphs();
   const color = style === 'focused' ? accent : dim;
-  return color('─'.repeat(width));
+  return color(g.hr.repeat(width));
 }
 
 /**

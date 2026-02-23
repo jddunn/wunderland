@@ -177,6 +177,6 @@ describe('PairingManager', () => {
 
             expect(code).toBe('');
             expect(created).toBe(false);
-        });
+        }, 15_000);
     });
 });

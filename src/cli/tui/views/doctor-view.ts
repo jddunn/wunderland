@@ -8,10 +8,13 @@ import * as path from 'node:path';
 import type { Screen } from '../screen.js';
 import type { KeybindingManager } from '../keybindings.js';
 import { accent, dim, muted, bright, success as sColor, error as eColor, info as iColor } from '../../ui/theme.js';
+import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
 import { getConfigPath } from '../../config/config-manager.js';
 import { getEnvPath, loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { checkEnvSecrets } from '../../config/secrets.js';
 import { URLS } from '../../constants.js';
+import { glyphs } from '../../ui/glyphs.js';
+import { getUiRuntime } from '../../ui/runtime.js';
 
 interface CheckResult {
   label: string;
@@ -24,29 +27,39 @@ export class DoctorView {
   private screen: Screen;
   private keys: KeybindingManager;
   private onBack: () => void;
+  private configDir?: string;
   private checks: CheckResult[] = [];
   private done = false;
+  private modal: null | { title: string; lines: string[] } = null;
 
-  constructor(opts: { screen: Screen; keys: KeybindingManager; onBack: () => void }) {
+  constructor(opts: { screen: Screen; keys: KeybindingManager; onBack: () => void; configDir?: string }) {
     this.screen = opts.screen;
     this.keys = opts.keys;
     this.onBack = opts.onBack;
+    this.configDir = opts.configDir;
 
     this.keys.push({
       name: 'doctor-view',
       bindings: {
-        'escape': () => { this.back(); },
-        'backspace': () => { this.back(); },
-        'q': () => { this.back(); },
+        '__text__': () => { return true; },
+        '?': () => {
+          if (this.modal?.title === 'Help') { this.modal = null; this.renderChecks(); return; }
+          if (this.modal) return;
+          this.modal = { title: 'Help', lines: this.getHelpLines() };
+          this.renderChecks();
+        },
+        'escape': () => { if (this.modal) { this.modal = null; this.renderChecks(); return; } this.back(); },
+        'backspace': () => { if (this.modal) { this.modal = null; this.renderChecks(); return; } this.back(); },
+        'q': () => { if (this.modal) { this.modal = null; this.renderChecks(); return; } this.back(); },
       },
     });
   }
 
   async run(): Promise<void> {
-    await loadDotEnvIntoProcessUpward({ startDir: process.cwd() });
+    await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: this.configDir });
 
-    const configPath = getConfigPath();
-    const envPath = getEnvPath();
+    const configPath = getConfigPath(this.configDir);
+    const envPath = getEnvPath(this.configDir);
     const localConfig = path.resolve(process.cwd(), 'agent.config.json');
 
     const secretStatus = checkEnvSecrets();
@@ -111,9 +124,12 @@ export class DoctorView {
   }
 
   private renderChecks(): void {
+    const g = glyphs();
+    const ui = getUiRuntime();
+    const { rows, cols } = this.screen.getSize();
     const lines: string[] = [];
     lines.push('');
-    lines.push(`  ${accent('◆')} ${bright('Wunderland Doctor')}`);
+    lines.push(`  ${accent(g.bullet)} ${bright('Wunderland Doctor')}`);
     lines.push('');
 
     let currentSection = '';
@@ -122,13 +138,13 @@ export class DoctorView {
     for (const check of this.checks) {
       if (check.section !== currentSection) {
         currentSection = check.section;
-        lines.push(`  ${iColor('◇')} ${bright(currentSection)}`);
+        lines.push(`  ${iColor(g.bulletHollow)} ${bright(currentSection)}`);
       }
 
-      const icon = check.status === 'pass' ? sColor('✓')
-        : check.status === 'fail' ? eColor('✗')
-        : check.status === 'skip' ? muted('○')
-        : dim('⋯');
+      const icon = check.status === 'pass' ? sColor(g.ok)
+        : check.status === 'fail' ? eColor(g.fail)
+        : check.status === 'skip' ? muted(g.circle)
+        : dim(ui.ascii ? '...' : '⋯');
       const label = check.status === 'fail' ? eColor(check.label) : check.label;
       const detail = check.detail ? `  ${dim(check.detail)}` : '';
       lines.push(`  ${icon} ${label}${detail}`);
@@ -145,15 +161,41 @@ export class DoctorView {
         skipped > 0 ? muted(`${skipped} skipped`) : '',
         failed > 0 ? eColor(`${failed} failed`) : '',
       ].filter(Boolean).join(dim(', '));
-      lines.push(`  ${accent('◆')} ${parts}`);
+      lines.push(`  ${accent(g.bullet)} ${parts}`);
     } else {
       lines.push(`  ${dim('Running checks...')}`);
     }
 
     lines.push('');
-    lines.push(`  ${dim('esc')} back  ${dim('q')} quit`);
+    lines.push(`  ${dim('?')} help  ${dim('esc')} back  ${dim('q')} quit`);
 
-    this.screen.render(lines.join('\n'));
+    const stamped = this.modal
+      ? stampOverlay({
+          screenLines: lines,
+          overlayLines: renderOverlayBox({
+            title: this.modal.title,
+            width: Math.min(Math.max(44, Math.min(74, cols - 8)), Math.max(24, cols - 4)),
+            lines: this.modal.lines,
+          }),
+          cols,
+          rows,
+        })
+      : lines;
+
+    this.screen.render(stamped.join('\n'));
+  }
+
+  private getHelpLines(): string[] {
+    return [
+      `${bright('What this does')}`,
+      `${dim('-')} Checks config files in your current directory and user config.`,
+      `${dim('-')} Verifies common provider keys (LLM + voice).`,
+      `${dim('-')} Pings a couple endpoints to validate connectivity.`,
+      '',
+      `${bright('Next steps')}`,
+      `${dim('-')} Run ${accent('wunderland setup')} to configure an agent.`,
+      `${dim('-')} Run ${accent('wunderland start')} to launch the server.`,
+    ];
   }
 
   private back(): void {

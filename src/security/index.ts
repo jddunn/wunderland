@@ -41,9 +41,22 @@ export {
 // Safe Guardrails
 export { SafeGuardrails, type SafeGuardrailsConfig } from './SafeGuardrails.js';
 
+// Audit Logging
+export {
+  AuditLogger,
+  type AuditLoggerConfig,
+  type ViolationFilter,
+  type ViolationStats,
+} from './AuditLogger.js';
+
 // Folder Permissions
 export {
+  type FolderAccessRule,
   type FolderPermissionConfig,
+  type FolderPermissionResult,
+  type ValidationResult,
+  checkFolderAccess,
+  createDefaultFolderConfig,
   validateFolderConfig,
   isContainedPath,
   validatePluginPath,

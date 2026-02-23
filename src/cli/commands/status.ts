@@ -10,6 +10,8 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { accent, warn as wColor, muted, dim, info as iColor, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
+import { getUiRuntime } from '../ui/runtime.js';
 import { printPanel } from '../ui/panel.js';
 import { loadConfig } from '../config/config-manager.js';
 import { loadEnv, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
@@ -27,6 +29,8 @@ export default async function cmdStatus(
 
   const config = await loadConfig(globals.config);
   const env = await loadEnv(globals.config);
+  const ui = getUiRuntime();
+  const g = glyphs();
 
   fmt.section('Wunderland Status');
   fmt.blank();
@@ -63,7 +67,7 @@ export default async function cmdStatus(
   const secretStatus = checkEnvSecrets();
   const llmKeys = secretStatus.filter((s) => ['openai', 'anthropic', 'openrouter'].some((p) => s.providers.includes(p)));
   const keyLines = llmKeys.map((s) => {
-    const icon = s.isSet ? sColor('\u2713') : muted('\u25CB');
+    const icon = s.isSet ? sColor(g.ok) : muted(g.circle);
     const detail = s.isSet ? dim(s.maskedValue || 'set') : muted('not set');
     return `${icon} ${s.envVar.padEnd(24)} ${detail}`;
   });
@@ -75,14 +79,14 @@ export default async function cmdStatus(
   const channels = config.channels || [];
   const channelLines: string[] = [];
   if (channels.length === 0) {
-    channelLines.push(`${muted('\u25CB')} ${muted('No channels configured')}`);
+    channelLines.push(`${muted(g.circle)} ${muted('No channels configured')}`);
   } else {
     for (const chId of channels) {
       const platform = CHANNEL_PLATFORMS.find((p) => p.id === chId);
-      const label = platform ? `${platform.icon}  ${platform.label}` : chId;
+      const label = platform ? `${ui.ascii ? '' : `${platform.icon}  `}${platform.label}` : chId;
       const secrets = getSecretsForPlatform(chId);
       const ready = secrets.length === 0 || secrets.every((s) => !!(env[s.envVar] || process.env[s.envVar]));
-      const icon = ready ? sColor('\u2713') : wColor('\u26A0');
+      const icon = ready ? sColor(g.ok) : wColor(g.warn);
       const status = ready ? sColor('active') : wColor('needs credentials');
       channelLines.push(`${icon} ${label.padEnd(24)} ${status}`);
     }
@@ -94,7 +98,7 @@ export default async function cmdStatus(
   // ── Tool Keys Panel ────────────────────────────────────────────────────
   const toolKeys = secretStatus.filter((s) => ['serper', 'serpapi', 'brave', 'elevenlabs', 'giphy', 'newsapi', 'pexels', 'unsplash'].some((p) => s.providers.includes(p)));
   const toolLines = toolKeys.map((s) => {
-    const icon = s.isSet ? sColor('\u2713') : muted('\u25CB');
+    const icon = s.isSet ? sColor(g.ok) : muted(g.circle);
     const detail = s.isSet ? dim(s.maskedValue || 'set') : muted('not set');
     return `${icon} ${s.envVar.padEnd(24)} ${detail}`;
   });
@@ -129,10 +133,11 @@ function formatTokenCount(count: number): string {
 
 function displayTokenUsage(): void {
   const usage: TokenUsageSummary = globalTokenTracker.getUsage();
+  const g = glyphs();
 
   if (!globalTokenTracker.hasUsage()) {
     const content = [
-      `${muted('\u25CB')} No token usage recorded this session`,
+      `${muted(g.circle)} No token usage recorded this session`,
       `${dim('Token tracking activates when chat or start commands make LLM calls')}`,
     ].join('\n');
     printPanel({ title: 'Token Usage', content, style: 'brand' });
@@ -150,7 +155,7 @@ function displayTokenUsage(): void {
   }
 
   if (usage.perModel.length > 1) {
-    lines.push(dim('\u2500'.repeat(56)));
+    lines.push(dim(g.hr.repeat(56)));
     lines.push(`${muted('Total'.padEnd(24))} ${accent(formatTokenCount(usage.totalTokens))} tokens`);
     lines.push(`${''.padEnd(24)} ${dim(`${usage.totalCalls} calls`)} ${dim('|')} est. ${formatCost(usage.estimatedCostUSD)}`);
   }

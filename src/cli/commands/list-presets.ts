@@ -107,12 +107,12 @@ export default async function cmdListPresets(
       ],
       rows: Object.entries(HEXACO_PRESETS).map(([key, values]) => [
         accent(key),
-        info(values.honesty_humility?.toFixed(1) ?? '\u2014'),
-        info(values.emotionality?.toFixed(1) ?? '\u2014'),
-        info(values.extraversion?.toFixed(1) ?? '\u2014'),
-        info(values.agreeableness?.toFixed(1) ?? '\u2014'),
-        info(values.conscientiousness?.toFixed(1) ?? '\u2014'),
-        info(values.openness?.toFixed(1) ?? '\u2014'),
+        info(values.honesty_humility?.toFixed(1) ?? '-'),
+        info(values.emotionality?.toFixed(1) ?? '-'),
+        info(values.extraversion?.toFixed(1) ?? '-'),
+        info(values.agreeableness?.toFixed(1) ?? '-'),
+        info(values.conscientiousness?.toFixed(1) ?? '-'),
+        info(values.openness?.toFixed(1) ?? '-'),
       ]),
     });
     fmt.blank();

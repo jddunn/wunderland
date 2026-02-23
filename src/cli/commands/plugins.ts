@@ -7,6 +7,7 @@ import type { GlobalFlags } from '../types.js';
 import { accent, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { printTable } from '../ui/table.js';
+import { glyphs } from '../ui/glyphs.js';
 
 // ── Fallback catalog when the registry is not available ─────────────────────
 
@@ -104,6 +105,7 @@ export default async function cmdPlugins(
 
   // Collect all categories in order
   const allCats = [...CATEGORY_ORDER, ...[...grouped.keys()].filter((c) => !CATEGORY_ORDER.includes(c))];
+  const g = glyphs();
 
   for (const cat of allCats) {
     const group = grouped.get(cat);
@@ -126,7 +128,7 @@ export default async function cmdPlugins(
         { label: 'Status', width: 16 },
       ],
       rows: group.map((ext) => [
-        ext.available ? sColor('\u2713') : muted('\u25CB'),
+        ext.available ? sColor(g.ok) : muted(g.circle),
         accent(ext.name),
         ext.displayName,
         ext.available ? sColor('installed') : muted('not installed'),

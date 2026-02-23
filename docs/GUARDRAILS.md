@@ -196,7 +196,7 @@ Default: Write (safer to assume write when uncertain)
 
 ## Security Tier Integration
 
-The SDK ships tier-aligned folder permission presets (see `createDefaultFolderConfig()` in `wunderland/security/FolderPermissions`).
+The SDK ships tier-aligned folder permission presets (see `createDefaultFolderConfig()` in `wunderland/advanced/security`).
 
 In the CLI runtime (`wunderland chat` / `wunderland start`):
 
@@ -324,7 +324,7 @@ All permission violations are logged to structured JSON files for compliance and
 ### Querying Violations
 
 ```typescript
-import { AuditLogger } from 'wunderland/security/AuditLogger';
+import { AuditLogger } from 'wunderland/advanced/security';
 
 const logger = new AuditLogger();
 
@@ -535,7 +535,7 @@ const guardrails = new SafeGuardrails({
 
 3. Use `validateFolderConfig()` to check for conflicts:
    ```typescript
-   import { validateFolderConfig } from 'wunderland/security/FolderPermissions';
+   import { validateFolderConfig } from 'wunderland/advanced/security';
 
    const result = validateFolderConfig(config);
    if (!result.valid) {
@@ -601,7 +601,7 @@ const guardrails = new SafeGuardrails({
 
 ```typescript
 // Check folder access
-import { checkFolderAccess } from 'wunderland/security/FolderPermissions';
+import { checkFolderAccess } from 'wunderland/advanced/security';
 
 const result = checkFolderAccess(
   '/home/user/file.txt',
@@ -618,7 +618,7 @@ if (!result.allowed) {
 ### SafeGuardrails
 
 ```typescript
-import { SafeGuardrails } from 'wunderland/security/SafeGuardrails';
+import { SafeGuardrails } from 'wunderland/advanced/security';
 
 const guardrails = new SafeGuardrails({
   auditLogPath: '~/.wunderland/security/violations.log',
@@ -646,7 +646,7 @@ if (!result.allowed) {
 ### AuditLogger
 
 ```typescript
-import { AuditLogger } from 'wunderland/security/AuditLogger';
+import { AuditLogger } from 'wunderland/advanced/security';
 
 const logger = new AuditLogger({
   logFilePath: '~/.wunderland/security/violations.log',

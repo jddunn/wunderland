@@ -219,7 +219,7 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
       auditor: 'llama3.2:1b',
       tier: 'low',
       reason:
-        `${totalMemoryGB} GB RAM detected — using lightweight 1B/3B models ` +
+        `${totalMemoryGB} GB RAM detected - using lightweight 1B/3B models ` +
         'to stay within memory limits.',
     };
   }
@@ -231,7 +231,7 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
       auditor: 'llama3.2:3b',
       tier: 'mid',
       reason:
-        `${totalMemoryGB} GB RAM detected — 8B primary model with 3B ` +
+        `${totalMemoryGB} GB RAM detected - 8B primary model with 3B ` +
         'router/auditor for a balanced local setup.',
     };
   }
@@ -239,8 +239,8 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
   // 16 GB+
   const primary = hasGpu ? 'llama3.1:70b' : 'dolphin-llama3:8b';
   const gpuNote = hasGpu
-    ? 'GPU detected — using 70B primary for maximum quality.'
-    : 'No dedicated GPU — capping at 8B primary to avoid swap pressure.';
+    ? 'GPU detected - using 70B primary for maximum quality.'
+    : 'No dedicated GPU - capping at 8B primary to avoid swap pressure.';
 
   return {
     router: 'llama3.2:3b',
@@ -363,7 +363,7 @@ export async function autoConfigureOllama(): Promise<OllamaAutoConfigResult> {
   if (running) {
     ok('Ollama server is already running');
   } else {
-    warning('Ollama server is not running — attempting to start...');
+    warning('Ollama server is not running - attempting to start...');
     await startOllama();
     running = true;
   }
@@ -397,7 +397,7 @@ export async function autoConfigureOllama(): Promise<OllamaAutoConfigResult> {
       ok(`${m.name}  ${dim(`${sizeGB} GB`)}`);
     }
   } else {
-    note('No models installed yet — you will need to pull the recommended models.');
+    note('No models installed yet - you will need to pull the recommended models.');
   }
 
   return {

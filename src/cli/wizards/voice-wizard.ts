@@ -112,7 +112,7 @@ async function configureTtsProvider(state: WizardState): Promise<void> {
 
   if (ttsChoice === 'piper') {
     fmt.note(
-      'Piper runs locally — no API key required.\n' +
+      'Piper runs locally - no API key required.\n' +
       '    Install: https://github.com/rhasspy/piper\n' +
       '    Ensure the `piper` binary is on your PATH.',
     );
@@ -192,7 +192,7 @@ async function configureSttProvider(state: WizardState): Promise<void> {
 
   if (sttChoice === 'whisper-local') {
     fmt.note(
-      'Whisper.cpp runs locally — no API key required.\n' +
+      'Whisper.cpp runs locally - no API key required.\n' +
       '    Install: https://github.com/ggerganov/whisper.cpp\n' +
       '    Ensure the `whisper` binary is on your PATH.',
     );

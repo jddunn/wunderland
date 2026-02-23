@@ -1,8 +1,8 @@
-# Wunderland CLI v0.24.0 — Full Command Reference
+# Wunderland CLI v0.27.0 — Full Command Reference
 
-Generated: 2026-02-20
+Generated: 2026-02-22
 
-**New in v0.24.0:** Styled tables (`cli-table3`), bordered panels (`boxen`), animated step progress (`nanospinner`), TUI dashboard mode, PNG screenshot export (`--export-png`).
+**Updated in v0.27.0:** Grouped help output, `wunderland help <topic>` onboarding guides, TUI command-palette search (`/`), and in-TUI help/details modals (`?` / `⏎`).
 
 ---
 
@@ -10,75 +10,66 @@ Generated: 2026-02-20
 
 ```
   Usage:
+    wunderland                        Open TUI dashboard (TTY only)
     wunderland <command> [options]
+    wunderland help <topic>           Short guides + onboarding
 
-  Commands:
-    setup                  Interactive onboarding wizard
-    init <dir>             Scaffold a new Wunderbot project
-    create [description]   Create agent from natural language
-    start                  Start local agent server
-    chat                   Interactive terminal assistant
-    hitl                   Watch/resolve approvals & checkpoints
-    doctor                 Health check: keys, tools, connectivity
-    channels               List configured channels
-    channels add           Add a channel interactively
-    channels remove <id>   Remove a channel
-    config                 Show current config
-    config get <key>       Get a config value
-    config set <key> <val> Set a config value
-    voice                  Voice provider status
-    cron                   Scheduled jobs management
-    status                 Agent & connection status
-    seal                   Seal agent config (integrity hash)
-    list-presets            List personality & HEXACO presets
-    skills                 Manage agent skills
-    skills list             List available skills
-    skills info <name>     Show skill details
-    skills enable <name>   Enable a skill
-    skills disable <name>  Disable a skill
-    extensions             Manage agent extensions
-    extensions list         List available extensions
-    extensions info <name> Show extension details
-    extensions enable <name> Enable an extension
-    extensions disable <name> Disable an extension
-    rag                    RAG memory management
-    rag ingest <file|text> Ingest a document
-    rag query <text>       Search RAG memory
-    rag collections        Manage RAG collections
-    rag health             RAG service health
-    agency                 Multi-agent collective management
-    agency create <name>   Create a multi-agent agency
-    agency status <name>   Show agency status
-    workflows              Workflow engine management
-    workflows list          List workflow definitions
-    workflows run <name>    Execute a workflow
-    evaluate               Run evaluation suite
-    evaluate run <dataset>  Run evaluation on dataset
-    evaluate results <id> Show evaluation results
-    knowledge              Knowledge graph operations
-    knowledge query <text> Search knowledge graph
-    knowledge stats        Graph statistics
-    provenance             Audit trail & provenance
-    provenance audit       Show agent audit trail
-    provenance verify <id> Verify event signature
-    marketplace            Skill & tool marketplace
-    marketplace search <q> Search marketplace
-    marketplace install <id> Install from marketplace
-    models                 List LLM providers & models
-    models set-default <p> <m> Set default provider/model
-    models test [provider] Test provider connectivity
-    export                 Export agent as shareable manifest
-    import <manifest>     Import agent from manifest file
-    plugins                List installed extension packs
-    export-session         Export chat session to file
-    ollama-setup           Configure Ollama (local LLM)
-    version                Show version
+  Quickstart:
+    wunderland setup                  Interactive onboarding wizard
+    wunderland doctor                 Health check: keys, tools, connectivity
+    wunderland chat                   Interactive terminal assistant
+    wunderland start                  Start local agent server
+
+  Commands (grouped):
+    Onboarding
+      setup                 Wizard: keys, channels, personality
+      init <dir>            Scaffold an agent project
+      create [description]  Create agent from natural language
+      doctor                Health check
+
+    Run
+      chat                  Interactive assistant (REPL)
+      start                 Start server
+      status                Agent & connection status
+      hitl                  Watch/resolve approvals & checkpoints
+
+    Configure
+      channels              List/add/remove channels
+      models                Provider/model settings
+      voice                 Voice provider status
+      cron                  Scheduled jobs management
+      skills                Skills management
+      extensions            Extension management
+      list-presets          List personality & agent presets
+      config                Read/write config values
+
+    Advanced
+      rag                   RAG memory management
+      agency                Multi-agent collectives
+      workflows             Workflow engine
+      evaluate              Evaluation suite
+      knowledge             Knowledge graph
+      provenance            Audit trail & provenance
+      marketplace           Marketplace search/install
+
+    Utilities
+      seal                  Seal agent config (integrity hash)
+      verify-seal           Verify sealed.json integrity/signature
+      export                Export agent as shareable manifest
+      import <manifest>     Import agent from manifest file
+      plugins               List installed extension packs
+      export-session        Export chat session to file
+      ollama-setup          Configure Ollama (local LLM)
+      version               Show version
 
   Global Options:
     --help, -h             Show help
     --version, -v          Show version
     --quiet, -q            Suppress banner
-    --yes, -y              Auto-approve tool calls (fully autonomous)
+    --yes, -y              Auto-confirm prompts (non-interactive where possible)
+    --auto-approve-tools   Auto-approve tool calls (fully autonomous)
+    --theme <plain|cyberpunk> UI theme (default: plain)
+    --ascii                Force ASCII-only UI (auto-fallback in limited terminals)
     --no-color             Disable colors (also: NO_COLOR env)
     --dry-run              Preview without writing
     --tui                  Force interactive TUI mode
@@ -97,8 +88,12 @@ Generated: 2026-02-20
     --skills-dir <path>    Load skills from directory
     --no-skills            Disable skill loading
     --export-png <path>    Export command output as styled PNG screenshot
-    --dangerously-skip-permissions  Auto-approve tool calls
+    --dangerously-skip-permissions  Skip permission/approval checks (dangerous)
     --dangerously-skip-command-safety  Disable shell command safety checks
+
+  Guides:
+    wunderland help                   List help topics
+    wunderland help <topic>           Open a short guide
 
   Links:
     https://wunderland.sh  ·  https://rabbithole.inc  ·  https://docs.wunderland.sh
@@ -109,7 +104,7 @@ Generated: 2026-02-20
 ## `wunderland version`
 
 ```
-wunderland v0.24.0
+wunderland v0.27.0
 ```
 
 ---
@@ -117,7 +112,7 @@ wunderland v0.24.0
 ## `wunderland config`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Configuration
     File                     /Users/johnn/.wunderland/config.json
@@ -129,10 +124,10 @@ wunderland v0.24.0
 
 ## `wunderland doctor`
 
-*Upgraded in v0.24.0: animated step-by-step progress with spinners (in TTY)*
+*Upgraded in v0.27.0: animated step-by-step progress with spinners (in TTY)*
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Wunderland Doctor
 
@@ -166,10 +161,10 @@ wunderland v0.24.0
 
 ## `wunderland status`
 
-*Upgraded in v0.24.0: bordered panel cards per section (boxen)*
+*Upgraded in v0.27.0: bordered panel cards per section (boxen)*
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Wunderland Status
 
@@ -208,10 +203,10 @@ wunderland v0.24.0
 
 ## `wunderland list-presets`
 
-*Upgraded in v0.24.0: styled tables with cli-table3*
+*Upgraded in v0.27.0: styled tables with cli-table3*
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Agent Presets
 
@@ -258,10 +253,10 @@ wunderland v0.24.0
 
 ## `wunderland models`
 
-*Upgraded in v0.24.0: tabular grid with status badges*
+*Upgraded in v0.27.0: tabular grid with status badges*
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ LLM Providers & Models
 
@@ -301,7 +296,7 @@ wunderland v0.24.0
 ## `wunderland models test openai`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Testing OpenAI
 
@@ -314,7 +309,7 @@ wunderland v0.24.0
 ## `wunderland channels`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Channel Bindings
 
@@ -328,7 +323,7 @@ wunderland v0.24.0
 ## `wunderland voice`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Voice Providers
 
@@ -350,7 +345,7 @@ wunderland v0.24.0
 ## `wunderland cron`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Scheduled Jobs
 
@@ -364,10 +359,10 @@ wunderland v0.24.0
 
 ## `wunderland skills list`
 
-*Upgraded in v0.24.0: styled table with verified badge column*
+*Upgraded in v0.27.0: styled table with verified badge column*
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Available Skills
 
@@ -416,7 +411,7 @@ wunderland v0.24.0
 ## `wunderland skills info weather`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Skill: weather
     ID                       com.framers.skill.weather
@@ -432,10 +427,10 @@ wunderland v0.24.0
 
 ## `wunderland plugins` (extensions list)
 
-*Upgraded in v0.24.0: per-category styled tables with status badges*
+*Upgraded in v0.27.0: per-category styled tables with status badges*
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Extension Packs
 
@@ -478,7 +473,7 @@ wunderland v0.24.0
 ## `wunderland extensions list`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Available Extensions
 
@@ -512,7 +507,7 @@ wunderland v0.24.0
 ## `wunderland extensions info web-search`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Extension: Web Search
     Name                     web-search
@@ -529,7 +524,7 @@ wunderland v0.24.0
 ## `wunderland rag`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ wunderland rag
 
@@ -566,7 +561,7 @@ wunderland v0.24.0
 ## `wunderland rag health`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ RAG Health
     Status                   ready
@@ -585,7 +580,7 @@ wunderland v0.24.0
 ## `wunderland rag stats`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ RAG Statistics
     Storage                  better-sqlite3
@@ -600,7 +595,7 @@ wunderland v0.24.0
 ## `wunderland rag collections`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ RAG Collections
     wunderland-docs          5 docs, 21 chunks — Wunderland Documentation
@@ -611,7 +606,7 @@ wunderland v0.24.0
 ## `wunderland rag documents list`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ RAG Documents
     doc_1771646034356_jsfxqacb [technical] collection=wunderland-docs
@@ -626,7 +621,7 @@ wunderland v0.24.0
 ## `wunderland rag query "agent security model" --debug`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ RAG Query: "agent security model"
     [doc_...chunk_0] (100.0%) # Wunderland Security Model...
@@ -653,7 +648,7 @@ wunderland v0.24.0
 ## `wunderland rag query "security tiers" --graph`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ RAG Query: "security tiers"
     [doc_...chunk_0] (100.0%) # Wunderland Security Model...
@@ -682,7 +677,7 @@ wunderland v0.24.0
 ## `wunderland rag query "LLM providers" --graph --debug --verbose`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ RAG Query: "LLM providers"
     [doc_...chunk_0] (100.0%) # LLM Provider Ecosystem...
@@ -719,7 +714,7 @@ wunderland v0.24.0
 ## `wunderland rag audit`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ RAG Audit Trail
     [trail-mlvyn6]           "LLM providers" @ 2026-02-21T06:51:19.652Z
@@ -740,7 +735,7 @@ wunderland v0.24.0
 ## `wunderland rag graph stats`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ GraphRAG Statistics
     Entities                 148
@@ -755,7 +750,7 @@ wunderland v0.24.0
 ## `wunderland agency`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ wunderland agency
 
@@ -776,7 +771,7 @@ wunderland v0.24.0
 ## `wunderland workflows`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ wunderland workflows
 
@@ -795,7 +790,7 @@ wunderland v0.24.0
 ## `wunderland evaluate`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ wunderland evaluate
 
@@ -813,7 +808,7 @@ wunderland v0.24.0
 ## `wunderland knowledge`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ wunderland knowledge
 
@@ -831,7 +826,7 @@ wunderland v0.24.0
 ## `wunderland knowledge demo`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ✓ Demo Knowledge Graph Created
 
@@ -853,7 +848,7 @@ wunderland v0.24.0
 ## `wunderland knowledge stats`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Knowledge Graph Statistics
   ◇ Knowledge graph is empty.
@@ -866,7 +861,7 @@ wunderland v0.24.0
 ## `wunderland provenance`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ wunderland provenance
 
@@ -885,7 +880,7 @@ wunderland v0.24.0
 ## `wunderland provenance demo`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Provenance Demo
   ◇ Creating demo signed event chain...
@@ -911,7 +906,7 @@ wunderland v0.24.0
 ## `wunderland marketplace`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ wunderland marketplace
 
@@ -930,7 +925,7 @@ wunderland v0.24.0
 ## `wunderland marketplace search "weather"`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ◆ Marketplace: "weather"
 
@@ -946,7 +941,7 @@ wunderland v0.24.0
 ## `wunderland hitl`
 
 ```
-  WUNDERLAND v0.24.0
+  WUNDERLAND v0.27.0
 
   ✗ Missing HITL secret
     Provide --secret <token> or set WUNDERLAND_HITL_SECRET.
@@ -967,14 +962,14 @@ wunderland v0.24.0
 
 ---
 
-## New in v0.24.0
+## New in v0.27.0
 
 ### TUI Dashboard Mode
 
 Running `wunderland` with no arguments in a TTY launches an interactive dashboard:
 
 ```
-┌─ WUNDERLAND v0.24.0 ──────────────────────────────────────┐
+┌─ WUNDERLAND v0.27.0 ──────────────────────────────────────┐
 │                                                            │
 │  ◆ Agent: not configured     ◆ LLM: openai / gpt-4o-mini  │
 │                                                            │

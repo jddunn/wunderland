@@ -6,40 +6,47 @@
 
 import chalk from 'chalk';
 import { success as sColor, error as eColor, warn as wColor, info as iColor, muted, dim, key as kColor, tool as tColor, channel as cColor, accent, bright } from './theme.js';
+import { glyphs } from './glyphs.js';
 
 // ── Prefixed output ─────────────────────────────────────────────────────────
 
 /** Green check + message. */
 export function ok(msg: string): void {
-  console.log(`  ${sColor('\u2713')} ${msg}`);
+  const g = glyphs();
+  console.log(`  ${sColor(g.ok)} ${msg}`);
 }
 
 /** Red cross + message. */
 export function fail(msg: string): void {
-  console.log(`  ${eColor('\u2717')} ${msg}`);
+  const g = glyphs();
+  console.log(`  ${eColor(g.fail)} ${msg}`);
 }
 
 /** Yellow warning triangle + message. */
 export function warning(msg: string): void {
-  console.log(`  ${wColor('\u26A0')} ${msg}`);
+  const g = glyphs();
+  console.log(`  ${wColor(g.warn)} ${msg}`);
 }
 
 /** Cyan info dot + message. */
 export function note(msg: string): void {
-  console.log(`  ${iColor('\u25C7')} ${msg}`);
+  const g = glyphs();
+  console.log(`  ${iColor(g.info)} ${msg}`);
 }
 
 /** Gray circle (skipped/optional). */
 export function skip(msg: string): void {
-  console.log(`  ${muted('\u25CB')} ${msg}`);
+  const g = glyphs();
+  console.log(`  ${muted(g.circle)} ${msg}`);
 }
 
 // ── Structured output ───────────────────────────────────────────────────────
 
 /** Section header with decorative line. */
 export function section(title: string): void {
+  const g = glyphs();
   console.log();
-  console.log(`  ${accent('\u25C6')} ${bright(title)}`);
+  console.log(`  ${accent(g.bullet)} ${bright(title)}`);
 }
 
 /** Indented key-value pair. */
@@ -49,8 +56,9 @@ export function kvPair(label: string, value: string): void {
 
 /** Masked API key display (shows last 4 chars). */
 export function maskedKey(label: string, value: string): void {
+  const g = glyphs();
   const display = value.length > 8
-    ? `${dim('\u2022'.repeat(8))}${kColor(value.slice(-4))}`
+    ? `${dim(g.mask.repeat(8))}${kColor(value.slice(-4))}`
     : kColor('set');
   console.log(`    ${muted(label.padEnd(24))} ${display}`);
 }
@@ -78,7 +86,8 @@ export function link(url: string, label?: string): string {
 
 /** Dim dot separator. */
 export function dot(): string {
-  return dim('  \u00B7  ');
+  const g = glyphs();
+  return dim(`  ${g.dot}  `);
 }
 
 /** Highlighted value inline. */
@@ -99,15 +108,17 @@ export function blank(): void {
 
 /** Horizontal rule. */
 export function hr(): void {
-  console.log(`  ${dim('\u2500'.repeat(56))}`);
+  const g = glyphs();
+  console.log(`  ${dim(g.hr.repeat(56))}`);
 }
 
 // ── Error display ───────────────────────────────────────────────────────────
 
 /** Formatted error block. */
 export function errorBlock(title: string, detail?: string): void {
+  const g = glyphs();
   console.log();
-  console.log(`  ${eColor('\u2717')} ${chalk.red.bold(title)}`);
+  console.log(`  ${eColor(g.fail)} ${chalk.red.bold(title)}`);
   if (detail) {
     console.log(`    ${dim(detail)}`);
   }
@@ -116,8 +127,9 @@ export function errorBlock(title: string, detail?: string): void {
 
 /** Formatted success block. */
 export function successBlock(title: string, detail?: string): void {
+  const g = glyphs();
   console.log();
-  console.log(`  ${sColor('\u2713')} ${chalk.green.bold(title)}`);
+  console.log(`  ${sColor(g.ok)} ${chalk.green.bold(title)}`);
   if (detail) {
     console.log(`    ${dim(detail)}`);
   }

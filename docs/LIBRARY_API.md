@@ -113,3 +113,17 @@ Examples:
 import { SECURITY_TIERS } from 'wunderland/advanced/security';
 import { WonderlandNetwork } from 'wunderland/advanced/social';
 ```
+
+### TypeScript note
+
+If you import subpath exports like `wunderland/advanced/*`, ensure your app’s `tsconfig.json` uses a modern resolver that understands `package.json#exports`:
+
+```json
+{
+  "compilerOptions": {
+    "moduleResolution": "bundler"
+  }
+}
+```
+
+(`node16` / `nodenext` also work.)

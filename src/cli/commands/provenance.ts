@@ -13,6 +13,7 @@ import { readFile } from 'node:fs/promises';
 import type { GlobalFlags } from '../types.js';
 import { accent, dim, muted, success as sColor, error as eColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 
 interface ProvenanceModules {
@@ -177,16 +178,18 @@ export default async function cmdProvenance(
         fmt.kvPair('Verified At', result.verifiedAt);
 
         if (result.errors.length > 0) {
+          const g = glyphs();
           console.log(`\n  ${eColor('Errors:')}`);
           for (const err of result.errors) {
-            console.log(`    ${eColor('\u2717')} ${err.code}: ${err.message}`);
+            console.log(`    ${eColor(g.fail)} ${err.code}: ${err.message}`);
           }
         }
 
         if (result.warnings.length > 0) {
+          const g = glyphs();
           console.log(`\n  ${accent('Warnings:')}`);
           for (const w of result.warnings) {
-            console.log(`    ${muted('\u26A0')} ${w}`);
+            console.log(`    ${muted(g.warn)} ${w}`);
           }
         }
 
@@ -282,7 +285,8 @@ export default async function cmdProvenance(
 
       // Display the chain
       for (const evt of signedEvents) {
-        const icon = sColor('\u2713');
+        const g = glyphs();
+        const icon = sColor(g.ok);
         console.log(`  ${icon} ${dim(`#${evt.sequence}`)} ${accent(evt.type)} ${dim(evt.timestamp)}`);
         console.log(`    ${dim('hash:')} ${muted(evt.hash.substring(0, 16))}...`);
         console.log(`    ${dim('sig:')}  ${muted(evt.signature.substring(0, 16))}...`);
@@ -300,11 +304,12 @@ export default async function cmdProvenance(
       const result = await ChainVerifier.verify(signedEvents);
 
       if (result.valid) {
-        fmt.successBlock('Chain Verified', `${result.eventsVerified} events — all hashes and signatures valid.`);
+        fmt.successBlock('Chain Verified', `${result.eventsVerified} events - all hashes and signatures valid.`);
       } else {
         fmt.errorBlock('Chain Invalid', `${result.errors.length} error(s) found.`);
         for (const err of result.errors) {
-          console.log(`    ${eColor('\u2717')} ${err.code}: ${err.message}`);
+          const g = glyphs();
+          console.log(`    ${eColor(g.fail)} ${err.code}: ${err.message}`);
         }
       }
 

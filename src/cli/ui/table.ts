@@ -5,6 +5,7 @@
 
 import Table from 'cli-table3';
 import { dim, accent, muted, bright, info } from './theme.js';
+import { glyphs } from './glyphs.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -32,12 +33,27 @@ const BORDER_COMPACT: Record<string, string> = {
   'right': '', 'right-mid': '', 'middle': '   ',
 };
 
-const BORDER_BOXED: Record<string, string> = {
-  'top': dim('\u2500'), 'top-mid': dim('\u252C'), 'top-left': dim('  \u250C'), 'top-right': dim('\u2510'),
-  'bottom': dim('\u2500'), 'bottom-mid': dim('\u2534'), 'bottom-left': dim('  \u2514'), 'bottom-right': dim('\u2518'),
-  'left': dim('  \u2502'), 'left-mid': dim('  \u251C'), 'mid': dim('\u2500'), 'mid-mid': dim('\u253C'),
-  'right': dim('\u2502'), 'right-mid': dim('\u2524'), 'middle': dim('\u2502'),
-};
+function borderBoxed(): Record<string, string> {
+  const g = glyphs();
+  const indent = '  ';
+  return {
+    'top': dim(g.box.h),
+    'top-mid': dim(g.box.tT),
+    'top-left': dim(indent + g.box.tl),
+    'top-right': dim(g.box.tr),
+    'bottom': dim(g.box.h),
+    'bottom-mid': dim(g.box.bT),
+    'bottom-left': dim(indent + g.box.bl),
+    'bottom-right': dim(g.box.br),
+    'left': dim(indent + g.box.v),
+    'left-mid': dim(indent + g.box.lT),
+    'mid': dim(g.box.h),
+    'mid-mid': dim(g.box.cross),
+    'right': dim(g.box.v),
+    'right-mid': dim(g.box.rT),
+    'middle': dim(g.box.v),
+  };
+}
 
 // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -46,6 +62,7 @@ const BORDER_BOXED: Record<string, string> = {
  */
 export function renderTable(opts: TableOptions): string {
   const termWidth = process.stdout.columns || 130;
+  const g = glyphs();
   const { columns, rows, title, compact = false, zebra = true } = opts;
 
   // Calculate column widths
@@ -59,7 +76,7 @@ export function renderTable(opts: TableOptions): string {
   const colAligns = columns.map((c) => c.align ?? 'left') as ('left' | 'right' | 'center')[];
 
   const table = new Table({
-    chars: compact ? BORDER_COMPACT : BORDER_BOXED,
+    chars: compact ? BORDER_COMPACT : borderBoxed(),
     colWidths,
     colAligns,
     style: { head: [], border: [], 'padding-left': 1, 'padding-right': 1 },
@@ -71,7 +88,7 @@ export function renderTable(opts: TableOptions): string {
 
   // Separator row — thin accent line under header
   if (compact) {
-    table.push(columns.map((_, i) => dim('\u2500'.repeat(Math.max(colWidths[i] - 2, 1)))));
+    table.push(columns.map((_, i) => dim(g.hr.repeat(Math.max(colWidths[i] - 2, 1)))));
   }
 
   // Data rows
@@ -89,7 +106,7 @@ export function renderTable(opts: TableOptions): string {
 
   if (title) {
     const titleText = bright(title);
-    lines.push(`  ${accent('\u25C6')} ${titleText}`);
+    lines.push(`  ${accent(g.bullet)} ${titleText}`);
     lines.push('');
   }
 
