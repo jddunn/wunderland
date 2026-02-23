@@ -58,6 +58,7 @@ export {
   WunderlandDiscoveryManager,
   type WunderlandDiscoveryConfig,
   type WunderlandDiscoveryStats,
+  type SkillEntry as DiscoverySkillEntry,
 } from './WunderlandDiscoveryManager.js';
 
 // Preset co-occurrence helper

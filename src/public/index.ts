@@ -37,7 +37,8 @@ import type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace }
 import { WunderlandConfigError } from '../config/errors.js';
 import { loadAgentConfig, resolveLlmConfig } from '../config/load.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
-import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../discovery/index.js';
+import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats, DiscoverySkillEntry } from '../discovery/index.js';
+import type { AgentPreset } from '../core/PresetLoader.js';
 
 // =============================================================================
 // Public Types
@@ -88,6 +89,10 @@ export type WunderlandDiagnostics = {
     droppedByPolicy: Array<{ tool: string; reason: string }>;
     availability?: Record<string, { available: boolean; reason?: string }>;
   };
+  skills: {
+    count: number;
+    names: string[];
+  };
   workspace: {
     agentId: string;
     baseDir: string;
@@ -135,6 +140,44 @@ export type WunderlandOptions = {
         curated?: ToolRegistryConfig;
         custom?: ITool[];
       };
+  /**
+   * Load a preset by ID — auto-configures tools, skills, extensions, and personality.
+   * Preset values are merged with explicit `tools`, `skills`, and `extensions` options
+   * (explicit options take precedence).
+   * @example preset: 'research-assistant'
+   */
+  preset?: string;
+  /**
+   * Skill sources (merged with preset skills if both provided):
+   * - `'all'`: all curated skills for the current platform
+   * - `string[]`: skill names from the curated registry
+   * - object: fine-grained control over skill loading
+   */
+  skills?:
+    | 'all'
+    | string[]
+    | {
+        /** Curated skill names to load. */
+        names?: string[];
+        /** Additional skill directories to scan. */
+        dirs?: string[];
+        /** Scan default dirs (./skills, ~/.codex/skills) — default: true. */
+        includeDefaults?: boolean;
+      };
+  /**
+   * Extension sources (merged with preset extensions if both provided).
+   * Extensions are resolved from `@framers/agentos-extensions-registry`.
+   */
+  extensions?: {
+    /** Tool extension names (e.g. ['web-search', 'web-browser', 'giphy']). */
+    tools?: string[];
+    /** Voice provider extension names (e.g. ['voice-synthesis']). */
+    voice?: string[];
+    /** Productivity extension names (e.g. ['google-calendar']). */
+    productivity?: string[];
+    /** Per-extension overrides (enabled, priority, options). */
+    overrides?: Record<string, { enabled?: boolean; priority?: number; options?: unknown }>;
+  };
   approvals?: {
     /** Default: 'deny-side-effects' */
     mode?: WunderlandApprovalsMode;
@@ -255,18 +298,221 @@ async function resolveToolMap(opts: {
   };
 }
 
-function buildSystemPrompt(agentConfig: WunderlandAgentConfig, policy: NormalizedRuntimePolicy): string {
+async function resolveSkillsFromOpts(opts: {
+  skills: WunderlandOptions['skills'];
+  preset?: AgentPreset;
+  logger: Required<NonNullable<WunderlandOptions['logger']>>;
+}): Promise<{
+  skillsPrompt: string;
+  skillEntries: DiscoverySkillEntry[];
+  skillNames: string[];
+}> {
+  const empty = { skillsPrompt: '', skillEntries: [], skillNames: [] as string[] };
+  const skillsOpt = opts.skills;
+  const presetSkills = opts.preset?.suggestedSkills ?? [];
+
+  // Collect all named skills (from option + preset, deduplicated)
+  let namedSkills: string[] = [];
+  let dirs: string[] = [];
+  let includeDefaults = false;
+
+  if (skillsOpt === 'all') {
+    namedSkills = ['all'];
+  } else if (Array.isArray(skillsOpt)) {
+    namedSkills = [...skillsOpt];
+  } else if (typeof skillsOpt === 'object' && skillsOpt !== null) {
+    namedSkills = [...(skillsOpt.names ?? [])];
+    dirs = [...(skillsOpt.dirs ?? [])];
+    includeDefaults = skillsOpt.includeDefaults ?? false;
+  }
+
+  // Merge preset skills (dedup)
+  if (presetSkills.length > 0 && !namedSkills.includes('all')) {
+    const existing = new Set(namedSkills);
+    for (const name of presetSkills) {
+      if (!existing.has(name)) namedSkills.push(name);
+    }
+  }
+
+  if (namedSkills.length === 0 && dirs.length === 0 && !includeDefaults) {
+    return empty;
+  }
+
+  const promptParts: string[] = [];
+  const allEntries: DiscoverySkillEntry[] = [];
+  const allNames: string[] = [];
+
+  // 1. Directory-based skills (local dirs + defaults)
+  if (dirs.length > 0 || includeDefaults) {
+    try {
+      const skillsMod: any = await import('../skills/index.js');
+      const SkillRegistry = skillsMod.SkillRegistry;
+      const resolveDefaultSkillsDirs = skillsMod.resolveDefaultSkillsDirs;
+
+      const registry = new SkillRegistry();
+      const scanDirs = [...dirs];
+      if (includeDefaults && typeof resolveDefaultSkillsDirs === 'function') {
+        scanDirs.push(...resolveDefaultSkillsDirs({ cwd: process.cwd() }));
+      }
+      if (scanDirs.length > 0) {
+        await registry.loadFromDirs(scanDirs);
+        const snapshot = registry.buildSnapshot({ platform: process.platform, strict: true });
+        if (snapshot.prompt) promptParts.push(snapshot.prompt);
+        // Extract entries for discovery
+        if (typeof registry.listAll === 'function') {
+          for (const entry of registry.listAll() as any[]) {
+            const skill = entry.skill ?? entry;
+            const name = skill.name ?? 'unknown';
+            allEntries.push({
+              name,
+              description: skill.description ?? '',
+              content: skill.content ?? '',
+            });
+            allNames.push(name);
+          }
+        }
+      }
+    } catch (err) {
+      opts.logger.warn?.('[wunderland] Failed to load skills from directories (continuing without)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // 2. Named skills from curated registry
+  if (namedSkills.length > 0) {
+    try {
+      const { resolveSkillsByNames } = await import('../core/PresetSkillResolver.js');
+
+      let snapshot: any;
+      if (namedSkills.includes('all')) {
+        // Load all curated skills
+        const catalogModule: string = '@framers/agentos-skills-registry/catalog';
+        const catalog: any = await import(catalogModule);
+        const allSkillNames = typeof catalog.listSkillNames === 'function'
+          ? catalog.listSkillNames()
+          : typeof catalog.searchSkills === 'function'
+            ? catalog.searchSkills('').map((s: any) => s.name)
+            : [];
+        snapshot = await resolveSkillsByNames(allSkillNames);
+      } else {
+        snapshot = await resolveSkillsByNames(namedSkills);
+      }
+
+      if (snapshot?.prompt) promptParts.push(snapshot.prompt);
+
+      // Build SkillEntries for discovery
+      if (Array.isArray(snapshot?.skills)) {
+        for (const skill of snapshot.skills as any[]) {
+          const name = typeof skill === 'string' ? skill : skill.name ?? 'unknown';
+          if (!allNames.includes(name)) {
+            allEntries.push({ name, description: '', content: '' });
+            allNames.push(name);
+          }
+        }
+      }
+    } catch (err) {
+      opts.logger.warn?.('[wunderland] Failed to load curated skills (continuing without)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return {
+    skillsPrompt: promptParts.filter(Boolean).join('\n\n'),
+    skillEntries: allEntries,
+    skillNames: allNames,
+  };
+}
+
+async function resolveExtensionsFromOpts(opts: {
+  extensions: WunderlandOptions['extensions'];
+  preset?: AgentPreset;
+  logger: Required<NonNullable<WunderlandOptions['logger']>>;
+}): Promise<{
+  extensionTools: ITool[];
+  extensionNames: string[];
+}> {
+  const empty = { extensionTools: [], extensionNames: [] as string[] };
+  const extOpt = opts.extensions;
+  const presetExt = opts.preset?.suggestedExtensions;
+
+  // Collect extension names by category
+  let toolExts = [...(extOpt?.tools ?? [])];
+  let voiceExts = [...(extOpt?.voice ?? [])];
+  let prodExts = [...(extOpt?.productivity ?? [])];
+  const overrides = extOpt?.overrides;
+
+  // Merge from preset (dedup)
+  if (presetExt) {
+    const mergeDedup = (target: string[], source: string[] | undefined) => {
+      const existing = new Set(target);
+      for (const name of source ?? []) {
+        if (!existing.has(name)) target.push(name);
+      }
+    };
+    mergeDedup(toolExts, presetExt.tools);
+    mergeDedup(voiceExts, presetExt.voice);
+    mergeDedup(prodExts, presetExt.productivity);
+  }
+
+  if (toolExts.length === 0 && voiceExts.length === 0 && prodExts.length === 0) {
+    return empty;
+  }
+
+  try {
+    const { resolveExtensionsByNames } = await import('../core/PresetExtensionResolver.js');
+
+    const result = await resolveExtensionsByNames(toolExts, voiceExts, prodExts, overrides);
+
+    if (result.missing.length > 0) {
+      opts.logger.warn?.(`[wunderland] Some extensions not available: ${result.missing.join(', ')}`);
+    }
+
+    // Invoke factories and extract ITool instances
+    const tools: ITool[] = [];
+    const names: string[] = [];
+
+    for (const pack of result.manifest.packs) {
+      try {
+        const instances = typeof pack.factory === 'function' ? pack.factory() : [];
+        const toolArray = Array.isArray(instances) ? instances : [instances];
+        for (const instance of toolArray) {
+          if (instance && typeof instance === 'object' && 'name' in instance && typeof instance.execute === 'function') {
+            tools.push(instance as ITool);
+            names.push(instance.name);
+          }
+        }
+      } catch (err) {
+        opts.logger.warn?.(`[wunderland] Failed to initialize extension pack "${pack.name}"`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return { extensionTools: tools, extensionNames: names };
+  } catch (err) {
+    opts.logger.warn?.('[wunderland] Failed to resolve extensions (continuing without)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return empty;
+  }
+}
+
+function buildSystemPrompt(agentConfig: WunderlandAgentConfig, policy: NormalizedRuntimePolicy, skillsPrompt?: string): string {
   const base = typeof agentConfig.systemPrompt === 'string' && agentConfig.systemPrompt.trim()
     ? agentConfig.systemPrompt.trim()
     : 'You are a Wunderland in-process agent runtime.';
 
-  const extra = [
+  const parts = [
+    base,
     `Execution mode: human-all (library approvals).`,
     `Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}. Security tier: ${policy.securityTier}.`,
     'When you need up-to-date information, use web_search and/or browser_* tools (if available).',
-  ].join('\n');
+    skillsPrompt || '',
+  ].filter(Boolean);
 
-  return `${base}\n\n${extra}`.trim();
+  return parts.join('\n\n').trim();
 }
 
 // =============================================================================
@@ -312,9 +558,44 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 
   const approvalsMode: WunderlandApprovalsMode = opts.approvals?.mode ?? 'deny-side-effects';
 
+  // Load preset (if specified) — provides default tools, skills, extensions, and personality
+  let loadedPreset: AgentPreset | undefined;
+  if (opts.preset) {
+    try {
+      const { PresetLoader } = await import('../core/PresetLoader.js');
+      const loader = new PresetLoader();
+      loadedPreset = loader.loadPreset(opts.preset);
+      logger.debug?.(`[wunderland] Loaded preset "${opts.preset}"`, {
+        skills: loadedPreset.suggestedSkills,
+        extensions: loadedPreset.suggestedExtensions,
+      });
+    } catch (err) {
+      logger.warn?.(`[wunderland] Failed to load preset "${opts.preset}" (continuing without)`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const { toolMap, droppedByPolicy, availability } = await resolveToolMap({
     tools: opts.tools,
     policy,
+    logger,
+  });
+
+  // Resolve named extensions → add their tools to toolMap
+  const { extensionTools } = await resolveExtensionsFromOpts({
+    extensions: opts.extensions,
+    preset: loadedPreset,
+    logger,
+  });
+  for (const t of extensionTools) {
+    if (t?.name) toolMap.set(t.name, toToolInstance(t));
+  }
+
+  // Resolve skills → get prompt text + entries for discovery indexing
+  const { skillsPrompt, skillEntries, skillNames } = await resolveSkillsFromOpts({
+    skills: opts.skills,
+    preset: loadedPreset,
     logger,
   });
 
@@ -341,6 +622,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   try {
     await discoveryManager.initialize({
       toolMap,
+      skillEntries: skillEntries.length > 0 ? skillEntries : undefined,
       llmConfig: {
         providerId: llm.providerId,
         apiKey: llm.apiKey,
@@ -369,7 +651,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     workingDirectory,
   };
 
-  const systemPrompt = buildSystemPrompt(agentConfig, policy);
+  const systemPrompt = buildSystemPrompt(agentConfig, policy, skillsPrompt);
 
   const sessions = new Map<string, Array<Record<string, unknown>>>();
 
@@ -388,6 +670,10 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       names: [...toolMap.keys()].sort(),
       droppedByPolicy,
       availability,
+    },
+    skills: {
+      count: skillNames.length,
+      names: [...skillNames].sort(),
     },
     workspace: { agentId: workspace.agentId, baseDir: workspace.baseDir, workingDirectory },
     discovery: discoveryManager.getStats(),
