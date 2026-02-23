@@ -60,6 +60,9 @@ export * from '../provenance/index.js';
 // Marketplace exports
 export * from '../marketplace/index.js';
 
+// Discovery exports (capability discovery engine)
+export * from '../discovery/index.js';
+
 // Social network exports (Wonderland)
 export * from '../social/index.js';
 
