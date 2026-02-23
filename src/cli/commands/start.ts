@@ -34,6 +34,7 @@ import {
 } from '../../core/index.js';
 import { HumanInteractionManager, type ChannelMessage, type IChannelAdapter } from '@framers/agentos';
 import { PairingManager } from '../../pairing/PairingManager.js';
+import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig } from '../../discovery/index.js';
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
@@ -609,6 +610,47 @@ export default async function cmdStart(
   toolMap.clear();
   for (const [k, v] of filtered.toolMap.entries()) toolMap.set(k, v);
 
+  // Capability discovery — semantic search + graph re-ranking
+  const discoveryOpts: WunderlandDiscoveryConfig = {};
+  if (cfg?.discovery) {
+    const d = cfg.discovery as Record<string, unknown>;
+    if (typeof d.enabled === 'boolean') discoveryOpts.enabled = d.enabled;
+    if (typeof d.embeddingProvider === 'string') discoveryOpts.embeddingProvider = d.embeddingProvider;
+    if (typeof d.embeddingModel === 'string') discoveryOpts.embeddingModel = d.embeddingModel;
+    if (typeof d.scanManifests === 'boolean') discoveryOpts.scanManifestDirs = d.scanManifests;
+    const budgetFields = { tier0Budget: 'tier0TokenBudget', tier1Budget: 'tier1TokenBudget', tier2Budget: 'tier2TokenBudget', tier1TopK: 'tier1TopK', tier2TopK: 'tier2TopK' } as const;
+    const configOverrides: Record<string, number> = {};
+    for (const [src, dest] of Object.entries(budgetFields)) {
+      if (typeof d[src] === 'number') configOverrides[dest] = d[src] as number;
+    }
+    if (Object.keys(configOverrides).length > 0) discoveryOpts.config = configOverrides as any;
+  }
+  const discoveryManager = new WunderlandDiscoveryManager(discoveryOpts);
+  try {
+    await discoveryManager.initialize({
+      toolMap,
+      llmConfig: { providerId, apiKey: llmApiKey, baseUrl: llmBaseUrl },
+    });
+    const metaTool = discoveryManager.getMetaTool();
+    if (metaTool) {
+      toolMap.set(metaTool.name, {
+        name: metaTool.name,
+        description: metaTool.description,
+        inputSchema: metaTool.inputSchema as any,
+        hasSideEffects: metaTool.hasSideEffects,
+        category: 'productivity',
+        execute: metaTool.execute as any,
+      });
+    }
+    const stats = discoveryManager.getStats();
+    if (stats.initialized) {
+      fmt.ok(`Discovery: ${stats.capabilityCount} capabilities indexed, ${stats.graphEdges} graph edges`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    fmt.warning(`Discovery initialization failed (continuing without): ${msg}`);
+  }
+
   // Skills — load from filesystem dirs + config-declared skills
   let skillsPrompt = '';
   if (enableSkills) {
@@ -841,6 +883,28 @@ export default async function cmdStart(
     }
 
     const traceCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> = [];
+
+    // Capability discovery — inject tiered context for this turn
+    try {
+      const discoveryResult = await discoveryManager.discoverForTurn(text);
+      if (discoveryResult) {
+        for (let i = messages.length - 1; i >= 1; i--) {
+          if (typeof messages[i]?.content === 'string' && String(messages[i]!.content).startsWith('[Capability Context]')) {
+            messages.splice(i, 1);
+          }
+        }
+        const ctxParts: string[] = ['[Capability Context]', discoveryResult.tier0];
+        if (discoveryResult.tier1.length > 0) {
+          ctxParts.push('Relevant capabilities:\n' + discoveryResult.tier1.map((r) => r.summaryText).join('\n'));
+        }
+        if (discoveryResult.tier2.length > 0) {
+          ctxParts.push(discoveryResult.tier2.map((r) => r.fullText).join('\n'));
+        }
+        messages.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
+      }
+    } catch {
+      // Non-fatal
+    }
 
     let reply = '';
     try {
@@ -1661,6 +1725,28 @@ export default async function cmdStart(
 
           messages.push({ role: 'user', content: message });
 
+          // Capability discovery — inject tiered context
+          try {
+            const discoveryResult = await discoveryManager.discoverForTurn(message);
+            if (discoveryResult) {
+              for (let i = messages.length - 1; i >= 1; i--) {
+                if (typeof messages[i]?.content === 'string' && String(messages[i]!.content).startsWith('[Capability Context]')) {
+                  messages.splice(i, 1);
+                }
+              }
+              const ctxParts: string[] = ['[Capability Context]', discoveryResult.tier0];
+              if (discoveryResult.tier1.length > 0) {
+                ctxParts.push('Relevant capabilities:\n' + discoveryResult.tier1.map((r) => r.summaryText).join('\n'));
+              }
+              if (discoveryResult.tier2.length > 0) {
+                ctxParts.push(discoveryResult.tier2.map((r) => r.fullText).join('\n'));
+              }
+              messages.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
+            }
+          } catch {
+            // Non-fatal
+          }
+
           const toolContext = {
             gmiId: `wunderland-server-${sessionId}`,
             personaId: seed.seedId,
@@ -1795,6 +1881,7 @@ export default async function cmdStart(
           )
           .filter(Boolean),
       );
+      await discoveryManager.close();
       await shutdownWunderlandOtel();
     } finally {
       process.exit(0);
@@ -1816,6 +1903,8 @@ export default async function cmdStart(
   fmt.kvPair('Port', String(port));
   fmt.kvPair('Tools', `${toolMap.size} loaded`);
   fmt.kvPair('Channels', `${adapterByPlatform.size} loaded`);
+  const dStats = discoveryManager.getStats();
+  fmt.kvPair('Discovery', dStats.initialized ? sColor(`${dStats.capabilityCount} capabilities`) : wColor('disabled'));
   fmt.kvPair('Pairing', pairingEnabled ? sColor('enabled') : wColor('disabled'));
   fmt.kvPair(
     'Authorization',
