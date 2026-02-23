@@ -14,7 +14,7 @@
   "suggestedSkills": ["healthcheck", "coding-agent", "github"],
   "suggestedChannels": ["slack", "discord", "webchat"],
   "suggestedExtensions": {
-    "tools": ["cli-executor", "web-browser"],
+    "tools": ["web-search", "cli-executor", "web-browser"],
     "voice": [],
     "productivity": []
   }

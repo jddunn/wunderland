@@ -14,7 +14,7 @@
   "suggestedSkills": ["summarize", "image-gen"],
   "suggestedChannels": ["webchat"],
   "suggestedExtensions": {
-    "tools": ["giphy", "image-search"],
+    "tools": ["web-search", "giphy", "image-search"],
     "voice": [],
     "productivity": []
   }
