@@ -10,9 +10,11 @@ import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import chalk from 'chalk';
-import { success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
+import { HEX, success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { visibleLength } from '../ui/ansi-utils.js';
+import { glyphs } from '../ui/glyphs.js';
+import { getUiRuntime } from '../ui/runtime.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
@@ -24,6 +26,7 @@ import {
   getPermissionsForSet,
   normalizeRuntimePolicy,
 } from '../security/runtime-policy.js';
+import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
 import {
   createWunderlandSeed,
@@ -34,23 +37,16 @@ import {
 
 // ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
 
-const C = {
-  purple:     '#a855f7',
-  lavender:   '#c084fc',
-  magenta:    '#e879f9',
-  cyan:       '#06b6d4',
-  brightCyan: '#22d3ee',
-  green:      '#22c55e',
-  white:      '#f9fafb',
-  text:       '#c9d1d9',
-  muted:      '#6b7280',
-  dim:        '#4b5563',
-  dark:       '#374151',
-  darker:     '#1f2937',
-} as const;
+const C = HEX;
 
 const frameBorder  = chalk.hex(C.cyan);
 const accentBorder = chalk.hex(C.lavender);
+
+function chatFrameGlyphs(): { tl: string; tr: string; bl: string; br: string; h: string; v: string } {
+  const ui = getUiRuntime();
+  if (ui.ascii) return { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|' };
+  return { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' };
+}
 
 /** Get terminal width, floored at 60. */
 function getChatWidth(): number {
@@ -59,9 +55,10 @@ function getChatWidth(): number {
 
 /** Frame a content line inside ║ ... ║ borders. */
 function frameLine(content: string, innerWidth: number): string {
+  const frame = chatFrameGlyphs();
   const vLen = visibleLength(content);
   const pad = Math.max(0, innerWidth - vLen);
-  return `  ${frameBorder('║')}${content}${' '.repeat(pad)}${frameBorder('║')}`;
+  return `  ${frameBorder(frame.v)}${content}${' '.repeat(pad)}${frameBorder(frame.v)}`;
 }
 
 /** Print the framed chat startup header. */
@@ -78,8 +75,9 @@ function printChatHeader(info: {
   const contentWidth = getChatWidth();
   const innerWidth = contentWidth - 2;
 
-  const topBorder = `  ${frameBorder('╔')}${frameBorder('═'.repeat(innerWidth))}${frameBorder('╗')}`;
-  const botBorder = `  ${frameBorder('╚')}${frameBorder('═'.repeat(innerWidth))}${frameBorder('╝')}`;
+  const frame = chatFrameGlyphs();
+  const topBorder = `  ${frameBorder(frame.tl)}${frameBorder(frame.h.repeat(innerWidth))}${frameBorder(frame.tr)}`;
+  const botBorder = `  ${frameBorder(frame.bl)}${frameBorder(frame.h.repeat(innerWidth))}${frameBorder(frame.br)}`;
   const empty = frameLine(' '.repeat(innerWidth), innerWidth);
 
   // Title
@@ -92,11 +90,12 @@ function printChatHeader(info: {
   const divDecoVis = 4;
   const divHalfL = Math.max(0, Math.floor((innerWidth - divDecoVis) / 2));
   const divHalfR = Math.max(0, innerWidth - divDecoVis - divHalfL);
-  const divContent = accentBorder('─'.repeat(divHalfL)) + divDeco + accentBorder('─'.repeat(divHalfR));
+  const g = glyphs();
+  const divContent = accentBorder(g.hr.repeat(divHalfL)) + divDeco + accentBorder(g.hr.repeat(divHalfR));
 
   // Key-value pairs
   const kvLine = (label: string, value: string): string => {
-    const kvContent = `   ${chalk.hex(C.brightCyan)('●')} ${chalk.hex(C.muted)(label.padEnd(18))} ${value}`;
+    const kvContent = `   ${chalk.hex(C.brightCyan)(g.bullet)} ${chalk.hex(C.muted)(label.padEnd(18))} ${value}`;
     return frameLine(kvContent, innerWidth);
   };
 
@@ -129,6 +128,7 @@ function printChatHeader(info: {
 
 /** Print a framed assistant response. */
 function printAssistantReply(text: string): void {
+  const g = glyphs();
   const contentWidth = getChatWidth();
   const innerWidth = contentWidth - 2;
   const maxTextWidth = innerWidth - 6; // 3 indent + 3 margin
@@ -153,12 +153,12 @@ function printAssistantReply(text: string): void {
     if (current) wrappedLines.push(current);
   }
 
-  const topLine = `  ${accentBorder('┌')}${accentBorder('─'.repeat(innerWidth - 2))}${accentBorder('┐')}`;
-  const botLine = `  ${accentBorder('└')}${accentBorder('─'.repeat(innerWidth - 2))}${accentBorder('┘')}`;
+  const topLine = `  ${accentBorder(g.box.tl)}${accentBorder(g.box.h.repeat(innerWidth - 2))}${accentBorder(g.box.tr)}`;
+  const botLine = `  ${accentBorder(g.box.bl)}${accentBorder(g.box.h.repeat(innerWidth - 2))}${accentBorder(g.box.br)}`;
   const replyFrame = (content: string): string => {
     const vLen = visibleLength(content);
     const pad = Math.max(0, innerWidth - 2 - vLen);
-    return `  ${accentBorder('│')}${content}${' '.repeat(pad)}${accentBorder('│')}`;
+    return `  ${accentBorder(g.box.v)}${content}${' '.repeat(pad)}${accentBorder(g.box.v)}`;
   };
   const emptyReply = replyFrame(' '.repeat(innerWidth - 2));
 
@@ -178,7 +178,9 @@ function printAssistantReply(text: string): void {
 
 /** Styled chat prompt string. */
 function chatPrompt(): string {
-  return `  ${frameBorder('║')} ${chalk.hex(C.brightCyan)('▸')} `;
+  const frame = chatFrameGlyphs();
+  const g = glyphs();
+  return `  ${frameBorder(frame.v)} ${chalk.hex(C.brightCyan)(g.cursor)} `;
 }
 
 // ── Command ─────────────────────────────────────────────────────────────────
@@ -191,12 +193,30 @@ export default async function cmdChat(
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
   const configPath = path.resolve(process.cwd(), 'agent.config.json');
+  const sealedPath = path.resolve(process.cwd(), 'sealed.json');
   let cfg: any | null = null;
 
   // Observability (OTEL) is opt-in, and agent.config.json can override env.
   try {
     if (existsSync(configPath)) {
-      cfg = JSON.parse(await readFile(configPath, 'utf8'));
+      const configRaw = await readFile(configPath, 'utf8');
+      if (existsSync(sealedPath)) {
+        const sealedRaw = await readFile(sealedPath, 'utf8');
+        const verification = verifySealedConfig({ configRaw, sealedRaw });
+        if (!verification.ok) {
+          fmt.errorBlock(
+            'Seal verification failed',
+            `${verification.error || 'Verification failed.'}\nRun: ${chalk.white('wunderland verify-seal')}`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+        if (!verification.signaturePresent) {
+          fmt.warning('Sealed config has no signature (hash-only verification).');
+        }
+      }
+
+      cfg = JSON.parse(configRaw);
       const cfgOtelEnabled = cfg?.observability?.otel?.enabled;
       if (typeof cfgOtelEnabled === 'boolean') {
         process.env['WUNDERLAND_OTEL_ENABLED'] = cfgOtelEnabled ? 'true' : 'false';
@@ -206,8 +226,13 @@ export default async function cmdChat(
         process.env['WUNDERLAND_OTEL_LOGS_ENABLED'] = cfgOtelLogsEnabled ? 'true' : 'false';
       }
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    if (existsSync(sealedPath)) {
+      fmt.errorBlock('Seal verification failed', err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+      return;
+    }
+    // Unsealed config parse errors are non-fatal (defaults apply).
   }
 
   await startWunderlandOtel({ serviceName: 'wunderland-chat' });
@@ -285,7 +310,7 @@ export default async function cmdChat(
   const dangerouslySkipCommandSafety =
     flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
   const autoApproveToolCalls =
-    globals.yes || dangerouslySkipPermissions || policy.executionMode === 'autonomous';
+    globals.autoApproveTools || dangerouslySkipPermissions || policy.executionMode === 'autonomous';
   const enableSkills = flags['no-skills'] !== true;
   const lazyTools = flags['lazy-tools'] === true;
   const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
@@ -618,9 +643,10 @@ export default async function cmdChat(
   });
 
   const askPermission = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
+    if (autoApproveToolCalls) return true;
     const preview = safeJsonStringify(args, 800);
     const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
-    const q = `  ${wColor('\u26A0')} Allow ${tColor(tool.name)} (${effectLabel})?\n${dim(preview)}\n  ${muted('[y/N]')} `;
+    const q = `  ${wColor(glyphs().warn)} Allow ${tColor(tool.name)} (${effectLabel})?\n${dim(preview)}\n  ${muted('[y/N]')} `;
     const answer = (await rl.question(q)).trim().toLowerCase();
     return answer === 'y' || answer === 'yes';
   };
@@ -628,12 +654,13 @@ export default async function cmdChat(
   const askCheckpoint = turnApprovalMode === 'off'
     ? undefined
     : async (info: { round: number; toolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> }): Promise<boolean> => {
+        if (autoApproveToolCalls) return true;
         const summary = info.toolCalls.map((c) => {
           const effect = c.hasSideEffects ? 'side effects' : 'read-only';
           const preview = safeJsonStringify(c.args, 600);
           return `- ${c.toolName} (${effect}): ${preview}`;
         }).join('\n');
-        const q = `  ${wColor('\u26A0')} Checkpoint after round ${info.round}.\n${dim(summary || '(no tool calls)')}\n  ${muted('Continue? [y/N]')} `;
+        const q = `  ${wColor(glyphs().warn)} Checkpoint after round ${info.round}.\n${dim(summary || '(no tool calls)')}\n  ${muted('Continue? [y/N]')} `;
         const answer = (await rl.question(q)).trim().toLowerCase();
         return answer === 'y' || answer === 'yes';
       };
@@ -681,17 +708,17 @@ export default async function cmdChat(
       toolMap,
       toolContext,
       maxRounds: 8,
-      dangerouslySkipPermissions: autoApproveToolCalls,
+      dangerouslySkipPermissions,
       askPermission,
       askCheckpoint,
       baseUrl: llmBaseUrl,
       fallback: providerId === 'openai' ? openrouterFallback : undefined,
       onFallback: (_err, provider) => {
-        console.log(`  ${frameBorder('║')} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`);
+        console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`);
       },
       onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
         console.log(
-          `  ${frameBorder('║')} ${chalk.hex(C.magenta)('>')} ${chalk.hex(C.magenta)(tool.name)} ${chalk.hex(C.dim)(truncateString(JSON.stringify(args), 120))}`
+          `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)('>')} ${chalk.hex(C.magenta)(tool.name)} ${chalk.hex(C.dim)(truncateString(JSON.stringify(args), 120))}`
         );
       },
     });
@@ -710,6 +737,7 @@ export default async function cmdChat(
   const endDivL = Math.max(0, Math.floor((iw - 18) / 2));
   const endDivR = Math.max(0, iw - 18 - endDivL);
   console.log('');
-  console.log(`  ${frameBorder('─'.repeat(endDivL))} ${chalk.hex(C.muted)('Session ended.')} ${frameBorder('─'.repeat(endDivR))}`);
+  const g = glyphs();
+  console.log(`  ${frameBorder(g.hr.repeat(endDivL))} ${chalk.hex(C.muted)('Session ended.')} ${frameBorder(g.hr.repeat(endDivR))}`);
   console.log('');
 }

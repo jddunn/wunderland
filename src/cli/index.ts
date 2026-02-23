@@ -11,84 +11,79 @@ import { printCompactHeader } from './ui/compact-header.js';
 import { VERSION, URLS } from './constants.js';
 import { muted, dim, accent } from './ui/theme.js';
 import * as fmt from './ui/format.js';
+import { printHelpTopic, printHelpTopicsList } from './help/topics.js';
+import { loadConfig } from './config/config-manager.js';
+import { detectAsciiFallback, parseUiTheme, setUiRuntime } from './ui/runtime.js';
 
 // ── Help text ───────────────────────────────────────────────────────────────
 
 function printHelp(opts?: { isExporting?: boolean }): void {
   const c = accent;
   const d = dim;
+  const w = chalk.white;
 
   console.log(`
   ${c('Usage:')}
-    ${chalk.white('wunderland')} ${d('<command>')} ${d('[options]')}
+    ${w('wunderland')} ${d('')}                       ${d('Open TUI dashboard (TTY only)')}
+    ${w('wunderland')} ${d('<command>')} ${d('[options]')}
+    ${w('wunderland help')} ${d('<topic>')}              ${d('Short guides + onboarding')}
 
-  ${c('Commands:')}
-    ${chalk.white('setup')}                  Interactive onboarding wizard
-    ${chalk.white('init')} ${d('<dir>')}             Scaffold a new Wunderbot project
-    ${chalk.white('create')} ${d('[description]')}   Create agent from natural language
-    ${chalk.white('start')}                  Start local agent server
-    ${chalk.white('chat')}                   Interactive terminal assistant
-    ${chalk.white('hitl')}                   Watch/resolve approvals & checkpoints
-    ${chalk.white('doctor')}                 Health check: keys, tools, connectivity
-    ${chalk.white('channels')}               List configured channels
-    ${chalk.white('channels add')}           Add a channel interactively
-    ${chalk.white('channels remove')} ${d('<id>')}   Remove a channel
-    ${chalk.white('config')}                 Show current config
-    ${chalk.white('config get')} ${d('<key>')}       Get a config value
-    ${chalk.white('config set')} ${d('<key> <val>')} Set a config value
-    ${chalk.white('voice')}                  Voice provider status
-    ${chalk.white('cron')}                   Scheduled jobs management
-    ${chalk.white('status')}                 Agent & connection status
-    ${chalk.white('seal')}                   Seal agent config (integrity hash)
-    ${chalk.white('list-presets')}            List personality & HEXACO presets
-    ${chalk.white('skills')}                 Manage agent skills
-    ${chalk.white('skills list')}             List available skills
-    ${chalk.white('skills info')} ${d('<name>')}     Show skill details
-    ${chalk.white('skills enable')} ${d('<name>')}   Enable a skill
-    ${chalk.white('skills disable')} ${d('<name>')}  Disable a skill
-    ${chalk.white('extensions')}             Manage agent extensions
-    ${chalk.white('extensions list')}         List available extensions
-    ${chalk.white('extensions info')} ${d('<name>')} Show extension details
-    ${chalk.white('extensions enable')} ${d('<name>')} Enable an extension
-    ${chalk.white('extensions disable')} ${d('<name>')} Disable an extension
-    ${chalk.white('rag')}                    RAG memory management
-    ${chalk.white('rag ingest')} ${d('<file|text>')} Ingest a document
-    ${chalk.white('rag query')} ${d('<text>')}       Search RAG memory
-    ${chalk.white('rag collections')}        Manage RAG collections
-    ${chalk.white('rag health')}             RAG service health
-    ${chalk.white('agency')}                 Multi-agent collective management
-    ${chalk.white('agency create')} ${d('<name>')}   Create a multi-agent agency
-    ${chalk.white('agency status')} ${d('<name>')}   Show agency status
-    ${chalk.white('workflows')}              Workflow engine management
-    ${chalk.white('workflows list')}          List workflow definitions
-    ${chalk.white('workflows run')} ${d('<name>')}    Execute a workflow
-    ${chalk.white('evaluate')}               Run evaluation suite
-    ${chalk.white('evaluate run')} ${d('<dataset>')}  Run evaluation on dataset
-    ${chalk.white('evaluate results')} ${d('<id>')} Show evaluation results
-    ${chalk.white('knowledge')}              Knowledge graph operations
-    ${chalk.white('knowledge query')} ${d('<text>')} Search knowledge graph
-    ${chalk.white('knowledge stats')}        Graph statistics
-    ${chalk.white('provenance')}             Audit trail & provenance
-    ${chalk.white('provenance audit')}       Show agent audit trail
-    ${chalk.white('provenance verify')} ${d('<id>')} Verify event signature
-    ${chalk.white('marketplace')}            Skill & tool marketplace
-    ${chalk.white('marketplace search')} ${d('<q>')} Search marketplace
-    ${chalk.white('marketplace install')} ${d('<id>')} Install from marketplace
-    ${chalk.white('models')}                 List LLM providers & models
-    ${chalk.white('models set-default')} ${d('<p> <m>')} Set default provider/model
-    ${chalk.white('models test')} ${d('[provider]')} Test provider connectivity
-    ${chalk.white('export')}                 Export agent as shareable manifest
-    ${chalk.white('import')} ${d('<manifest>')}     Import agent from manifest file
-    ${chalk.white('plugins')}                List installed extension packs
-    ${chalk.white('export-session')}         Export chat session to file
-    ${chalk.white('ollama-setup')}           Configure Ollama (local LLM)
-    ${chalk.white('version')}                Show version
+  ${c('Quickstart:')}
+    ${w('wunderland setup')}                  Interactive onboarding wizard
+    ${w('wunderland doctor')}                 Health check: keys, tools, connectivity
+    ${w('wunderland chat')}                   Interactive terminal assistant
+    ${w('wunderland start')}                  Start local agent server
+
+  ${c('Commands (grouped):')}
+    ${w('Onboarding')}
+      ${w('setup')}                 Wizard: keys, channels, personality
+      ${w('init')} ${d('<dir>')}            Scaffold an agent project
+      ${w('create')} ${d('[description]')}  Create agent from natural language
+      ${w('doctor')}                Health check
+
+    ${w('Run')}
+      ${w('chat')}                  Interactive assistant (REPL)
+      ${w('start')}                 Start server
+      ${w('status')}                Agent & connection status
+      ${w('hitl')}                  Watch/resolve approvals & checkpoints
+
+    ${w('Configure')}
+      ${w('channels')}              List/add/remove channels
+      ${w('models')}                Provider/model settings
+      ${w('voice')}                 Voice provider status
+      ${w('cron')}                  Scheduled jobs management
+      ${w('skills')}                Skills management
+      ${w('extensions')}            Extension management
+      ${w('list-presets')}           List personality & agent presets
+      ${w('config')}                Read/write config values
+
+    ${w('Advanced')}
+      ${w('rag')}                   RAG memory management
+      ${w('agency')}                Multi-agent collectives
+      ${w('workflows')}             Workflow engine
+      ${w('evaluate')}              Evaluation suite
+      ${w('knowledge')}             Knowledge graph
+      ${w('provenance')}            Audit trail & provenance
+      ${w('marketplace')}           Marketplace search/install
+
+    ${w('Utilities')}
+      ${w('seal')}                  Seal agent config (integrity hash)
+      ${w('verify-seal')}           Verify sealed.json integrity/signature
+      ${w('export')}                Export agent as shareable manifest
+      ${w('import')} ${d('<manifest>')}    Import agent from manifest file
+      ${w('plugins')}               List installed extension packs
+      ${w('export-session')}        Export chat session to file
+      ${w('ollama-setup')}          Configure Ollama (local LLM)
+      ${w('version')}               Show version
 
   ${c('Global Options:')}
     ${d('--help, -h')}             Show help
     ${d('--version, -v')}          Show version
     ${d('--quiet, -q')}            Suppress banner
-    ${d('--yes, -y')}              Auto-approve tool calls (fully autonomous)
+    ${d('--yes, -y')}              Auto-confirm prompts (non-interactive where possible)
+    ${d('--auto-approve-tools')}   Auto-approve tool calls (fully autonomous)
+    ${d('--theme <plain|cyberpunk>')} UI theme (default: plain)
+    ${d('--ascii')}                Force ASCII-only UI (auto-fallback in limited terminals)
     ${d('--no-color')}             Disable colors (also: NO_COLOR env)
     ${d('--dry-run')}              Preview without writing
     ${d('--tui')}                  Force interactive TUI mode
@@ -106,11 +101,16 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--force')}                Overwrite existing files
     ${d('--skills-dir <path>')}    Load skills from directory
     ${d('--no-skills')}            Disable skill loading
-${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}    ${d('--dangerously-skip-permissions')}  Auto-approve tool calls
+${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}
+    ${d('--dangerously-skip-permissions')}  Skip permission/approval checks (dangerous)
     ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
 
+  ${c('Guides:')}
+    ${w('wunderland help')}                   List help topics
+    ${w('wunderland help')} ${d('<topic>')}            Open a short guide
+
   ${c('Links:')}
-    ${muted(URLS.website)}${dim('  \u00B7  ')}${muted(URLS.saas)}${dim('  \u00B7  ')}${muted(URLS.docs)}
+    ${muted(URLS.website)}${fmt.dot()}${muted(URLS.saas)}${fmt.dot()}${muted(URLS.docs)}
   `);
 }
 
@@ -131,6 +131,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   voice:          () => import('./commands/voice.js'),
   cron:           () => import('./commands/cron.js'),
   seal:           () => import('./commands/seal.js'),
+  'verify-seal':  () => import('./commands/verify-seal.js'),
   'list-presets': () => import('./commands/list-presets.js'),
   skills:         () => import('./commands/skills.js'),
   extensions:     () => import('./commands/extensions.js'),
@@ -160,10 +161,21 @@ export async function main(argv: string[]): Promise<void> {
   const { positional, flags } = parseArgs(argv);
   const globals = extractGlobalFlags(flags);
 
-  // Disable colors if requested
-  if (globals.noColor) {
-    chalk.level = 0;
-  }
+  // Resolve UI runtime early (before any output).
+  const cfg = await loadConfig(globals.config);
+  const resolvedTheme =
+    parseUiTheme(flags['theme'])
+    ?? parseUiTheme(cfg.ui?.theme)
+    ?? 'plain';
+  const resolvedAscii = globals.ascii || cfg.ui?.ascii === true || detectAsciiFallback();
+  const resolvedNoColor = globals.noColor || resolvedTheme === 'plain';
+
+  setUiRuntime({ theme: resolvedTheme, ascii: resolvedAscii, noColor: resolvedNoColor });
+  globals.theme = resolvedTheme;
+  globals.ascii = resolvedAscii;
+  globals.noColor = resolvedNoColor;
+
+  if (resolvedNoColor) chalk.level = 0;
 
   // Version
   if (globals.version) {
@@ -209,13 +221,38 @@ export async function main(argv: string[]): Promise<void> {
 
   // Help / version as commands
   if (command === 'help' || command === '--help') {
+    const topic = subArgs[0];
+    const isHelpCommand = command === 'help';
     if (typeof flags['export-png'] === 'string') {
       const { withExport } = await import('./export/export-middleware.js');
-      const helpHandler = async () => { if (!globals.quiet) await printBanner(); printHelp({ isExporting: true }); };
+      const helpHandler = async () => {
+        if (!globals.quiet) await printBanner();
+        if (topic) {
+          printHelpTopic(topic);
+          return;
+        }
+        if (isHelpCommand) {
+          printHelpTopicsList();
+          console.log(`  ${dim('Full reference:')} ${accent('wunderland --help')}`);
+          console.log();
+          return;
+        }
+        printHelp({ isExporting: true });
+      };
       await withExport(helpHandler, subArgs, flags, globals, '--help');
       return;
     }
     if (!globals.quiet) await printBanner();
+    if (topic) {
+      printHelpTopic(topic);
+      return;
+    }
+    if (isHelpCommand) {
+      printHelpTopicsList();
+      console.log(`  ${dim('Full reference:')} ${accent('wunderland --help')}`);
+      console.log();
+      return;
+    }
     printHelp();
     return;
   }

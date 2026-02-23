@@ -8,6 +8,7 @@ import { Readable } from 'node:stream';
 import type { GlobalFlags } from '../types.js';
 import { accent, warn as wColor, success as sColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 
 type PendingSnapshot = {
   approvals?: Array<{ actionId: string; severity?: string; description?: string }>;
@@ -58,6 +59,7 @@ export default async function cmdHitl(
   }
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const g = glyphs();
   let processing = false;
 
   async function getPending(): Promise<PendingSnapshot> {
@@ -105,7 +107,7 @@ export default async function cmdHitl(
           fmt.kvPair('Action', accent(a.actionId));
           if (a.severity) fmt.kvPair('Severity', String(a.severity));
           if (a.description) console.log(`\n${dim(a.description)}\n`);
-          const ans = (await rl.question(`  ${wColor('\u26A0')} Approve? ${muted('[y]es / [n]o / [s]kip')} `)).trim().toLowerCase();
+          const ans = (await rl.question(`  ${wColor(g.warn)} Approve? ${muted('[y]es / [n]o / [s]kip')} `)).trim().toLowerCase();
           if (ans === 'y' || ans === 'yes') {
             await approve(a.actionId);
             fmt.ok(`${sColor('approved')} ${a.actionId}`);
@@ -128,7 +130,7 @@ export default async function cmdHitl(
         if (Array.isArray(c.completedWork) && c.completedWork.length > 0) {
           console.log(`\n${dim(c.completedWork.join('\n\n').slice(0, 2000))}\n`);
         }
-        const ans = (await rl.question(`  ${wColor('\u26A0')} Continue? ${muted('[y]es / [a]bort / [s]kip')} `)).trim().toLowerCase();
+        const ans = (await rl.question(`  ${wColor(g.warn)} Continue? ${muted('[y]es / [a]bort / [s]kip')} `)).trim().toLowerCase();
         if (ans === 'y' || ans === 'yes') {
           await checkpointDecision(c.checkpointId, 'continue');
           fmt.ok(`${sColor('continued')} ${c.checkpointId}`);
@@ -195,4 +197,3 @@ export default async function cmdHitl(
     }
   }
 }
-

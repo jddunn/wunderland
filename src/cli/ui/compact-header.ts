@@ -3,18 +3,22 @@
  * @module wunderland/cli/ui/compact-header
  */
 
-import gradient from 'gradient-string';
 import { VERSION, URLS } from '../constants.js';
-import { dim, muted } from './theme.js';
-
-const wunderlandGradient = gradient(['#a855f7', '#06b6d4']);
+import { bright, dim, muted } from './theme.js';
+import { wordmarkGradient } from './brand.js';
+import { glyphs } from './glyphs.js';
+import { getUiRuntime } from './runtime.js';
 
 /**
  * Print a single-line branded header.
  * Shown on: all commands except setup / help / no-args.
  */
 export function printCompactHeader(): void {
-  const brand = wunderlandGradient.multiline('WUNDERLAND');
-  console.log(`  ${brand} ${dim(`v${VERSION}`)}${dim('  \u00B7  ')}${muted(URLS.website)}${dim('  \u00B7  ')}${muted(URLS.saas)}`);
+  const ui = getUiRuntime();
+  const g = glyphs();
+  const brand = ui.theme === 'cyberpunk' && !ui.noColor && !ui.ascii
+    ? wordmarkGradient.multiline('WUNDERLAND')
+    : bright('WUNDERLAND');
+  console.log(`  ${brand} ${dim(`v${VERSION}`)}${dim(`  ${g.dot}  `)}${muted(URLS.website)}${dim(`  ${g.dot}  `)}${muted(URLS.saas)}`);
   console.log();
 }

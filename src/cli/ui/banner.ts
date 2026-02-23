@@ -4,22 +4,12 @@
  * @module wunderland/cli/ui/banner
  */
 
-import gradient from 'gradient-string';
 import { VERSION, URLS } from '../constants.js';
 import { dim, muted } from './theme.js';
+import { ASCII_BANNER, ASCII_BANNER_ASCII, brandGradient } from './brand.js';
 import { stripAnsi, sliceAnsi } from './ansi-utils.js';
-
-// ── Static ASCII banner (fallback when cfonts unavailable) ───────────────────
-
-const ASCII_BANNER = `
- ██╗    ██╗██╗   ██╗███╗   ██╗██████╗ ███████╗██████╗ ██╗      █████╗ ███╗   ██╗██████╗
- ██║    ██║██║   ██║████╗  ██║██╔══██╗██╔════╝██╔══██╗██║     ██╔══██╗████╗  ██║██╔══██╗
- ██║ █╗ ██║██║   ██║██╔██╗ ██║██║  ██║█████╗  ██████╔╝██║     ███████║██╔██╗ ██║██║  ██║
- ╚██╗╚█╗██╔╝╚██████╔╝██║╚████║██████╔╝███████╗██║  ██║███████╗██║  ██║██║╚████║██████╔╝
-  ╚═╝ ╚═╝    ╚═════╝ ╚═╝ ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝ ╚═══╝╚═════╝`;
-
-// Purple → Magenta → Cyan gradient (matches brand palette)
-const wunderlandGradient = gradient(['#a855f7', '#c084fc', '#e879f9', '#22d3ee', '#06b6d4']);
+import { glyphs } from './glyphs.js';
+import { getUiRuntime } from './runtime.js';
 
 // ── Typewriter reveal ────────────────────────────────────────────────────────
 
@@ -61,13 +51,14 @@ async function typewriterReveal(lines: string[], stepCols = 3, delayMs = 6): Pro
 // ── Tagline ──────────────────────────────────────────────────────────────────
 
 function printTagline(): void {
+  const g = glyphs();
   const tagline = [
     dim(`  v${VERSION}`),
     dim('  '),
     muted(URLS.website),
-    dim('  \u00B7  '),
+    dim(`  ${g.dot}  `),
     muted(URLS.saas),
-    dim('  \u00B7  '),
+    dim(`  ${g.dot}  `),
     muted(URLS.docs),
   ].join('');
 
@@ -82,28 +73,37 @@ function printTagline(): void {
  * Uses cfonts if available, falls back to static ASCII art.
  */
 export async function printBanner(): Promise<void> {
+  const ui = getUiRuntime();
   let bannerLines: string[] = [];
   let rendered = false;
 
   // Try cfonts for a dynamic, font-rendered banner
-  try {
-    const cfonts = await import('cfonts');
-    const result = cfonts.default.render('WUNDERLAND', {
-      font: 'chrome',
-      gradient: ['#a855f7', '#c084fc', '#22d3ee', '#06b6d4'],
-      transitionGradient: true,
-      space: false,
-    });
-    if (result && typeof result === 'object' && 'string' in result && (result as any).string) {
-      bannerLines = (result as any).string.split('\n');
-      rendered = true;
+  if (ui.theme === 'cyberpunk' && !ui.noColor && !ui.ascii) {
+    try {
+      const cfonts = await import('cfonts');
+      const result = cfonts.default.render('WUNDERLAND', {
+        font: 'chrome',
+        gradient: ['#a855f7', '#c084fc', '#22d3ee', '#06b6d4'],
+        transitionGradient: true,
+        space: false,
+      });
+      if (result && typeof result === 'object' && 'string' in result && (result as any).string) {
+        bannerLines = (result as any).string.split('\n');
+        rendered = true;
+      }
+    } catch {
+      // cfonts not available — fall through to static banner
     }
-  } catch {
-    // cfonts not available — fall through to static banner
   }
 
   if (!rendered) {
-    bannerLines = wunderlandGradient(ASCII_BANNER).split('\n');
+    if (ui.ascii) {
+      bannerLines = ASCII_BANNER_ASCII.split('\n');
+    } else if (ui.theme === 'cyberpunk' && !ui.noColor) {
+      bannerLines = brandGradient(ASCII_BANNER).split('\n');
+    } else {
+      bannerLines = ASCII_BANNER.split('\n');
+    }
   }
 
   // Filter out empty trailing lines
@@ -111,8 +111,8 @@ export async function printBanner(): Promise<void> {
     bannerLines.pop();
   }
 
-  // Display: animated for TTY, instant for piped output
-  if (process.stdout.isTTY && bannerLines.length > 0) {
+  // Display: animated only for the cyberpunk theme in capable terminals.
+  if (process.stdout.isTTY && bannerLines.length > 0 && ui.theme === 'cyberpunk' && !ui.noColor && !ui.ascii) {
     console.log(); // top margin
     await typewriterReveal(bannerLines);
   } else {

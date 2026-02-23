@@ -3,12 +3,14 @@
  * @module wunderland/cli/commands/create
  */
 
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as p from '@clack/prompts';
 import type { GlobalFlags } from '../types.js';
-import { accent, success as sColor, dim, warn } from '../ui/theme.js';
+import { accent, success as sColor, dim, warn as wColor, error as eColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward, mergeEnv } from '../config/env-manager.js';
 import { runInitLlmStep } from '../wizards/init-llm-step.js';
 import { openaiChatWithTools, type LLMProviderConfig } from '../openai/tool-calling.js';
@@ -224,29 +226,32 @@ export default async function cmdCreate(
 
   const confidence = extracted.confidence ?? {};
 
-  function formatField(label: string, value: unknown, confidenceKey: string): string {
-    const conf = confidence[confidenceKey];
-    let confBadge = '';
-    if (conf !== undefined) {
-      if (conf >= 0.8) confBadge = sColor(`✓ ${Math.round(conf * 100)}%`);
-      else if (conf >= 0.5) confBadge = warn(`⚠ ${Math.round(conf * 100)}%`);
-      else confBadge = warn(`✗ ${Math.round(conf * 100)}%`);
-    }
-
-    const valueStr = typeof value === 'object' ? JSON.stringify(value, null, 2).slice(0, 100) : String(value);
-    return `${label}: ${accent(valueStr)} ${confBadge}`;
+  function formatConfidenceBadge(conf: number | undefined): string {
+    if (conf === undefined) return '';
+    const g = glyphs();
+    const pct = `${Math.round(conf * 100)}%`;
+    if (conf >= 0.8) return sColor(`${g.ok} ${pct}`);
+    if (conf >= 0.5) return wColor(`${g.warn} ${pct}`);
+    return eColor(`${g.fail} ${pct}`);
   }
 
-  fmt.kvPair('Display Name', extracted.displayName ? formatField('', extracted.displayName, 'displayName') : dim('(not set)'));
+  function formatField(value: unknown, confidenceKey: string): string {
+    const confBadge = formatConfidenceBadge(confidence[confidenceKey]);
+    const valueStr = typeof value === 'object' ? JSON.stringify(value, null, 2).slice(0, 100) : String(value);
+    return `${accent(valueStr)}${confBadge ? ` ${confBadge}` : ''}`;
+  }
+
+  fmt.kvPair('Display Name', extracted.displayName ? formatField(extracted.displayName, 'displayName') : dim('(not set)'));
   fmt.kvPair('Seed ID', extracted.seedId ?? dim('(auto-generated)'));
   fmt.kvPair('Bio', extracted.bio ? String(extracted.bio).slice(0, 80) : dim('(not set)'));
 
   if (extracted.preset) {
-    fmt.kvPair('Preset', formatField('', extracted.preset, 'preset'));
+    fmt.kvPair('Preset', formatField(extracted.preset, 'preset'));
   }
 
   if (extracted.skills && extracted.skills.length > 0) {
-    fmt.kvPair('Skills', `${extracted.skills.join(', ')} ${confidence.skills ? sColor(`✓ ${Math.round(confidence.skills * 100)}%`) : ''}`);
+    const badge = formatConfidenceBadge(confidence.skills);
+    fmt.kvPair('Skills', `${extracted.skills.join(', ')}${badge ? ` ${badge}` : ''}`);
   }
 
   if (extracted.extensions) {
@@ -292,6 +297,16 @@ export default async function cmdCreate(
     : extracted.seedId ?? `agent-${Date.now()}`;
 
   const targetDir = path.resolve(process.cwd(), dirName);
+  const sealedPath = path.join(targetDir, 'sealed.json');
+
+  if (existsSync(sealedPath)) {
+    fmt.errorBlock(
+      'Refusing to overwrite sealed agent',
+      `${sealedPath} exists.\nThis agent is sealed and should be treated as immutable.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
 
   try {
     await mkdir(targetDir, { recursive: true });

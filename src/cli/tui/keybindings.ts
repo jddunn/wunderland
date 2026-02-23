@@ -48,6 +48,13 @@ export class KeybindingManager {
   handle(key: KeypressEvent): boolean {
     // Build the lookup key string
     const keyName = this.normalizeKey(key);
+    const isText =
+      !key.ctrl
+      && !key.meta
+      && typeof key.sequence === 'string'
+      && key.sequence.length === 1
+      // `readline` may set `name` to '' (unset), a single character, or e.g. 'space'.
+      && (key.name === '' || key.name === 'space' || key.name.length === 1);
 
     // Check layers from top to bottom
     for (let i = this.stack.length - 1; i >= 0; i--) {
@@ -56,6 +63,35 @@ export class KeybindingManager {
       if (handler) {
         const result = handler(key);
         // If handler returns false, continue to next layer
+        if (result !== false) return true;
+
+        // If the explicit handler defers (returns false), allow the layer's
+        // text handler to catch printable characters before falling through.
+        if (isText) {
+          const textHandler = layer.bindings['__text__'];
+          if (textHandler) {
+            const textResult = textHandler(key);
+            if (textResult !== false) return true;
+          }
+        }
+
+        continue;
+      }
+
+      // Special handler for text input (printable characters).
+      // Allows views to implement input without registering every possible character.
+      if (isText) {
+        const textHandler = layer.bindings['__text__'];
+        if (textHandler) {
+          const result = textHandler(key);
+          if (result !== false) return true;
+        }
+      }
+
+      // Catch-all handler for overlays/palettes that want to consume all keys.
+      const anyHandler = layer.bindings['__any__'];
+      if (anyHandler) {
+        const result = anyHandler(key);
         if (result !== false) return true;
       }
     }

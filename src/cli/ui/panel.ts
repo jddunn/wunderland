@@ -5,6 +5,7 @@
 
 import boxen from 'boxen';
 import { HEX } from './theme.js';
+import { getUiRuntime } from './runtime.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -36,13 +37,14 @@ const PANEL_COLORS: Record<PanelStyle, string> = {
 export function renderPanel(opts: PanelOptions): string {
   const { content, title, style = 'brand', width, padding = 1 } = opts;
   const borderColor = PANEL_COLORS[style];
+  const ui = getUiRuntime();
 
   const box = boxen(content, {
     title: title ? ` ${title} ` : undefined,
     titleAlignment: 'left',
     padding: { top: 0, bottom: 0, left: padding, right: padding },
     margin: { top: 0, bottom: 0, left: 2, right: 0 },
-    borderStyle: 'round',
+    borderStyle: ui.ascii ? 'classic' : 'round',
     borderColor,
     width: width ?? Math.min(process.stdout.columns || 80, 76),
     dimBorder: false,
