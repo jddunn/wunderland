@@ -16,6 +16,7 @@ export interface ToolRegistryConfig {
   serperApiKey?: string;
   serpApiKey?: string;
   braveApiKey?: string;
+  searxngUrl?: string;
   giphyApiKey?: string;
   elevenLabsApiKey?: string;
   pexelsApiKey?: string;
@@ -66,6 +67,7 @@ function buildSecretsMap(config?: ToolRegistryConfig): Record<string, string> {
   add('serper.apiKey', config?.serperApiKey, 'SERPER_API_KEY');
   add('serpapi.apiKey', config?.serpApiKey, 'SERPAPI_API_KEY');
   add('brave.apiKey', config?.braveApiKey, 'BRAVE_API_KEY');
+  add('searxng.url', config?.searxngUrl, 'SEARXNG_URL');
   add('giphy.apiKey', config?.giphyApiKey, 'GIPHY_API_KEY');
   add('elevenlabs.apiKey', config?.elevenLabsApiKey, 'ELEVENLABS_API_KEY');
   add('pexels.apiKey', config?.pexelsApiKey, 'PEXELS_API_KEY');
@@ -116,20 +118,20 @@ export async function createWunderlandTools(config?: ToolRegistryConfig): Promis
 export function getToolAvailability(config?: ToolRegistryConfig): Record<string, { available: boolean; reason?: string }> {
   const secrets = buildSecretsMap(config);
 
-  const hasWebKey = !!(secrets['serper.apiKey'] || secrets['serpapi.apiKey'] || secrets['brave.apiKey']);
+  const hasWebKey = !!(secrets['serper.apiKey'] || secrets['serpapi.apiKey'] || secrets['brave.apiKey'] || secrets['searxng.url']);
 
   return {
     [WUNDERLAND_TOOL_IDS.WEB_SEARCH]: {
       available: true,
-      reason: hasWebKey ? undefined : 'No web-search API keys set (Serper/SerpAPI/Brave); using DuckDuckGo fallback',
+      reason: hasWebKey ? undefined : 'No web-search providers configured (Serper/SerpAPI/Brave/SearXNG); using DuckDuckGo fallback',
     },
     [WUNDERLAND_TOOL_IDS.RESEARCH_AGGREGATE]: {
       available: true,
-      reason: hasWebKey ? undefined : 'No web-search API keys set (Serper/SerpAPI/Brave); using DuckDuckGo fallback',
+      reason: hasWebKey ? undefined : 'No web-search providers configured (Serper/SerpAPI/Brave/SearXNG); using DuckDuckGo fallback',
     },
     [WUNDERLAND_TOOL_IDS.FACT_CHECK]: {
       available: true,
-      reason: hasWebKey ? undefined : 'No web-search API keys set (Serper/SerpAPI/Brave); using DuckDuckGo fallback',
+      reason: hasWebKey ? undefined : 'No web-search providers configured (Serper/SerpAPI/Brave/SearXNG); using DuckDuckGo fallback',
     },
     [WUNDERLAND_TOOL_IDS.NEWS_SEARCH]: {
       available: !!secrets['newsapi.apiKey'],

@@ -158,7 +158,10 @@ const PAIRING_PAGE_HTML = `<!doctype html>
       .desc { margin-top: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 11px; color: rgba(232,236,255,0.78); line-height: 1.5; white-space: pre-wrap; }
       .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
       .status { font-size: 12px; color: var(--muted); }
-      code { color: rgba(232,236,255,0.92); }
+      .note { font-size: 12px; color: rgba(232,236,255,0.86); line-height: 1.5; }
+      ul { margin: 8px 0 0; padding-left: 18px; }
+      li { margin: 6px 0; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; color: rgba(232,236,255,0.92); }
     </style>
   </head>
   <body>
@@ -179,6 +182,21 @@ const PAIRING_PAGE_HTML = `<!doctype html>
         </div>
         <div class="status" style="margin-top:10px">
           Unknown senders receive a pairing code automatically in DMs. In group chats, send the pairing trigger (default <code>!pair</code>) to request one.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Security</h2>
+        <div class="note">
+          <div><strong>Treat the secret like a password.</strong> This server binds to <code>0.0.0.0</code> by default.</div>
+          <ul>
+            <li>Don’t share URLs containing <code>?secret=...</code> (they can end up in browser history/logs).</li>
+            <li>This UI stores the secret in localStorage (<code>wunderland_hitl_secret</code>). Clear site data to forget it.</li>
+            <li>Set a stable secret via <code>agent.config.json</code> → <code>hitl.secret</code> or <code>WUNDERLAND_HITL_SECRET</code> (restart to rotate).</li>
+            <li>Remote ops: use SSH port-forwarding (example: <code>ssh -L 3777:localhost:3777 you@host</code>).</li>
+            <li>Approve pairing only for people you trust (it grants the sender access to the agent).</li>
+          </ul>
+          <div style="margin-top:10px">Tip: run <code>wunderland help security</code> for the full model.</div>
         </div>
       </div>
 
@@ -324,6 +342,10 @@ const HITL_PAGE_HTML = `<!doctype html>
       .desc { margin-top: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 11px; color: rgba(232,236,255,0.78); line-height: 1.5; white-space: pre-wrap; }
       .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
       .status { font-size: 12px; color: var(--muted); }
+      .note { font-size: 12px; color: rgba(232,236,255,0.86); line-height: 1.5; }
+      ul { margin: 8px 0 0; padding-left: 18px; }
+      li { margin: 6px 0; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; color: rgba(232,236,255,0.92); }
     </style>
   </head>
   <body>
@@ -343,6 +365,21 @@ const HITL_PAGE_HTML = `<!doctype html>
           <span class="status" id="hint"></span>
           <span class="status">Pending: <span id="pendingCount">0</span></span>
           <span class="status">Stream: <span id="streamStatus">disconnected</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Security</h2>
+        <div class="note">
+          <div><strong>Approvals can trigger real side effects.</strong> Only approve actions you understand.</div>
+          <ul>
+            <li>This UI uses <code>?secret=...</code> for API calls/streaming; don’t share or screenshot URLs with the secret.</li>
+            <li>This UI stores the secret in localStorage (<code>wunderland_hitl_secret</code>). Clear site data to forget it.</li>
+            <li>For scripts, prefer the header <code>x-wunderland-hitl-secret</code>.</li>
+            <li>Set/rotate via <code>agent.config.json</code> → <code>hitl.secret</code> or <code>WUNDERLAND_HITL_SECRET</code> (restart to rotate).</li>
+            <li>Protect chat with <code>chat.secret</code> / <code>WUNDERLAND_CHAT_SECRET</code> if exposing <code>/chat</code>.</li>
+            <li>Remote ops: <code>ssh -L 3777:localhost:3777 you@host</code> instead of opening the port publicly.</li>
+          </ul>
         </div>
       </div>
 

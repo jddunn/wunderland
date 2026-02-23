@@ -25,6 +25,9 @@
   },
   "suggestedSkills": [],
   "suggestedChannels": ["webchat"],
+  "suggestedExtensions": {
+    "tools": ["web-search"]
+  },
   "stepUpAuth": {
     "defaultTier": 1,
     "approvalTimeoutMs": 600000
