@@ -42,6 +42,7 @@ describe('wunderland public API', () => {
     const app = await createWunderland({
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
+      discovery: { enabled: false },
     });
 
     const s = app.session('s1');
@@ -89,6 +90,7 @@ describe('wunderland public API', () => {
       tools: { custom: [sideEffectTool] },
       approvals: { mode: 'deny-side-effects' },
       agentConfig: { security: { wrapToolOutputs: false } },
+      discovery: { enabled: false },
     });
 
     const out = await app.session('s').sendText('run the tool');
@@ -136,6 +138,7 @@ describe('wunderland public API', () => {
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: { custom: [readTool] },
       agentConfig: { security: { wrapToolOutputs: false } },
+      discovery: { enabled: false },
     });
 
     const out = await app.session('s').sendText('run the tool');
