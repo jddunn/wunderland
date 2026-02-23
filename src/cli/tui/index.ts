@@ -56,6 +56,7 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
   const dashboard = new Dashboard({
     screen,
     keys,
+    configDir: _globals.config,
     onSelect: async (command: string) => {
       const viewLoader = VIEW_MAP[command];
 
@@ -71,6 +72,7 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
           activeView = new ViewClass({
             screen,
             keys,
+            configDir: _globals.config,
             onBack: () => { showDashboard(); },
           });
           await (activeView as any).run();

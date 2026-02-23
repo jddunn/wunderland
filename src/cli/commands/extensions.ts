@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { accent, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 
 // ── Config helpers ──────────────────────────────────────────────────────────
 
@@ -104,6 +105,16 @@ async function enableExtension(name: string): Promise<void> {
     return;
   }
 
+  const sealedPath = path.join(process.cwd(), 'sealed.json');
+  if (existsSync(sealedPath)) {
+    fmt.errorBlock(
+      'Agent is sealed',
+      `Refusing to modify agent.config.json because ${sealedPath} exists.\nUse ${accent('wunderland verify-seal')} to verify integrity.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   const result = await loadAgentConfig(process.cwd());
   if (!result) {
     fmt.errorBlock('Missing agent config', `No agent.config.json in current directory.\nRun ${accent('wunderland init <dir>')} first.`);
@@ -136,6 +147,16 @@ async function enableExtension(name: string): Promise<void> {
 }
 
 async function disableExtension(name: string): Promise<void> {
+  const sealedPath = path.join(process.cwd(), 'sealed.json');
+  if (existsSync(sealedPath)) {
+    fmt.errorBlock(
+      'Agent is sealed',
+      `Refusing to modify agent.config.json because ${sealedPath} exists.\nUse ${accent('wunderland verify-seal')} to verify integrity.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   const result = await loadAgentConfig(process.cwd());
   if (!result) {
     fmt.errorBlock('Missing agent config', `No agent.config.json in current directory.\nRun ${accent('wunderland init <dir>')} first.`);
@@ -172,6 +193,7 @@ async function disableExtension(name: string): Promise<void> {
  * List all available extensions.
  */
 async function listExtensions(flags: Record<string, string | boolean>): Promise<void> {
+  const g = glyphs();
   fmt.section('Available Extensions');
 
   try {
@@ -197,7 +219,7 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
       fmt.blank();
       fmt.note(accent('Tools:'));
       for (const ext of tools) {
-        const status = ext.available ? '✓' : dim('✗');
+        const status = ext.available ? g.ok : dim(g.fail);
         fmt.kvPair(`  ${status} ${ext.displayName}`, dim(ext.description));
       }
     }
@@ -206,7 +228,7 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
       fmt.blank();
       fmt.note(accent('Voice:'));
       for (const ext of voice) {
-        const status = ext.available ? '✓' : dim('✗');
+        const status = ext.available ? g.ok : dim(g.fail);
         fmt.kvPair(`  ${status} ${ext.displayName}`, dim(ext.description));
       }
     }
@@ -215,7 +237,7 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
       fmt.blank();
       fmt.note(accent('Productivity:'));
       for (const ext of productivity) {
-        const status = ext.available ? '✓' : dim('✗');
+        const status = ext.available ? g.ok : dim(g.fail);
         fmt.kvPair(`  ${status} ${ext.displayName}`, dim(ext.description));
       }
     }
@@ -224,7 +246,7 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
       fmt.blank();
       fmt.note(accent('Channels:'));
       for (const ext of channels.slice(0, 10)) {
-        const status = ext.available ? '✓' : dim('✗');
+        const status = ext.available ? g.ok : dim(g.fail);
         fmt.kvPair(`  ${status} ${ext.displayName}`, dim(ext.description));
       }
       if (channels.length > 10) {
@@ -247,6 +269,7 @@ async function showExtensionInfo(
   name: string | undefined,
   _flags: Record<string, string | boolean>,
 ): Promise<void> {
+  const g = glyphs();
   if (!name) {
     fmt.errorBlock('Missing extension name', 'Usage: wunderland extensions info <name>');
     process.exitCode = 1;
@@ -269,7 +292,7 @@ async function showExtensionInfo(
     fmt.kvPair('Category', ext.category);
     fmt.kvPair('Package', ext.packageName);
     fmt.kvPair('Description', ext.description);
-    fmt.kvPair('Status', ext.available ? '✓ Installed' : '✗ Not installed');
+    fmt.kvPair('Status', ext.available ? `${g.ok} Installed` : `${g.fail} Not installed`);
     fmt.kvPair('Default Priority', String(ext.defaultPriority));
 
     if (ext.requiredSecrets.length > 0) {

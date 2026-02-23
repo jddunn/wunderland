@@ -7,6 +7,7 @@ import type { GlobalFlags } from '../types.js';
 import { LLM_PROVIDERS } from '../constants.js';
 import { accent, dim, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { printTable } from '../ui/table.js';
 import { loadConfig, updateConfig } from '../config/config-manager.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
@@ -24,6 +25,7 @@ async function listModels(flags: Record<string, string | boolean>, globals: Glob
     return;
   }
 
+  const g = glyphs();
   printTable({
     title: 'LLM Providers & Models',
     compact: true,
@@ -36,7 +38,7 @@ async function listModels(flags: Record<string, string | boolean>, globals: Glob
     ],
     rows: LLM_PROVIDERS.map((provider) => {
       const envSet = provider.envVar ? !!process.env[provider.envVar] : true;
-      const statusIcon = envSet ? sColor('\u2713') : muted('\u25CB');
+      const statusIcon = envSet ? sColor(g.ok) : muted(g.circle);
       const envHint = provider.envVar
         ? (envSet ? sColor('configured') : muted('not set'))
         : muted('no key');
