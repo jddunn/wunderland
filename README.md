@@ -132,7 +132,93 @@ const out = await session.sendText('Hello!');
 console.log(out.text);
 ```
 
-See `docs/LIBRARY_API.md` for tools, approvals, and diagnostics.
+### With skills + extensions + discovery
+
+```ts
+import { createWunderland } from 'wunderland';
+
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  tools: 'curated',
+  skills: ['github', 'web-search', 'coding-agent'],
+  extensions: {
+    tools: ['web-search', 'web-browser', 'giphy'],
+    voice: ['voice-synthesis'],
+  },
+  // discovery is enabled by default — indexes tools + skills for semantic search
+});
+
+const session = app.session();
+const out = await session.sendText('Search the web for AI agent frameworks and summarize');
+console.log(out.text);
+```
+
+### Load everything at once
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  tools: 'curated',
+  skills: 'all',  // loads all 18 curated skills
+  extensions: {
+    tools: ['web-search', 'web-browser', 'news-search', 'image-search', 'giphy', 'cli-executor'],
+    voice: ['voice-synthesis'],
+  },
+});
+```
+
+### Use a preset (auto-configures skills + extensions)
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  preset: 'research-assistant',  // auto-loads recommended tools, skills, extensions
+});
+
+// Override or extend preset defaults:
+const custom = await createWunderland({
+  llm: { providerId: 'openai' },
+  preset: 'research-assistant',
+  skills: ['github'],  // adds to preset's suggested skills
+  extensions: { tools: ['cli-executor'] },  // adds to preset's extensions
+});
+```
+
+### Custom tools + skills from directories
+
+```ts
+import { createWunderland } from 'wunderland';
+import type { ITool } from '@framers/agentos';
+
+const myTool: ITool = {
+  id: 'my.tool', name: 'my_tool', displayName: 'My Tool',
+  description: 'Does something custom',
+  inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+  hasSideEffects: false,
+  async execute(args) { return { success: true, output: { result: 'done' } }; },
+};
+
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  tools: { curated: {}, custom: [myTool] },
+  skills: {
+    names: ['github'],
+    dirs: ['./my-custom-skills'],  // scan local SKILL.md directories
+    includeDefaults: true,         // also scan ./skills/, ~/.codex/skills/
+  },
+});
+```
+
+### Check what's loaded
+
+```ts
+const diag = app.diagnostics();
+console.log('Tools:', diag.tools.names);     // ['web_search', 'giphy_search', ...]
+console.log('Skills:', diag.skills.names);   // ['github', 'web-search', ...]
+console.log('Discovery:', diag.discovery);   // { initialized: true, capabilityCount: 25, ... }
+```
+
+See `docs/LIBRARY_API.md` for the full API reference (approvals, custom tools, diagnostics, advanced modules).
 
 ### CLI
 
