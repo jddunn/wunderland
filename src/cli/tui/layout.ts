@@ -3,9 +3,11 @@
  * @module wunderland/cli/tui/layout
  */
 
-import { dim, accent, bright } from '../ui/theme.js';
-import { stripAnsi, visibleLength, ansiPadEnd } from '../ui/ansi-utils.js';
+import chalk from 'chalk';
+import { dim, accent, bright, HEX } from '../ui/theme.js';
+import { stripAnsi, visibleLength, sliceAnsi, ansiPadEnd } from '../ui/ansi-utils.js';
 import { glyphs } from '../ui/glyphs.js';
+import { getUiRuntime } from '../ui/runtime.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -146,5 +148,58 @@ export function composeSideBySide(
     result.push(ansiPadEnd(left, leftWidth) + gapStr + right);
   }
 
+  return result;
+}
+
+// ── Frame wrapper ─────────────────────────────────────────────────────────
+
+/**
+ * Wrap content lines in a cyberpunk double-line frame (╔═╗║╚═╝).
+ * Matches the dashboard's outer border aesthetic.
+ * ASCII mode uses +=| characters.
+ */
+export function wrapInFrame(
+  contentLines: string[],
+  cols: number,
+  title?: string,
+): string[] {
+  const ui = getUiRuntime();
+  const tl = ui.ascii ? '+' : '╔';
+  const tr = ui.ascii ? '+' : '╗';
+  const bl = ui.ascii ? '+' : '╚';
+  const br = ui.ascii ? '+' : '╝';
+  const hz = ui.ascii ? '=' : '═';
+  const vt = ui.ascii ? '|' : '║';
+  const borderColor = ui.ascii ? (s: string) => s : chalk.hex(HEX.cyan);
+
+  const contentWidth = Math.max(cols - 4, 40);
+  const innerWidth = contentWidth - 2;
+  const bL = borderColor(vt);
+  const bR = borderColor(vt);
+
+  const frameLine = (content: string): string => {
+    const vLen = visibleLength(content);
+    if (vLen > innerWidth) {
+      return `  ${bL}${sliceAnsi(content, 0, innerWidth)}${bR}`;
+    }
+    return `  ${bL}${content}${' '.repeat(Math.max(0, innerWidth - vLen))}${bR}`;
+  };
+
+  const result: string[] = [];
+
+  // Top border with optional title
+  if (title) {
+    const titleStr = ` ${chalk.hex(HEX.magenta).bold(title)} `;
+    const titleLen = title.length + 2;
+    result.push(`  ${borderColor(tl)}${titleStr}${borderColor(hz.repeat(Math.max(0, innerWidth - titleLen)))}${borderColor(tr)}`);
+  } else {
+    result.push(`  ${borderColor(tl)}${borderColor(hz.repeat(innerWidth))}${borderColor(tr)}`);
+  }
+
+  for (const line of contentLines) {
+    result.push(frameLine(line));
+  }
+
+  result.push(`  ${borderColor(bl)}${borderColor(hz.repeat(innerWidth))}${borderColor(br)}`);
   return result;
 }

@@ -8,6 +8,7 @@ import type { KeybindingManager } from '../keybindings.js';
 import { accent, dim, muted, bright, success as sColor, warn as wColor } from '../../ui/theme.js';
 import { ansiPadEnd } from '../../ui/ansi-utils.js';
 import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
+import { wrapInFrame } from '../layout.js';
 import { LLM_PROVIDERS } from '../../constants.js';
 import { loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { glyphs } from '../../ui/glyphs.js';
@@ -150,9 +151,11 @@ export class ModelsView {
       : `${dim(upDown)} navigate  ${dim(enter)} details  ${dim('/')} search  ${dim('?')} help  ${dim('esc')} back`;
     lines.push(`  ${hint}`);
 
+    const framed = wrapInFrame(lines, cols, 'MODELS');
+
     const stamped = this.modal
       ? stampOverlay({
-          screenLines: lines,
+          screenLines: framed,
           overlayLines: renderOverlayBox({
             title: this.modal.title,
             width: this.modalWidth(cols),
@@ -161,7 +164,7 @@ export class ModelsView {
           cols,
           rows,
         })
-      : lines;
+      : framed;
 
     this.screen.render(stamped.join('\n'));
   }
@@ -238,7 +241,7 @@ export class ModelsView {
 
   private maxVisibleRows(rows: number): number {
     const header = this.searchMode ? 6 : 4;
-    const footer = 3;
+    const footer = 5; // 3 + 2 for frame borders
     return Math.max(5, rows - header - footer);
   }
 

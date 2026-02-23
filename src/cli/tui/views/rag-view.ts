@@ -7,6 +7,7 @@ import type { Screen } from '../screen.js';
 import type { KeybindingManager } from '../keybindings.js';
 import { accent, dim, muted, bright, info as iColor } from '../../ui/theme.js';
 import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
+import { wrapInFrame } from '../layout.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
 
@@ -128,9 +129,11 @@ export class RagView {
       : `${dim(upDown)} navigate  ${dim(enter)} details  ${dim('?')} help  ${dim('esc')} edit  ${dim('q')} back`;
     lines.push(`  ${hints}`);
 
+    const framed = wrapInFrame(lines, cols, 'RAG MEMORY');
+
     const stamped = this.modal
       ? stampOverlay({
-          screenLines: lines,
+          screenLines: framed,
           overlayLines: renderOverlayBox({
             title: this.modal.title,
             width: Math.min(Math.max(44, Math.min(74, cols - 8)), Math.max(24, cols - 4)),
@@ -139,7 +142,7 @@ export class RagView {
           cols,
           rows,
         })
-      : lines;
+      : framed;
 
     this.screen.render(stamped.join('\n'));
   }

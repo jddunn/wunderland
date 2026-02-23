@@ -9,6 +9,7 @@ import type { Screen } from '../screen.js';
 import type { KeybindingManager } from '../keybindings.js';
 import { accent, dim, muted, bright, success as sColor, info as iColor } from '../../ui/theme.js';
 import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
+import { wrapInFrame } from '../layout.js';
 import { loadEnv, loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
@@ -96,20 +97,21 @@ export class VoiceView {
     const allLines = this.buildLines(env);
 
     const { rows, cols } = this.screen.getSize();
-    const visibleRows = rows - 2;
+    const visibleRows = rows - 4; // account for frame borders
     const maxOffset = Math.max(0, allLines.length - visibleRows);
     this.scrollOffset = Math.min(this.scrollOffset, maxOffset);
 
     const visible = allLines.slice(this.scrollOffset, this.scrollOffset + visibleRows);
+    const framed = wrapInFrame(visible, cols, 'VOICE');
 
     if (!this.modal) {
-      this.screen.render(visible.join('\n'));
+      this.screen.render(framed.join('\n'));
       return;
     }
 
     const width = Math.min(Math.max(44, Math.min(74, cols - 8)), Math.max(24, cols - 4));
     const stamped = stampOverlay({
-      screenLines: visible,
+      screenLines: framed,
       overlayLines: renderOverlayBox({
         title: this.modal.title,
         width,
