@@ -26,6 +26,13 @@
   },
   "suggestedSkills": ["web-search", "summarize", "healthcheck", "coding-agent", "github"],
   "suggestedChannels": ["webchat", "slack", "teams", "discord", "telegram", "whatsapp", "email"],
+  "suggestedExtensions": {
+    "tools": ["web-search", "web-browser", "cli-executor"],
+    "voice": ["voice-twilio"],
+    "tts": ["tts-openai"],
+    "stt": ["stt-openai"],
+    "productivity": ["calendar-google"]
+  },
   "stepUpAuth": {
     "defaultTier": 2,
     "categoryTierOverrides": {

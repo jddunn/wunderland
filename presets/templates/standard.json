@@ -25,6 +25,9 @@
   },
   "suggestedSkills": ["web-search", "summarize", "healthcheck"],
   "suggestedChannels": ["webchat", "telegram", "discord"],
+  "suggestedExtensions": {
+    "tools": ["web-search", "web-browser"]
+  },
   "stepUpAuth": {
     "defaultTier": 1,
     "categoryTierOverrides": {
