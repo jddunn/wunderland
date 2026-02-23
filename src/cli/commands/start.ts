@@ -1088,6 +1088,54 @@ export default async function cmdStart(
     }
   }
 
+  // ── Founders Extension Integration (Discord) ──────────────────────────────
+  // If the Founders extension was loaded, wire its interaction handler and
+  // slash commands into the Discord adapter.
+  {
+    const foundersPack = activePacks.find(
+      (p: any) => p?.name === '@framers/agentos-ext-founders',
+    ) as any;
+    const discordAdapter = adapterByPlatform.get('discord') as any;
+
+    if (foundersPack?.metadata && discordAdapter) {
+      try {
+        // Read founders channel config from agent.config.json feeds.founders.
+        const foundersChannels = cfg?.feeds?.founders as Record<string, string> | undefined;
+
+        // Register slash command definitions with the Discord service.
+        const slashCommands = foundersPack.metadata.slashCommands;
+        if (slashCommands?.length && discordAdapter.service?.registerSlashCommands) {
+          discordAdapter.service.registerSlashCommands(slashCommands);
+        }
+
+        // Create the interaction handler (pass channel IDs from agent config) and register it.
+        if (typeof foundersPack.metadata.createHandler === 'function') {
+          const handler = foundersPack.metadata.createHandler(foundersChannels);
+          if (typeof discordAdapter.registerExternalInteractionHandler === 'function') {
+            discordAdapter.registerExternalInteractionHandler(
+              handler.handleInteraction,
+            );
+          }
+          // Set up the welcome post after a short delay (give Discord gateway time).
+          if (typeof handler.ensureWelcomePost === 'function') {
+            const client = discordAdapter.service?.getClient?.();
+            if (client) {
+              setTimeout(() => {
+                handler.ensureWelcomePost(client).catch((err: Error) => {
+                  console.warn('[Founders] Welcome post setup failed:', err.message);
+                });
+              }, 5000);
+            }
+          }
+          fmt.ok('Founders extension integrated with Discord adapter');
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        fmt.warning(`Founders extension integration failed: ${msg}`);
+      }
+    }
+  }
+
   if (adapterByPlatform.size > 0) {
     for (const [platform, adapter] of adapterByPlatform.entries()) {
       if (!isChannelAllowedByPolicy(platform)) continue;
