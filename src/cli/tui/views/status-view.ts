@@ -10,6 +10,7 @@ import type { Screen } from '../screen.js';
 import type { KeybindingManager } from '../keybindings.js';
 import { accent, dim, muted, bright, success as sColor, warn as wColor, info as iColor } from '../../ui/theme.js';
 import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
+import { wrapInFrame } from '../layout.js';
 import { loadConfig } from '../../config/config-manager.js';
 import { loadEnv, loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { checkEnvSecrets, getSecretsForPlatform } from '../../config/secrets.js';
@@ -151,12 +152,13 @@ export class StatusView {
 
   private render(lines: string[]): void {
     const { rows, cols } = this.screen.getSize();
+    const framed = wrapInFrame(lines, cols, 'STATUS');
     if (!this.modal) {
-      this.screen.render(lines.join('\n'));
+      this.screen.render(framed.join('\n'));
       return;
     }
     const stamped = stampOverlay({
-      screenLines: lines,
+      screenLines: framed,
       overlayLines: renderOverlayBox({
         title: this.modal.title,
         width: Math.min(Math.max(44, Math.min(74, cols - 8)), Math.max(24, cols - 4)),
