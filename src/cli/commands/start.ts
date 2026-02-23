@@ -280,10 +280,26 @@ export default async function cmdStart(
   const lazyTools = flags['lazy-tools'] === true || cfg?.lazyTools === true;
   const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
   const workspaceAgentId = sanitizeAgentWorkspaceId(seedId);
+  // Expose a stable workspace directory path for extension packs (channels/tools) that need
+  // to persist lightweight state (rate limits, caches, etc.).
+  try {
+    const workspaceDir = path.join(workspaceBaseDir, workspaceAgentId);
+    if (!process.env['WUNDERLAND_WORKSPACE_DIR']) process.env['WUNDERLAND_WORKSPACE_DIR'] = workspaceDir;
+  } catch {
+    // ignore
+  }
+
+  const ollamaBaseUrl = (() => {
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
+    const base = raw || 'http://localhost:11434';
+    const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
+    if (normalized.endsWith('/v1')) return normalized;
+    return `${normalized}/v1`;
+  })();
 
   const llmBaseUrl =
     providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
-    : providerId === 'ollama' ? 'http://localhost:11434/v1'
+    : providerId === 'ollama' ? ollamaBaseUrl
     : undefined;
   const llmApiKey =
     providerId === 'openrouter' ? openrouterApiKey
@@ -749,6 +765,11 @@ export default async function cmdStart(
     const text = String(message.text || '').trim();
     if (!text) return;
 
+    const rawEvent = message.rawEvent;
+    const rawMeta = rawEvent && typeof rawEvent === 'object' ? (rawEvent as any) : null;
+    const explicitInvocation = rawMeta?.explicitInvocation === true;
+    const explain = rawMeta?.explain === true;
+
     const senderId = String((message.sender as any)?.id || '').trim() || 'unknown';
     const isGroupPairingRequest = (() => {
       if (!pairingGroupTriggerEnabled) return false;
@@ -768,7 +789,7 @@ export default async function cmdStart(
       const isAllowed = await pairing.isAllowed(platform, senderId);
       if (!isAllowed) {
         // Avoid spamming group channels with pairing prompts from random participants.
-        if (message.conversationType !== 'direct' && !isGroupPairingRequest) {
+        if (message.conversationType !== 'direct' && !isGroupPairingRequest && !explicitInvocation) {
           return;
         }
 
@@ -819,6 +840,8 @@ export default async function cmdStart(
       // ignore
     }
 
+    const traceCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> = [];
+
     let reply = '';
     try {
       if (canUseLLM) {
@@ -850,6 +873,18 @@ export default async function cmdStart(
           toolContext,
           maxRounds: 8,
           dangerouslySkipPermissions,
+          onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
+            if (!explain) return;
+            try {
+              traceCalls.push({
+                toolName: String((tool as any)?.name || 'unknown'),
+                hasSideEffects: (tool as any)?.hasSideEffects === true,
+                args: args || {},
+              });
+            } catch {
+              // ignore
+            }
+          },
           askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
             if (autoApproveToolCalls) return true;
 
@@ -927,6 +962,49 @@ export default async function cmdStart(
 
     if (typeof reply === 'string' && reply.trim()) {
       await sendChannelText({ platform, conversationId, text: reply.trim(), replyToMessageId: message.messageId });
+    }
+
+    if (explain) {
+      const redact = (value: unknown, depth: number): unknown => {
+        if (depth <= 0) return '[truncated]';
+        if (value === null || value === undefined) return value;
+        if (typeof value === 'string') {
+          const t = value.trim();
+          return t.length > 200 ? `${t.slice(0, 200)}…` : t;
+        }
+        if (typeof value === 'number' || typeof value === 'boolean') return value;
+        if (Array.isArray(value)) return value.slice(0, 20).map((v) => redact(v, depth - 1));
+        if (typeof value === 'object') {
+          const out: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+            const key = String(k);
+            if (/(api[-_]?key|token|secret|password|auth)/i.test(key)) {
+              out[key] = '[REDACTED]';
+            } else {
+              out[key] = redact(v, depth - 1);
+            }
+          }
+          return out;
+        }
+        return String(value);
+      };
+
+      const maxCalls = 8;
+      const shown = traceCalls.slice(0, maxCalls);
+      const lines: string[] = [];
+      for (const c of shown) {
+        const effect = c.hasSideEffects ? 'side effects' : 'read-only';
+        const argsPreview = safeJsonStringify(redact(c.args, 4), 700);
+        lines.push(`- ${c.toolName} (${effect}) ${argsPreview}`);
+      }
+      if (traceCalls.length > maxCalls) {
+        lines.push(`- … +${traceCalls.length - maxCalls} more`);
+      }
+      const traceText = lines.length > 0
+        ? `Tool trace (what I called):\n${lines.join('\n')}`
+        : 'Tool trace: (no tool calls)';
+
+      await sendChannelText({ platform, conversationId, text: traceText, replyToMessageId: message.messageId });
     }
   }
 
