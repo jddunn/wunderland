@@ -11,6 +11,7 @@ import { OutputCapture } from '../ui/output-capture.js';
 import { ansiToHtml } from './ansi-to-html.js';
 import { renderPng } from './png-renderer.js';
 import { success as sColor, error as eColor, dim } from '../ui/theme.js';
+import { glyphs } from '../ui/glyphs.js';
 
 /**
  * Wraps a command handler to capture its output and export as PNG.
@@ -31,6 +32,7 @@ export async function withExport(
   globals: GlobalFlags,
   commandName?: string,
 ): Promise<void> {
+  const g = glyphs();
   const exportPath = typeof flags['export-png'] === 'string'
     ? flags['export-png']
     : 'output.png';
@@ -70,7 +72,7 @@ export async function withExport(
   }
 
   if (!ansiOutput || ansiOutput.trim().length === 0) {
-    console.log(`  ${eColor('\u2717')} No output to export`);
+    console.log(`  ${eColor(g.fail)} No output to export`);
     return;
   }
 
@@ -82,11 +84,11 @@ export async function withExport(
     });
     await renderPng(html, resolved);
     console.log();
-    console.log(`  ${sColor('\u2713')} Exported to ${dim(resolved)}`);
+    console.log(`  ${sColor(g.ok)} Exported to ${dim(resolved)}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.log();
-    console.log(`  ${eColor('\u2717')} PNG export failed: ${dim(msg)}`);
+    console.log(`  ${eColor(g.fail)} PNG export failed: ${dim(msg)}`);
     process.exitCode = 1;
   }
 }

@@ -10,6 +10,7 @@
 import type { GlobalFlags } from '../types.js';
 import { accent, dim, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 
 async function tryLoadKnowledgeGraph(): Promise<any | null> {
@@ -82,7 +83,7 @@ export default async function cmdKnowledge(
         fmt.note(`Start an agent with: ${accent('wunderland start')}`);
       } else {
         for (const entity of matches) {
-          const icon = sColor('\u25C6');
+          const icon = sColor(glyphs().bullet);
           const conf = entity.confidence != null ? dim(` (${Math.round(entity.confidence * 100)}%)`) : '';
           console.log(`    ${icon} ${accent(entity.label)}${conf}  ${muted(entity.type)}`);
           if (entity.properties && Object.keys(entity.properties).length > 0) {

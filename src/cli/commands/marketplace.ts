@@ -10,6 +10,7 @@
 import type { GlobalFlags } from '../types.js';
 import { accent, dim, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 
 interface MarketplaceItem {
@@ -147,7 +148,8 @@ export default async function cmdMarketplace(
       for (const [source, items] of grouped) {
         console.log(`\n  ${accent(sourceLabels[source] || source)}`);
         for (const item of items) {
-          const icon = item.installed ? sColor('\u2713') : muted('\u25CB');
+          const g = glyphs();
+          const icon = item.installed ? sColor(g.ok) : muted(g.circle);
           const status = item.installed ? '' : dim(' (not installed)');
           console.log(`    ${icon} ${accent(item.id.padEnd(22))} ${item.description.slice(0, 60)}${status}`);
         }

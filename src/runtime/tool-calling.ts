@@ -6,7 +6,7 @@
  * - Tier 2 (Async Review): Execute, then queue for human review
  * - Tier 3 (Sync HITL): Require explicit human approval before execution
  *
- * When `dangerouslySkipPermissions` is true (via `--yes` or
+ * When `dangerouslySkipPermissions` is true (e.g. via the CLI flag
  * `--dangerously-skip-permissions`), uses {@link FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG}
  * which auto-approves ALL tool calls — skills, side effects, capabilities,
  * destructive commands, build commands, and every other tool type.

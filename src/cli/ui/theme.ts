@@ -10,14 +10,21 @@ import chalk from 'chalk';
 
 export const HEX = {
   purple: '#a855f7',
+  lavender: '#c084fc',
   cyan: '#06b6d4',
+  lightCyan: '#67e8f9',
+  brightCyan: '#22d3ee',
   green: '#22c55e',
   red: '#ef4444',
   gold: '#f59e0b',
   magenta: '#e879f9',
-  brightCyan: '#22d3ee',
+  fuchsia: '#f0abfc',
   muted: '#6b7280',
   dim: '#4b5563',
+  text: '#c9d1d9',
+  dark: '#374151',
+  darker: '#1f2937',
+  bg: '#0a0a0f',
   white: '#f9fafb',
 } as const;
 

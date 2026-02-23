@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { accent, muted, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { printTable } from '../ui/table.js';
 
 // ── Fallback catalog when @framers/agentos-skills-registry is not installed ─
@@ -87,6 +88,7 @@ async function listSkills(flags: Record<string, string | boolean>): Promise<void
     fmt.note('Showing built-in catalog (install @framers/agentos-skills-registry for full list)');
   }
 
+  const g = glyphs();
   printTable({
     title: 'Available Skills',
     compact: true,
@@ -95,14 +97,14 @@ async function listSkills(flags: Record<string, string | boolean>): Promise<void
       { label: 'Name', width: 20 },
       { label: 'Ver', width: 8 },
       { label: 'Description' },
-      { label: '\u2713', width: 4, align: 'center' },
+      { label: g.ok, width: 4, align: 'center' },
     ],
     rows: entries.map((skill) => [
       accent(skill.id),
       skill.name,
       muted(skill.version),
       muted(skill.description),
-      skill.verified ? sColor('\u2713') : muted('\u25CB'),
+      skill.verified ? sColor(g.ok) : muted(g.circle),
     ]),
   });
 
@@ -148,6 +150,16 @@ async function enableSkill(args: string[]): Promise<void> {
     return;
   }
 
+  const sealedPath = path.join(process.cwd(), 'sealed.json');
+  if (existsSync(sealedPath)) {
+    fmt.errorBlock(
+      'Agent is sealed',
+      `Refusing to modify agent.config.json because ${sealedPath} exists.\nUse ${accent('wunderland verify-seal')} to verify integrity.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   // Validate skill exists (match by id or short name)
   const { entries } = await loadCatalog();
   const skill = entries.find((s) => s.id === name || s.name === name);
@@ -184,6 +196,16 @@ async function disableSkill(args: string[]): Promise<void> {
   const name = args[0];
   if (!name) {
     fmt.errorBlock('Missing skill name', 'Usage: wunderland skills disable <name>');
+    process.exitCode = 1;
+    return;
+  }
+
+  const sealedPath = path.join(process.cwd(), 'sealed.json');
+  if (existsSync(sealedPath)) {
+    fmt.errorBlock(
+      'Agent is sealed',
+      `Refusing to modify agent.config.json because ${sealedPath} exists.\nUse ${accent('wunderland verify-seal')} to verify integrity.`,
+    );
     process.exitCode = 1;
     return;
   }

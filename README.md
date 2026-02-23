@@ -141,6 +141,10 @@ npm install -g wunderland
 # Interactive setup wizard
 wunderland setup
 
+# UI / accessibility
+wunderland --theme cyberpunk
+wunderland --ascii
+
 # Start the agent server
 wunderland start
 
@@ -172,35 +176,41 @@ wunderland doctor
 
 | Command | Description |
 |---------|-------------|
+| `wunderland` | Open the interactive TUI dashboard (TTY only) |
 | `wunderland setup` | Interactive setup wizard (LLM provider, channels, personality) |
+| `wunderland help [topic]` | Onboarding guides + keybindings (`wunderland help tui`) |
 | `wunderland start` | Start the agent server (default port 3777) |
 | `wunderland chat` | Chat with your agent in the terminal |
 | `wunderland doctor` | Health check and diagnostics |
-| `wunderland init <name>` | Scaffold a new agent project |
+| `wunderland status` | Agent & connection status |
+| `wunderland init <dir>` | Scaffold a new agent project (supports `--preset`) |
 | `wunderland seal` | Lock agent configuration (immutable after sealing) |
-| `wunderland list-presets` | Browse 8 agent presets + 3 templates |
-| `wunderland skills` | List available skills |
+| `wunderland list-presets` | Browse built-in agent presets + templates |
+| `wunderland skills` | Skills catalog and management |
+| `wunderland extensions` | Extensions catalog and management |
 | `wunderland models` | List supported LLM providers and models |
-| `wunderland plugins` | Manage extensions |
+| `wunderland plugins` | List installed extension packs |
 | `wunderland export` | Export agent configuration as a portable manifest |
-| `wunderland import` | Import an agent manifest |
+| `wunderland import <manifest>` | Import an agent manifest |
+
+See `docs/CLI_TUI_GUIDE.md` for TUI keybindings, search, modals, presets, and screenshot export.
 
 ---
 
 ## Agent Presets
 
-Get started quickly with pre-configured agent personalities:
+Get started quickly with pre-configured agent presets (see `wunderland list-presets`):
 
-| Preset | Description |
-|--------|-------------|
-| `researcher` | High conscientiousness + openness, systematic and thorough |
-| `creative` | High openness + extraversion, experimental and expressive |
-| `analyst` | High conscientiousness, data-driven and precise |
-| `debater` | Low agreeableness + high extraversion, argumentative |
-| `diplomat` | High agreeableness + honesty-humility, consensus-seeking |
-| `explorer` | High openness, curiosity-driven and wide-ranging |
-| `sentinel` | High conscientiousness + honesty-humility, security-focused |
-| `maverick` | Low conscientiousness + high openness, unconventional |
+| Preset ID | Name | Description |
+|----------|------|-------------|
+| `research-assistant` | Research Assistant | Thorough researcher with analytical focus |
+| `code-reviewer` | Code Reviewer | Precise, detail-oriented code analyst |
+| `security-auditor` | Security Auditor | Vigilant security-focused analyst |
+| `data-analyst` | Data Analyst | Systematic data interpreter and visualizer |
+| `devops-assistant` | DevOps Assistant | Infrastructure and deployment specialist |
+| `personal-assistant` | Personal Assistant | Friendly, organized daily helper |
+| `customer-support` | Customer Support Agent | Patient, empathetic support specialist |
+| `creative-writer` | Creative Writer | Imaginative storyteller and content creator |
 
 ---
 
