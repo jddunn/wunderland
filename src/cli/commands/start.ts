@@ -98,6 +98,18 @@ function isChatAuthorized(req: import('node:http').IncomingMessage, url: URL, ch
   return extractChatSecret(req, url) === chatSecret;
 }
 
+function extractFeedSecret(req: import('node:http').IncomingMessage, url: URL): string {
+  const fromHeader = getHeaderString(req, 'x-wunderland-feed-secret');
+  if (fromHeader) return fromHeader;
+  const fromQuery = (url.searchParams.get('feed_secret') || '').trim();
+  return fromQuery;
+}
+
+function isFeedAuthorized(req: import('node:http').IncomingMessage, url: URL, feedSecret: string): boolean {
+  if (!feedSecret) return true;
+  return extractFeedSecret(req, url) === feedSecret;
+}
+
 // ── Command ─────────────────────────────────────────────────────────────────
 
 export default async function cmdStart(
@@ -340,6 +352,10 @@ export default async function cmdStart(
       : '';
     const fromEnv = String(process.env['WUNDERLAND_CHAT_SECRET'] || '').trim();
     return fromCfg || fromEnv || '';
+  })();
+  const feedSecret = (() => {
+    const fromEnv = String(process.env['WUNDERLAND_FEED_SECRET'] || '').trim();
+    return fromEnv || chatSecret; // fall back to chat secret if no feed secret
   })();
   const sseClients = new Set<import('node:http').ServerResponse>();
 
@@ -1098,7 +1114,7 @@ export default async function cmdStart(
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
       res.setHeader(
         'Access-Control-Allow-Headers',
-        'Content-Type, X-Wunderland-HITL-Secret, X-Wunderland-Chat-Secret',
+        'Content-Type, X-Wunderland-HITL-Secret, X-Wunderland-Chat-Secret, X-Wunderland-Feed-Secret',
       );
 
       if (req.method === 'OPTIONS') {
@@ -1841,6 +1857,78 @@ export default async function cmdStart(
         }
 
         sendJson(res, 200, { reply });
+        return;
+      }
+
+      // ── Feed Ingestion API ─────────────────────────────────────────────────
+      // Accepts structured content (embeds, text) and posts to a Discord channel.
+      // Used by external scrapers (e.g., Python news bots) that don't have their
+      // own Discord gateway connection.
+      if (req.method === 'POST' && url.pathname === '/api/feed') {
+        if (!isFeedAuthorized(req, url, feedSecret)) {
+          sendJson(res, 401, { error: 'Unauthorized' });
+          return;
+        }
+
+        const body = await readBody(req);
+        let parsed: any;
+        try {
+          parsed = JSON.parse(body || '{}');
+        } catch {
+          sendJson(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+
+        const channelId = typeof parsed.channelId === 'string' ? parsed.channelId.trim() : '';
+        if (!channelId) {
+          sendJson(res, 400, { error: 'Missing "channelId" in JSON body.' });
+          return;
+        }
+
+        const embeds = Array.isArray(parsed.embeds) ? parsed.embeds : [];
+        const content = typeof parsed.content === 'string' ? parsed.content.trim() : '';
+        if (embeds.length === 0 && !content) {
+          sendJson(res, 400, { error: 'Provide at least one of "embeds" or "content".' });
+          return;
+        }
+
+        // Find the Discord channel adapter to post through.
+        const discordAdapter = adapterByPlatform.get('discord');
+        if (!discordAdapter) {
+          sendJson(res, 503, { error: 'Discord channel adapter not loaded. Ensure "discord" is in agent.config.json channels.' });
+          return;
+        }
+
+        try {
+          // Access the underlying discord.js Client via the adapter's service.
+          const client = (discordAdapter as any)?.service?.getClient?.();
+          if (!client) {
+            sendJson(res, 503, { error: 'Discord client not available.' });
+            return;
+          }
+
+          const channel = await client.channels.fetch(channelId);
+          if (!channel || !('send' in channel)) {
+            sendJson(res, 404, { error: `Channel ${channelId} not found or not a text channel.` });
+            return;
+          }
+
+          const sendOptions: any = {};
+          if (content) sendOptions.content = content;
+          if (embeds.length > 0) sendOptions.embeds = embeds;
+
+          const msg = await (channel as any).send(sendOptions);
+          const category = typeof parsed.category === 'string' ? parsed.category : '';
+          if (category) {
+            console.log(`[feed] Posted to #${(channel as any).name || channelId} (${category}): ${msg?.id || 'ok'}`);
+          }
+
+          sendJson(res, 200, { ok: true, messageId: msg?.id || null });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[feed] Error posting to ${channelId}:`, msg);
+          sendJson(res, 500, { error: `Failed to post: ${msg}` });
+        }
         return;
       }
 
