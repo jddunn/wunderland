@@ -63,6 +63,99 @@ const app = await createWunderland({
 });
 ```
 
+## Skills
+
+Skills are prompt-level modules (`SKILL.md`) that teach an agent _when_ and _how_ to use tools. They're loaded from the curated registry (`@framers/agentos-skills-registry`) and injected into the system prompt.
+
+### Load by name
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  skills: ['github', 'web-search', 'summarize'],
+});
+```
+
+### Load all curated skills
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  skills: 'all',
+});
+```
+
+### Load from directories + names
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  skills: {
+    names: ['github', 'coding-agent'],
+    dirs: ['./my-custom-skills'],
+    includeDefaults: true,  // also scan ./skills/, ~/.codex/skills/
+  },
+});
+```
+
+Skills are indexed by the Capability Discovery Engine alongside tools, enabling semantic search across all capabilities.
+
+## Extensions
+
+Extensions are runtime code packages (tools, guardrails, workflows) loaded from the curated registry (`@framers/agentos-extensions-registry`). Each extension's tools are added to the agent's tool map.
+
+### Load by name
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  extensions: {
+    tools: ['web-search', 'web-browser', 'giphy'],
+    voice: ['voice-synthesis'],
+  },
+});
+```
+
+Extensions require their respective API keys to be set in environment variables (e.g., `SERPER_API_KEY` for web-search).
+
+### Combine with curated tools
+
+Extensions merge with the `tools` option — they don't replace it:
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  tools: 'curated',
+  extensions: { tools: ['deep-research', 'content-extraction'] },
+});
+```
+
+## Presets
+
+Presets auto-configure tools, skills, extensions, and personality in a single option. Eight presets are available: `research-assistant`, `customer-support`, `creative-writer`, `code-reviewer`, `data-analyst`, `security-auditor`, `devops-assistant`, `personal-assistant`.
+
+### Use a preset
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  preset: 'research-assistant',
+});
+```
+
+### Override preset defaults
+
+Explicit `skills` and `extensions` merge with (and take precedence over) preset values:
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  preset: 'research-assistant',
+  skills: ['github'],  // adds to preset's suggested skills
+  extensions: { tools: ['content-extraction'] },  // adds to preset's extensions
+});
+```
+
 ## Approvals (safe by default)
 
 By default, Wunderland denies **side-effect** tools and auto-approves read-only tools:
@@ -102,8 +195,15 @@ const app = await createWunderland({
 
 ```ts
 const diag = app.diagnostics();
-console.log(diag.llm, diag.policy, diag.tools);
+console.log(diag.llm, diag.policy, diag.tools, diag.skills, diag.discovery);
 ```
+
+The diagnostics object includes:
+- `llm` — provider, model, API key status
+- `policy` — security tier, permission set, tool access profile
+- `tools` — loaded tools, dropped-by-policy list
+- `skills` — loaded skill count and names
+- `discovery` — capability count, graph edges, initialization status
 
 ## Advanced modules
 
