@@ -428,6 +428,11 @@ export default async function cmdChat(
         },
         'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
+        'wunderbot-feeds': {
+          options: {
+            feeds: (cfg as any)?.feeds ?? {},
+          },
+        },
       };
 
       function mergeOverride(base: any, extra: any): any {

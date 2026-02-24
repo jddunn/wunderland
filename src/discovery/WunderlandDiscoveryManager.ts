@@ -189,7 +189,7 @@ export class WunderlandDiscoveryManager {
         isDefault: true,
         config: {
           apiKey: embeddingConfig.apiKey,
-          ...(embeddingConfig.baseUrl ? { baseUrl: embeddingConfig.baseUrl } : {}),
+          ...(embeddingConfig.baseUrl ? { baseURL: embeddingConfig.baseUrl } : {}),
         },
       }],
     });
@@ -266,7 +266,12 @@ export class WunderlandDiscoveryManager {
     if (!this._initialized || !this._engine) return null;
 
     try {
-      return await this._engine.discover(userMessage);
+      const result = await this._engine.discover(userMessage);
+      // Debug: log which capabilities were selected
+      const tier1Names = result?.tier1?.map((c) => `${c.capability?.name ?? '?'}(${c.relevanceScore?.toFixed(2)})`).join(', ') ?? 'none';
+      const tier2Names = result?.tier2?.map((c) => c.capability?.name ?? '?').join(', ') ?? 'none';
+      console.log(`[Discovery] "${userMessage.slice(0, 60)}" → T1:[${tier1Names}] T2:[${tier2Names}]`);
+      return result;
     } catch {
       return null;
     }
