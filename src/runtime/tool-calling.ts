@@ -447,7 +447,16 @@ async function chatCompletionsRequest(
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter' : 'OpenAI';
   const apiKey = provider.getApiKey ? await provider.getApiKey() : provider.apiKey;
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const fetchUrl = `${baseUrl}/chat/completions`;
+  // Ollama inference with tools can take several minutes — use generous timeouts.
+  // Node's undici has separate headersTimeout/bodyTimeout defaults (300s each) that
+  // fire independently of AbortController.  Override via the dispatcher option.
+  const controller = new AbortController();
+  const fetchTimeout = setTimeout(() => controller.abort(), 10 * 60_000); // 10 minutes
+  console.log(`[tool-calling] POST ${fetchUrl} (model=${provider.model}, tools=${tools.length})`);
+
+  const isLocalLLM = /localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\./.test(fetchUrl);
+  const fetchOpts: RequestInit & Record<string, unknown> = {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -462,7 +471,34 @@ async function chatCompletionsRequest(
       temperature,
       max_tokens: maxTokens,
     }),
-  });
+    signal: controller.signal,
+  };
+
+  // For local/LAN LLM servers (Ollama), bump undici's internal timeouts.
+  if (isLocalLLM) {
+    try {
+      const { Agent } = await import('undici');
+      (fetchOpts as any).dispatcher = new Agent({
+        headersTimeout: 10 * 60_000,
+        bodyTimeout: 10 * 60_000,
+        connectTimeout: 30_000,
+      });
+    } catch {
+      // undici not available — rely on AbortController only
+    }
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(fetchUrl, fetchOpts as RequestInit);
+  } catch (fetchErr) {
+    clearTimeout(fetchTimeout);
+    const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+    console.error(`[tool-calling] Fetch error for ${fetchUrl}: ${errMsg}`);
+    throw fetchErr;
+  } finally {
+    clearTimeout(fetchTimeout);
+  }
 
   const text = await res.text();
   if (!res.ok) throw new Error(`${providerName} error (${res.status}): ${text.slice(0, 300)}`);
@@ -847,8 +883,21 @@ export async function runToolCallingTurn(opts: {
 
         const toolCalls = message.tool_calls || [];
 
+        // Debug: log LLM response shape
+        const contentPreview = typeof message.content === 'string' ? message.content.slice(0, 200) : '(null)';
+        console.log(`[tool-calling] Round ${round}: toolCalls=${toolCalls.length}, content="${contentPreview}"`);
+        if (toolCalls.length > 0) {
+          for (const tc of toolCalls) {
+            console.log(`[tool-calling]   → ${tc?.function?.name}(${(tc?.function?.arguments || '').slice(0, 100)})`);
+          }
+        }
+
         if (toolCalls.length === 0) {
-          const content = typeof message.content === 'string' ? message.content.trim() : '';
+          let content = typeof message.content === 'string' ? message.content.trim() : '';
+          // Strip <think>...</think> blocks from models like qwen3 that use thinking mode.
+          content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+          // Also strip leading **<think>...</think>** markdown-wrapped variants.
+          content = content.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
           opts.messages.push({ role: 'assistant', content: content || '(no content)' });
           return content || '';
         }
@@ -1014,6 +1063,7 @@ export async function runToolCallingTurn(opts: {
 
           const payload = result?.success ? redactToolOutputForLLM(result.output) : { error: result?.error || 'Tool failed' };
           const json = safeJsonStringify(payload, 20000);
+          console.log(`[tool-calling] Tool ${toolName} result: success=${result?.success}, output=${json.slice(0, 300)}`);
           const content = shouldWrapToolOutputs
             ? wrapUntrustedToolOutput(json, { toolName, toolCallId: call.id, includeWarning: true })
             : json;
