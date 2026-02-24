@@ -314,21 +314,50 @@ export default async function cmdStart(
     providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
     : providerId === 'ollama' ? ollamaBaseUrl
     : undefined;
-  const llmApiKey =
-    providerId === 'openrouter' ? openrouterApiKey
-    : providerId === 'ollama' ? 'ollama'
-    : providerId === 'openai' ? (process.env['OPENAI_API_KEY'] || '')
-    : providerId === 'anthropic' ? (process.env['ANTHROPIC_API_KEY'] || '')
-    : (process.env['OPENAI_API_KEY'] || '');
+  // Resolve auth method (OAuth or API key)
+  const authMethod: 'api-key' | 'oauth' =
+    (cfg.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
+      ? 'oauth'
+      : 'api-key';
+
+  let llmApiKey: string;
+  let oauthGetApiKey: (() => Promise<string>) | undefined;
+
+  if (authMethod === 'oauth') {
+    try {
+      const { OpenAIOAuthFlow, FileTokenStore } = await import('@framers/agentos/auth');
+      const flow = new OpenAIOAuthFlow({ tokenStore: new FileTokenStore() });
+      // Verify we have stored tokens
+      const initialKey = await flow.getAccessToken();
+      llmApiKey = initialKey;
+      oauthGetApiKey = () => flow.getAccessToken();
+    } catch (err) {
+      fmt.errorBlock(
+        'OAuth authentication required',
+        `Run ${accent('wunderland login')} to authenticate with your OpenAI subscription.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+  } else {
+    llmApiKey =
+      providerId === 'openrouter' ? openrouterApiKey
+      : providerId === 'ollama' ? 'ollama'
+      : providerId === 'openai' ? (process.env['OPENAI_API_KEY'] || '')
+      : providerId === 'anthropic' ? (process.env['ANTHROPIC_API_KEY'] || '')
+      : (process.env['OPENAI_API_KEY'] || '');
+  }
 
   const canUseLLM =
-    providerId === 'ollama'
+    authMethod === 'oauth'
       ? true
-      : providerId === 'openrouter'
-        ? !!openrouterApiKey
-        : providerId === 'anthropic'
-          ? !!process.env['ANTHROPIC_API_KEY']
-          : !!llmApiKey || !!openrouterFallback;
+      : providerId === 'ollama'
+        ? true
+        : providerId === 'openrouter'
+          ? !!openrouterApiKey
+          : providerId === 'anthropic'
+            ? !!process.env['ANTHROPIC_API_KEY']
+            : !!llmApiKey || !!openrouterFallback;
 
   const preloadedPackages: string[] = [];
   let activePacks: any[] = [];
@@ -1050,6 +1079,7 @@ export default async function cmdStart(
           onFallback: (err, provider) => {
             console.warn(`[fallback] Primary provider failed (${err.message}), routing to ${provider}`);
           },
+          getApiKey: oauthGetApiKey,
         });
       } else {
         reply = `No LLM credentials configured. You said: ${text}`;
@@ -1920,6 +1950,7 @@ export default async function cmdStart(
             onFallback: (err, provider) => {
               console.warn(`[fallback] Primary provider failed (${err.message}), routing to ${provider}`);
             },
+            getApiKey: oauthGetApiKey,
           });
         } else {
           reply =
@@ -1988,8 +2019,41 @@ export default async function cmdStart(
           const sendOptions: any = {};
           if (content) sendOptions.content = content;
           if (embeds.length > 0) sendOptions.embeds = embeds;
+          // Forward message flags (e.g. SUPPRESS_NOTIFICATIONS = 4096).
+          if (typeof parsed.flags === 'number' && parsed.flags > 0) {
+            sendOptions.flags = parsed.flags;
+          }
 
-          const msg = await (channel as any).send(sendOptions);
+          // If a username is provided, send via webhook so the message
+          // appears with a custom identity (e.g. "Wunderland News").
+          const webhookUsername = typeof parsed.username === 'string' ? parsed.username.trim() : '';
+          const webhookAvatar = typeof parsed.avatar_url === 'string' ? parsed.avatar_url.trim() : '';
+          let msg: any;
+          if (webhookUsername) {
+            // Find or create a webhook for this channel.
+            const textChannel = channel as any;
+            let webhook: any;
+            try {
+              const webhooks = await textChannel.fetchWebhooks();
+              webhook = webhooks.find((w: any) => w.name === 'Wunderland Feed');
+              if (!webhook) {
+                webhook = await textChannel.createWebhook({ name: 'Wunderland Feed' });
+              }
+            } catch {
+              // Fallback to regular send if webhook creation fails (missing perms).
+              webhook = null;
+            }
+            if (webhook) {
+              const whOpts: any = { ...sendOptions, username: webhookUsername };
+              if (webhookAvatar) whOpts.avatarURL = webhookAvatar;
+              msg = await webhook.send(whOpts);
+            } else {
+              msg = await textChannel.send(sendOptions);
+            }
+          } else {
+            msg = await (channel as any).send(sendOptions);
+          }
+
           const category = typeof parsed.category === 'string' ? parsed.category : '';
           if (category) {
             console.log(`[feed] Posted to #${(channel as any).name || channelId} (${category}): ${msg?.id || 'ok'}`);

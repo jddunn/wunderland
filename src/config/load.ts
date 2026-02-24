@@ -60,9 +60,13 @@ export type ResolvedLlmConfig = {
   fallback?: LLMProviderConfig;
   canUseLLM: boolean;
   openaiFallbackEnabled: boolean;
+  /** Auth method resolved from agent config. */
+  authMethod: 'api-key' | 'oauth';
+  /** Async key getter for OAuth-authenticated sessions. */
+  getApiKey?: () => Promise<string>;
 };
 
-export function resolveLlmConfig(opts: {
+export async function resolveLlmConfig(opts: {
   agentConfig: WunderlandAgentConfig;
   llm?: Partial<{
     providerId: WunderlandProviderId | string;
@@ -71,7 +75,7 @@ export function resolveLlmConfig(opts: {
     baseUrl?: string;
     fallback?: LLMProviderConfig;
   }>;
-}): ResolvedLlmConfig {
+}): Promise<ResolvedLlmConfig> {
   const providerFromConfig = typeof (opts.agentConfig as any).llmProvider === 'string' ? String((opts.agentConfig as any).llmProvider).trim() : '';
   const providerIdRaw = opts.llm?.providerId ?? providerFromConfig ?? 'openai';
   const providerId = providerIdRaw === 'openai' || providerIdRaw === 'openrouter' || providerIdRaw === 'ollama' || providerIdRaw === 'anthropic'
@@ -104,6 +108,12 @@ export function resolveLlmConfig(opts: {
         } satisfies LLMProviderConfig)
       : undefined);
 
+  // Determine auth method from agent config
+  const authMethod: 'api-key' | 'oauth' =
+    (opts.agentConfig as any).llmAuthMethod === 'oauth' && providerId === 'openai'
+      ? 'oauth'
+      : 'api-key';
+
   const apiKey =
     typeof opts.llm?.apiKey === 'string'
       ? opts.llm.apiKey
@@ -115,17 +125,33 @@ export function resolveLlmConfig(opts: {
             ? String(process.env['ANTHROPIC_API_KEY'] || '')
             : String(process.env['OPENAI_API_KEY'] || '');
 
+  // For OAuth, we don't require an API key — tokens are resolved dynamically
+  let getApiKey: (() => Promise<string>) | undefined;
+
+  if (authMethod === 'oauth') {
+    try {
+      // Dynamic import to avoid hard dependency on the auth module
+      const { OpenAIOAuthFlow, FileTokenStore } = await import('@framers/agentos/auth');
+      const flow = new OpenAIOAuthFlow({ tokenStore: new FileTokenStore() });
+      getApiKey = () => flow.getAccessToken();
+    } catch {
+      // Fallback: if the auth module isn't available, treat as api-key
+    }
+  }
+
   const canUseLLM =
-    providerId === 'ollama'
-      ? true
-      : providerId === 'openrouter'
-        ? !!openrouterApiKey
-        : providerId === 'anthropic'
-          ? !!process.env['ANTHROPIC_API_KEY']
-          : !!apiKey || !!fallback;
+    authMethod === 'oauth'
+      ? true // OAuth handles auth dynamically
+      : providerId === 'ollama'
+        ? true
+        : providerId === 'openrouter'
+          ? !!openrouterApiKey
+          : providerId === 'anthropic'
+            ? !!process.env['ANTHROPIC_API_KEY']
+            : !!apiKey || !!fallback;
 
   const openaiFallbackEnabled = providerId === 'openai' && !!fallback;
 
-  return { providerId, apiKey, model, baseUrl, fallback, canUseLLM, openaiFallbackEnabled };
+  return { providerId, apiKey, model, baseUrl, fallback, canUseLLM, openaiFallbackEnabled, authMethod, getApiKey };
 }
 
