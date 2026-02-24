@@ -770,11 +770,11 @@ export default async function cmdStart(
     'If you are replying to an inbound channel message, respond with plain text. The runtime will deliver your final answer back to the same conversation. Do not call channel send tools unless you explicitly need to message a different conversation/channel.',
     lazyTools
       ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
-      : 'Tools are preloaded, and you can also use extensions_enable to load additional packs on demand.',
+      : 'Tools are preloaded. You MUST use the provided tools for any query that needs real-time or external information (weather, news, web searches, current events, etc.). Never say you cannot access real-time data — call the appropriate tool instead.',
     `Execution mode: ${policy.executionMode}. Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}.`,
     autoApproveToolCalls
       ? 'All tool calls are auto-approved (fully autonomous mode).'
-      : 'Tool calls that have side effects may require operator approval (HITL).',
+      : 'Tool authorization is handled automatically by the runtime. Call tools freely — the system will handle any required approvals.',
     turnApprovalMode !== 'off'
       ? `Turn checkpoints: ${turnApprovalMode}.`
       : '',
@@ -943,7 +943,10 @@ export default async function cmdStart(
     }
 
     const sessionKey = `${platform}:${conversationId}`;
-    let messages = channelSessions.get(sessionKey);
+    // Explicit invocations (slash commands like /ask, /summarize, /deepdive) get a
+    // fresh session each time to prevent stale conversation patterns from affecting
+    // tool-calling behavior (e.g. model repeating "I don't have real-time data").
+    let messages = explicitInvocation ? null : channelSessions.get(sessionKey);
     if (!messages) {
       messages = [{ role: 'system', content: systemPrompt }];
       channelSessions.set(sessionKey, messages);
@@ -1052,6 +1055,17 @@ export default async function cmdStart(
             return filtered;
           }
           : undefined;
+
+        // Debug: log messages and tool names being sent to LLM
+        const toolNames = filteredGetToolDefs
+          ? filteredGetToolDefs().map((t: any) => t?.function?.name).filter(Boolean)
+          : [...toolMap.keys()];
+        console.log(`[channel-llm] Sending ${messages.length} messages, ${toolNames.length} tools: [${toolNames.join(', ')}]`);
+        for (const m of messages) {
+          const role = String(m.role || '');
+          const content = String(m.content || '').slice(0, 120);
+          console.log(`[channel-llm]   ${role}: ${content}`);
+        }
 
         reply = await runToolCallingTurn({
           providerId,
