@@ -399,6 +399,8 @@ export interface LLMProviderConfig {
   baseUrl?: string;
   /** Extra headers (e.g. OpenRouter's HTTP-Referer, X-Title). */
   extraHeaders?: Record<string, string>;
+  /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
+  getApiKey?: () => Promise<string>;
 }
 
 export type LLMProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic';
@@ -443,11 +445,12 @@ async function chatCompletionsRequest(
 ): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
   const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter' : 'OpenAI';
+  const apiKey = provider.getApiKey ? await provider.getApiKey() : provider.apiKey;
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${provider.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       ...(provider.extraHeaders || {}),
     },
@@ -482,11 +485,14 @@ export async function openaiChatWithTools(opts: {
   fallback?: LLMProviderConfig;
   /** Called when a fallback is triggered. */
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
+  /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
+  getApiKey?: () => Promise<string>;
 }): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
   const primary: LLMProviderConfig = {
     apiKey: opts.apiKey,
     model: opts.model,
     baseUrl: opts.baseUrl,
+    getApiKey: opts.getApiKey,
   };
 
   try {
@@ -703,6 +709,8 @@ export async function runToolCallingTurn(opts: {
   fallback?: LLMProviderConfig;
   /** Called when a fallback is triggered. */
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
+  /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
+  getApiKey?: () => Promise<string>;
 }): Promise<string> {
   const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
   const shouldWrapToolOutputs = (() => {
@@ -778,6 +786,7 @@ export async function runToolCallingTurn(opts: {
               fallbackProvider = providerName;
               opts.onFallback?.(primaryError, providerName);
             },
+            getApiKey: opts.getApiKey,
           });
         };
 

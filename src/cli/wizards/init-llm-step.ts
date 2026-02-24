@@ -19,6 +19,8 @@ export interface InitLlmResult {
   llmProvider: string;
   /** Selected model ID (e.g., 'gpt-4o-mini') */
   llmModel: string;
+  /** Auth method: 'api-key' (default) or 'oauth' for subscription-based tokens. */
+  llmAuthMethod?: 'api-key' | 'oauth';
 }
 
 export interface InitLlmStepOptions {
@@ -48,6 +50,7 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
 
   const apiKeys: Record<string, string> = {};
   let selectedProvider: string | undefined;
+  let useOAuth = false;
   const nonInteractive = opts.nonInteractive === true || !process.stdin.isTTY || !process.stdout.isTTY;
 
   // ── Detect existing env vars ───────────────────────────────────────────────
@@ -109,11 +112,18 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
 
   // ── Prompt for key if none collected ───────────────────────────────────────
   if (Object.keys(apiKeys).length === 0) {
-    const providerOptions = SUPPORTED_LLM_PROVIDERS.map((prov) => ({
-      value: prov.id,
-      label: prov.label,
-      hint: prov.id === 'ollama' ? 'local, no key needed' : undefined,
-    }));
+    const providerOptions = [
+      ...SUPPORTED_LLM_PROVIDERS.map((prov) => ({
+        value: prov.id,
+        label: prov.label,
+        hint: prov.id === 'ollama' ? 'local, no key needed' : undefined,
+      })),
+      {
+        value: 'openai-oauth',
+        label: 'OpenAI (Subscription)',
+        hint: 'ChatGPT Plus/Pro — no API key needed',
+      },
+    ];
 
     const chosenProvider = await p.select({
       message: 'Which LLM provider do you want to use?',
@@ -121,10 +131,17 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     });
 
     if (p.isCancel(chosenProvider)) return null;
-    selectedProvider = chosenProvider as string;
+
+    if (chosenProvider === 'openai-oauth') {
+      selectedProvider = 'openai';
+      useOAuth = true;
+      fmt.note(`Run ${accent('wunderland login')} after init to authenticate with your OpenAI subscription.`);
+    } else {
+      selectedProvider = chosenProvider as string;
+    }
 
     const provDef = SUPPORTED_LLM_PROVIDERS.find((p) => p.id === selectedProvider);
-    if (provDef && provDef.envVar) {
+    if (provDef && provDef.envVar && !useOAuth) {
       const key = await p.password({
         message: `${provDef.label} API Key:`,
         validate: (val: string) => {
@@ -199,5 +216,6 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     apiKeys,
     llmProvider: selectedProvider,
     llmModel: selectedModel,
+    ...(useOAuth ? { llmAuthMethod: 'oauth' as const } : {}),
   };
 }
