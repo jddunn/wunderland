@@ -473,6 +473,11 @@ export default async function cmdStart(
         },
         'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
+        'wunderbot-feeds': {
+          options: {
+            feeds: (cfg as any)?.feeds ?? {},
+          },
+        },
       };
 
       function mergeOverride(base: any, extra: any): any {
@@ -667,6 +672,16 @@ export default async function cmdStart(
     const configOverrides: Record<string, number> = {};
     for (const [src, dest] of Object.entries(budgetFields)) {
       if (typeof d[src] === 'number') configOverrides[dest] = d[src] as number;
+    }
+    // Support tier1MinRelevance directly or via nested config object
+    if (typeof d.tier1MinRelevance === 'number') configOverrides['tier1MinRelevance'] = d.tier1MinRelevance;
+    if (typeof d.graphBoostFactor === 'number') configOverrides['graphBoostFactor'] = d.graphBoostFactor;
+    // Merge nested config object (allows full CapabilityDiscoveryConfig overrides)
+    if (d.config && typeof d.config === 'object' && !Array.isArray(d.config)) {
+      for (const [k, v] of Object.entries(d.config as Record<string, unknown>)) {
+        if (typeof v === 'number') configOverrides[k] = v;
+        if (typeof v === 'boolean') (configOverrides as any)[k] = v;
+      }
     }
     if (Object.keys(configOverrides).length > 0) discoveryOpts.config = configOverrides as any;
   }
@@ -953,7 +968,8 @@ export default async function cmdStart(
 
     const traceCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> = [];
 
-    // Capability discovery — inject tiered context for this turn
+    // Capability discovery — inject tiered context AND build filtered tool set for this turn
+    let discoveredToolNames: Set<string> | null = null;
     try {
       const discoveryResult = await discoveryManager.discoverForTurn(text);
       if (discoveryResult) {
@@ -970,6 +986,30 @@ export default async function cmdStart(
           ctxParts.push(discoveryResult.tier2.map((r) => r.fullText).join('\n'));
         }
         messages.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
+
+        // Extract discovered tool names for filtered tool defs.
+        // Send tier2 (top 3 semantic matches) plus always-on core tools.
+        // The full toolMap is still passed for execution, so any tool can
+        // still be called if the model requests it via discover_capabilities.
+        const names = new Set<string>();
+        for (const r of discoveryResult.tier2) {
+          const capName = r.capability?.name;
+          if (capName && r.capability?.kind === 'tool') {
+            const toolName = r.capability.id?.startsWith('tool:') ? r.capability.id.slice(5) : capName;
+            names.add(toolName);
+          }
+        }
+        // Always include schema-on-demand meta tools and discover_capabilities
+        for (const [name] of toolMap) {
+          if (name.startsWith('extensions_') || name === 'discover_capabilities') names.add(name);
+        }
+        // Always include general-purpose search tools so the model can
+        // look things up regardless of discovery ranking.
+        const alwaysInclude = ['web_search', 'news_search'];
+        for (const coreTool of alwaysInclude) {
+          if (toolMap.has(coreTool)) names.add(coreTool);
+        }
+        if (names.size > 0) discoveredToolNames = names;
       }
     } catch {
       // Non-fatal
@@ -997,12 +1037,29 @@ export default async function cmdStart(
           wrapToolOutputs: policy.wrapToolOutputs,
         };
 
+        // Build filtered tool defs based on discovery (reduces context for small models)
+        const filteredGetToolDefs = discoveredToolNames
+          ? () => {
+            const filtered: Array<Record<string, unknown>> = [];
+            for (const [name, tool] of toolMap) {
+              if (discoveredToolNames!.has(name)) {
+                filtered.push({
+                  type: 'function',
+                  function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+                });
+              }
+            }
+            return filtered;
+          }
+          : undefined;
+
         reply = await runToolCallingTurn({
           providerId,
           apiKey: llmApiKey,
           model,
           messages,
           toolMap,
+          ...(filteredGetToolDefs && { getToolDefs: filteredGetToolDefs }),
           toolContext,
           maxRounds: 8,
           dangerouslySkipPermissions,
@@ -1095,7 +1152,12 @@ export default async function cmdStart(
     }
 
     if (typeof reply === 'string' && reply.trim()) {
-      await sendChannelText({ platform, conversationId, text: reply.trim(), replyToMessageId: message.messageId });
+      // Strip <think>...</think> blocks from models like qwen3 that expose thinking tokens.
+      let cleanReply = reply.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+      cleanReply = cleanReply.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
+      if (cleanReply) {
+        await sendChannelText({ platform, conversationId, text: cleanReply, replyToMessageId: message.messageId });
+      }
     }
 
     if (explain) {
@@ -1843,7 +1905,8 @@ export default async function cmdStart(
 
           messages.push({ role: 'user', content: message });
 
-          // Capability discovery — inject tiered context
+          // Capability discovery — inject tiered context AND build filtered tool set
+          let apiDiscoveredToolNames: Set<string> | null = null;
           try {
             const discoveryResult = await discoveryManager.discoverForTurn(message);
             if (discoveryResult) {
@@ -1860,6 +1923,25 @@ export default async function cmdStart(
                 ctxParts.push(discoveryResult.tier2.map((r) => r.fullText).join('\n'));
               }
               messages.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
+
+              // Extract discovered tool names for filtered tool defs
+              const names = new Set<string>();
+              for (const r of discoveryResult.tier1) {
+                if (r.capability?.kind === 'tool') {
+                  const toolName = r.capability.id?.startsWith('tool:') ? r.capability.id.slice(5) : r.capability.name;
+                  names.add(toolName);
+                }
+              }
+              for (const r of discoveryResult.tier2) {
+                if (r.capability?.kind === 'tool') {
+                  const toolName = r.capability.id?.startsWith('tool:') ? r.capability.id.slice(5) : r.capability.name;
+                  names.add(toolName);
+                }
+              }
+              for (const [name] of toolMap) {
+                if (name.startsWith('extensions_') || name === 'discover_capabilities') names.add(name);
+              }
+              if (names.size > 0) apiDiscoveredToolNames = names;
             }
           } catch {
             // Non-fatal
@@ -1880,12 +1962,29 @@ export default async function cmdStart(
             wrapToolOutputs: policy.wrapToolOutputs,
           };
 
+          // Build filtered tool defs based on discovery
+          const apiFilteredGetToolDefs = apiDiscoveredToolNames
+            ? () => {
+              const filtered: Array<Record<string, unknown>> = [];
+              for (const [name, tool] of toolMap) {
+                if (apiDiscoveredToolNames!.has(name)) {
+                  filtered.push({
+                    type: 'function',
+                    function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+                  });
+                }
+              }
+              return filtered;
+            }
+            : undefined;
+
           reply = await runToolCallingTurn({
             providerId,
             apiKey: llmApiKey,
             model,
             messages,
             toolMap,
+            ...(apiFilteredGetToolDefs && { getToolDefs: apiFilteredGetToolDefs }),
             toolContext,
             maxRounds: 8,
             dangerouslySkipPermissions,
@@ -1959,6 +2058,11 @@ export default async function cmdStart(
             `You said: ${message}`;
         }
 
+        // Strip <think>...</think> blocks from models like qwen3.
+        if (typeof reply === 'string') {
+          reply = reply.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+          reply = reply.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
+        }
         sendJson(res, 200, { reply });
         return;
       }
