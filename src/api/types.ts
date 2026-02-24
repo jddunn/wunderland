@@ -29,6 +29,8 @@ export type WunderlandAgentConfig = {
   }>;
   llmProvider?: string;
   llmModel?: string;
+  /** Auth method for the LLM provider. 'api-key' (default) or 'oauth' for subscription-based tokens. */
+  llmAuthMethod?: 'api-key' | 'oauth';
   securityTier?: SecurityTierName | string | null;
   permissionSet?: PermissionSetName | string | null;
   toolAccessProfile?: ToolAccessProfileName | string | null;

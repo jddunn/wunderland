@@ -148,6 +148,9 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   'import':       () => import('./commands/import-agent.js'),
   'ollama-setup':    () => import('./commands/ollama-setup.js'),
   'export-session':  () => import('./commands/export-session.js'),
+  login:             () => import('./commands/login.js'),
+  logout:            () => import('./commands/logout.js'),
+  'auth-status':     () => import('./commands/auth-status.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */

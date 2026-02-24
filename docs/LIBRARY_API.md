@@ -156,6 +156,46 @@ const app = await createWunderland({
 });
 ```
 
+## OAuth Authentication (OpenAI Subscription)
+
+Use your ChatGPT Plus/Pro subscription instead of a separate API key. The `llm.getApiKey` option allows dynamic token resolution, which the OAuth system uses to transparently inject fresh tokens into every LLM request.
+
+### With `agentConfig` (reads from `agent.config.json`)
+
+```ts
+const app = await createWunderland({
+  agentConfig: {
+    llmProvider: 'openai',
+    llmModel: 'gpt-4o',
+    llmAuthMethod: 'oauth',  // triggers OAuth token resolution
+  },
+  tools: 'none',
+});
+```
+
+When `llmAuthMethod: 'oauth'` is set, `createWunderland()` dynamically imports `@framers/agentos/auth`, instantiates an `OpenAIOAuthFlow` with a `FileTokenStore`, and wires `getApiKey` into the LLM provider config. No `OPENAI_API_KEY` env var is needed.
+
+### With explicit `getApiKey`
+
+```ts
+import { OpenAIOAuthFlow, FileTokenStore } from '@framers/agentos/auth';
+
+const flow = new OpenAIOAuthFlow({ tokenStore: new FileTokenStore() });
+
+const app = await createWunderland({
+  llm: {
+    providerId: 'openai',
+    apiKey: '',  // not used when getApiKey is set
+    model: 'gpt-4o',
+    getApiKey: () => flow.getAccessToken(),  // dynamic token
+  },
+});
+```
+
+### Provider support
+
+Only OpenAI is currently supported for OAuth. Anthropic, Google, and other providers do not offer equivalent consumer OAuth flows — using session tokens from their consumer products violates their Terms of Service. The auth module uses generic `IOAuthFlow` / `IOAuthTokenStore` interfaces designed for future provider extensibility.
+
 ## Approvals (safe by default)
 
 By default, Wunderland denies **side-effect** tools and auto-approves read-only tools:
