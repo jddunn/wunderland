@@ -10,7 +10,7 @@ import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import chalk from 'chalk';
-import { HEX, success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
+import { HEX, accent, success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { visibleLength } from '../ui/ansi-utils.js';
 import { glyphs } from '../ui/glyphs.js';
@@ -282,26 +282,54 @@ export default async function cmdChat(
     providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
     : providerId === 'ollama' ? 'http://localhost:11434/v1'
     : undefined;
-  const llmApiKey =
-    providerId === 'openrouter' ? openrouterApiKey
-    : providerId === 'ollama' ? 'ollama'
-    : providerId === 'openai' ? (process.env['OPENAI_API_KEY'] || '')
-    : providerId === 'anthropic' ? (process.env['ANTHROPIC_API_KEY'] || '')
-    : (process.env['OPENAI_API_KEY'] || '');
+  // Resolve auth method (OAuth or API key)
+  const authMethod: 'api-key' | 'oauth' =
+    (cfg.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
+      ? 'oauth'
+      : 'api-key';
+
+  let llmApiKey: string;
+  let oauthGetApiKey: (() => Promise<string>) | undefined;
+
+  if (authMethod === 'oauth') {
+    try {
+      const { OpenAIOAuthFlow, FileTokenStore } = await import('@framers/agentos/auth');
+      const flow = new OpenAIOAuthFlow({ tokenStore: new FileTokenStore() });
+      const initialKey = await flow.getAccessToken();
+      llmApiKey = initialKey;
+      oauthGetApiKey = () => flow.getAccessToken();
+    } catch {
+      fmt.errorBlock(
+        'OAuth authentication required',
+        `Run ${accent('wunderland login')} to authenticate with your OpenAI subscription.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+  } else {
+    llmApiKey =
+      providerId === 'openrouter' ? openrouterApiKey
+      : providerId === 'ollama' ? 'ollama'
+      : providerId === 'openai' ? (process.env['OPENAI_API_KEY'] || '')
+      : providerId === 'anthropic' ? (process.env['ANTHROPIC_API_KEY'] || '')
+      : (process.env['OPENAI_API_KEY'] || '');
+  }
 
   const canUseLLM =
-    providerId === 'ollama'
+    authMethod === 'oauth'
       ? true
-      : providerId === 'openrouter'
-        ? !!openrouterApiKey
-        : providerId === 'anthropic'
-          ? !!process.env['ANTHROPIC_API_KEY']
-          : !!llmApiKey || !!openrouterFallback;
+      : providerId === 'ollama'
+        ? true
+        : providerId === 'openrouter'
+          ? !!openrouterApiKey
+          : providerId === 'anthropic'
+            ? !!process.env['ANTHROPIC_API_KEY']
+            : !!llmApiKey || !!openrouterFallback;
 
   if (!canUseLLM) {
     fmt.errorBlock(
       'Missing API key',
-      'Configure an LLM provider in agent.config.json, or set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY, or use Ollama.',
+      'Configure an LLM provider in agent.config.json, set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY, use `wunderland login` for OAuth, or use Ollama.',
     );
     process.exitCode = 1;
     return;
@@ -818,6 +846,7 @@ export default async function cmdChat(
       askCheckpoint,
       baseUrl: llmBaseUrl,
       fallback: providerId === 'openai' ? openrouterFallback : undefined,
+      getApiKey: oauthGetApiKey,
       onFallback: (_err, provider) => {
         console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`);
       },

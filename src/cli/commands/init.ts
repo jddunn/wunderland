@@ -202,6 +202,7 @@ export default async function cmdInit(
   const skipKeys = flags['skip-keys'] === true || _globals.quiet;
   let llmProvider: string | undefined;
   let llmModel: string | undefined;
+  let llmAuthMethod: 'api-key' | 'oauth' | undefined;
   let wroteEnv = false;
 
   if (!skipKeys) {
@@ -209,6 +210,7 @@ export default async function cmdInit(
     if (llmResult) {
       llmProvider = llmResult.llmProvider;
       llmModel = llmResult.llmModel;
+      llmAuthMethod = llmResult.llmAuthMethod;
 
       // Write project .env with collected keys
       const envData: Record<string, string> = { ...llmResult.apiKeys };
@@ -255,6 +257,7 @@ export default async function cmdInit(
   // Include LLM provider/model in config if set
   if (llmProvider) config.llmProvider = llmProvider;
   if (llmModel) config.llmModel = llmModel;
+  if (llmAuthMethod === 'oauth') (config as any).llmAuthMethod = 'oauth';
 
   // Write files
   await writeFile(

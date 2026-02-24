@@ -1,6 +1,12 @@
 import { defineConfig } from 'vitest/config';
+import { resolve } from 'node:path';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@framers/agentos/auth': resolve(__dirname, '../agentos/src/core/llm/auth/index.ts'),
+    },
+  },
   test: {
     include: ['src/**/*.test.ts'],
     exclude: [

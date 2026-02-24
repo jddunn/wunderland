@@ -338,6 +338,29 @@ Supports 13 LLM providers out of the box:
 
 Set `OPENROUTER_API_KEY` as an environment variable to enable automatic fallback routing through OpenRouter when your primary provider is unavailable.
 
+### OpenAI OAuth (Subscription Login)
+
+Use your existing ChatGPT Plus ($20/mo) or Pro ($200/mo) subscription instead of a separate API key. This uses the same OAuth device code flow as the Codex CLI.
+
+```bash
+wunderland login                    # Authenticate with OpenAI via OAuth
+wunderland auth-status              # Check token validity
+wunderland start                    # Uses OAuth token automatically
+wunderland logout                   # Clear stored tokens
+```
+
+Or set `"llmAuthMethod": "oauth"` in `agent.config.json`:
+
+```json
+{
+  "llmProvider": "openai",
+  "llmModel": "gpt-4o",
+  "llmAuthMethod": "oauth"
+}
+```
+
+> **Provider support:** Only OpenAI is supported for OAuth login. Anthropic, Google, and other providers do not offer equivalent consumer OAuth flows, and using session tokens from their consumer products violates their Terms of Service. The auth system uses generic `IOAuthFlow` / `IOAuthTokenStore` interfaces, so additional providers can be added if they offer legitimate OAuth APIs in the future.
+
 ---
 
 ## Self-Hosting with Ollama

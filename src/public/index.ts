@@ -539,14 +539,14 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     baseDir: opts.workspace?.baseDir ?? resolveAgentWorkspaceBaseDir(),
   };
 
-  const llm = resolveLlmConfig({ agentConfig, llm: opts.llm });
+  const llm = await resolveLlmConfig({ agentConfig, llm: opts.llm });
   if (!llm.canUseLLM) {
     throw new WunderlandConfigError('No usable LLM credentials configured.', [
       {
         path: 'llm',
         message: `providerId=${llm.providerId} is not configured for use.`,
         hint: llm.providerId === 'openai'
-          ? 'Set OPENAI_API_KEY (or OPENROUTER_API_KEY for fallback), or pass llm.apiKey.'
+          ? 'Set OPENAI_API_KEY, use llmAuthMethod: "oauth" with `wunderland login`, or pass llm.apiKey.'
           : llm.providerId === 'openrouter'
             ? 'Set OPENROUTER_API_KEY or pass llm.apiKey.'
             : llm.providerId === 'anthropic'
@@ -804,6 +804,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         onToolCall,
         baseUrl: llm.baseUrl,
         fallback: llm.fallback,
+        getApiKey: llm.getApiKey,
       });
 
       // Attach tool outputs (best-effort, ordered).
