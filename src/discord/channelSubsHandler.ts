@@ -40,6 +40,7 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
 
   async function ensureDiscordJs(): Promise<any> {
     if (!djs) {
+      // @ts-ignore -- discord.js is an optional runtime dependency for Discord-enabled deployments
       djs = await import('discord.js');
     }
     return djs;
