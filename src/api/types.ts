@@ -6,8 +6,96 @@
 import type { SecurityTierName, PermissionSetName } from '../security/SecurityTiers.js';
 import type { ToolAccessProfileName } from '../social/ToolAccessProfiles.js';
 import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
+import type { StorageResolutionOptions } from '@framers/sql-storage-adapter';
 
 export type WunderlandExecutionMode = 'autonomous' | 'human-all' | 'human-dangerous';
+export type WunderlandToolFailureMode = 'fail_open' | 'fail_closed';
+export type WunderlandTaskOutcomeTelemetryScope =
+  | 'global'
+  | 'session'
+  | 'persona'
+  | 'tenant'
+  | 'tenant_persona';
+
+export interface WunderlandTaskOutcomeTelemetryConfig {
+  /**
+   * Enables rolling task-outcome KPI tracking.
+   * Default: true
+   */
+  enabled?: boolean;
+  /**
+   * Number of recent outcomes retained per scope.
+   * Default: 100
+   */
+  rollingWindowSize?: number;
+  /**
+   * KPI aggregation scope.
+   * Default: tenant_persona
+   */
+  scope?: WunderlandTaskOutcomeTelemetryScope;
+  /**
+   * Persist KPI windows to SQL storage.
+   * Default: true
+   */
+  persist?: boolean;
+  /**
+   * SQL table used for KPI window storage.
+   * Default: wunderland_task_outcome_kpi_windows
+   */
+  tableName?: string;
+  /**
+   * SQL adapter resolution config passed to @framers/sql-storage-adapter.
+   */
+  storage?: StorageResolutionOptions;
+  /**
+   * Emit low-success alerts in runtime logs.
+   * Default: true
+   */
+  emitAlerts?: boolean;
+  /**
+   * Alert threshold for weighted success rate.
+   * Default: 0.55
+   */
+  alertBelowWeightedSuccessRate?: number;
+  /**
+   * Minimum samples required before alert evaluation.
+   * Default: 8
+   */
+  alertMinSamples?: number;
+  /**
+   * Minimum milliseconds between repeated alerts per scope.
+   * Default: 60000
+   */
+  alertCooldownMs?: number;
+}
+
+export interface WunderlandAdaptiveExecutionConfig {
+  /**
+   * Enables adaptive execution changes driven by rolling KPI.
+   * Default: true
+   */
+  enabled?: boolean;
+  /**
+   * Minimum samples before adaptive rules can apply.
+   * Default: 5
+   */
+  minSamples?: number;
+  /**
+   * Minimum weighted success rate required to avoid degraded mode.
+   * Default: 0.7
+   */
+  minWeightedSuccessRate?: number;
+  /**
+   * Force full tool schema exposure when degraded.
+   * Default: true
+   */
+  forceAllToolsWhenDegraded?: boolean;
+  /**
+   * Force fail-open mode when degraded (unless explicitly requested fail-closed).
+   * Default: true
+   */
+  forceFailOpenWhenDegraded?: boolean;
+}
 
 /**
  * Minimal shape of the `agent.config.json` schema used by Wunderland CLI/runtime.
@@ -31,6 +119,12 @@ export type WunderlandAgentConfig = {
   llmModel?: string;
   /** Auth method for the LLM provider. 'api-key' (default) or 'oauth' for subscription-based tokens. */
   llmAuthMethod?: 'api-key' | 'oauth';
+  /**
+   * Tool-call failure behavior:
+   * - fail_open: continue after tool failures (default)
+   * - fail_closed: stop turn on first tool failure
+   */
+  toolFailureMode?: WunderlandToolFailureMode | string | null;
   securityTier?: SecurityTierName | string | null;
   permissionSet?: PermissionSetName | string | null;
   toolAccessProfile?: ToolAccessProfileName | string | null;
@@ -85,6 +179,14 @@ export type WunderlandAgentConfig = {
       exportLogs: boolean;
     }>;
   }>;
+  /**
+   * Rolling task-outcome KPI telemetry.
+   */
+  taskOutcomeTelemetry?: WunderlandTaskOutcomeTelemetryConfig;
+  /**
+   * Adaptive execution controls based on rolling KPI.
+   */
+  adaptiveExecution?: WunderlandAdaptiveExecutionConfig;
 
   /** Capability discovery configuration. */
   discovery?: {
@@ -132,4 +234,3 @@ export type WunderlandWorkspace = {
   agentId: string;
   baseDir: string;
 };
-

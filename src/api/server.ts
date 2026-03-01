@@ -37,6 +37,7 @@ import {
   type LLMProviderConfig,
   type ToolInstance,
 } from '../runtime/tool-calling.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
 import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import {
@@ -47,7 +48,14 @@ import {
 } from '../runtime/policy.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 
-import type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from './types.js';
+import type {
+  WunderlandAdaptiveExecutionConfig,
+  WunderlandAgentConfig,
+  WunderlandProviderId,
+  WunderlandTaskOutcomeTelemetryConfig,
+  WunderlandToolFailureMode,
+  WunderlandWorkspace,
+} from './types.js';
 
 type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;
@@ -556,6 +564,12 @@ export async function createWunderlandServer(opts?: {
     apiKey: string;
     baseUrl?: string;
   }>;
+  /** Override default tool-call failure behavior for this runtime. */
+  toolFailureMode?: WunderlandToolFailureMode;
+  /** Runtime task-outcome telemetry controls. */
+  taskOutcomeTelemetry?: WunderlandTaskOutcomeTelemetryConfig;
+  /** Runtime adaptive execution controls. */
+  adaptiveExecution?: WunderlandAdaptiveExecutionConfig;
   /** Override HITL secret (otherwise config/env/random). */
   hitlSecret?: string;
   /** Optional OpenAI-compatible fallback provider config. */
@@ -699,6 +713,29 @@ export async function createWunderlandServer(opts?: {
           : !!llmApiKey || !!openrouterFallback;
 
   const openaiFallbackEnabled = providerId === 'openai' && !!openrouterFallback;
+  const telemetryConfig: WunderlandTaskOutcomeTelemetryConfig = {
+    ...(cfg.taskOutcomeTelemetry ?? {}),
+    ...(opts?.taskOutcomeTelemetry ?? {}),
+    storage: {
+      ...(cfg.taskOutcomeTelemetry?.storage ?? {}),
+      ...(opts?.taskOutcomeTelemetry?.storage ?? {}),
+    },
+  };
+  const adaptiveConfig: WunderlandAdaptiveExecutionConfig = {
+    ...(cfg.adaptiveExecution ?? {}),
+    ...(opts?.adaptiveExecution ?? {}),
+  };
+  const adaptiveRuntime = new WunderlandAdaptiveExecutionRuntime({
+    toolFailureMode: opts?.toolFailureMode ?? cfg.toolFailureMode,
+    taskOutcomeTelemetry: telemetryConfig,
+    adaptiveExecution: adaptiveConfig,
+    logger,
+  });
+  await adaptiveRuntime.initialize();
+  const defaultTenantId =
+    typeof (cfg as any)?.organizationId === 'string' && String((cfg as any).organizationId).trim()
+      ? String((cfg as any).organizationId).trim()
+      : undefined;
 
   const preloadedPackages: string[] = [];
   let activePacks: any[] = [];
@@ -719,6 +756,8 @@ export async function createWunderlandServer(opts?: {
           const fromEnv = String(process.env['WUNDERLAND_HITL_SECRET'] || '').trim();
           return fromCfg || fromEnv || randomUUID();
         })();
+
+  const toolApiSecret = String(process.env['WUNDERLAND_TOOL_API_KEY'] || '').trim();
 
   const sseClients = new Set<import('node:http').ServerResponse>();
   async function broadcastHitlUpdate(payload: Record<string, unknown>): Promise<void> {
@@ -1191,13 +1230,33 @@ export async function createWunderlandServer(opts?: {
       // ignore
     }
 
+    const tenantId =
+      (typeof (message as any)?.organizationId === 'string' && String((message as any).organizationId).trim())
+      || defaultTenantId;
+    const adaptiveDecision = adaptiveRuntime.resolveTurnDecision({
+      scope: {
+        sessionId: sessionKey,
+        userId: senderId,
+        personaId: seed.seedId,
+        tenantId: tenantId || undefined,
+      },
+    });
+
     let reply = '';
+    let turnFailed = false;
+    let fallbackTriggered = false;
+    let toolCallCount = 0;
     try {
       if (canUseLLM) {
         const toolContext: Record<string, unknown> = {
           gmiId: `wunderland-channel-${sessionKey}`,
           personaId: seed.seedId,
-          userContext: { userId: senderId, platform, conversationId },
+          userContext: {
+            userId: senderId,
+            platform,
+            conversationId,
+            ...(tenantId ? { organizationId: tenantId } : null),
+          },
           agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
           permissionSet: policy.permissionSet,
           securityTier: policy.securityTier,
@@ -1205,6 +1264,13 @@ export async function createWunderlandServer(opts?: {
           toolAccessProfile: policy.toolAccessProfile,
           interactiveSession: false,
           turnApprovalMode,
+          toolFailureMode: adaptiveDecision.toolFailureMode,
+          adaptiveExecution: {
+            degraded: adaptiveDecision.degraded,
+            reason: adaptiveDecision.reason,
+            actions: adaptiveDecision.actions,
+            kpi: adaptiveDecision.kpi ?? undefined,
+          },
           ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
           wrapToolOutputs: policy.wrapToolOutputs,
         };
@@ -1218,6 +1284,10 @@ export async function createWunderlandServer(opts?: {
           toolContext,
           maxRounds: 8,
           dangerouslySkipPermissions: autoApproveToolCalls,
+          toolFailureMode: adaptiveDecision.toolFailureMode,
+          onToolCall: () => {
+            toolCallCount += 1;
+          },
           askPermission: async (tool, args) => {
             if (autoApproveToolCalls) return true;
             const preview = safeJsonStringify(args, 1800);
@@ -1277,6 +1347,7 @@ export async function createWunderlandServer(opts?: {
           baseUrl: llmBaseUrl,
           fallback: providerId === 'openai' ? openrouterFallback : undefined,
           onFallback: (err, provider) => {
+            fallbackTriggered = true;
             logger.warn?.('[wunderland/api] fallback activated', { error: err.message, provider });
           },
         });
@@ -1284,7 +1355,28 @@ export async function createWunderlandServer(opts?: {
         reply = `No LLM credentials configured. You said: ${text}`;
         messages.push({ role: 'assistant', content: reply });
       }
+    } catch (error) {
+      turnFailed = true;
+      throw error;
     } finally {
+      try {
+        await adaptiveRuntime.recordTurnOutcome({
+          scope: {
+            sessionId: sessionKey,
+            userId: senderId,
+            personaId: seed.seedId,
+            tenantId: tenantId || undefined,
+          },
+          degraded: adaptiveDecision.degraded || fallbackTriggered,
+          replyText: reply,
+          didFail: turnFailed,
+          toolCallCount,
+        });
+      } catch (error) {
+        logger.warn?.('[wunderland/api][channels] failed to record adaptive outcome', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       try {
         const adapter = adapterByPlatform.get(platform);
         if (adapter) await (adapter as any).sendTypingIndicator?.(conversationId, false);
@@ -1328,7 +1420,7 @@ export async function createWunderlandServer(opts?: {
     try {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Wunderland-HITL-Secret');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Wunderland-HITL-Secret, X-Api-Key');
 
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
@@ -1538,122 +1630,235 @@ export async function createWunderlandServer(opts?: {
           return;
         }
 
-        let reply: string;
-        if (canUseLLM) {
-          const sessionId =
-            typeof parsed.sessionId === 'string' && parsed.sessionId.trim() ? parsed.sessionId.trim().slice(0, 128) : 'default';
-
-          if (parsed.reset === true) {
-            sessions.delete(sessionId);
-          }
-
-          let messages = sessions.get(sessionId);
-          if (!messages) {
-            messages = [{ role: 'system', content: systemPrompt }];
-            sessions.set(sessionId, messages);
-          }
-
-          if (messages.length > 200) {
-            messages = [messages[0], ...messages.slice(-120)];
-            sessions.set(sessionId, messages);
-          }
-
-          messages.push({ role: 'user', content: message });
-
-          const toolContext: Record<string, unknown> = {
-            gmiId: `wunderland-server-${sessionId}`,
+        let reply = '';
+        let turnFailed = false;
+        let fallbackTriggered = false;
+        let toolCallCount = 0;
+        const sessionId =
+          typeof parsed.sessionId === 'string' && parsed.sessionId.trim() ? parsed.sessionId.trim().slice(0, 128) : 'default';
+        const requestedToolFailureMode =
+          typeof parsed.toolFailureMode === 'string' ? parsed.toolFailureMode : undefined;
+        const tenantId =
+          (typeof parsed.tenantId === 'string' && parsed.tenantId.trim())
+          || defaultTenantId;
+        const adaptiveDecision = adaptiveRuntime.resolveTurnDecision({
+          scope: {
+            sessionId,
+            userId: sessionId,
             personaId: seed.seedId,
-            userContext: { userId: sessionId },
-            agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
-            permissionSet: policy.permissionSet,
-            securityTier: policy.securityTier,
-            executionMode: policy.executionMode,
-            toolAccessProfile: policy.toolAccessProfile,
-            interactiveSession: false,
-            turnApprovalMode,
-            ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
-            wrapToolOutputs: policy.wrapToolOutputs,
-          };
+            tenantId: tenantId || undefined,
+          },
+          requestedToolFailureMode,
+        });
 
-          reply = await runToolCallingTurn({
-            providerId,
-            apiKey: llmApiKey,
-            model,
-            messages,
-            toolMap,
-            toolContext,
-            maxRounds: 8,
-            dangerouslySkipPermissions: autoApproveToolCalls,
-            askPermission: async (tool, args) => {
-              if (autoApproveToolCalls) return true;
-              const preview = safeJsonStringify(args, 1800);
-              const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
-              const actionId = `tool-${seedId}-${randomUUID()}`;
-              const decision = await hitlManager.requestApproval({
-                actionId,
-                description: `Allow ${tool.name} (${effectLabel})?\\n\\n${preview}`,
-                severity: tool.hasSideEffects === true ? 'high' : 'low',
-                category: toAgentosApprovalCategory(tool),
-                agentId: seed.seedId,
-                context: { toolName: tool.name, args, sessionId },
-                reversible: tool.hasSideEffects !== true,
-                requestedAt: new Date(),
-                timeoutMs: 5 * 60_000,
-              });
-              return decision.approved === true;
-            },
-            askCheckpoint:
-              turnApprovalMode === 'off'
-                ? undefined
-                : async ({ round, toolCalls }) => {
-                    if (autoApproveToolCalls) return true;
-                    const checkpointId = `checkpoint-${seedId}-${sessionId}-${round}-${randomUUID()}`;
-                    const completedWork = toolCalls.map((c) => {
-                      const effect = c.hasSideEffects ? 'side effects' : 'read-only';
-                      const preview = safeJsonStringify(c.args, 800);
-                      return `${c.toolName} (${effect})\\n${preview}`;
-                    });
-                    const timeoutMs = 5 * 60_000;
-                    const checkpointPromise = hitlManager
-                      .checkpoint({
-                        checkpointId,
-                        workflowId: `chat-${sessionId}`,
-                        currentPhase: `tool-round-${round}`,
-                        progress: Math.min(1, (round + 1) / 8),
-                        completedWork,
-                        upcomingWork: ['Continue to next LLM round'],
-                        issues: [],
-                        notes: 'Continue?',
-                        checkpointAt: new Date(),
-                      })
-                      .catch(() => ({ decision: 'abort' as const }));
-                    const timeoutPromise = new Promise<{ decision: 'abort' }>((resolve) =>
-                      setTimeout(() => resolve({ decision: 'abort' }), timeoutMs),
-                    );
-                    const decision = (await Promise.race([checkpointPromise, timeoutPromise])) as any;
-                    if (decision?.decision !== 'continue') {
-                      try {
-                        await hitlManager.cancelRequest(checkpointId, 'checkpoint_timeout_or_abort');
-                      } catch {
-                        // ignore
+        if (parsed.reset === true) {
+          sessions.delete(sessionId);
+        }
+
+        let messages = sessions.get(sessionId);
+        if (!messages) {
+          messages = [{ role: 'system', content: systemPrompt }];
+          sessions.set(sessionId, messages);
+        }
+
+        if (messages.length > 200) {
+          messages = [messages[0], ...messages.slice(-120)];
+          sessions.set(sessionId, messages);
+        }
+
+        messages.push({ role: 'user', content: message });
+
+        try {
+          if (canUseLLM) {
+            const toolContext: Record<string, unknown> = {
+              gmiId: `wunderland-server-${sessionId}`,
+              personaId: seed.seedId,
+              userContext: {
+                userId: sessionId,
+                ...(tenantId ? { organizationId: tenantId } : null),
+              },
+              agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
+              permissionSet: policy.permissionSet,
+              securityTier: policy.securityTier,
+              executionMode: policy.executionMode,
+              toolAccessProfile: policy.toolAccessProfile,
+              interactiveSession: false,
+              turnApprovalMode,
+              toolFailureMode: adaptiveDecision.toolFailureMode,
+              adaptiveExecution: {
+                degraded: adaptiveDecision.degraded,
+                reason: adaptiveDecision.reason,
+                actions: adaptiveDecision.actions,
+                kpi: adaptiveDecision.kpi ?? undefined,
+              },
+              ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
+              wrapToolOutputs: policy.wrapToolOutputs,
+            };
+
+            reply = await runToolCallingTurn({
+              providerId,
+              apiKey: llmApiKey,
+              model,
+              messages,
+              toolMap,
+              toolContext,
+              maxRounds: 8,
+              dangerouslySkipPermissions: autoApproveToolCalls,
+              toolFailureMode: adaptiveDecision.toolFailureMode,
+              onToolCall: () => {
+                toolCallCount += 1;
+              },
+              askPermission: async (tool, args) => {
+                if (autoApproveToolCalls) return true;
+                const preview = safeJsonStringify(args, 1800);
+                const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
+                const actionId = `tool-${seedId}-${randomUUID()}`;
+                const decision = await hitlManager.requestApproval({
+                  actionId,
+                  description: `Allow ${tool.name} (${effectLabel})?\\n\\n${preview}`,
+                  severity: tool.hasSideEffects === true ? 'high' : 'low',
+                  category: toAgentosApprovalCategory(tool),
+                  agentId: seed.seedId,
+                  context: { toolName: tool.name, args, sessionId },
+                  reversible: tool.hasSideEffects !== true,
+                  requestedAt: new Date(),
+                  timeoutMs: 5 * 60_000,
+                });
+                return decision.approved === true;
+              },
+              askCheckpoint:
+                turnApprovalMode === 'off'
+                  ? undefined
+                  : async ({ round, toolCalls }) => {
+                      if (autoApproveToolCalls) return true;
+                      const checkpointId = `checkpoint-${seedId}-${sessionId}-${round}-${randomUUID()}`;
+                      const completedWork = toolCalls.map((c) => {
+                        const effect = c.hasSideEffects ? 'side effects' : 'read-only';
+                        const preview = safeJsonStringify(c.args, 800);
+                        return `${c.toolName} (${effect})\\n${preview}`;
+                      });
+                      const timeoutMs = 5 * 60_000;
+                      const checkpointPromise = hitlManager
+                        .checkpoint({
+                          checkpointId,
+                          workflowId: `chat-${sessionId}`,
+                          currentPhase: `tool-round-${round}`,
+                          progress: Math.min(1, (round + 1) / 8),
+                          completedWork,
+                          upcomingWork: ['Continue to next LLM round'],
+                          issues: [],
+                          notes: 'Continue?',
+                          checkpointAt: new Date(),
+                        })
+                        .catch(() => ({ decision: 'abort' as const }));
+                      const timeoutPromise = new Promise<{ decision: 'abort' }>((resolve) =>
+                        setTimeout(() => resolve({ decision: 'abort' }), timeoutMs),
+                      );
+                      const decision = (await Promise.race([checkpointPromise, timeoutPromise])) as any;
+                      if (decision?.decision !== 'continue') {
+                        try {
+                          await hitlManager.cancelRequest(checkpointId, 'checkpoint_timeout_or_abort');
+                        } catch {
+                          // ignore
+                        }
                       }
-                    }
-                    return decision?.decision === 'continue';
-                  },
-            baseUrl: llmBaseUrl,
-            fallback: providerId === 'openai' ? openrouterFallback : undefined,
-            onFallback: (err, provider) => {
-              logger.warn?.('[wunderland/api] fallback activated', { error: err.message, provider });
-            },
-          });
-        } else {
-          reply =
-            'No LLM credentials configured. I can run, but I cannot generate real replies yet.\\n\\n' +
-            'Set an API key in .env (OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY) or use Ollama, then retry.\\n\\n' +
-            `You said: ${message}`;
+                      return decision?.decision === 'continue';
+                    },
+              baseUrl: llmBaseUrl,
+              fallback: providerId === 'openai' ? openrouterFallback : undefined,
+              onFallback: (err, provider) => {
+                fallbackTriggered = true;
+                logger.warn?.('[wunderland/api] fallback activated', { error: err.message, provider });
+              },
+            });
+          } else {
+            reply =
+              'No LLM credentials configured. I can run, but I cannot generate real replies yet.\\n\\n' +
+              'Set an API key in .env (OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY) or use Ollama, then retry.\\n\\n' +
+              `You said: ${message}`;
+          }
+        } catch (error) {
+          turnFailed = true;
+          throw error;
+        } finally {
+          try {
+            await adaptiveRuntime.recordTurnOutcome({
+              scope: {
+                sessionId,
+                userId: sessionId,
+                personaId: seed.seedId,
+                tenantId: tenantId || undefined,
+              },
+              degraded: adaptiveDecision.degraded || fallbackTriggered,
+              replyText: reply,
+              didFail: turnFailed,
+              toolCallCount,
+            });
+          } catch (error) {
+            logger.warn?.('[wunderland/api][chat] failed to record adaptive outcome', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
 
         sendJson(res, 200, { reply });
+        return;
+      }
+
+      // ── Tool Execution API ──────────────────────────────────────
+      if (url.pathname === '/api/tools' && req.method === 'GET') {
+        if (toolApiSecret && req.headers['x-api-key'] !== toolApiSecret) {
+          sendJson(res, 401, { error: 'Unauthorized' });
+          return;
+        }
+        const tools = Array.from(toolMap.values()).map((t) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+          category: t.category,
+          hasSideEffects: t.hasSideEffects,
+        }));
+        sendJson(res, 200, { tools });
+        return;
+      }
+
+      if (url.pathname.startsWith('/api/tools/') && req.method === 'POST') {
+        if (toolApiSecret && req.headers['x-api-key'] !== toolApiSecret) {
+          sendJson(res, 401, { error: 'Unauthorized' });
+          return;
+        }
+        const toolName = decodeURIComponent(url.pathname.slice('/api/tools/'.length));
+        const tool = toolMap.get(toolName);
+        if (!tool) {
+          sendJson(res, 404, { error: `Tool '${toolName}' not found` });
+          return;
+        }
+        let args: Record<string, unknown> = {};
+        try {
+          const body = await readBody(req);
+          if (body) args = JSON.parse(body);
+        } catch {
+          sendJson(res, 400, { error: 'Invalid JSON body' });
+          return;
+        }
+        try {
+          const ctx: Record<string, unknown> = {
+            gmiId: 'tool-api',
+            personaId: seedId,
+            permissionSet: policy.permissionSet,
+            securityTier: policy.securityTier,
+            executionMode: 'autonomous',
+            toolAccessProfile: policy.toolAccessProfile,
+            interactiveSession: false,
+          };
+          const result = await tool.execute(args, ctx);
+          sendJson(res, result.success ? 200 : 500, result);
+        } catch (err) {
+          sendJson(res, 500, {
+            success: false,
+            error: err instanceof Error ? err.message : 'Tool execution failed',
+          });
+        }
         return;
       }
 
@@ -1700,6 +1905,7 @@ export async function createWunderlandServer(opts?: {
       server.close((err) => (err ? reject(err) : resolve()));
     });
 
+    await adaptiveRuntime.close();
     await shutdownWunderlandOtel();
   };
 

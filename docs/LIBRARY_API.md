@@ -231,6 +231,47 @@ const app = await createWunderland({
 });
 ```
 
+## Adaptive Execution + Task Outcome Telemetry
+
+`createWunderland()` supports rolling task-outcome KPI telemetry and adaptive runtime policy:
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  toolFailureMode: 'fail_open', // default
+  taskOutcomeTelemetry: {
+    enabled: true,
+    scope: 'tenant_persona',
+    rollingWindowSize: 100,
+    persist: true,
+    storage: { priority: ['better-sqlite3', 'sqljs'] },
+  },
+  adaptiveExecution: {
+    enabled: true,
+    minSamples: 5,
+    minWeightedSuccessRate: 0.7,
+    forceAllToolsWhenDegraded: true,
+    forceFailOpenWhenDegraded: true,
+  },
+});
+```
+
+Per-turn overrides are available via `session.sendText()`:
+
+```ts
+const session = app.session('support-thread');
+await session.sendText('Handle this request', {
+  userId: 'user-123',
+  tenantId: 'acme',
+  toolFailureMode: 'fail_closed',
+});
+```
+
+- `toolFailureMode`:
+  - `fail_open`: continue after tool failures.
+  - `fail_closed`: halt on first tool failure.
+- If KPI is degraded, adaptive mode can force `discovered -> all` tool schema exposure and force fail-open unless the request explicitly pins `fail_closed`.
+
 ## Diagnostics
 
 ```ts
