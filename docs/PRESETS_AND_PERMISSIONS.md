@@ -181,7 +181,26 @@ A typical `agent.config.json` written by `wunderland init` includes (abbreviated
   },
   "permissionSet": "supervised",
   "executionMode": "human-dangerous",
+  "toolFailureMode": "fail_open",
   "toolAccessProfile": "assistant",
+  "taskOutcomeTelemetry": {
+    "enabled": true,
+    "scope": "tenant_persona",
+    "rollingWindowSize": 100,
+    "persist": true,
+    "tableName": "wunderland_task_outcome_kpi_windows",
+    "storage": {
+      "priority": ["better-sqlite3", "sqljs"],
+      "filePath": "./db_data/wunderland.sqlite"
+    }
+  },
+  "adaptiveExecution": {
+    "enabled": true,
+    "minSamples": 5,
+    "minWeightedSuccessRate": 0.7,
+    "forceAllToolsWhenDegraded": true,
+    "forceFailOpenWhenDegraded": true
+  },
   "skills": ["web-search", "summarize"],
   "extensions": {
     "tools": ["web-search", "web-browser"],
@@ -190,6 +209,32 @@ A typical `agent.config.json` written by `wunderland init` includes (abbreviated
   }
 }
 ```
+
+### Adaptive Execution + Fail-Open
+
+- `toolFailureMode` controls tool failure behavior:
+  - `fail_open` (default): continue turn when a tool fails.
+  - `fail_closed`: halt turn on first tool failure.
+- `taskOutcomeTelemetry` tracks rolling KPI windows (weighted success rate) per scope and can persist them via `@framers/sql-storage-adapter`.
+- `adaptiveExecution` can react to degraded KPI by:
+  - forcing full tool schema exposure (`discovered -> all`) when discovery filtering is active,
+  - forcing `toolFailureMode=fail_open` unless the request explicitly asks for `fail_closed`.
+
+### Runtime Request Overrides (`POST /chat`)
+
+For `wunderland start` and `createWunderlandServer()`, `/chat` accepts optional per-request overrides:
+
+```json
+{
+  "message": "Summarize latest updates",
+  "sessionId": "customer-42",
+  "tenantId": "acme",
+  "toolFailureMode": "fail_closed"
+}
+```
+
+- `tenantId` affects KPI scope when `taskOutcomeTelemetry.scope` includes tenant dimensions.
+- `toolFailureMode` overrides runtime default for that request only.
 
 ## Troubleshooting
 
