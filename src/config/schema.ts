@@ -99,6 +99,17 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
           issues.push({ path: `discovery.${strField}`, message: 'Expected string.' });
         }
       }
+      if (disc.recallProfile !== undefined) {
+        if (
+          typeof disc.recallProfile !== 'string'
+          || !['aggressive', 'balanced', 'precision'].includes(disc.recallProfile)
+        ) {
+          issues.push({
+            path: 'discovery.recallProfile',
+            message: 'Expected "aggressive", "balanced", or "precision".',
+          });
+        }
+      }
       if (disc.scanManifests !== undefined && typeof disc.scanManifests !== 'boolean') {
         issues.push({ path: 'discovery.scanManifests', message: 'Expected boolean.' });
       }

@@ -26,6 +26,7 @@ import {
   type LLMProviderConfig,
 } from '../runtime/tool-calling.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
+import { planTurnToolDefinitions, type TurnToolSelectionMode } from './turn-tool-selection.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
@@ -218,7 +219,12 @@ export type WunderlandSession = {
   messages: () => WunderlandMessage[];
   sendText: (
     text: string,
-    opts?: { userId?: string; tenantId?: string; toolFailureMode?: WunderlandToolFailureMode },
+    opts?: {
+      userId?: string;
+      tenantId?: string;
+      toolFailureMode?: WunderlandToolFailureMode;
+      toolSelectionMode?: TurnToolSelectionMode;
+    },
   ) => Promise<WunderlandTurnResult>;
 };
 
@@ -621,6 +627,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   if (agentConfig.discovery) {
     const d = agentConfig.discovery;
     discoveryOpts.enabled ??= d.enabled;
+    discoveryOpts.recallProfile ??= d.recallProfile;
     discoveryOpts.embeddingProvider ??= d.embeddingProvider;
     discoveryOpts.embeddingModel ??= d.embeddingModel;
     discoveryOpts.scanManifestDirs ??= d.scanManifests;
@@ -828,8 +835,9 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       };
 
       // Capability discovery — inject tiered context for this turn
+      let discoveryResult: Awaited<ReturnType<typeof discoveryManager.discoverForTurn>> = null;
       try {
-        const discoveryResult = await discoveryManager.discoverForTurn(userText);
+        discoveryResult = await discoveryManager.discoverForTurn(userText);
         if (discoveryResult) {
           // Remove stale discovery context from previous turns
           for (let i = history.length - 1; i >= 1; i--) {
@@ -852,6 +860,25 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         // Non-fatal — continue without discovery context
       }
 
+      const baseToolCount = toolMap.size;
+      let widenedToolDefsAfterRuntimeToolLoad = false;
+      const getTurnToolDefs = () => {
+        if (!widenedToolDefsAfterRuntimeToolLoad && toolMap.size !== baseToolCount) {
+          widenedToolDefsAfterRuntimeToolLoad = true;
+        }
+        const plan = planTurnToolDefinitions({
+          toolMap,
+          discoveryResult,
+          requestedMode: sendOpts?.toolSelectionMode,
+          forceAllTools:
+            adaptiveDecision.actions?.forcedToolSelectionMode === true
+            || widenedToolDefsAfterRuntimeToolLoad,
+        });
+        toolContext['toolSelectionMode'] = plan.mode;
+        toolContext['toolSelectionReason'] = plan.reason;
+        return plan.toolDefs;
+      };
+
       let reply = '';
       let turnFailed = false;
       let fallbackTriggered = false;
@@ -868,6 +895,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
           askPermission,
           onToolCall,
           toolFailureMode: adaptiveDecision.toolFailureMode,
+          getToolDefs: getTurnToolDefs,
           baseUrl: llm.baseUrl,
           fallback: llm.fallback,
           getApiKey: llm.getApiKey,

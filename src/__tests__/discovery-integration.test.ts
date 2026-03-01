@@ -163,6 +163,7 @@ describe('validateWunderlandAgentConfig — discovery field', () => {
         tier2Budget: 2000,
         tier1TopK: 5,
         tier2TopK: 2,
+        recallProfile: 'aggressive',
         embeddingProvider: 'openai',
         embeddingModel: 'text-embedding-3-small',
         scanManifests: true,
@@ -226,6 +227,24 @@ describe('validateWunderlandAgentConfig — discovery field', () => {
       discovery: { scanManifests: 1 },
     });
     const discoveryIssues = issues.filter((i) => i.path === 'discovery.scanManifests');
+    expect(discoveryIssues.length).toBeGreaterThan(0);
+  });
+
+  it('accepts discovery.recallProfile enum values', () => {
+    for (const recallProfile of ['aggressive', 'balanced', 'precision']) {
+      const { issues } = validateWunderlandAgentConfig({
+        discovery: { recallProfile },
+      });
+      const discoveryIssues = issues.filter((i) => i.path.startsWith('discovery'));
+      expect(discoveryIssues).toHaveLength(0);
+    }
+  });
+
+  it('reports issue for invalid discovery.recallProfile', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      discovery: { recallProfile: 'ultra' },
+    });
+    const discoveryIssues = issues.filter((i) => i.path === 'discovery.recallProfile');
     expect(discoveryIssues.length).toBeGreaterThan(0);
   });
 });
