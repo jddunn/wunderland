@@ -666,6 +666,9 @@ export default async function cmdStart(
   if (cfg?.discovery) {
     const d = cfg.discovery as Record<string, unknown>;
     if (typeof d.enabled === 'boolean') discoveryOpts.enabled = d.enabled;
+    if (d.recallProfile === 'aggressive' || d.recallProfile === 'balanced' || d.recallProfile === 'precision') {
+      discoveryOpts.recallProfile = d.recallProfile;
+    }
     if (typeof d.embeddingProvider === 'string') discoveryOpts.embeddingProvider = d.embeddingProvider;
     if (typeof d.embeddingModel === 'string') discoveryOpts.embeddingModel = d.embeddingModel;
     if (typeof d.scanManifests === 'boolean') discoveryOpts.scanManifestDirs = d.scanManifests;

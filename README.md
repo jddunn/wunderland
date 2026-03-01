@@ -146,7 +146,8 @@ const app = await createWunderland({
     tools: ['web-search', 'web-browser', 'giphy'],
     voice: ['voice-synthesis'],
   },
-  // discovery is enabled by default — indexes tools + skills for semantic search
+  // discovery is enabled by default with aggressive recall.
+  // per-turn tool schemas are narrowed to discovered capabilities unless degraded.
 });
 
 const session = app.session();
@@ -220,6 +221,27 @@ console.log('Discovery:', diag.discovery);   // { initialized: true, capabilityC
 ```
 
 See `docs/LIBRARY_API.md` for the full API reference (approvals, custom tools, diagnostics, advanced modules).
+
+### Discovery recall + dynamic tool exposure
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  tools: 'curated',
+  discovery: {
+    recallProfile: 'aggressive', // default: aggressive | balanced | precision
+  },
+});
+
+const session = app.session();
+await session.sendText('Investigate recent SQL adapter changes', {
+  toolSelectionMode: 'discovered', // default when discovery has results
+  // toolSelectionMode: 'all',     // optional per-turn override
+});
+```
+
+- `toolSelectionMode` automatically falls back to `all` when discovery has no usable tool hits.
+- Adaptive degraded mode can force `all` tool exposure for recovery.
 
 ### CLI
 

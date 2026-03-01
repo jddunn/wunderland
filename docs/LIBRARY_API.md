@@ -100,6 +100,21 @@ const app = await createWunderland({
 
 Skills are indexed by the Capability Discovery Engine alongside tools, enabling semantic search across all capabilities.
 
+### Discovery recall profiles
+
+By default, Wunderland uses **aggressive** discovery recall (higher TopK and token budgets) and narrows per-turn tool schemas to discovered capabilities.
+
+```ts
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  discovery: {
+    recallProfile: 'aggressive', // default
+    // recallProfile: 'balanced',
+    // recallProfile: 'precision',
+  },
+});
+```
+
 ## Extensions
 
 Extensions are runtime code packages (tools, guardrails, workflows) loaded from the curated registry (`@framers/agentos-extensions-registry`). Each extension's tools are added to the agent's tool map.
@@ -264,12 +279,16 @@ await session.sendText('Handle this request', {
   userId: 'user-123',
   tenantId: 'acme',
   toolFailureMode: 'fail_closed',
+  toolSelectionMode: 'discovered', // or 'all'
 });
 ```
 
 - `toolFailureMode`:
   - `fail_open`: continue after tool failures.
   - `fail_closed`: halt on first tool failure.
+- `toolSelectionMode`:
+  - `discovered`: expose only discovery-selected tools for that turn (default when discovery results exist).
+  - `all`: expose all loaded tools.
 - If KPI is degraded, adaptive mode can force `discovered -> all` tool schema exposure and force fail-open unless the request explicitly pins `fail_closed`.
 
 ## Diagnostics

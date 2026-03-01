@@ -22,6 +22,7 @@ import {
   CapabilityDiscoveryEngine,
   CapabilityManifestScanner,
   createDiscoverCapabilitiesTool,
+  DEFAULT_DISCOVERY_CONFIG,
 } from '@framers/agentos/discovery';
 import { EmbeddingManager, InMemoryVectorStore } from '@framers/agentos';
 import { AIModelProviderManager } from '@framers/agentos';
@@ -35,6 +36,13 @@ import { derivePresetCoOccurrences } from './preset-co-occurrence.js';
 export interface WunderlandDiscoveryConfig {
   /** Enable/disable discovery. Default: true when embedding available. */
   enabled?: boolean;
+  /**
+   * Recall profile for discovery context construction.
+   * - aggressive: higher TopK + larger tier budgets (default)
+   * - balanced: AgentOS defaults
+   * - precision: tighter TopK for smaller contexts
+   */
+  recallProfile?: DiscoveryRecallProfile;
   /** Discovery engine tuning. */
   config?: Partial<CapabilityDiscoveryConfig>;
   /** Explicit embedding provider override (e.g., 'openai', 'ollama'). */
@@ -50,12 +58,15 @@ export interface WunderlandDiscoveryConfig {
 export interface WunderlandDiscoveryStats {
   enabled: boolean;
   initialized: boolean;
+  recallProfile: DiscoveryRecallProfile;
   capabilityCount: number;
   graphNodes: number;
   graphEdges: number;
   presetCoOccurrences: number;
   manifestDirs: string[];
 }
+
+export type DiscoveryRecallProfile = 'aggressive' | 'balanced' | 'precision';
 
 /** Minimal tool shape for source gathering (matches ToolInstance from runtime/tool-calling). */
 interface ToolLike {
@@ -90,6 +101,43 @@ const EMBEDDING_PROVIDER_MAP: Record<string, { model: string; dimension: number 
   ollama:      { model: 'nomic-embed-text', dimension: 768 },
   groq:        { model: 'text-embedding-3-small', dimension: 1536 }, // Falls back to OpenAI
 };
+
+const DISCOVERY_RECALL_PRESETS: Record<DiscoveryRecallProfile, Partial<CapabilityDiscoveryConfig>> = {
+  aggressive: {
+    tier1TokenBudget: 1200,
+    tier2TokenBudget: 3200,
+    tier1TopK: 8,
+    tier2TopK: 4,
+    tier1MinRelevance: 0.2,
+  },
+  balanced: {},
+  precision: {
+    tier1TokenBudget: 700,
+    tier2TokenBudget: 1500,
+    tier1TopK: 4,
+    tier2TopK: 1,
+    tier1MinRelevance: 0.4,
+  },
+};
+
+function normalizeRecallProfile(raw: unknown): DiscoveryRecallProfile {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (value === 'balanced') return 'balanced';
+  if (value === 'precision') return 'precision';
+  return 'aggressive';
+}
+
+function resolveDiscoveryConfig(
+  recallProfile: DiscoveryRecallProfile,
+  overrides?: Partial<CapabilityDiscoveryConfig>,
+): CapabilityDiscoveryConfig {
+  const preset = DISCOVERY_RECALL_PRESETS[recallProfile];
+  return {
+    ...DEFAULT_DISCOVERY_CONFIG,
+    ...preset,
+    ...(overrides ?? {}),
+  };
+}
 
 function resolveEmbeddingConfig(opts: {
   embeddingProvider?: string;
@@ -144,8 +192,11 @@ export class WunderlandDiscoveryManager {
   private _presetCoOccurrenceCount = 0;
   private embeddingManager: EmbeddingManager | null = null;
   private vectorStore: InMemoryVectorStore | null = null;
+  private readonly recallProfile: DiscoveryRecallProfile;
 
-  constructor(private readonly config: WunderlandDiscoveryConfig = {}) {}
+  constructor(private readonly config: WunderlandDiscoveryConfig = {}) {
+    this.recallProfile = normalizeRecallProfile(config.recallProfile);
+  }
 
   /** The underlying discovery engine (null if not initialized). */
   get engine(): ICapabilityDiscoveryEngine | null {
@@ -223,7 +274,7 @@ export class WunderlandDiscoveryManager {
     this._engine = new CapabilityDiscoveryEngine(
       this.embeddingManager,
       this.vectorStore,
-      this.config.config,
+      resolveDiscoveryConfig(this.recallProfile, this.config.config),
     );
 
     // 6. Gather capability sources
@@ -292,6 +343,7 @@ export class WunderlandDiscoveryManager {
     return {
       enabled: this._enabled,
       initialized: this._initialized,
+      recallProfile: this.recallProfile,
       capabilityCount: engineStats?.capabilityCount ?? 0,
       graphNodes: engineStats?.graphNodes ?? 0,
       graphEdges: engineStats?.graphEdges ?? 0,

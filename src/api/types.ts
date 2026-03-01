@@ -192,6 +192,13 @@ export type WunderlandAgentConfig = {
   discovery?: {
     /** Enable/disable discovery. Default: auto-detect based on embedding availability. */
     enabled?: boolean;
+    /**
+     * Recall profile for discovery context.
+     * - aggressive: higher recall (default)
+     * - balanced: AgentOS default budgets/topK
+     * - precision: lower token footprint, tighter TopK
+     */
+    recallProfile?: 'aggressive' | 'balanced' | 'precision';
     /** Tier 0 token budget. Default: 200. */
     tier0Budget?: number;
     /** Tier 1 token budget. Default: 800. */
