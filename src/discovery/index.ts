@@ -57,6 +57,7 @@ export {
 export {
   WunderlandDiscoveryManager,
   type WunderlandDiscoveryConfig,
+  type DiscoveryRecallProfile,
   type WunderlandDiscoveryStats,
   type SkillEntry as DiscoverySkillEntry,
 } from './WunderlandDiscoveryManager.js';
