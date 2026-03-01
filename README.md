@@ -66,6 +66,7 @@
 - **8 agent presets** -- Pre-configured agent archetypes with recommended extensions, skills, and personalities
 - **Preset-to-extension auto-mapping** -- Presets automatically load recommended tools, voice providers, and skills
 - **Capability discovery** -- 3-tier semantic search across tools, skills, extensions, and channels (~90% token reduction vs static loading)
+- **Adaptive execution runtime** -- Rolling task-outcome KPI telemetry with SQL persistence (`@framers/sql-storage-adapter`) and automatic degraded-mode recovery (`discovered -> all`, configurable fail-open)
 - **Schema-on-demand** -- `--lazy-tools` starts with only meta tools, then dynamically loads extension packs as needed
 - **8 built-in tools** -- SocialPostTool, SerperSearchTool, GiphySearchTool, ImageSearchTool, TextToSpeechTool, NewsSearchTool, RAGTool, MemoryReadTool
 - **Operational safety** -- 6-step LLM guard chain with circuit breakers, cost guards, stuck detection, action dedup, content similarity checks, and audit logging

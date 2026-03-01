@@ -65,6 +65,16 @@ function getBooleanProp(obj: Record<string, unknown>, key: string): boolean | un
   return typeof v === 'boolean' ? v : undefined;
 }
 
+function normalizeToolFailureMode(
+  raw: unknown,
+  fallback: 'fail_open' | 'fail_closed' = 'fail_open',
+): 'fail_open' | 'fail_closed' {
+  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (v === 'fail_closed') return 'fail_closed';
+  if (v === 'fail_open') return 'fail_open';
+  return fallback;
+}
+
 const TOOL_OUTPUT_START = '<<<TOOL_OUTPUT_UNTRUSTED>>>';
 const TOOL_OUTPUT_END = '<<<END_TOOL_OUTPUT_UNTRUSTED>>>';
 const TOOL_OUTPUT_WARNING =
@@ -747,12 +757,19 @@ export async function runToolCallingTurn(opts: {
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
   /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
   getApiKey?: () => Promise<string>;
+  /** Tool-call failure behavior. Default: fail_open. */
+  toolFailureMode?: 'fail_open' | 'fail_closed';
 }): Promise<string> {
   const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
   const shouldWrapToolOutputs = (() => {
     const v = getBooleanProp(opts.toolContext, 'wrapToolOutputs');
     return typeof v === 'boolean' ? v : true;
   })();
+  const toolFailureMode = normalizeToolFailureMode(
+    opts.toolFailureMode ?? getStringProp(opts.toolContext, 'toolFailureMode'),
+    'fail_open',
+  );
+  const failClosedOnToolFailure = toolFailureMode === 'fail_closed';
   const executionMode = (getStringProp(opts.toolContext, 'executionMode') || '').toLowerCase();
   const requireApprovalForAllTools =
     !opts.dangerouslySkipPermissions && executionMode === 'human-all';
@@ -909,17 +926,28 @@ export async function runToolCallingTurn(opts: {
         });
 
         for (const call of toolCalls) {
+          const maybeFailClosed = (reason: string): string | null => {
+            if (!failClosedOnToolFailure) return null;
+            const reply = `[tool_failure_mode=fail_closed] ${reason}`;
+            opts.messages.push({ role: 'assistant', content: reply });
+            return reply;
+          };
+
           const toolName = call?.function?.name;
           const rawArgs = call?.function?.arguments;
 
           if (!toolName || typeof rawArgs !== 'string') {
             opts.messages.push({ role: 'tool', tool_call_id: call?.id, content: JSON.stringify({ error: 'Malformed tool call.' }) });
+            const failReply = maybeFailClosed('Malformed tool call returned by model.');
+            if (failReply) return failReply;
             continue;
           }
 
           const tool = opts.toolMap.get(toolName);
           if (!tool) {
             opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Tool not found: ${toolName}` }) });
+            const failReply = maybeFailClosed(`Tool not found: ${toolName}.`);
+            if (failReply) return failReply;
             continue;
           }
 
@@ -928,6 +956,8 @@ export async function runToolCallingTurn(opts: {
             args = JSON.parse(rawArgs);
           } catch {
             opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Invalid JSON arguments for ${toolName}` }) });
+            const failReply = maybeFailClosed(`Invalid JSON arguments for ${toolName}.`);
+            if (failReply) return failReply;
             continue;
           }
 
@@ -952,6 +982,8 @@ export async function runToolCallingTurn(opts: {
                   ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: call.id, includeWarning: false })
                   : denial,
               });
+              const failReply = maybeFailClosed(`Permission denied for tool: ${toolName}.`);
+              if (failReply) return failReply;
               continue;
             }
           } else {
@@ -982,6 +1014,8 @@ export async function runToolCallingTurn(opts: {
                       ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: call.id, includeWarning: false })
                       : denial,
                   });
+                  const failReply = maybeFailClosed(`Permission denied for tool: ${toolName}.`);
+                  if (failReply) return failReply;
                   continue;
                 }
                 // User approved interactively — proceed
@@ -994,6 +1028,8 @@ export async function runToolCallingTurn(opts: {
                     ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: call.id, includeWarning: false })
                     : denial,
                 });
+                const failReply = maybeFailClosed(`Permission denied for tool: ${toolName}.`);
+                if (failReply) return failReply;
                 continue;
               }
             }
@@ -1050,6 +1086,8 @@ export async function runToolCallingTurn(opts: {
               tool_call_id: call.id,
               content: JSON.stringify({ error: `Tool threw: ${err instanceof Error ? err.message : String(err)}` }),
             });
+            const failReply = maybeFailClosed(`Tool ${toolName} threw: ${err instanceof Error ? err.message : String(err)}`);
+            if (failReply) return failReply;
             continue;
           }
 
@@ -1068,6 +1106,11 @@ export async function runToolCallingTurn(opts: {
             ? wrapUntrustedToolOutput(json, { toolName, toolCallId: call.id, includeWarning: true })
             : json;
           opts.messages.push({ role: 'tool', tool_call_id: call.id, content });
+
+          if (!result?.success) {
+            const failReply = maybeFailClosed(`Tool ${toolName} failed: ${result?.error || 'Tool failed'}`);
+            if (failReply) return failReply;
+          }
         }
 
         if (requireCheckpointAfterRound) {

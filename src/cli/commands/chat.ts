@@ -21,6 +21,7 @@ import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
 import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
@@ -667,6 +668,14 @@ export default async function cmdChat(
     fmt.warning(`Discovery initialization failed (continuing without): ${msg}`);
   }
 
+  const adaptiveRuntime = new WunderlandAdaptiveExecutionRuntime({
+    toolFailureMode: cfg?.toolFailureMode,
+    taskOutcomeTelemetry: cfg?.taskOutcomeTelemetry,
+    adaptiveExecution: cfg?.adaptiveExecution,
+    logger: console,
+  });
+  await adaptiveRuntime.initialize();
+
   const seedId = cfg?.seedId ? String(cfg.seedId) : `seed_chat_${Date.now()}`;
   const displayName = cfg?.displayName ? String(cfg.displayName) : 'Wunderland CLI';
   const bio = cfg?.bio ? String(cfg.bio) : 'Interactive terminal assistant';
@@ -722,6 +731,10 @@ export default async function cmdChat(
     } : null),
     ...(cfg && policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
   };
+  const localUserId = String((toolContext as any)?.userContext?.userId ?? 'local-user');
+  const tenantId = typeof (cfg as any)?.organizationId === 'string' && String((cfg as any).organizationId).trim()
+    ? String((cfg as any).organizationId).trim()
+    : undefined;
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
@@ -838,29 +851,74 @@ export default async function cmdChat(
       // Non-fatal
     }
 
-    const reply = await runToolCallingTurn({
-      providerId,
-      apiKey: llmApiKey,
-      model,
-      messages,
-      toolMap,
-      toolContext,
-      maxRounds: 8,
-      dangerouslySkipPermissions,
-      askPermission,
-      askCheckpoint,
-      baseUrl: llmBaseUrl,
-      fallback: providerId === 'openai' ? openrouterFallback : undefined,
-      getApiKey: oauthGetApiKey,
-      onFallback: (_err, provider) => {
-        console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`);
-      },
-      onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
-        console.log(
-          `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)('>')} ${chalk.hex(C.magenta)(tool.name)} ${chalk.hex(C.dim)(truncateString(JSON.stringify(args), 120))}`
-        );
+    const adaptiveDecision = adaptiveRuntime.resolveTurnDecision({
+      scope: {
+        sessionId,
+        userId: localUserId,
+        personaId: seedId,
+        tenantId,
       },
     });
+    (toolContext as any).toolFailureMode = adaptiveDecision.toolFailureMode;
+    (toolContext as any).adaptiveExecution = {
+      degraded: adaptiveDecision.degraded,
+      reason: adaptiveDecision.reason,
+      actions: adaptiveDecision.actions,
+      kpi: adaptiveDecision.kpi ?? undefined,
+    };
+
+    let reply = '';
+    let turnFailed = false;
+    let fallbackTriggered = false;
+    let toolCallCount = 0;
+    try {
+      reply = await runToolCallingTurn({
+        providerId,
+        apiKey: llmApiKey,
+        model,
+        messages,
+        toolMap,
+        toolContext,
+        maxRounds: 8,
+        dangerouslySkipPermissions,
+        askPermission,
+        askCheckpoint,
+        toolFailureMode: adaptiveDecision.toolFailureMode,
+        baseUrl: llmBaseUrl,
+        fallback: providerId === 'openai' ? openrouterFallback : undefined,
+        getApiKey: oauthGetApiKey,
+        onFallback: (_err, provider) => {
+          fallbackTriggered = true;
+          console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`);
+        },
+        onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
+          toolCallCount += 1;
+          console.log(
+            `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)('>')} ${chalk.hex(C.magenta)(tool.name)} ${chalk.hex(C.dim)(truncateString(JSON.stringify(args), 120))}`
+          );
+        },
+      });
+    } catch (error) {
+      turnFailed = true;
+      throw error;
+    } finally {
+      try {
+        await adaptiveRuntime.recordTurnOutcome({
+          scope: {
+            sessionId,
+            userId: localUserId,
+            personaId: seedId,
+            tenantId,
+          },
+          degraded: adaptiveDecision.degraded || fallbackTriggered,
+          replyText: reply,
+          didFail: turnFailed,
+          toolCallCount,
+        });
+      } catch (error) {
+        console.warn('[wunderland/chat] Failed to record adaptive outcome', error);
+      }
+    }
 
     if (reply) {
       printAssistantReply(reply);
@@ -869,6 +927,7 @@ export default async function cmdChat(
 
   rl.close();
   await discoveryManager.close();
+  await adaptiveRuntime.close();
   await shutdownWunderlandOtel();
 
   // Session ended banner

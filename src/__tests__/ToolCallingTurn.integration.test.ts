@@ -300,6 +300,63 @@ describe('runToolCallingTurn (integration)', () => {
     expect(callCount).toBe(2);
   });
 
+  it('stops immediately on tool failure when toolFailureMode=fail_closed', async () => {
+    const tool: ToolInstance = {
+      name: 'web_search',
+      description: 'Search the web',
+      inputSchema: {
+        type: 'object',
+        required: ['q'],
+        properties: { q: { type: 'string' } },
+      },
+      category: 'research',
+      hasSideEffects: false,
+      execute: vi.fn(async () => ({ success: false, error: 'upstream unavailable' })),
+    };
+
+    const fetchMock = mockOpenAIChatCompletionSequence([
+      {
+        model: 'gpt-test',
+        usage: {},
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call-1',
+                  function: { name: 'web_search', arguments: JSON.stringify({ q: 'hi' }) },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    const messages: Array<Record<string, unknown>> = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: 'user' },
+    ];
+
+    const reply = await runToolCallingTurn({
+      apiKey: 'test-key',
+      model: 'gpt-test',
+      messages,
+      toolMap: new Map([[tool.name, tool]]),
+      toolContext: { gmiId: 'gmi-1', personaId: 'persona-1', userContext: { userId: 'u-1' }, wrapToolOutputs: false },
+      maxRounds: 3,
+      dangerouslySkipPermissions: true,
+      askPermission: vi.fn(async () => true),
+      toolFailureMode: 'fail_closed',
+    });
+
+    expect(reply).toContain('[tool_failure_mode=fail_closed]');
+    expect(reply).toContain('Tool web_search failed');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('prompts for approval before executing an unknown-category side-effect tool in tiered mode', async () => {
     const tool: ToolInstance = {
       name: 'browser_click',

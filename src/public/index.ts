@@ -25,6 +25,7 @@ import {
   type ToolInstance,
   type LLMProviderConfig,
 } from '../runtime/tool-calling.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
@@ -33,7 +34,14 @@ import {
 } from '../runtime/policy.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 
-import type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from '../api/types.js';
+import type {
+  WunderlandAdaptiveExecutionConfig,
+  WunderlandAgentConfig,
+  WunderlandProviderId,
+  WunderlandTaskOutcomeTelemetryConfig,
+  WunderlandToolFailureMode,
+  WunderlandWorkspace,
+} from '../api/types.js';
 import { WunderlandConfigError } from '../config/errors.js';
 import { loadAgentConfig, resolveLlmConfig } from '../config/load.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
@@ -197,12 +205,21 @@ export type WunderlandOptions = {
   };
   /** Capability discovery configuration. */
   discovery?: WunderlandDiscoveryConfig;
+  /** Default tool-call failure behavior. */
+  toolFailureMode?: WunderlandToolFailureMode;
+  /** Runtime task-outcome telemetry controls. */
+  taskOutcomeTelemetry?: WunderlandTaskOutcomeTelemetryConfig;
+  /** Runtime adaptive execution controls. */
+  adaptiveExecution?: WunderlandAdaptiveExecutionConfig;
 };
 
 export type WunderlandSession = {
   readonly id: string;
   messages: () => WunderlandMessage[];
-  sendText: (text: string, opts?: { userId?: string }) => Promise<WunderlandTurnResult>;
+  sendText: (
+    text: string,
+    opts?: { userId?: string; tenantId?: string; toolFailureMode?: WunderlandToolFailureMode },
+  ) => Promise<WunderlandTurnResult>;
 };
 
 export type WunderlandApp = {
@@ -639,6 +656,26 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     });
   }
 
+  const telemetryConfig: WunderlandTaskOutcomeTelemetryConfig = {
+    ...(agentConfig.taskOutcomeTelemetry ?? {}),
+    ...(opts.taskOutcomeTelemetry ?? {}),
+    storage: {
+      ...(agentConfig.taskOutcomeTelemetry?.storage ?? {}),
+      ...(opts.taskOutcomeTelemetry?.storage ?? {}),
+    },
+  };
+  const adaptiveConfig: WunderlandAdaptiveExecutionConfig = {
+    ...(agentConfig.adaptiveExecution ?? {}),
+    ...(opts.adaptiveExecution ?? {}),
+  };
+  const adaptiveRuntime = new WunderlandAdaptiveExecutionRuntime({
+    toolFailureMode: opts.toolFailureMode ?? agentConfig.toolFailureMode,
+    taskOutcomeTelemetry: telemetryConfig,
+    adaptiveExecution: adaptiveConfig,
+    logger,
+  });
+  await adaptiveRuntime.initialize();
+
   const baseToolContext: Record<string, unknown> = {
     agentId: workspace.agentId,
     securityTier: policy.securityTier,
@@ -766,6 +803,30 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         permissions,
       };
 
+      const tenantId = typeof sendOpts?.tenantId === 'string' && sendOpts.tenantId.trim()
+        ? sendOpts.tenantId.trim()
+        : (
+          typeof (agentConfig as any)?.organizationId === 'string' && String((agentConfig as any).organizationId).trim()
+            ? String((agentConfig as any).organizationId).trim()
+            : undefined
+        );
+      const adaptiveDecision = adaptiveRuntime.resolveTurnDecision({
+        scope: {
+          sessionId: id,
+          userId,
+          personaId: workspace.agentId,
+          tenantId,
+        },
+        requestedToolFailureMode: sendOpts?.toolFailureMode,
+      });
+      toolContext['toolFailureMode'] = adaptiveDecision.toolFailureMode;
+      toolContext['adaptiveExecution'] = {
+        degraded: adaptiveDecision.degraded,
+        reason: adaptiveDecision.reason,
+        actions: adaptiveDecision.actions,
+        kpi: adaptiveDecision.kpi ?? undefined,
+      };
+
       // Capability discovery — inject tiered context for this turn
       try {
         const discoveryResult = await discoveryManager.discoverForTurn(userText);
@@ -791,21 +852,52 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         // Non-fatal — continue without discovery context
       }
 
-      const reply = await runToolCallingTurn({
-        providerId: llm.providerId,
-        apiKey: llm.apiKey,
-        model: llm.model,
-        messages: history,
-        toolMap,
-        toolContext,
-        maxRounds: 8,
-        dangerouslySkipPermissions: false,
-        askPermission,
-        onToolCall,
-        baseUrl: llm.baseUrl,
-        fallback: llm.fallback,
-        getApiKey: llm.getApiKey,
-      });
+      let reply = '';
+      let turnFailed = false;
+      let fallbackTriggered = false;
+      try {
+        reply = await runToolCallingTurn({
+          providerId: llm.providerId,
+          apiKey: llm.apiKey,
+          model: llm.model,
+          messages: history,
+          toolMap,
+          toolContext,
+          maxRounds: 8,
+          dangerouslySkipPermissions: false,
+          askPermission,
+          onToolCall,
+          toolFailureMode: adaptiveDecision.toolFailureMode,
+          baseUrl: llm.baseUrl,
+          fallback: llm.fallback,
+          getApiKey: llm.getApiKey,
+          onFallback: () => {
+            fallbackTriggered = true;
+          },
+        });
+      } catch (error) {
+        turnFailed = true;
+        throw error;
+      } finally {
+        try {
+          await adaptiveRuntime.recordTurnOutcome({
+            scope: {
+              sessionId: id,
+              userId,
+              personaId: workspace.agentId,
+              tenantId,
+            },
+            degraded: adaptiveDecision.degraded || fallbackTriggered,
+            replyText: reply,
+            didFail: turnFailed,
+            toolCallCount: toolCalls.length,
+          });
+        } catch (error) {
+          logger.warn?.('[wunderland] failed to record adaptive telemetry outcome', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       // Attach tool outputs (best-effort, ordered).
       const newToolMsgs = history.slice(toolMessagesStartIdx).filter((m) => m?.role === 'tool') as any[];
@@ -831,6 +923,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 
   const close = async () => {
     await discoveryManager.close();
+    await adaptiveRuntime.close();
     sessions.clear();
   };
 
