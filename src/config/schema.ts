@@ -38,11 +38,19 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
   expectString('systemPrompt');
   expectString('llmProvider');
   expectString('llmModel');
+  expectString('toolFailureMode');
   expectString('securityTier');
   expectString('permissionSet');
   expectString('toolAccessProfile');
   expectString('executionMode');
   expectBoolean('lazyTools');
+
+  if (typeof cfg.toolFailureMode === 'string') {
+    const m = cfg.toolFailureMode.trim().toLowerCase();
+    if (m !== 'fail_open' && m !== 'fail_closed') {
+      issues.push({ path: 'toolFailureMode', message: 'Expected "fail_open" or "fail_closed".' });
+    }
+  }
 
   if (cfg.extensions !== undefined) {
     if (!isPlainObject(cfg.extensions)) {
@@ -97,6 +105,54 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
     }
   }
 
+  if (cfg.taskOutcomeTelemetry !== undefined) {
+    if (!isPlainObject(cfg.taskOutcomeTelemetry)) {
+      issues.push({ path: 'taskOutcomeTelemetry', message: 'Expected object.' });
+    } else {
+      const t = cfg.taskOutcomeTelemetry as Record<string, unknown>;
+      for (const boolField of ['enabled', 'persist', 'emitAlerts']) {
+        if (t[boolField] !== undefined && typeof t[boolField] !== 'boolean') {
+          issues.push({ path: `taskOutcomeTelemetry.${boolField}`, message: 'Expected boolean.' });
+        }
+      }
+      for (const numField of [
+        'rollingWindowSize',
+        'alertBelowWeightedSuccessRate',
+        'alertMinSamples',
+        'alertCooldownMs',
+      ]) {
+        if (t[numField] !== undefined && typeof t[numField] !== 'number') {
+          issues.push({ path: `taskOutcomeTelemetry.${numField}`, message: 'Expected number.' });
+        }
+      }
+      for (const strField of ['scope', 'tableName']) {
+        if (t[strField] !== undefined && typeof t[strField] !== 'string') {
+          issues.push({ path: `taskOutcomeTelemetry.${strField}`, message: 'Expected string.' });
+        }
+      }
+      if (t.storage !== undefined && !isPlainObject(t.storage)) {
+        issues.push({ path: 'taskOutcomeTelemetry.storage', message: 'Expected object.' });
+      }
+    }
+  }
+
+  if (cfg.adaptiveExecution !== undefined) {
+    if (!isPlainObject(cfg.adaptiveExecution)) {
+      issues.push({ path: 'adaptiveExecution', message: 'Expected object.' });
+    } else {
+      const a = cfg.adaptiveExecution as Record<string, unknown>;
+      for (const boolField of ['enabled', 'forceAllToolsWhenDegraded', 'forceFailOpenWhenDegraded']) {
+        if (a[boolField] !== undefined && typeof a[boolField] !== 'boolean') {
+          issues.push({ path: `adaptiveExecution.${boolField}`, message: 'Expected boolean.' });
+        }
+      }
+      for (const numField of ['minSamples', 'minWeightedSuccessRate']) {
+        if (a[numField] !== undefined && typeof a[numField] !== 'number') {
+          issues.push({ path: `adaptiveExecution.${numField}`, message: 'Expected number.' });
+        }
+      }
+    }
+  }
+
   return { config: input as WunderlandAgentConfig, issues };
 }
-
