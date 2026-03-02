@@ -97,7 +97,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@framers/agentos": "^0.1.33",
+    "@framers/agentos": "^0.1.35",
     "@framers/agentos-ext-cli-executor": "^1.1.0",
     "@framers/agentos-ext-giphy": "^1.0.0",
     "@framers/agentos-ext-image-search": "^1.0.0",
