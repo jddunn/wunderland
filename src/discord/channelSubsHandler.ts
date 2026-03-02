@@ -63,7 +63,7 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
 
     const guild = interaction.guild;
     if (!guild) {
-      await interaction.editReply({ content: 'This only works in a server.' });
+      try { await interaction.editReply({ content: 'This only works in a server.' }); } catch {}
       return true;
     }
 
@@ -71,19 +71,24 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
     try {
       member = await guild.members.fetch(interaction.user.id);
     } catch {
-      await interaction.editReply({ content: 'Could not fetch your member data.' });
+      try { await interaction.editReply({ content: 'Could not fetch your member data.' }); } catch {}
       return true;
     }
 
-    if (action === 'all') {
-      await handleSubscribeAll(interaction, guild, member);
-    } else if (action === 'none') {
-      await handleUnsubscribeAll(interaction, guild, member);
-    } else if (action.startsWith('toggle:')) {
-      const slug = action.slice('toggle:'.length);
-      await handleToggle(interaction, guild, member, slug);
-    } else {
-      return false;
+    try {
+      if (action === 'all') {
+        await handleSubscribeAll(interaction, guild, member);
+      } else if (action === 'none') {
+        await handleUnsubscribeAll(interaction, guild, member);
+      } else if (action.startsWith('toggle:')) {
+        const slug = action.slice('toggle:'.length);
+        await handleToggle(interaction, guild, member, slug);
+      } else {
+        return false;
+      }
+    } catch (err: any) {
+      console.error('[ChannelSubs] Handler error:', err?.message ?? err);
+      try { await interaction.editReply({ content: 'Something went wrong — please try again.' }); } catch {}
     }
     return true;
   }
@@ -96,16 +101,18 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
   ): Promise<void> {
     const ch = CHANNEL_SUBS.find((c) => c.slug === slug);
     if (!ch) {
-      await i.editReply({ content: `Unknown channel: ${slug}` });
+      try { await i.editReply({ content: `Unknown channel: ${slug}` }); } catch {}
       return;
     }
 
     const roleName = `sub:${slug}`;
     const role = guild.roles.cache.find((r: any) => r.name === roleName);
     if (!role) {
-      await i.editReply({
-        content: `Role \`${roleName}\` not found. An admin needs to run the setup script.`,
-      });
+      try {
+        await i.editReply({
+          content: `Role \`${roleName}\` not found. An admin needs to run the setup script.`,
+        });
+      } catch {}
       return;
     }
 
@@ -123,10 +130,14 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
     // Force re-fetch to get accurate state after role change.
     const refreshed = await guild.members.fetch({ user: member.id, force: true });
     const action = hasSub ? 'Unsubscribed from' : 'Subscribed to';
-    await i.editReply({
-      content: `${hasSub ? '\u274C' : '\u2705'} **${action}** ${ch.emoji} ${ch.label}`,
-      embeds: [buildStatusEmbed(refreshed, guild)],
-    });
+    try {
+      await i.editReply({
+        content: `${hasSub ? '\u274C' : '\u2705'} **${action}** ${ch.emoji} ${ch.label}`,
+        embeds: [buildStatusEmbed(refreshed, guild)],
+      });
+    } catch (err: any) {
+      console.error('[ChannelSubs] editReply error (toggle):', err?.message ?? err);
+    }
   }
 
   async function handleSubscribeAll(
@@ -138,16 +149,21 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
       .map((ch) => guild.roles.cache.find((r: any) => r.name === `sub:${ch.slug}`))
       .filter((r: any) => r != null && !member.roles.cache.has(r.id));
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       rolesToAdd.map((r: any) => member.roles.add(r, 'Subscribe all channels')),
     );
+    const failed = results.filter((r) => r.status === 'rejected').length;
 
     // Force re-fetch to get accurate state after role changes.
     const refreshed = await guild.members.fetch({ user: member.id, force: true });
-    await i.editReply({
-      content: '\u2705 **Subscribed to all channels**',
-      embeds: [buildStatusEmbed(refreshed, guild)],
-    });
+    const msg = failed > 0
+      ? `\u2705 **Subscribed to all channels** (${failed} role${failed > 1 ? 's' : ''} failed — try again)`
+      : '\u2705 **Subscribed to all channels**';
+    try {
+      await i.editReply({ content: msg, embeds: [buildStatusEmbed(refreshed, guild)] });
+    } catch (err: any) {
+      console.error('[ChannelSubs] editReply error (sub all):', err?.message ?? err);
+    }
   }
 
   async function handleUnsubscribeAll(
@@ -159,16 +175,21 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
       .map((ch) => guild.roles.cache.find((r: any) => r.name === `sub:${ch.slug}`))
       .filter((r: any) => r != null && member.roles.cache.has(r.id));
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       rolesToRemove.map((r: any) => member.roles.remove(r, 'Unsubscribe all channels')),
     );
+    const failed = results.filter((r) => r.status === 'rejected').length;
 
     // Force re-fetch to get accurate state after role changes.
     const refreshed = await guild.members.fetch({ user: member.id, force: true });
-    await i.editReply({
-      content: '\u274C **Unsubscribed from all channels**',
-      embeds: [buildStatusEmbed(refreshed, guild)],
-    });
+    const msg = failed > 0
+      ? `\u274C **Unsubscribed from all channels** (${failed} role${failed > 1 ? 's' : ''} failed — try again)`
+      : '\u274C **Unsubscribed from all channels**';
+    try {
+      await i.editReply({ content: msg, embeds: [buildStatusEmbed(refreshed, guild)] });
+    } catch (err: any) {
+      console.error('[ChannelSubs] editReply error (unsub all):', err?.message ?? err);
+    }
   }
 
   // ── Status embed (shown in ephemeral reply) ────────────────────────────
