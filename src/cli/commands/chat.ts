@@ -22,6 +22,7 @@ import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstanc
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
+import { resolveStrictToolNames } from '../../runtime/tool-function-names.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
@@ -250,6 +251,7 @@ export default async function cmdChat(
     if (v === 'after-each-round') return 'after-each-round';
     return 'off';
   })();
+  const strictToolNames = resolveStrictToolNames((cfg as any)?.toolCalling?.strictToolNames);
 
   const providerFlag = typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
   const providerFromConfig = typeof cfg?.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
@@ -724,6 +726,7 @@ export default async function cmdChat(
     userContext: { userId: process.env['USER'] || 'local-user' },
     agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
     interactiveSession: true,
+    strictToolNames,
     ...(cfg ? {
       permissionSet: policy.permissionSet,
       securityTier: policy.securityTier,
@@ -884,6 +887,7 @@ export default async function cmdChat(
         toolContext,
         maxRounds: 8,
         dangerouslySkipPermissions,
+        strictToolNames,
         askPermission,
         askCheckpoint,
         toolFailureMode: adaptiveDecision.toolFailureMode,

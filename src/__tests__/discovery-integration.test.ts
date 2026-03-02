@@ -82,6 +82,48 @@ describe('WunderlandDiscoveryManager', () => {
     expect(result).toBeNull();
   });
 
+  it('accepts promise-based API key inputs and still degrades gracefully when provider is unsupported', async () => {
+    const manager = new WunderlandDiscoveryManager();
+    const toolMap = new Map();
+    toolMap.set('test', {
+      name: 'test',
+      description: 'test tool',
+      inputSchema: { type: 'object', properties: {} },
+    });
+
+    await manager.initialize({
+      toolMap,
+      llmConfig: {
+        providerId: 'unknown-provider',
+        apiKey: Promise.resolve('test-key'),
+      },
+    });
+
+    expect(manager.engine).toBeNull();
+    expect(manager.getMetaTool()).toBeNull();
+  });
+
+  it('gracefully disables discovery when API key input is invalid', async () => {
+    const manager = new WunderlandDiscoveryManager();
+    const toolMap = new Map();
+    toolMap.set('test', {
+      name: 'test',
+      description: 'test tool',
+      inputSchema: { type: 'object', properties: {} },
+    });
+
+    await manager.initialize({
+      toolMap,
+      llmConfig: {
+        providerId: 'openai',
+        apiKey: {} as any,
+      },
+    });
+
+    expect(manager.engine).toBeNull();
+    expect(manager.getMetaTool()).toBeNull();
+  });
+
   it('getStats returns correct defaults when not initialized', () => {
     const manager = new WunderlandDiscoveryManager();
     const stats: WunderlandDiscoveryStats = manager.getStats();
@@ -246,5 +288,21 @@ describe('validateWunderlandAgentConfig — discovery field', () => {
     });
     const discoveryIssues = issues.filter((i) => i.path === 'discovery.recallProfile');
     expect(discoveryIssues.length).toBeGreaterThan(0);
+  });
+
+  it('accepts boolean toolCalling.strictToolNames', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      toolCalling: { strictToolNames: true },
+    });
+    const toolCallingIssues = issues.filter((i) => i.path.startsWith('toolCalling'));
+    expect(toolCallingIssues).toHaveLength(0);
+  });
+
+  it('reports issue when toolCalling.strictToolNames is not boolean', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      toolCalling: { strictToolNames: 'yes' },
+    });
+    const toolCallingIssues = issues.filter((i) => i.path === 'toolCalling.strictToolNames');
+    expect(toolCallingIssues.length).toBeGreaterThan(0);
   });
 });

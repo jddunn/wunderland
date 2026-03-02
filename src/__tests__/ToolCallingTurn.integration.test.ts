@@ -160,6 +160,103 @@ describe('runToolCallingTurn (integration)', () => {
     expect(tool.execute).toHaveBeenCalledTimes(1);
   });
 
+  it('executes tools whose display names are not OpenAI function-name compliant', async () => {
+    const tool: ToolInstance = {
+      name: 'Social Post',
+      description: 'Post to social media',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+      category: 'social',
+      hasSideEffects: true,
+      execute: vi.fn(async () => ({ success: true, output: { posted: true } })),
+    };
+    const toolMap = new Map<string, ToolInstance>([['social_post', tool]]);
+
+    const fetchMock = vi.fn(async (_url: string, init: any) => {
+      const body = JSON.parse(init?.body || '{}');
+      const sentNames = Array.isArray(body?.tools) ? body.tools.map((t: any) => t?.function?.name).filter(Boolean) : [];
+      expect(sentNames).toContain('social_post');
+      expect(sentNames).not.toContain('Social Post');
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          model: 'gpt-test',
+          usage: {},
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [{ id: 'call-1', function: { name: 'social_post', arguments: JSON.stringify({ text: 'hi' }) } }],
+              },
+            },
+          ],
+        }),
+      } as any;
+    });
+
+    const fetchMock2 = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        model: 'gpt-test',
+        usage: {},
+        choices: [{ message: { role: 'assistant', content: 'done' } }],
+      }),
+    }) as any);
+
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (...args: any[]) => {
+      calls += 1;
+      return calls === 1 ? fetchMock(...args) : fetchMock2(...args);
+    }) as any);
+
+    const reply = await runToolCallingTurn({
+      apiKey: 'test-key',
+      model: 'gpt-test',
+      messages: [{ role: 'system', content: 'system' }, { role: 'user', content: 'user' }],
+      toolMap,
+      toolContext: { gmiId: 'gmi-1', personaId: 'persona-1', userContext: { userId: 'u-1' } },
+      maxRounds: 3,
+      dangerouslySkipPermissions: true,
+      askPermission: vi.fn(async () => true),
+    });
+
+    expect(reply).toBe('done');
+    expect(tool.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails fast in strict mode when tool-map keys require rewriting', async () => {
+    const tool: ToolInstance = {
+      name: 'Social Post',
+      description: 'Post to social media',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      category: 'social',
+      hasSideEffects: true,
+      execute: vi.fn(async () => ({ success: true, output: { ok: true } })),
+    };
+    const toolMap = new Map<string, ToolInstance>([['Social Post', tool]]);
+
+    const fetchMock = vi.fn(async () => {
+      throw new Error('fetch should not be called in strict failure path');
+    });
+    vi.stubGlobal('fetch', fetchMock as any);
+
+    await expect(runToolCallingTurn({
+      apiKey: 'test-key',
+      model: 'gpt-test',
+      messages: [{ role: 'system', content: 'system' }, { role: 'user', content: 'user' }],
+      toolMap,
+      toolContext: { gmiId: 'gmi-1', personaId: 'persona-1', userContext: { userId: 'u-1' }, strictToolNames: true },
+      maxRounds: 3,
+      dangerouslySkipPermissions: true,
+      askPermission: vi.fn(async () => true),
+      strictToolNames: true,
+    })).rejects.toThrow(/strict mode is enabled/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('supports turn checkpoints after each round when turnApprovalMode is enabled', async () => {
     const tool: ToolInstance = {
       name: 'read_context',

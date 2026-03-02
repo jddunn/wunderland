@@ -38,6 +38,7 @@ import {
   type ToolInstance,
 } from '../runtime/tool-calling.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
+import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
 import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import {
@@ -605,6 +606,7 @@ export async function createWunderlandServer(opts?: {
   const policy = normalizeRuntimePolicy(cfg as any);
   const permissions = getPermissionsForSet(policy.permissionSet);
   const turnApprovalMode = inferTurnApprovalMode(cfg);
+  const strictToolNames = resolveStrictToolNames((cfg as any)?.toolCalling?.strictToolNames);
 
   // Observability (OTEL) is opt-in, and config can override env.
   const cfgOtelEnabled = (cfg as any)?.observability?.otel?.enabled;
@@ -1273,6 +1275,7 @@ export async function createWunderlandServer(opts?: {
           },
           ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
           wrapToolOutputs: policy.wrapToolOutputs,
+          strictToolNames,
         };
 
         reply = await runToolCallingTurn({
@@ -1284,6 +1287,7 @@ export async function createWunderlandServer(opts?: {
           toolContext,
           maxRounds: 8,
           dangerouslySkipPermissions: autoApproveToolCalls,
+          strictToolNames,
           toolFailureMode: adaptiveDecision.toolFailureMode,
           onToolCall: () => {
             toolCallCount += 1;
@@ -1693,6 +1697,7 @@ export async function createWunderlandServer(opts?: {
               },
               ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
               wrapToolOutputs: policy.wrapToolOutputs,
+              strictToolNames,
             };
 
             reply = await runToolCallingTurn({
@@ -1704,6 +1709,7 @@ export async function createWunderlandServer(opts?: {
               toolContext,
               maxRounds: 8,
               dangerouslySkipPermissions: autoApproveToolCalls,
+              strictToolNames,
               toolFailureMode: adaptiveDecision.toolFailureMode,
               onToolCall: () => {
                 toolCallCount += 1;

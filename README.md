@@ -242,6 +242,8 @@ await session.sendText('Investigate recent SQL adapter changes', {
 
 - `toolSelectionMode` automatically falls back to `all` when discovery has no usable tool hits.
 - Adaptive degraded mode can force `all` tool exposure for recovery.
+- Tool schemas sent to OpenAI-compatible providers are normalized to valid `function.name` values automatically.
+- Optional strict mode: set `toolCalling.strictToolNames=true` (or `WUNDERLAND_STRICT_TOOL_NAMES=true`) to fail fast on rewrites/collisions.
 
 ### CLI
 

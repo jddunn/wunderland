@@ -115,6 +115,35 @@ const app = await createWunderland({
 });
 ```
 
+## Tool function-name compatibility (OpenAI-safe)
+
+OpenAI-compatible tool calling requires `function.name` to match `^[a-zA-Z0-9_-]+$`.
+
+Wunderland now normalizes outbound tool function names automatically:
+- Canonical names are derived from loaded tool map keys.
+- Non-compliant names are sanitized and collision-resolved deterministically.
+- Tool calls are mapped back to original tool instances before execution.
+
+Enable fail-fast strict mode when you want CI/release-time enforcement:
+
+```ts
+const app = await createWunderland({
+  agentConfig: {
+    toolCalling: {
+      strictToolNames: true,
+    },
+  },
+});
+```
+
+Environment override:
+
+```bash
+WUNDERLAND_STRICT_TOOL_NAMES=true
+```
+
+In strict mode, runtime startup/turn execution fails if rewrites or collisions are required.
+
 ## Extensions
 
 Extensions are runtime code packages (tools, guardrails, workflows) loaded from the curated registry (`@framers/agentos-extensions-registry`). Each extension's tools are added to the agent's tool map.
@@ -174,6 +203,11 @@ const app = await createWunderland({
 ## OAuth Authentication (OpenAI Subscription)
 
 Use your ChatGPT Plus/Pro subscription instead of a separate API key. The `llm.getApiKey` option allows dynamic token resolution, which the OAuth system uses to transparently inject fresh tokens into every LLM request.
+
+`apiKey` and `getApiKey` are resolved defensively at runtime:
+- supports static strings, promise values, and lazy async resolvers
+- rejects non-string/empty resolved values with clear errors
+- prevents accidental `[object Promise]` authorization headers
 
 ### With `agentConfig` (reads from `agent.config.json`)
 

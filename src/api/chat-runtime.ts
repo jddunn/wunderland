@@ -20,6 +20,7 @@ import {
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
 import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
+import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 import {
   createWunderlandSeed,
@@ -337,6 +338,7 @@ export async function createWunderlandChatRuntime(opts: {
   const agentConfig = opts.agentConfig ?? {};
   const policy = normalizeRuntimePolicy(agentConfig as any);
   const turnApprovalMode = inferTurnApprovalMode(agentConfig);
+  const strictToolNames = resolveStrictToolNames((agentConfig as any)?.toolCalling?.strictToolNames);
 
   const seedIdForWorkspace =
     typeof agentConfig.seedId === 'string' && agentConfig.seedId.trim()
@@ -397,6 +399,7 @@ export async function createWunderlandChatRuntime(opts: {
     toolAccessProfile: policy.toolAccessProfile,
     executionMode: policy.executionMode,
     wrapToolOutputs: policy.wrapToolOutputs,
+    strictToolNames,
     ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
     turnApprovalMode,
     agentWorkspace: { agentId: workspace.agentId, baseDir: workspace.baseDir },
@@ -428,6 +431,7 @@ export async function createWunderlandChatRuntime(opts: {
         toolContext,
         maxRounds: 8,
         dangerouslySkipPermissions: false,
+        strictToolNames,
         askPermission,
         onToolCall: runOpts?.onToolCall,
         baseUrl: opts.llm.baseUrl,

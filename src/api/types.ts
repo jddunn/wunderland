@@ -125,6 +125,13 @@ export type WunderlandAgentConfig = {
    * - fail_closed: stop turn on first tool failure
    */
   toolFailureMode?: WunderlandToolFailureMode | string | null;
+  toolCalling?: Partial<{
+    /**
+     * Enforce strict OpenAI function-name compatibility and fail fast when
+     * rewrites/collision handling would otherwise be required.
+     */
+    strictToolNames: boolean;
+  }>;
   securityTier?: SecurityTierName | string | null;
   permissionSet?: PermissionSetName | string | null;
   toolAccessProfile?: ToolAccessProfileName | string | null;
