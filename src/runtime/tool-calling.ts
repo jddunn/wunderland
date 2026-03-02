@@ -37,6 +37,15 @@ import {
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { resolveAgentWorkspaceDir } from '@framers/agentos';
+import { resolveApiKeyInput } from './api-key-resolver.js';
+import {
+  buildToolDefsFromMapping,
+  buildToolFunctionNameMapping,
+  formatToolNameRewriteSummary,
+  resolveStrictToolNames,
+  resolveToolMapKeyFromFunctionName,
+  sanitizeToolDefsForProvider,
+} from './tool-function-names.js';
 
 const tracer = trace.getTracer('wunderland.runtime');
 
@@ -307,13 +316,37 @@ export interface ToolInstance {
   execute: (args: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<{ success: boolean; output?: unknown; error?: string }>;
 }
 
-export function buildToolDefs(toolMap: Map<string, ToolInstance>): Array<Record<string, unknown>> {
-  const tools = [...toolMap.values()].filter((t): t is ToolInstance => !!t && typeof t.name === 'string' && !!t.name);
-  tools.sort((a, b) => a.name.localeCompare(b.name));
-  return tools.map((tool) => ({
-    type: 'function',
-    function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
-  }));
+function buildStrictToolNameError(prefix: string, summary: string): Error {
+  return new Error(
+    `${prefix} Invalid tool function names detected while strict mode is enabled. `
+    + `Rename tools to match ^[a-zA-Z0-9_-]+$ or disable strict mode. `
+    + `Details: ${summary}`,
+  );
+}
+
+function shouldLogRewrite(logged: Set<string>, key: string): boolean {
+  if (logged.has(key)) return false;
+  logged.add(key);
+  return true;
+}
+
+export function buildToolDefs(
+  toolMap: Map<string, ToolInstance>,
+  opts: {
+    strictToolNames?: unknown;
+    onRewrite?: (summary: string) => void;
+  } = {},
+): Array<Record<string, unknown>> {
+  const mapping = buildToolFunctionNameMapping(toolMap);
+  const strictToolNames = resolveStrictToolNames(opts.strictToolNames);
+  if (mapping.rewrites.length > 0) {
+    const summary = formatToolNameRewriteSummary(mapping.rewrites);
+    if (strictToolNames) {
+      throw buildStrictToolNameError('[tool-calling]', summary);
+    }
+    opts.onRewrite?.(summary);
+  }
+  return buildToolDefsFromMapping(toolMap, mapping);
 }
 
 export function truncateString(value: unknown, maxLen: number): string {
@@ -403,14 +436,14 @@ export function createAuthorizationManager(opts: {
  * Both OpenAI and OpenRouter use the same OpenAI-compatible chat completions API.
  */
 export interface LLMProviderConfig {
-  apiKey: string;
+  apiKey: string | Promise<string>;
   model: string;
   /** API base URL (without trailing slash). Defaults to OpenAI. */
   baseUrl?: string;
   /** Extra headers (e.g. OpenRouter's HTTP-Referer, X-Title). */
   extraHeaders?: Record<string, string>;
   /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
-  getApiKey?: () => Promise<string>;
+  getApiKey?: () => string | Promise<string>;
 }
 
 export type LLMProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic';
@@ -455,7 +488,10 @@ async function chatCompletionsRequest(
 ): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
   const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter' : 'OpenAI';
-  const apiKey = provider.getApiKey ? await provider.getApiKey() : provider.apiKey;
+  const apiKey = await resolveApiKeyInput(
+    provider.getApiKey ? provider.getApiKey : provider.apiKey,
+    { source: `${providerName} chat completions` },
+  );
 
   const fetchUrl = `${baseUrl}/chat/completions`;
   // Ollama inference with tools can take several minutes — use generous timeouts.
@@ -519,7 +555,7 @@ async function chatCompletionsRequest(
 }
 
 export async function openaiChatWithTools(opts: {
-  apiKey: string;
+  apiKey: string | Promise<string>;
   model: string;
   messages: Array<Record<string, unknown>>;
   tools: Array<Record<string, unknown>>;
@@ -532,7 +568,7 @@ export async function openaiChatWithTools(opts: {
   /** Called when a fallback is triggered. */
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
   /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
-  getApiKey?: () => Promise<string>;
+  getApiKey?: () => string | Promise<string>;
 }): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
   const primary: LLMProviderConfig = {
     apiKey: opts.apiKey,
@@ -726,7 +762,7 @@ async function anthropicMessagesRequest(opts: {
 
 export async function runToolCallingTurn(opts: {
   providerId?: string;
-  apiKey: string;
+  apiKey: string | Promise<string>;
   model: string;
   messages: Array<Record<string, unknown>>;
   toolMap: Map<string, ToolInstance>;
@@ -756,11 +792,18 @@ export async function runToolCallingTurn(opts: {
   /** Called when a fallback is triggered. */
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
   /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
-  getApiKey?: () => Promise<string>;
+  getApiKey?: () => string | Promise<string>;
   /** Tool-call failure behavior. Default: fail_open. */
   toolFailureMode?: 'fail_open' | 'fail_closed';
+  /** Enforce strict OpenAI-compatible function names and fail on rewrites/collisions. */
+  strictToolNames?: boolean;
 }): Promise<string> {
   const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
+  const strictToolNames = resolveStrictToolNames(
+    opts.strictToolNames ?? getBooleanProp(opts.toolContext, 'strictToolNames'),
+  );
+  const loggedRewriteEvents = new Set<string>();
+
   const shouldWrapToolOutputs = (() => {
     const v = getBooleanProp(opts.toolContext, 'wrapToolOutputs');
     return typeof v === 'boolean' ? v : true;
@@ -805,7 +848,78 @@ export async function runToolCallingTurn(opts: {
       'wunderland.turn',
       { round, has_tools: opts.toolMap.size > 0 },
       async () => {
-        const toolDefs = opts.getToolDefs ? opts.getToolDefs() : buildToolDefs(opts.toolMap);
+        const nameMapping = buildToolFunctionNameMapping(opts.toolMap);
+        if (nameMapping.rewrites.length > 0) {
+          const summary = formatToolNameRewriteSummary(nameMapping.rewrites);
+          if (strictToolNames) {
+            emitOtelLog({
+              name: 'wunderland.runtime',
+              body: 'tool_name_strict_block',
+              severity: SeverityNumber.ERROR,
+              attributes: {
+                rewrite_count: nameMapping.rewrites.length,
+                round,
+              },
+            });
+            throw buildStrictToolNameError('[tool-calling]', summary);
+          }
+          const eventKey = `mapping:${summary}`;
+          if (shouldLogRewrite(loggedRewriteEvents, eventKey)) {
+            console.warn(`[tool-calling] Sanitized tool map function names: ${summary}`);
+            emitOtelLog({
+              name: 'wunderland.runtime',
+              body: 'tool_name_rewrite_mapping',
+              severity: SeverityNumber.WARN,
+              attributes: {
+                rewrite_count: nameMapping.rewrites.length,
+                round,
+              },
+            });
+          }
+        }
+
+        const rawToolDefs = opts.getToolDefs
+          ? opts.getToolDefs()
+          : opts.toolDefs ?? buildToolDefsFromMapping(opts.toolMap, nameMapping);
+
+        const sanitizedDefs = sanitizeToolDefsForProvider(rawToolDefs);
+        if (sanitizedDefs.rewrites.length > 0) {
+          const summary = formatToolNameRewriteSummary(
+            sanitizedDefs.rewrites.map((r) => ({
+              sourceName: r.originalName,
+              rewrittenName: r.sanitizedName,
+              reason: r.reason,
+            })),
+          );
+
+          if (strictToolNames) {
+            emitOtelLog({
+              name: 'wunderland.runtime',
+              body: 'tool_name_strict_block_defs',
+              severity: SeverityNumber.ERROR,
+              attributes: {
+                rewrite_count: sanitizedDefs.rewrites.length,
+                round,
+              },
+            });
+            throw buildStrictToolNameError('[tool-calling]', summary);
+          }
+          const eventKey = `defs:${summary}`;
+          if (shouldLogRewrite(loggedRewriteEvents, eventKey)) {
+            console.warn(`[tool-calling] Sanitized outbound tool definitions: ${summary}`);
+            emitOtelLog({
+              name: 'wunderland.runtime',
+              body: 'tool_name_rewrite_defs',
+              severity: SeverityNumber.WARN,
+              attributes: {
+                rewrite_count: sanitizedDefs.rewrites.length,
+                round,
+              },
+            });
+          }
+        }
+
+        const toolDefs = sanitizedDefs.toolDefs;
 
         // LLM call span (safe metadata only; no prompt/output content).
         let fallbackTriggered = false;
@@ -813,9 +927,13 @@ export async function runToolCallingTurn(opts: {
 
         const invoke = async () => {
           if (providerId === 'anthropic') {
+            const anthropicApiKey = await resolveApiKeyInput(
+              opts.getApiKey ? opts.getApiKey : opts.apiKey,
+              { source: 'Anthropic Messages API' },
+            );
             const payload = toAnthropicMessagePayload(opts.messages);
             return await anthropicMessagesRequest({
-              apiKey: opts.apiKey,
+              apiKey: anthropicApiKey,
               model: opts.model,
               system: payload.system,
               messages: payload.messages,
@@ -933,30 +1051,44 @@ export async function runToolCallingTurn(opts: {
             return reply;
           };
 
-          const toolName = call?.function?.name;
+          const requestedToolName = call?.function?.name;
           const rawArgs = call?.function?.arguments;
 
-          if (!toolName || typeof rawArgs !== 'string') {
+          if (!requestedToolName || typeof rawArgs !== 'string') {
             opts.messages.push({ role: 'tool', tool_call_id: call?.id, content: JSON.stringify({ error: 'Malformed tool call.' }) });
             const failReply = maybeFailClosed('Malformed tool call returned by model.');
             if (failReply) return failReply;
             continue;
           }
 
-          const tool = opts.toolMap.get(toolName);
+          const resolvedToolKey = resolveToolMapKeyFromFunctionName({
+            functionName: requestedToolName,
+            toolMap: opts.toolMap,
+            mapping: nameMapping,
+            sanitizedAliasByName: sanitizedDefs.aliasBySanitizedName,
+          });
+          const tool = resolvedToolKey ? opts.toolMap.get(resolvedToolKey) : undefined;
           if (!tool) {
-            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Tool not found: ${toolName}` }) });
-            const failReply = maybeFailClosed(`Tool not found: ${toolName}.`);
+            emitOtelLog({
+              name: 'wunderland.runtime',
+              body: 'tool_lookup_miss',
+              severity: SeverityNumber.WARN,
+              attributes: { requested_tool_name: requestedToolName, round },
+            });
+            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Tool not found: ${requestedToolName}` }) });
+            const failReply = maybeFailClosed(`Tool not found: ${requestedToolName}.`);
             if (failReply) return failReply;
             continue;
           }
+
+          const toolName = tool.name || resolvedToolKey || requestedToolName;
 
           let args: Record<string, unknown>;
           try {
             args = JSON.parse(rawArgs);
           } catch {
-            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Invalid JSON arguments for ${toolName}` }) });
-            const failReply = maybeFailClosed(`Invalid JSON arguments for ${toolName}.`);
+            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Invalid JSON arguments for ${requestedToolName}` }) });
+            const failReply = maybeFailClosed(`Invalid JSON arguments for ${requestedToolName}.`);
             if (failReply) return failReply;
             continue;
           }
@@ -1051,7 +1183,7 @@ export async function runToolCallingTurn(opts: {
                 const guardrails = getGuardrails();
                 const agentId = getAgentIdForGuardrails(opts.toolContext);
                 const guardrailsCheck = await guardrails.validateBeforeExecution({
-                  toolId: tool.name,
+                  toolId: resolvedToolKey || tool.name,
                   toolName: tool.name,
                   args,
                   agentId,
