@@ -174,4 +174,33 @@ describe('OAuth integration — LLMProviderConfig getApiKey', () => {
 
     expect(capturedAuthHeader).toBe('Bearer my-static-api-key');
   });
+
+  it('chatCompletionsRequest resolves promise-based apiKey values', async () => {
+    const { openaiChatWithTools } = await import('../runtime/tool-calling.js');
+
+    let capturedAuthHeader = '';
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, opts: any) => {
+      capturedAuthHeader = opts?.headers?.Authorization || '';
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          model: 'gpt-test',
+          usage: {},
+          choices: [{ message: { role: 'assistant', content: 'test' } }],
+        }),
+      };
+    }));
+
+    await openaiChatWithTools({
+      apiKey: Promise.resolve('async-api-key'),
+      model: 'gpt-test',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [],
+      temperature: 0.2,
+      maxTokens: 100,
+    });
+
+    expect(capturedAuthHeader).toBe('Bearer async-api-key');
+  });
 });

@@ -26,8 +26,12 @@ import {
 } from '@framers/agentos/discovery';
 import { EmbeddingManager, InMemoryVectorStore } from '@framers/agentos';
 import { AIModelProviderManager } from '@framers/agentos';
+import { context } from '@opentelemetry/api';
+import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 
 import { derivePresetCoOccurrences } from './preset-co-occurrence.js';
+import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';
+import { resolveApiKeyInput, type ApiKeyInput } from '../runtime/api-key-resolver.js';
 
 // ============================================================================
 // TYPES
@@ -139,6 +143,27 @@ function resolveDiscoveryConfig(
   };
 }
 
+function emitDiscoveryLog(opts: {
+  body: string;
+  severity: SeverityNumber;
+  attributes?: Record<string, string | number | boolean>;
+}): void {
+  if (!isWunderlandOtelEnabled()) return;
+  if (!shouldExportWunderlandOtelLogs()) return;
+  try {
+    const logger = logs.getLogger('wunderland.discovery');
+    logger.emit({
+      severityNumber: opts.severity,
+      severityText: String(opts.severity),
+      body: opts.body,
+      attributes: opts.attributes,
+      context: context.active(),
+    });
+  } catch {
+    // ignore
+  }
+}
+
 function resolveEmbeddingConfig(opts: {
   embeddingProvider?: string;
   embeddingModel?: string;
@@ -213,21 +238,42 @@ export class WunderlandDiscoveryManager {
   async initialize(opts: {
     toolMap: Map<string, ToolLike>;
     skillEntries?: SkillEntry[];
-    llmConfig: { providerId: string; apiKey: string; baseUrl?: string };
+    llmConfig: { providerId: string; apiKey: ApiKeyInput; baseUrl?: string };
   }): Promise<void> {
     if (this.config.enabled === false) return;
+
+    let llmApiKey: string;
+    try {
+      llmApiKey = await resolveApiKeyInput(opts.llmConfig.apiKey, {
+        source: `discovery/${opts.llmConfig.providerId || 'unknown'}`,
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[Discovery] Invalid API key input (${msg}). Continuing without capability index.`);
+      emitDiscoveryLog({
+        body: 'discovery_api_key_resolution_failed',
+        severity: SeverityNumber.WARN,
+        attributes: { provider_id: opts.llmConfig.providerId || 'unknown' },
+      });
+      return;
+    }
 
     // 1. Resolve embedding provider
     const embeddingConfig = resolveEmbeddingConfig({
       embeddingProvider: this.config.embeddingProvider,
       embeddingModel: this.config.embeddingModel,
       llmProviderId: opts.llmConfig.providerId,
-      llmApiKey: opts.llmConfig.apiKey,
+      llmApiKey,
       llmBaseUrl: opts.llmConfig.baseUrl,
     });
 
     if (!embeddingConfig) {
       // No embedding provider available — discovery disabled
+      emitDiscoveryLog({
+        body: 'discovery_embedding_unavailable',
+        severity: SeverityNumber.INFO,
+        attributes: { provider_id: opts.llmConfig.providerId || 'unknown' },
+      });
       return;
     }
 

@@ -52,6 +52,17 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
     }
   }
 
+  if (cfg.toolCalling !== undefined) {
+    if (!isPlainObject(cfg.toolCalling)) {
+      issues.push({ path: 'toolCalling', message: 'Expected object.' });
+    } else {
+      const toolCalling = cfg.toolCalling as Record<string, unknown>;
+      if (toolCalling.strictToolNames !== undefined && typeof toolCalling.strictToolNames !== 'boolean') {
+        issues.push({ path: 'toolCalling.strictToolNames', message: 'Expected boolean.' });
+      }
+    }
+  }
+
   if (cfg.extensions !== undefined) {
     if (!isPlainObject(cfg.extensions)) {
       issues.push({ path: 'extensions', message: 'Expected object.' });

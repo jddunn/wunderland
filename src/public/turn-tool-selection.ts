@@ -40,6 +40,7 @@ export function planTurnToolDefinitions(opts: {
   discoveryResult?: CapabilityDiscoveryResult | null;
   requestedMode?: unknown;
   forceAllTools?: boolean;
+  strictToolNames?: unknown;
 }): {
   mode: TurnToolSelectionMode;
   reason: string;
@@ -52,7 +53,7 @@ export function planTurnToolDefinitions(opts: {
       mode: 'all',
       reason: 'forced_all_tools',
       selectedToolNames: names,
-      toolDefs: buildToolDefs(opts.toolMap),
+      toolDefs: buildToolDefs(opts.toolMap, { strictToolNames: opts.strictToolNames }),
     };
   }
 
@@ -70,7 +71,7 @@ export function planTurnToolDefinitions(opts: {
       mode: 'all',
       reason: explicitMode === 'all' ? 'requested_all_tools' : 'discovery_unavailable',
       selectedToolNames: names,
-      toolDefs: buildToolDefs(opts.toolMap),
+      toolDefs: buildToolDefs(opts.toolMap, { strictToolNames: opts.strictToolNames }),
     };
   }
 
@@ -80,7 +81,7 @@ export function planTurnToolDefinitions(opts: {
       mode: 'all',
       reason: 'no_discovered_tools_fallback_all',
       selectedToolNames: names,
-      toolDefs: buildToolDefs(opts.toolMap),
+      toolDefs: buildToolDefs(opts.toolMap, { strictToolNames: opts.strictToolNames }),
     };
   }
 
@@ -94,7 +95,7 @@ export function planTurnToolDefinitions(opts: {
       mode: 'all',
       reason: 'discovered_tools_not_loaded_fallback_all',
       selectedToolNames: names,
-      toolDefs: buildToolDefs(opts.toolMap),
+      toolDefs: buildToolDefs(opts.toolMap, { strictToolNames: opts.strictToolNames }),
     };
   }
 
@@ -105,7 +106,6 @@ export function planTurnToolDefinitions(opts: {
       ? 'requested_discovered_tools'
       : 'auto_discovered_tools',
     selectedToolNames,
-    toolDefs: buildToolDefs(filteredMap),
+    toolDefs: buildToolDefs(filteredMap, { strictToolNames: opts.strictToolNames }),
   };
 }
-
