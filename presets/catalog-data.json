@@ -19,7 +19,8 @@
       ],
       "skillPath": "registry/curated/web-search/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "weather",
@@ -38,7 +39,8 @@
       ],
       "skillPath": "registry/curated/weather/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "summarize",
@@ -58,7 +60,8 @@
       ],
       "skillPath": "registry/curated/summarize/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "github",
@@ -79,7 +82,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/github/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "coding-agent",
@@ -100,7 +104,8 @@
       ],
       "skillPath": "registry/curated/coding-agent/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "git",
@@ -118,7 +123,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/git/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "slack-helper",
@@ -139,7 +145,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/slack-helper/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "discord-helper",
@@ -159,7 +166,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/discord-helper/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "notion",
@@ -180,7 +188,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/notion/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "obsidian",
@@ -201,7 +210,8 @@
       ],
       "skillPath": "registry/curated/obsidian/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "trello",
@@ -223,7 +233,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/trello/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "apple-notes",
@@ -243,7 +254,8 @@
       ],
       "skillPath": "registry/curated/apple-notes/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "apple-reminders",
@@ -264,7 +276,8 @@
       ],
       "skillPath": "registry/curated/apple-reminders/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "healthcheck",
@@ -285,7 +298,8 @@
       ],
       "skillPath": "registry/curated/healthcheck/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "spotify-player",
@@ -308,7 +322,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/spotify-player/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "whisper-transcribe",
@@ -331,7 +346,8 @@
       ],
       "skillPath": "registry/curated/whisper-transcribe/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "1password",
@@ -350,7 +366,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/1password/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     },
     {
       "name": "image-gen",
@@ -371,7 +388,8 @@
       "requiredTools": [],
       "skillPath": "registry/curated/image-gen/SKILL.md",
       "namespace": "wunderland",
-      "source": "curated"
+      "source": "curated",
+      "available": true
     }
   ],
   "CHANNEL_CATALOG": [
@@ -801,7 +819,7 @@
         "openai.apiKey"
       ],
       "defaultPriority": 100,
-      "available": true,
+      "available": false,
       "defaultModel": "gpt-4o",
       "smallModel": "gpt-4o-mini",
       "apiBaseUrl": "https://api.openai.com/v1"
@@ -817,7 +835,7 @@
         "anthropic.apiKey"
       ],
       "defaultPriority": 100,
-      "available": true,
+      "available": false,
       "defaultModel": "claude-sonnet-4-5-20250929",
       "smallModel": "claude-haiku-4-5-20251001",
       "apiBaseUrl": "https://api.anthropic.com"
@@ -831,7 +849,7 @@
       "description": "Ollama local inference \u2014 run open-weight models (Llama, Mistral, etc.) on your own hardware.",
       "requiredSecrets": [],
       "defaultPriority": 90,
-      "available": true,
+      "available": false,
       "defaultModel": "llama3",
       "smallModel": "llama3.2:3b",
       "apiBaseUrl": "http://127.0.0.1:11434/v1"
@@ -849,7 +867,7 @@
         "aws.region"
       ],
       "defaultPriority": 80,
-      "available": true,
+      "available": false,
       "defaultModel": "anthropic.claude-sonnet",
       "smallModel": "anthropic.claude-haiku"
     },
@@ -864,7 +882,7 @@
         "gemini.apiKey"
       ],
       "defaultPriority": 90,
-      "available": true,
+      "available": false,
       "defaultModel": "gemini-2.0-flash",
       "smallModel": "gemini-2.0-flash-lite",
       "apiBaseUrl": "https://generativelanguage.googleapis.com"
@@ -992,7 +1010,7 @@
         "openrouter.apiKey"
       ],
       "defaultPriority": 80,
-      "available": true,
+      "available": false,
       "defaultModel": "auto",
       "smallModel": "auto",
       "apiBaseUrl": "https://openrouter.ai/api/v1"
