@@ -220,6 +220,28 @@ A typical `agent.config.json` written by `wunderland init` includes (abbreviated
   - forcing full tool schema exposure (`discovered -> all`) when discovery filtering is active,
   - forcing `toolFailureMode=fail_open` unless the request explicitly asks for `fail_closed`.
 
+### Tool function-name strictness
+
+OpenAI-compatible tool schemas require `function.name` to match `^[a-zA-Z0-9_-]+$`.
+
+Wunderland sanitizes and de-duplicates tool function names automatically by default. To fail fast instead, configure:
+
+```json
+{
+  "toolCalling": {
+    "strictToolNames": true
+  }
+}
+```
+
+Environment override:
+
+```bash
+WUNDERLAND_STRICT_TOOL_NAMES=true
+```
+
+When strict mode is on, runtime will reject turns/startup if any tool name rewrite or collision handling would be needed.
+
 ### Runtime Request Overrides (`POST /chat`)
 
 For `wunderland start` and `createWunderlandServer()`, `/chat` accepts optional per-request overrides:

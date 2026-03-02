@@ -26,6 +26,7 @@ import {
   type LLMProviderConfig,
 } from '../runtime/tool-calling.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
+import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
 import { planTurnToolDefinitions, type TurnToolSelectionMode } from './turn-tool-selection.js';
 import {
   filterToolMapByPolicy,
@@ -206,6 +207,11 @@ export type WunderlandOptions = {
   };
   /** Capability discovery configuration. */
   discovery?: WunderlandDiscoveryConfig;
+  /** Tool-calling behavior controls. */
+  toolCalling?: {
+    /** Enforce strict OpenAI function names and fail when rewrites/collisions are needed. */
+    strictToolNames?: boolean;
+  };
   /** Default tool-call failure behavior. */
   toolFailureMode?: WunderlandToolFailureMode;
   /** Runtime task-outcome telemetry controls. */
@@ -578,6 +584,9 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       },
     ]);
   }
+  const strictToolNames = resolveStrictToolNames(
+    opts.toolCalling?.strictToolNames ?? (agentConfig as any)?.toolCalling?.strictToolNames,
+  );
 
   const approvalsMode: WunderlandApprovalsMode = opts.approvals?.mode ?? 'deny-side-effects';
 
@@ -690,6 +699,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     toolAccessProfile: policy.toolAccessProfile,
     executionMode: 'human-all',
     wrapToolOutputs: policy.wrapToolOutputs,
+    strictToolNames,
     ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
     agentWorkspace: { agentId: workspace.agentId, baseDir: workspace.baseDir },
     workingDirectory,
@@ -870,6 +880,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
           toolMap,
           discoveryResult,
           requestedMode: sendOpts?.toolSelectionMode,
+          strictToolNames,
           forceAllTools:
             adaptiveDecision.actions?.forcedToolSelectionMode === true
             || widenedToolDefsAfterRuntimeToolLoad,
@@ -892,6 +903,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
           toolContext,
           maxRounds: 8,
           dangerouslySkipPermissions: false,
+          strictToolNames,
           askPermission,
           onToolCall,
           toolFailureMode: adaptiveDecision.toolFailureMode,

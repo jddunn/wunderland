@@ -16,10 +16,17 @@ import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { isOllamaRunning, startOllama, detectOllamaInstall } from '../ollama/ollama-manager.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
-import { runToolCallingTurn, safeJsonStringify, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
+import {
+  buildToolDefs,
+  runToolCallingTurn,
+  safeJsonStringify,
+  type ToolInstance,
+  type LLMProviderConfig,
+} from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
+import { resolveStrictToolNames } from '../../runtime/tool-function-names.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
@@ -195,6 +202,7 @@ export default async function cmdStart(
     if (v === 'after-each-round') return 'after-each-round';
     return 'off';
   })();
+  const strictToolNames = resolveStrictToolNames((cfg as any)?.toolCalling?.strictToolNames);
 
   // Observability (OTEL) is opt-in, and config can override env.
   const cfgOtelEnabled = cfg?.observability?.otel?.enabled;
@@ -1077,6 +1085,7 @@ export default async function cmdStart(
           },
           ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
           wrapToolOutputs: policy.wrapToolOutputs,
+          strictToolNames,
         };
 
         // Build filtered tool defs based on discovery (reduces context for small models).
@@ -1085,16 +1094,13 @@ export default async function cmdStart(
           discoveredToolNames && adaptiveDecision.actions?.forcedToolSelectionMode !== true;
         const filteredGetToolDefs = useFilteredToolDefs
           ? () => {
-            const filtered: Array<Record<string, unknown>> = [];
+            const filtered = new Map<string, ToolInstance>();
             for (const [name, tool] of toolMap) {
               if (discoveredToolNames!.has(name)) {
-                filtered.push({
-                  type: 'function',
-                  function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
-                });
+                filtered.set(name, tool);
               }
             }
-            return filtered;
+            return buildToolDefs(filtered, { strictToolNames });
           }
           : undefined;
 
@@ -1119,6 +1125,7 @@ export default async function cmdStart(
           toolContext,
           maxRounds: 8,
           dangerouslySkipPermissions,
+          strictToolNames,
           toolFailureMode: adaptiveDecision.toolFailureMode,
           onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
             toolCallCount += 1;
@@ -2157,6 +2164,7 @@ export default async function cmdStart(
               },
               ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
               wrapToolOutputs: policy.wrapToolOutputs,
+              strictToolNames,
             };
 
             // Build filtered tool defs based on discovery.
@@ -2165,16 +2173,13 @@ export default async function cmdStart(
               apiDiscoveredToolNames && adaptiveDecision.actions?.forcedToolSelectionMode !== true;
             const apiFilteredGetToolDefs = useFilteredToolDefs
               ? () => {
-                const filtered: Array<Record<string, unknown>> = [];
+                const filtered = new Map<string, ToolInstance>();
                 for (const [name, tool] of toolMap) {
                   if (apiDiscoveredToolNames!.has(name)) {
-                    filtered.push({
-                      type: 'function',
-                      function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
-                    });
+                    filtered.set(name, tool);
                   }
                 }
-                return filtered;
+                return buildToolDefs(filtered, { strictToolNames });
               }
               : undefined;
 
@@ -2188,6 +2193,7 @@ export default async function cmdStart(
               toolContext,
               maxRounds: 8,
               dangerouslySkipPermissions,
+              strictToolNames,
               toolFailureMode: adaptiveDecision.toolFailureMode,
               onToolCall: () => {
                 toolCallCount += 1;
