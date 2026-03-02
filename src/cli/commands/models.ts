@@ -5,7 +5,7 @@
 
 import type { GlobalFlags } from '../types.js';
 import { LLM_PROVIDERS } from '../constants.js';
-import { accent, dim, muted, success as sColor } from '../ui/theme.js';
+import { accent, info, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { printTable } from '../ui/table.js';
@@ -47,7 +47,7 @@ async function listModels(flags: Record<string, string | boolean>, globals: Glob
         accent(provider.id),
         provider.label,
         envHint,
-        provider.models.map((m) => dim(m)).join(', '),
+        provider.models.map((m) => info(m)).join(', '),
       ];
     }),
   });
