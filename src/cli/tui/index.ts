@@ -88,8 +88,8 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
       } catch (err) {
         console.error('Command failed:', err instanceof Error ? err.message : String(err));
       }
-      // TUI has been torn down; cleanly exit after the command finishes
-      process.exit(process.exitCode ?? 0);
+      // TUI has been torn down; main() handles its own lifecycle.
+      // Don't force-exit — interactive commands (chat) need to keep running.
     },
     onQuit: () => {
       cleanup();
