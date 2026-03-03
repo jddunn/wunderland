@@ -28,6 +28,8 @@ import {
   getPermissionsForSet,
   normalizeRuntimePolicy,
 } from '../security/runtime-policy.js';
+import { isValidSecurityTier, SECURITY_TIERS } from '../../security/SecurityTiers.js';
+import { isValidToolAccessProfile } from '../../social/ToolAccessProfiles.js';
 import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
 import {
@@ -74,6 +76,9 @@ function printChatHeader(info: {
   lazyTools: boolean;
   autoApprove: boolean;
   turnApproval: string;
+  securityTier: string;
+  toolProfile: string;
+  cliExecution: boolean;
 }): void {
   const contentWidth = getChatWidth();
   const innerWidth = contentWidth - 2;
@@ -116,12 +121,17 @@ function printChatHeader(info: {
   if (info.fallback) lines.push(kvLine('Fallback', sColor('OpenRouter (auto)')));
   lines.push(kvLine('Lazy Tools', info.lazyTools ? sColor('on') : chalk.hex(C.muted)('off')));
   lines.push(kvLine('Authorization', info.autoApprove ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)')));
+  lines.push(kvLine('Security Tier', accent(info.securityTier)));
+  lines.push(kvLine('Tool Profile', accent(info.toolProfile)));
+  lines.push(kvLine('CLI Execution', info.cliExecution ? wColor('enabled') : dim('disabled')));
   if (info.turnApproval !== 'off') lines.push(kvLine('Turn Checkpoints', sColor(info.turnApproval)));
   lines.push(empty);
 
   // Help hint
   const helpHint = `   Type ${chalk.hex(C.cyan)('/help')} for commands, ${chalk.hex(C.cyan)('/exit')} to quit`;
   lines.push(frameLine(helpHint, innerWidth));
+  const restrictHint = `   ${dim('Restrict: --security-tier=balanced  |  --profile=assistant')}`;
+  lines.push(frameLine(restrictHint, innerWidth));
   lines.push(empty);
   lines.push(botBorder);
   lines.push('');
@@ -243,7 +253,41 @@ export default async function cmdChat(
   // CLI-local defaults: when no agent.config.json exists, use `developer` profile
   // + `autonomous` permission set so the agent can use CLI tools with HITL approval.
   // Server-hosted bots use `assistant` + `supervised` via their own config.
-  const cliDefaults = !cfg ? { toolAccessProfile: 'developer', permissionSet: 'autonomous' } : {};
+  const cliDefaults: Record<string, unknown> = !cfg
+    ? { toolAccessProfile: 'developer', permissionSet: 'autonomous' }
+    : {};
+
+  // Allow CLI flags to override security tier / tool profile
+  const tierFlag = typeof flags['security-tier'] === 'string' ? String(flags['security-tier']).trim().toLowerCase() : '';
+  const profileFlag = typeof flags['profile'] === 'string' ? String(flags['profile']).trim().toLowerCase() : '';
+
+  if (tierFlag) {
+    if (!isValidSecurityTier(tierFlag)) {
+      fmt.errorBlock('Invalid security tier', `"${tierFlag}" — valid: dangerous, permissive, balanced, strict, paranoid`);
+      process.exitCode = 1;
+      return;
+    }
+    const tierCfg = SECURITY_TIERS[tierFlag];
+    cliDefaults.securityTier = tierFlag;
+    cliDefaults.permissionSet = tierCfg.permissionSet;
+    cliDefaults.executionMode =
+      tierFlag === 'dangerous' || tierFlag === 'permissive' ? 'autonomous' : 'human-dangerous';
+    cliDefaults.toolAccessProfile =
+      tierFlag === 'dangerous' || tierFlag === 'permissive' ? 'developer' : 'assistant';
+  }
+
+  if (profileFlag) {
+    if (!isValidToolAccessProfile(profileFlag)) {
+      fmt.errorBlock(
+        'Invalid tool profile',
+        `"${profileFlag}" — valid: social-citizen, social-observer, social-creative, assistant, developer, unrestricted`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    cliDefaults.toolAccessProfile = profileFlag;
+  }
+
   const policy = normalizeRuntimePolicy({ ...cliDefaults, ...(cfg || {}) });
   const permissions = getPermissionsForSet(policy.permissionSet);
   const turnApprovalMode = (() => {
@@ -769,6 +813,9 @@ export default async function cmdChat(
     lazyTools,
     autoApprove: autoApproveToolCalls,
     turnApproval: turnApprovalMode,
+    securityTier: policy.securityTier || 'permissive',
+    toolProfile: policy.toolAccessProfile || 'developer',
+    cliExecution: permissions.system?.cliExecution !== false,
   });
 
   const askPermission = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
