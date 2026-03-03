@@ -41,7 +41,9 @@ jobs:
           "
 
       - name: Install dependencies (retry once for npm propagation)
-        run: npm install || (echo "Retrying after 30s..." && sleep 30 && npm install)
+        run: npm install --legacy-peer-deps || (echo "Retrying after 30s..." && sleep 30 && npm install --legacy-peer-deps)
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Build
         run: npm run build
