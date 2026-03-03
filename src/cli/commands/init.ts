@@ -8,7 +8,7 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { PERSONALITY_PRESETS } from '../constants.js';
-import { accent, success as sColor, dim } from '../ui/theme.js';
+import { accent, success as sColor, warn as wColor, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
 import { PresetLoader, type AgentPreset } from '../../core/PresetLoader.js';
@@ -327,10 +327,12 @@ export default async function cmdInit(
       const preset = PERSONALITY_PRESETS.find((p) => p.id === presetKey);
       fmt.kvPair('Personality', preset ? preset.label : presetKey);
     }
-    if (securityTierName && tierConfig) {
-      fmt.kvPair('Security Tier', accent(tierConfig.displayName));
-      fmt.kvPair('', dim(tierConfig.description));
-    }
+    // Always show resolved security/permissions (defaulted or explicit)
+    fmt.kvPair('Security Tier', accent(tierConfig.displayName));
+    fmt.kvPair('', dim(tierConfig.description));
+    fmt.kvPair('Execution Mode', executionMode === 'autonomous' ? wColor(executionMode) : sColor(executionMode));
+    fmt.kvPair('Tool Profile', accent(toolAccessProfile));
+    fmt.kvPair('CLI Execution', permissionSet === 'autonomous' ? wColor('enabled') : dim('disabled'));
   }
 
   fmt.kvPair('Skills Dir', dim('./skills'));
@@ -341,5 +343,6 @@ export default async function cmdInit(
   } else {
     fmt.note(`Next: ${sColor(`cd ${dirName}`)} && ${sColor('cp .env.example .env')} && ${sColor('wunderland start')}`);
   }
+  fmt.note(`Restrict permissions: ${dim('wunderland init --security-tier=balanced')}`);
   fmt.blank();
 }
