@@ -1341,6 +1341,40 @@ export default async function cmdStart(
     }
   }
 
+  // ── Verify Extension Integration (Discord) ─────────────────────────────────
+  // If the Verify extension was loaded, wire its interaction handler and
+  // /verify slash command into the Discord adapter.
+  {
+    const verifyPack = activePacks.find(
+      (p: any) => p?.name === '@framers/agentos-ext-verify',
+    ) as any;
+    const discordAdapterVerify = adapterByPlatform.get('discord') as any;
+
+    if (verifyPack?.metadata && discordAdapterVerify) {
+      try {
+        const verifyChannels = (cfg as any)?.feeds?.verify as Record<string, string> | undefined;
+
+        const slashCommands = verifyPack.metadata.slashCommands;
+        if (slashCommands?.length && discordAdapterVerify.service?.registerSlashCommands) {
+          discordAdapterVerify.service.registerSlashCommands(slashCommands);
+        }
+
+        if (typeof verifyPack.metadata.createHandler === 'function') {
+          const handler = verifyPack.metadata.createHandler(verifyChannels);
+          if (typeof discordAdapterVerify.registerExternalInteractionHandler === 'function') {
+            discordAdapterVerify.registerExternalInteractionHandler(
+              handler.handleInteraction,
+            );
+          }
+          fmt.ok('Verify extension integrated with Discord adapter');
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        fmt.warning(`Verify extension integration failed: ${msg}`);
+      }
+    }
+  }
+
   // ── Channel Subscriptions Integration (Discord) ──────────────────────────
   // Wire role-based channel subscription buttons for THE LOOKING GLASS.
   {
