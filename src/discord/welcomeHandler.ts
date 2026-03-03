@@ -9,6 +9,12 @@
 
 const BRAND_COLOR = 0x8b6914;
 
+/** Pool of welcome-appropriate emoji reactions — picked at random per join. */
+const WELCOME_REACTIONS = [
+  '👋', '🐇', '🕳️', '✨', '🎩', '🍄', '🫖', '🃏',
+  '🪄', '🌀', '🔮', '💫', '🎉', '🙌', '🤝', '🦊',
+];
+
 const WELCOME_ADDENDUM = `
 You are welcoming a new member to the Rabbit Hole Discord. Be warm, brief (1-2 sentences), and on-brand. Reference their name naturally. Don't be cheesy or generic. Don't use excessive emojis. Make them feel like they just stumbled into something interesting.`.trim();
 
@@ -122,6 +128,23 @@ export function createWelcomeHandler(config: WelcomeConfig) {
           embeds: [embed],
           ...(replyToId ? { replyToMessageId: replyToId } : {}),
         });
+
+        // React to the system join message with 1-3 random on-brand emojis
+        if (replyToId) {
+          try {
+            const client = service.getClient?.();
+            const channel = client?.channels?.cache?.get(config.channelId);
+            const joinMsg = channel && await channel.messages.fetch(replyToId).catch(() => null);
+            if (joinMsg) {
+              const count = 1 + Math.floor(Math.random() * 3); // 1-3 reactions
+              const shuffled = [...WELCOME_REACTIONS].sort(() => Math.random() - 0.5);
+              for (let i = 0; i < count; i++) {
+                await joinMsg.react(shuffled[i]).catch(() => {});
+              }
+            }
+          } catch { /* non-critical */ }
+        }
+
         console.log(`[Welcome] Welcomed ${displayName} (@${username})`);
       } catch (err: any) {
         console.error('[Welcome] Failed to welcome member:', err?.message ?? err);
