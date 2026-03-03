@@ -26,10 +26,11 @@ describe('isValidToolAccessProfile', () => {
     'social-observer',
     'social-creative',
     'assistant',
+    'developer',
     'unrestricted',
   ];
 
-  it('should return true for all 5 valid profile names', () => {
+  it('should return true for all 6 valid profile names', () => {
     for (const name of VALID_NAMES) {
       expect(isValidToolAccessProfile(name)).toBe(true);
     }
@@ -41,8 +42,8 @@ describe('isValidToolAccessProfile', () => {
     expect(isValidToolAccessProfile('ASSISTANT')).toBe(false);
   });
 
-  it('should have exactly 5 profile entries in the registry', () => {
-    expect(Object.keys(TOOL_ACCESS_PROFILES)).toHaveLength(5);
+  it('should have exactly 6 profile entries in the registry', () => {
+    expect(Object.keys(TOOL_ACCESS_PROFILES)).toHaveLength(6);
   });
 });
 
@@ -215,6 +216,30 @@ describe('isToolAllowedByProfile', () => {
     });
   });
 
+  describe('developer profile', () => {
+    const profile = getToolAccessProfile('developer');
+
+    it('should allow search tools', () => {
+      expect(isToolAllowedByProfile(profile, 'web_search')).toBe(true);
+    });
+
+    it('should allow filesystem tools', () => {
+      expect(isToolAllowedByProfile(profile, 'file_read')).toBe(true);
+    });
+
+    it('should allow system tools (CLI execution)', () => {
+      expect(isToolAllowedByProfile(profile, 'cli_executor')).toBe(true);
+    });
+
+    it('should allow communication tools', () => {
+      expect(isToolAllowedByProfile(profile, 'email_send')).toBe(true);
+    });
+
+    it('should not allow social tools', () => {
+      expect(isToolAllowedByProfile(profile, 'social_post')).toBe(false);
+    });
+  });
+
   describe('unrestricted profile', () => {
     const profile = getToolAccessProfile('unrestricted');
 
@@ -315,6 +340,17 @@ describe('Profile configurations', () => {
 
   it('assistant maxRiskTier should be TIER_2', () => {
     expect(getToolAccessProfile('assistant').maxRiskTier).toBe(ToolRiskTier.TIER_2_ASYNC_REVIEW);
+  });
+
+  it('developer maxRiskTier should be TIER_3', () => {
+    expect(getToolAccessProfile('developer').maxRiskTier).toBe(ToolRiskTier.TIER_3_SYNC_HITL);
+  });
+
+  it('developer should allow CLI but not system modification', () => {
+    const p = getToolAccessProfile('developer');
+    expect(p.allowFileSystem).toBe(true);
+    expect(p.allowCliExecution).toBe(true);
+    expect(p.allowSystemModification).toBe(false);
   });
 
   it('unrestricted maxRiskTier should be TIER_3', () => {
