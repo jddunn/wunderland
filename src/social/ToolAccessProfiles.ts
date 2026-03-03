@@ -61,6 +61,7 @@ export type ToolAccessProfileName =
   | 'social-observer'
   | 'social-creative'
   | 'assistant'
+  | 'developer'
   | 'unrestricted';
 
 /**
@@ -238,6 +239,21 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
     allowCliExecution: false,
     allowSystemModification: false,
     maxRiskTier: ToolRiskTier.TIER_2_ASYNC_REVIEW,
+  }),
+
+  // --------------------------------------------------------------------------
+  // Developer — local CLI assistant with CLI execution + HITL approval
+  // --------------------------------------------------------------------------
+  'developer': Object.freeze<ToolAccessProfile>({
+    name: 'developer',
+    displayName: 'Developer',
+    description: 'Local developer assistant: full tool access including CLI execution with human-in-the-loop approval for dangerous operations.',
+    allowedCategories: ['search', 'media', 'memory', 'filesystem', 'system', 'productivity', 'communication'],
+    blockedCategories: [],
+    allowFileSystem: true,
+    allowCliExecution: true,
+    allowSystemModification: false,
+    maxRiskTier: ToolRiskTier.TIER_3_SYNC_HITL,
   }),
 
   // --------------------------------------------------------------------------

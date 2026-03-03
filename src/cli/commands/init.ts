@@ -176,8 +176,9 @@ export default async function cmdInit(
     }
   }
 
-  // Default to a safe, production-ready tier when not explicitly specified.
-  const resolvedTierName: SecurityTierName = securityTierName ?? 'balanced';
+  // Default to permissive tier for local development (allows CLI execution).
+  // Use --security-tier=balanced for stricter server-hosted setups.
+  const resolvedTierName: SecurityTierName = securityTierName ?? 'permissive';
   const tierConfig = getSecurityTier(resolvedTierName);
   const permissionSet = SECURITY_TIERS[resolvedTierName].permissionSet;
   const executionMode =
@@ -186,7 +187,7 @@ export default async function cmdInit(
       : resolvedTierName === 'paranoid'
         ? 'human-all'
         : 'human-dangerous';
-  const toolAccessProfile = (agentPreset as any)?.toolAccessProfile || 'assistant';
+  const toolAccessProfile = (agentPreset as any)?.toolAccessProfile || 'developer';
   const wrapToolOutputs = resolvedTierName !== 'dangerous';
   const security = {
     tier: tierConfig.name,
