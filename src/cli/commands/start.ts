@@ -325,7 +325,7 @@ export default async function cmdStart(
     : undefined;
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =
-    (cfg.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
+    (cfg?.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
       ? 'oauth'
       : 'api-key';
 
