@@ -673,9 +673,13 @@ export default async function cmdChat(
     fmt.warning(`Discovery initialization failed (continuing without): ${msg}`);
   }
 
+  const cliStorageDefaults = { quiet: true, priority: ['sqljs' as const] };
   const adaptiveRuntime = new WunderlandAdaptiveExecutionRuntime({
     toolFailureMode: cfg?.toolFailureMode,
-    taskOutcomeTelemetry: cfg?.taskOutcomeTelemetry,
+    taskOutcomeTelemetry: {
+      ...cfg?.taskOutcomeTelemetry,
+      storage: { ...cliStorageDefaults, ...cfg?.taskOutcomeTelemetry?.storage },
+    },
     adaptiveExecution: cfg?.adaptiveExecution,
     logger: console,
   });
