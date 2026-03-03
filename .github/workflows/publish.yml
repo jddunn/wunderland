@@ -1,8 +1,6 @@
 name: Publish to npm + GitHub Release
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 permissions:
