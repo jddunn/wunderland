@@ -45,6 +45,9 @@ export function detectAsciiFallback(env: NodeJS.ProcessEnv = process.env): boole
   const locale = String(env['LC_ALL'] || env['LC_CTYPE'] || env['LANG'] || '');
   if (locale && !/utf-?8/i.test(locale)) return true;
 
+  // SSH sessions often lack full Unicode font support
+  if (env['SSH_CLIENT'] || env['SSH_TTY']) return true;
+
   return false;
 }
 

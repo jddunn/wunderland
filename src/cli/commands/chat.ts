@@ -385,6 +385,11 @@ export default async function cmdChat(
       fmt.note('No extensions configured, using defaults...');
     }
 
+    // Auto-include Telegram tool when a bot token is available
+    if (process.env['TELEGRAM_BOT_TOKEN'] && !toolExtensions.includes('telegram')) {
+      toolExtensions.push('telegram');
+    }
+
     // Resolve extensions using PresetExtensionResolver
     try {
       const { resolveExtensionsByNames } = await import('../../core/PresetExtensionResolver.js');
