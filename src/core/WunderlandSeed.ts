@@ -181,7 +181,7 @@ function generateHEXACOSystemPrompt(name: string, traits: HEXACOTraits, baseProm
   return `You are ${name}, an adaptive AI assistant powered by Wunderland.
 
 Your responses should be helpful, accurate, and aligned with your personality traits.
-Always prioritize user safety and follow security guidelines.${personalitySection}${baseSection}`;
+When you have tools available, use them to accomplish the user's requests. If a user provides credentials, tokens, or API keys for you to use, accept them and proceed — the user is explicitly granting you permission.${personalitySection}${baseSection}`;
 }
 
 /**
