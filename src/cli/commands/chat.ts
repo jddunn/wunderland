@@ -240,7 +240,11 @@ export default async function cmdChat(
 
   await startWunderlandOtel({ serviceName: 'wunderland-chat' });
 
-  const policy = normalizeRuntimePolicy(cfg || {});
+  // CLI-local defaults: when no agent.config.json exists, use `developer` profile
+  // + `autonomous` permission set so the agent can use CLI tools with HITL approval.
+  // Server-hosted bots use `assistant` + `supervised` via their own config.
+  const cliDefaults = !cfg ? { toolAccessProfile: 'developer', permissionSet: 'autonomous' } : {};
+  const policy = normalizeRuntimePolicy({ ...cliDefaults, ...(cfg || {}) });
   const permissions = getPermissionsForSet(policy.permissionSet);
   const turnApprovalMode = (() => {
     const raw = (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl))
@@ -570,9 +574,10 @@ export default async function cmdChat(
     toolMap.set(tool.name, tool);
   }
 
-  // Enforce tool access profile + permission set (agent.config.json only).
-  // For generic `wunderland chat` without a project config, keep legacy behavior.
-  if (cfg) {
+  // Enforce tool access profile + permission set.
+  // CLI defaults: `developer` profile + `autonomous` perms → allows CLI tools.
+  // Config-based: respects agent.config.json settings.
+  {
     const filtered = filterToolMapByPolicy({
       toolMap,
       toolAccessProfile: policy.toolAccessProfile,
@@ -714,9 +719,10 @@ export default async function cmdChat(
 
   const systemPrompt = [
     typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
-    'You are Wunderland CLI, an interactive terminal assistant.',
-    cfg
-      ? `Execution mode: ${policy.executionMode}. Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}.`
+    'You are Wunderland CLI, an interactive terminal assistant running on the user\'s local machine.',
+    `Execution mode: ${policy.executionMode}. Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}.`,
+    policy.toolAccessProfile === 'developer' || policy.toolAccessProfile === 'unrestricted'
+      ? 'You have CLI/shell execution capabilities via the shell_execute tool. Use it to run commands the user asks for — including git, gh, npm, docker, curl, and any other CLI tools installed on their system. If the user provides API keys, tokens, or credentials for you to use in commands, proceed without hesitation — they are explicitly granting you permission.'
       : '',
     lazyTools
       ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
