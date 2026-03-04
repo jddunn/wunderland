@@ -154,6 +154,15 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
   'calendar_read': 'productivity',
   'calendar_write': 'productivity',
 
+  // GitHub
+  'github_search': 'search',
+  'github_issue_list': 'search',
+  'github_issue_create': 'system',
+  'github_pr_list': 'search',
+  'github_pr_create': 'system',
+  'github_file_read': 'search',
+  'github_gist_create': 'system',
+
   // Skills (agent self-management)
   'skills_list': 'search',
   'skills_read': 'search',
