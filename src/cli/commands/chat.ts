@@ -400,6 +400,18 @@ export default async function cmdChat(
   const toolMap = new Map<string, ToolInstance>();
   const preloadedPackages: string[] = [];
 
+  // Channel adapter instances (populated during extension loading)
+  interface ChannelAdapterInstance {
+    platform: string;
+    displayName?: string;
+    on: (handler: (event: any) => void, eventTypes?: string[]) => () => void;
+    sendMessage: (conversationId: string, content: any) => Promise<any>;
+    sendTypingIndicator?: (conversationId: string, isTyping: boolean) => Promise<void>;
+    getConnectionInfo?: () => { status: string };
+    shutdown?: () => Promise<void>;
+  }
+  const channelAdapters: ChannelAdapterInstance[] = [];
+
   if (!lazyTools) {
     // Read extensions from agent.config.json if present
     let extensionsFromConfig: any = null;
@@ -608,7 +620,19 @@ export default async function cmdChat(
         toolMap.set(tool.name, tool);
       }
 
+      // Extract messaging-channel adapters for bidirectional channel listening
+      const channelPayloads = packs
+        .flatMap((p: any) => (p?.descriptors || [])
+          .filter((d: { kind: string }) => d?.kind === 'messaging-channel')
+          .map((d: { payload: unknown }) => d.payload))
+        .filter(Boolean);
+      for (const a of channelPayloads) channelAdapters.push(a as ChannelAdapterInstance);
+
       fmt.ok(`Loaded ${tools.length} tools from ${packs.length} extensions`);
+      if (channelAdapters.length > 0) {
+        const chNames = channelAdapters.map(a => (a as any).displayName || (a as any).platform || 'unknown').join(', ');
+        fmt.ok(`Listening on ${channelAdapters.length} channel(s): ${chNames}`);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       fmt.warning(`Extension loading failed, using empty toolset: ${msg}`);
@@ -787,6 +811,9 @@ export default async function cmdChat(
     autoApproveToolCalls
       ? 'All tool calls are auto-approved (fully autonomous mode).'
       : 'Tool calls that have side effects may require user approval.',
+    channelAdapters.length > 0
+      ? `You are also listening on the following messaging channels: [${channelAdapters.map(a => (a as any).displayName || (a as any).platform).join(', ')}].\nMessages from channels are prefixed with [platform/sender]. When responding to a channel message, your reply is automatically sent back to that channel. Be concise in channel replies.`
+      : '',
     skillsPrompt || '',
   ].filter(Boolean).join('\n\n');
 
@@ -830,6 +857,46 @@ export default async function cmdChat(
     cliExecution: permissions.system?.cliExecution !== false,
   });
 
+  // ── Channel message queue (bridges async channel events into the REPL) ──
+  type IncomingChannelMessage = {
+    platform: string;
+    conversationId: string;
+    senderName: string;
+    text: string;
+    adapter: ChannelAdapterInstance;
+  };
+  const channelQueue: IncomingChannelMessage[] = [];
+  let channelQueueResolve: (() => void) | null = null;
+
+  function enqueueChannelMessage(msg: IncomingChannelMessage) {
+    channelQueue.push(msg);
+    if (channelQueueResolve) {
+      channelQueueResolve();
+      channelQueueResolve = null;
+    }
+  }
+  function waitForChannelMessage(): Promise<void> {
+    if (channelQueue.length > 0) return Promise.resolve();
+    return new Promise<void>((resolve) => { channelQueueResolve = resolve; });
+  }
+
+  // Wire up channel adapter listeners
+  const channelCleanups: Array<() => void> = [];
+  for (const adapter of channelAdapters) {
+    const cleanup = adapter.on((event: any) => {
+      if (event?.type !== 'message') return;
+      const data = event.data;
+      enqueueChannelMessage({
+        platform: data?.platform ?? (adapter as any).platform ?? 'unknown',
+        conversationId: data?.conversationId ?? '',
+        senderName: data?.sender?.displayName || data?.sender?.username || data?.sender?.id || 'unknown',
+        text: data?.text ?? '',
+        adapter,
+      });
+    }, ['message']);
+    channelCleanups.push(cleanup);
+  }
+
   const askPermission = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
     if (autoApproveToolCalls) return true;
     const preview = safeJsonStringify(args, 800);
@@ -853,60 +920,11 @@ export default async function cmdChat(
         return answer === 'y' || answer === 'yes';
       };
 
-  for (;;) {
-    const line = await rl.question(chatPrompt());
-    const input = (line || '').trim();
-    if (!input) continue;
-
-    if (input === '/exit' || input === 'exit' || input === 'quit') break;
-
-    if (input === '/help') {
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const helpLines: string[] = [];
-      helpLines.push('');
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/help')}      ${chalk.hex(C.text)('Show this help')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/tools')}     ${chalk.hex(C.text)('List available tools')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/discover')}  ${chalk.hex(C.text)('Show discovery stats')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw));
-      helpLines.push('');
-      console.log(helpLines.join('\n'));
-      continue;
-    }
-
-    if (input === '/tools') {
-      const names = [...toolMap.keys()].sort();
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const toolLines: string[] = [''];
-      for (const n of names) {
-        toolLines.push(frameLine(`   ${chalk.hex(C.magenta)(n)}`, iw));
-      }
-      toolLines.push('');
-      console.log(toolLines.join('\n'));
-      continue;
-    }
-
-    if (input === '/discover') {
-      const dStats = discoveryManager.getStats();
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const dLines: string[] = [''];
-      dLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Discovery Stats')}`, iw));
-      dLines.push(frameLine(`   Enabled:       ${dStats.enabled ? sColor('yes') : wColor('no')}`, iw));
-      dLines.push(frameLine(`   Initialized:   ${dStats.initialized ? sColor('yes') : wColor('no')}`, iw));
-      dLines.push(frameLine(`   Capabilities:  ${dStats.capabilityCount}`, iw));
-      dLines.push(frameLine(`   Graph nodes:   ${dStats.graphNodes}`, iw));
-      dLines.push(frameLine(`   Graph edges:   ${dStats.graphEdges}`, iw));
-      dLines.push(frameLine(`   Preset co-occ: ${dStats.presetCoOccurrences}`, iw));
-      if (dStats.manifestDirs.length > 0) {
-        dLines.push(frameLine(`   Manifest dirs: ${dStats.manifestDirs.join(', ')}`, iw));
-      }
-      dLines.push('');
-      console.log(dLines.join('\n'));
-      continue;
-    }
-
+  // ── Chat turn helper (shared by stdin and channel inputs) ──
+  async function runChatTurn(
+    input: string,
+    replyTarget?: { adapter: ChannelAdapterInstance; conversationId: string },
+  ): Promise<void> {
     messages.push({ role: 'user', content: input });
 
     // Capability discovery — inject tiered context for this turn
@@ -1003,9 +1021,135 @@ export default async function cmdChat(
 
     if (reply) {
       printAssistantReply(reply);
+      // If this turn originated from a messaging channel, send the reply back
+      if (replyTarget) {
+        try {
+          await replyTarget.adapter.sendMessage(replyTarget.conversationId, {
+            blocks: [{ type: 'text', text: reply }],
+          });
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Channel reply failed: ${errMsg}`);
+        }
+      }
     }
   }
 
+  // ── Slash command handler (returns true if the input was a slash command) ──
+  function handleSlashCommand(input: string): boolean {
+    if (input === '/help') {
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const helpLines: string[] = [];
+      helpLines.push('');
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/help')}      ${chalk.hex(C.text)('Show this help')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/tools')}     ${chalk.hex(C.text)('List available tools')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/channels')}  ${chalk.hex(C.text)('Show connected channels')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/discover')}  ${chalk.hex(C.text)('Show discovery stats')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw));
+      helpLines.push('');
+      console.log(helpLines.join('\n'));
+      return true;
+    }
+
+    if (input === '/tools') {
+      const names = [...toolMap.keys()].sort();
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const toolLines: string[] = [''];
+      for (const n of names) {
+        toolLines.push(frameLine(`   ${chalk.hex(C.magenta)(n)}`, iw));
+      }
+      toolLines.push('');
+      console.log(toolLines.join('\n'));
+      return true;
+    }
+
+    if (input === '/channels') {
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const chLines: string[] = [''];
+      if (channelAdapters.length === 0) {
+        chLines.push(frameLine(`   ${muted('No channels connected')}`, iw));
+      } else {
+        for (const adapter of channelAdapters) {
+          const info = adapter.getConnectionInfo?.();
+          const status = info?.status === 'connected' ? sColor('connected') : wColor(info?.status ?? 'unknown');
+          chLines.push(frameLine(`   ${chalk.hex(C.brightCyan)((adapter as any).displayName || (adapter as any).platform)} ${status}`, iw));
+        }
+      }
+      chLines.push('');
+      console.log(chLines.join('\n'));
+      return true;
+    }
+
+    if (input === '/discover') {
+      const dStats = discoveryManager.getStats();
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const dLines: string[] = [''];
+      dLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Discovery Stats')}`, iw));
+      dLines.push(frameLine(`   Enabled:       ${dStats.enabled ? sColor('yes') : wColor('no')}`, iw));
+      dLines.push(frameLine(`   Initialized:   ${dStats.initialized ? sColor('yes') : wColor('no')}`, iw));
+      dLines.push(frameLine(`   Capabilities:  ${dStats.capabilityCount}`, iw));
+      dLines.push(frameLine(`   Graph nodes:   ${dStats.graphNodes}`, iw));
+      dLines.push(frameLine(`   Graph edges:   ${dStats.graphEdges}`, iw));
+      dLines.push(frameLine(`   Preset co-occ: ${dStats.presetCoOccurrences}`, iw));
+      if (dStats.manifestDirs.length > 0) {
+        dLines.push(frameLine(`   Manifest dirs: ${dStats.manifestDirs.join(', ')}`, iw));
+      }
+      dLines.push('');
+      console.log(dLines.join('\n'));
+      return true;
+    }
+
+    return false;
+  }
+
+  // ── Main REPL loop ──
+  const hasChannels = channelAdapters.length > 0;
+  for (;;) {
+    if (!hasChannels) {
+      // No channels — simple blocking readline (original behavior, zero overhead)
+      const line = await rl.question(chatPrompt());
+      const input = (line || '').trim();
+      if (!input) continue;
+      if (input === '/exit' || input === 'exit' || input === 'quit') break;
+      if (handleSlashCommand(input)) continue;
+      await runChatTurn(input);
+    } else {
+      // Concurrent: race stdin vs channel message queue
+      let stdinLine: string | undefined;
+      let channelMsg: IncomingChannelMessage | undefined;
+
+      const stdinPromise = rl.question(chatPrompt()).then((line) => { stdinLine = line; });
+      const channelPromise = waitForChannelMessage().then(() => {
+        channelMsg = channelQueue.shift();
+      });
+
+      await Promise.race([stdinPromise, channelPromise]);
+
+      if (channelMsg) {
+        const cm = channelMsg;
+        const prefix = `[${cm.platform}/${cm.senderName}]`;
+        console.log(`\n  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.brightCyan)(prefix)} ${cm.text}`);
+        await runChatTurn(
+          `${prefix} ${cm.text}`,
+          { adapter: cm.adapter, conversationId: cm.conversationId },
+        );
+        // The pending stdinPromise stays live — it will resolve on the next iteration
+      } else if (stdinLine !== undefined) {
+        const input = (stdinLine || '').trim();
+        if (!input) continue;
+        if (input === '/exit' || input === 'exit' || input === 'quit') break;
+        if (handleSlashCommand(input)) continue;
+        await runChatTurn(input);
+      }
+    }
+  }
+
+  // ── Graceful shutdown ──
+  for (const cleanup of channelCleanups) cleanup();
   rl.close();
   await discoveryManager.close();
   await adaptiveRuntime.close();
