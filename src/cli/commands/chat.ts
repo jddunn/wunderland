@@ -250,12 +250,13 @@ export default async function cmdChat(
 
   await startWunderlandOtel({ serviceName: 'wunderland-chat' });
 
-  // CLI-local defaults: when no agent.config.json exists, use `developer` profile
-  // + `autonomous` permission set so the agent can use CLI tools with HITL approval.
-  // Server-hosted bots use `assistant` + `supervised` via their own config.
-  const cliDefaults: Record<string, unknown> = !cfg
-    ? { toolAccessProfile: 'developer', permissionSet: 'autonomous' }
-    : {};
+  // CLI defaults: always use `developer` profile + `autonomous` permission set
+  // so the agent can use CLI tools. Config values override these if explicitly set.
+  // Server-hosted bots override via their own agent.config.json.
+  const cliDefaults: Record<string, unknown> = {
+    toolAccessProfile: 'developer',
+    permissionSet: 'autonomous',
+  };
 
   // Allow CLI flags to override security tier / tool profile
   const tierFlag = typeof flags['security-tier'] === 'string' ? String(flags['security-tier']).trim().toLowerCase() : '';
@@ -433,9 +434,14 @@ export default async function cmdChat(
       fmt.note('No extensions configured, using defaults...');
     }
 
-    // Auto-include Telegram tool when a bot token is available
+    // Auto-include Telegram tool when a valid bot token is available
     if (process.env['TELEGRAM_BOT_TOKEN'] && !toolExtensions.includes('telegram')) {
-      toolExtensions.push('telegram');
+      const tgToken = process.env['TELEGRAM_BOT_TOKEN'].trim();
+      if (/^\d+:[A-Za-z0-9_-]{35,}$/.test(tgToken)) {
+        toolExtensions.push('telegram');
+      } else {
+        fmt.warning('TELEGRAM_BOT_TOKEN looks invalid (expected format: 123456:ABC-DEF...) — skipping Telegram extension');
+      }
     }
 
     // Resolve extensions using PresetExtensionResolver
@@ -577,7 +583,7 @@ export default async function cmdChat(
         // Not available — skip silently
       }
 
-      await Promise.all(
+      const activationResults = await Promise.allSettled(
         packs
           .map((p: any) =>
             typeof p?.onActivate === 'function'
@@ -586,6 +592,12 @@ export default async function cmdChat(
           )
           .filter(Boolean),
       );
+      for (const result of activationResults) {
+        if (result.status === 'rejected') {
+          const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          fmt.warning(`Extension activation failed: ${msg}`);
+        }
+      }
 
       const tools: ToolInstance[] = packs
         .flatMap((p: any) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
