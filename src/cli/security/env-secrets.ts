@@ -73,6 +73,7 @@ export function createEnvSecretResolver(opts?: {
     // These are intentionally minimal; channel packs may still implement their own fallbacks.
     if (id === 'discord.botToken') candidates.push('DISCORD_TOKEN');
     if (id === 'telegram.botToken') candidates.push('TELEGRAM_TOKEN');
+    if (id === 'github.token') candidates.push('GH_TOKEN');
 
     for (const envVar of candidates) {
       const v = env[envVar];
