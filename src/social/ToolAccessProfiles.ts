@@ -118,7 +118,10 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
   'browser_navigate': 'search',
   'browser_click': 'search',
   'browser_extract': 'search',
+  'browser_scrape': 'search',
   'browser_screenshot': 'search',
+  'browser_snapshot': 'search',
+  'browser_type': 'search',
   'feed_search': 'search',
 
   // Media
@@ -140,6 +143,7 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
   'list_directory': 'filesystem',
 
   // System
+  'shell_execute': 'system',
   'cli_executor': 'system',
   'code_execution': 'system',
   'run_command': 'system',
@@ -160,6 +164,7 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
   // Schema-on-demand meta tools (agent self-management)
   'extensions_list': 'search',
   'extensions_enable': 'memory',
+  'extensions_status': 'search',
 
   // Communication
   'email_send': 'communication',
