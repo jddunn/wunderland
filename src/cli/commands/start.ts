@@ -598,8 +598,8 @@ export default async function cmdStart(
         // Not available — skip silently
       }
 
-      // Activate all packs
-      await Promise.all(
+      // Activate all packs (graceful — don't let one bad extension crash everything)
+      const activationResults = await Promise.allSettled(
         packs
           .map((p: any) =>
             typeof p?.onActivate === 'function'
@@ -608,6 +608,12 @@ export default async function cmdStart(
           )
           .filter(Boolean),
       );
+      for (const result of activationResults) {
+        if (result.status === 'rejected') {
+          const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          fmt.warning(`Extension activation failed: ${msg}`);
+        }
+      }
 
       activePacks = packs;
 
