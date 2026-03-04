@@ -15,7 +15,9 @@ export default async function cmdAuthStatus(
   const provider = typeof flags['provider'] === 'string' ? flags['provider'].trim() : 'openai';
 
   try {
-    const { FileTokenStore, OpenAIOAuthFlow } = await import('@framers/agentos/auth');
+    // Dynamic import — isTokenValid is available in local build; type resolves after agentos publish
+    const authMod = await import('@framers/agentos/auth') as any;
+    const { FileTokenStore, isTokenValid } = authMod;
     const store = new FileTokenStore();
     const tokens = await store.load(provider);
 
@@ -23,12 +25,11 @@ export default async function cmdAuthStatus(
 
     if (!tokens) {
       console.log(`  Status: ${eColor('Not authenticated')}`);
-      console.log(`  Run ${accent('wunderland login')} to authenticate.\n`);
+      console.log(`  Run ${accent(`wunderland login --provider ${provider}`)} to authenticate.\n`);
       return;
     }
 
-    const flow = new OpenAIOAuthFlow({ tokenStore: store });
-    const valid = flow.isValid(tokens);
+    const valid = isTokenValid(tokens);
     const expiresAt = new Date(tokens.expiresAt);
     const minutesLeft = Math.round((tokens.expiresAt - Date.now()) / 1000 / 60);
     const masked = tokens.accessToken.slice(0, 8) + '...' + tokens.accessToken.slice(-4);
@@ -41,7 +42,7 @@ export default async function cmdAuthStatus(
     if (!valid && tokens.refreshToken) {
       console.log(`\n  Token expired but refresh token available — will auto-refresh on next use.`);
     } else if (!valid) {
-      console.log(`\n  Run ${accent('wunderland login')} to re-authenticate.`);
+      console.log(`\n  Run ${accent(`wunderland login --provider ${provider}`)} to re-authenticate.`);
     }
     console.log('');
   } catch (err) {
