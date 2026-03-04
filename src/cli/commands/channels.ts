@@ -89,6 +89,41 @@ async function addChannelById(platformId: string, globals: GlobalFlags): Promise
     return;
   }
 
+  // OAuth-capable platforms — offer interactive OAuth before manual token entry
+  const OAUTH_PLATFORMS = new Set(['twitter', 'instagram']);
+  if (OAUTH_PLATFORMS.has(platformId) && !globals.yes) {
+    const p = await import('@clack/prompts');
+    const authMethod = await p.select({
+      message: `How would you like to authenticate with ${platform.label}?`,
+      options: [
+        { value: 'oauth' as const, label: 'OAuth 2.0 (recommended)', hint: 'Opens browser for authorization' },
+        { value: 'manual' as const, label: 'Manual tokens', hint: 'Paste pre-obtained tokens from developer portal' },
+      ],
+    });
+
+    if (p.isCancel(authMethod)) { fmt.note('Cancelled.'); return; }
+
+    if (authMethod === 'oauth') {
+      try {
+        const loginMod = await import('./login.js');
+        const loginFlags: Record<string, string | boolean> = { provider: platformId };
+        await loginMod.default([], loginFlags, globals);
+      } catch (err) {
+        fmt.errorBlock('OAuth failed', err instanceof Error ? err.message : String(err));
+        return;
+      }
+
+      // Save channel to config even if OAuth was used (tokens stored in FileTokenStore)
+      channels.push(platformId);
+      await updateConfig({ channels }, globals.config);
+      fmt.blank();
+      fmt.ok(`Added ${cColor(platform.label)} channel with OAuth.`);
+      fmt.blank();
+      return;
+    }
+    // Fall through to manual token entry
+  }
+
   // Prompt for secrets
   const secrets = getSecretsForPlatform(platformId);
   const env = await loadEnv(globals.config);
