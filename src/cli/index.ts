@@ -86,6 +86,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('export-session')}        Export chat session to file
       ${w('ollama-setup')}          Configure Ollama (local LLM)
       ${w('upgrade')}               Check for updates & self-update
+      ${w('completions')} ${d('<shell>')}   Shell completions (bash/zsh/fish)
       ${w('version')}               Show version
 
   ${c('Global Options:')}
@@ -181,6 +182,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   'auth-status':     () => import('./commands/auth-status.js'),
   upgrade:           () => import('./commands/upgrade.js'),
   env:               () => import('./commands/env.js'),
+  completions:       () => import('./commands/completions.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
