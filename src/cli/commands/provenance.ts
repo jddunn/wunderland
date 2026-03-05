@@ -15,6 +15,7 @@ import { accent, dim, muted, success as sColor, error as eColor } from '../ui/th
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 
 interface ProvenanceModules {
   AgentKeyManager: any;
@@ -106,7 +107,13 @@ export default async function cmdProvenance(
       const provenanceCfg = cfg.provenance || cfg.security?.provenance;
       const enabled = provenanceCfg?.enabled === true;
 
-      fmt.kvPair('Agent', cfg.seedId || cfg.displayName || 'unknown');
+      const resolvedName = resolveAgentDisplayName({
+        displayName: cfg.displayName,
+        agentName: cfg.agentName,
+        seedId: cfg.seedId,
+        fallback: 'unknown',
+      });
+      fmt.kvPair('Agent', resolvedName);
       fmt.kvPair('Provenance Enabled', enabled ? sColor('yes') : muted('no'));
 
       if (provenanceCfg) {

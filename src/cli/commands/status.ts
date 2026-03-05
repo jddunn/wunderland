@@ -18,6 +18,7 @@ import { loadEnv, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
 import { TokenUsageTracker, type TokenUsageSummary } from '../../core/TokenUsageTracker.js';
+import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 
 const CHANNEL_ALIASES: Record<string, string> = {
   'blog-publisher': 'devto',
@@ -55,7 +56,14 @@ export default async function cmdStatus(
   if (existsSync(localConfig)) {
     try {
       const cfg = JSON.parse(await readFile(localConfig, 'utf8'));
-      agentLines.push(`${muted('Name'.padEnd(20))} ${accent(cfg.displayName || 'Unknown')}`);
+      const resolvedName = resolveAgentDisplayName({
+        displayName: cfg.displayName,
+        agentName: cfg.agentName,
+        seedId: cfg.seedId,
+        globalAgentName: config.agentName,
+        fallback: 'Unknown',
+      });
+      agentLines.push(`${muted('Name'.padEnd(20))} ${accent(resolvedName)}`);
       agentLines.push(`${muted('Seed ID'.padEnd(20))} ${cfg.seedId || 'unknown'}`);
       if (cfg.bio) agentLines.push(`${muted('Bio'.padEnd(20))} ${dim(cfg.bio)}`);
     } catch {
@@ -65,7 +73,7 @@ export default async function cmdStatus(
     agentLines.push(`${muted('Project'.padEnd(20))} ${muted('no agent.config.json in current directory')}`);
   }
 
-  if (config.agentName) agentLines.push(`${muted('Global Agent'.padEnd(20))} ${config.agentName}`);
+  if (config.agentName) agentLines.push(`${muted('Global Agent'.padEnd(20))} ${accent(config.agentName)}`);
   if (config.llmProvider) agentLines.push(`${muted('LLM Provider'.padEnd(20))} ${config.llmProvider}`);
   if (config.llmModel) agentLines.push(`${muted('LLM Model'.padEnd(20))} ${config.llmModel}`);
   if (config.personalityPreset) {

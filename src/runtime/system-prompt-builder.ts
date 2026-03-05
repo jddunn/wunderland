@@ -49,9 +49,10 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
 
   // 1. Base system prompt from seed (includes HEXACO identity + personality guidelines).
   //    This already contains: "You are ${name}, an adaptive AI assistant powered by Wunderland."
-  const basePrompt = typeof seed.baseSystemPrompt === 'string'
-    ? seed.baseSystemPrompt
-    : String(seed.baseSystemPrompt);
+  const fallbackIdentity = `You are ${seed.name || 'Wunderland Assistant'}, an adaptive AI assistant powered by Wunderland.`;
+  const basePrompt = typeof seed.baseSystemPrompt === 'string' && seed.baseSystemPrompt.trim()
+    ? seed.baseSystemPrompt.trim()
+    : fallbackIdentity;
   parts.push(basePrompt);
 
   // 2. Mode-specific runtime context (does NOT override identity).
@@ -207,7 +208,7 @@ function buildPersonalityInstructions(seed: IWunderlandSeed): string {
 }
 
 function buildConversationalStyleInstructions(seed: IWunderlandSeed): string {
-  const name = seed.name || 'Wunderland Assistant';
+  const name = typeof seed.name === 'string' && seed.name.trim() ? seed.name.trim() : 'Wunderland Assistant';
   return [
     'Conversational Style:',
     `- Your name is ${name}. Always use this name when asked who you are or what your name is.`,
