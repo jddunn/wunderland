@@ -35,6 +35,7 @@ import {
   type NormalizedRuntimePolicy,
 } from '../runtime/policy.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
+import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
 
 import type {
   WunderlandAdaptiveExecutionConfig,
@@ -536,7 +537,12 @@ async function resolveExtensionsFromOpts(opts: {
 }
 
 function buildLibrarySystemPrompt(agentConfig: WunderlandAgentConfig, policy: NormalizedRuntimePolicy, skillsPrompt?: string): string {
-  const displayName = agentConfig.displayName || agentConfig.agentName || 'Wunderland Agent';
+  const displayName = resolveAgentDisplayName({
+    displayName: agentConfig.displayName,
+    agentName: agentConfig.agentName,
+    seedId: agentConfig.seedId,
+    fallback: 'Wunderland Agent',
+  });
   const personality = agentConfig.personality || {};
   const seed = createWunderlandSeed({
     seedId: String(agentConfig.seedId || 'seed_library'),

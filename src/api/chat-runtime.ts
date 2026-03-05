@@ -22,6 +22,8 @@ import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
 import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
 import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
+import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
+import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
@@ -80,10 +82,12 @@ function finiteNumber(value: unknown, fallback: number): number {
 function buildSeedFromAgentConfig(cfg: WunderlandAgentConfig, workspaceSeedId: string) {
   const seedId =
     typeof cfg.seedId === 'string' && cfg.seedId.trim() ? cfg.seedId.trim() : workspaceSeedId;
-  const displayName =
-    typeof cfg.displayName === 'string' && cfg.displayName.trim()
-      ? cfg.displayName.trim()
-      : seedId;
+  const displayName = resolveAgentDisplayName({
+    displayName: cfg.displayName,
+    agentName: cfg.agentName,
+    seedId,
+    fallback: seedId,
+  });
   const bio =
     typeof cfg.bio === 'string' && cfg.bio.trim() ? cfg.bio.trim() : 'Autonomous Wunderbot';
   const p = cfg.personality || {};
@@ -363,23 +367,17 @@ export async function createWunderlandChatRuntime(opts: {
     logger,
   });
 
-  const systemPrompt = [
-    typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
-    'You are a Wunderland in-process agent runtime.',
-    `Execution mode: ${policy.executionMode}. Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}.`,
-    agentConfig.lazyTools === true
-      ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
-      : 'Tools are preloaded, and you can also use extensions_enable to load additional packs on demand.',
-    'When you need up-to-date information, use web_search and/or browser_* tools (enable them first if missing).',
-    turnApprovalMode !== 'off' ? `Turn checkpoints: ${turnApprovalMode}.` : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-
   const sessions = new Map<string, Array<Record<string, unknown>>>();
-
   const autoApprove =
     opts.autoApproveToolCalls === true || policy.executionMode === 'autonomous';
+  const systemPrompt = buildAgenticSystemPrompt({
+    seed,
+    policy,
+    mode: 'library',
+    lazyTools: agentConfig.lazyTools === true,
+    autoApproveToolCalls: autoApprove,
+    turnApprovalMode,
+  });
 
   if (!autoApprove && typeof opts.askPermission !== 'function') {
     throw new Error(

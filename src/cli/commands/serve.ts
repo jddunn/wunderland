@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor, info as iColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 import {
   getDaemonDir,
   readDaemonInfo,
@@ -60,7 +61,12 @@ export default async function cmdServe(
   }
 
   const seedId = String(cfg.seedId || 'seed_local_agent');
-  const displayName = String(cfg.displayName || 'My Agent');
+  const displayName = resolveAgentDisplayName({
+    displayName: cfg.displayName,
+    agentName: cfg.agentName,
+    seedId,
+    fallback: 'My Agent',
+  });
 
   // ── Resolve port ───────────────────────────────────────────────────────
   let port = DEFAULT_PORT;
