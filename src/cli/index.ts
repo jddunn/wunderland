@@ -84,6 +84,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('plugins')}               List installed extension packs
       ${w('export-session')}        Export chat session to file
       ${w('ollama-setup')}          Configure Ollama (local LLM)
+      ${w('upgrade')}               Check for updates & self-update
       ${w('version')}               Show version
 
   ${c('Global Options:')}
@@ -118,6 +119,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--lines <n>')}            Number of log lines to show (logs, default: 50)
     ${d('--follow, -f')}           Stream new log lines (logs)
     ${d('--stderr')}               Show stderr instead of stdout (logs)
+    ${d('--check')}                Check for updates without installing (upgrade)
     ${d('--skills-dir <path>')}    Load skills from directory
     ${d('--no-skills')}            Disable skill loading
 ${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}
@@ -176,6 +178,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   login:             () => import('./commands/login.js'),
   logout:            () => import('./commands/logout.js'),
   'auth-status':     () => import('./commands/auth-status.js'),
+  upgrade:           () => import('./commands/upgrade.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
