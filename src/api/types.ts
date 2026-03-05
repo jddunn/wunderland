@@ -105,6 +105,8 @@ export interface WunderlandAdaptiveExecutionConfig {
 export type WunderlandAgentConfig = {
   seedId?: string;
   displayName?: string;
+  /** Alias for displayName — used by global CLI config (`~/.wunderland/config.json`). */
+  agentName?: string;
   bio?: string;
   systemPrompt?: string;
   personality?: Partial<{
