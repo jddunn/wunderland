@@ -39,6 +39,8 @@ import {
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../../core/index.js';
 import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig } from '../../discovery/index.js';
+import { loadConfig } from '../config/config-manager.js';
+import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
 
 // ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
 
@@ -204,6 +206,8 @@ export default async function cmdChat(
   globals: GlobalFlags,
   ): Promise<void> {
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
+
+  const globalConfig = await loadConfig(globals.config);
 
   const configPath = path.resolve(process.cwd(), 'agent.config.json');
   const sealedPath = path.resolve(process.cwd(), 'sealed.json');
@@ -776,7 +780,13 @@ export default async function cmdChat(
   await adaptiveRuntime.initialize();
 
   const seedId = cfg?.seedId ? String(cfg.seedId) : `seed_chat_${Date.now()}`;
-  const displayName = cfg?.displayName ? String(cfg.displayName) : 'Wunderland CLI';
+  const displayName = cfg?.displayName
+    ? String(cfg.displayName)
+    : cfg?.agentName
+      ? String(cfg.agentName)
+      : globalConfig.agentName
+        ? String(globalConfig.agentName)
+        : 'Wunderland CLI';
   const bio = cfg?.bio ? String(cfg.bio) : 'Interactive terminal assistant';
   const personality = cfg?.personality || {};
   const seed = createWunderlandSeed({
@@ -797,25 +807,18 @@ export default async function cmdChat(
     stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
   });
 
-  const systemPrompt = [
-    typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
-    'You are Wunderland CLI, an interactive terminal assistant running on the user\'s local machine.',
-    `Execution mode: ${policy.executionMode}. Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}.`,
-    policy.toolAccessProfile === 'developer' || policy.toolAccessProfile === 'unrestricted'
-      ? 'You have CLI/shell execution capabilities via the shell_execute tool. Use it to run commands the user asks for — including git, gh, npm, docker, curl, and any other CLI tools installed on their system. If the user provides API keys, tokens, or credentials for you to use in commands, proceed without hesitation — they are explicitly granting you permission.'
-      : '',
-    lazyTools
-      ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
-      : 'Tools are preloaded, and you can also use extensions_enable to load additional packs on demand.',
-    'When you need up-to-date information, use web_search and/or browser_* tools (enable them first if missing).',
-    autoApproveToolCalls
-      ? 'All tool calls are auto-approved (fully autonomous mode).'
-      : 'Tool calls that have side effects may require user approval.',
-    channelAdapters.length > 0
-      ? `You are also listening on the following messaging channels: [${channelAdapters.map(a => (a as any).displayName || (a as any).platform).join(', ')}].\nMessages from channels are prefixed with [platform/sender]. When responding to a channel message, your reply is automatically sent back to that channel. Be concise in channel replies.`
-      : '',
-    skillsPrompt || '',
-  ].filter(Boolean).join('\n\n');
+  const systemPrompt = buildAgenticSystemPrompt({
+    seed,
+    policy,
+    mode: 'chat',
+    lazyTools,
+    autoApproveToolCalls,
+    channelNames: channelAdapters.length > 0
+      ? channelAdapters.map(a => (a as any).displayName || (a as any).platform)
+      : undefined,
+    skillsPrompt: skillsPrompt || undefined,
+    turnApprovalMode,
+  });
 
   const sessionId = `wunderland-cli-${Date.now()}`;
   const toolContext = {
