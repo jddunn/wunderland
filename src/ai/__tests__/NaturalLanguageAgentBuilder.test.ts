@@ -213,6 +213,41 @@ describe('NaturalLanguageAgentBuilder', () => {
       expect(result.toolAccessProfile).toBe('assistant');
     });
 
+    it('should accept newly added channels', async () => {
+      const mockLLM = vi.fn(async () =>
+        JSON.stringify({
+          displayName: 'Social Bot',
+          channels: ['linkedin', 'facebook', 'threads', 'bluesky', 'mastodon', 'farcaster', 'lemmy', 'google-business'],
+        })
+      );
+
+      const result = await extractAgentConfig('Post updates to modern social channels', mockLLM);
+
+      expect(result.channels).toEqual([
+        'linkedin',
+        'facebook',
+        'threads',
+        'bluesky',
+        'mastodon',
+        'farcaster',
+        'lemmy',
+        'google-business',
+      ]);
+    });
+
+    it('should normalize channel aliases and deduplicate', async () => {
+      const mockLLM = vi.fn(async () =>
+        JSON.stringify({
+          displayName: 'Alias Bot',
+          channels: ['X', 'Google Business Profile', 'blog-publisher', 'hashnode', 'medium', 'wordpress', 'dev.to', 'unknown'],
+        })
+      );
+
+      const result = await extractAgentConfig('Use aliases for channels', mockLLM);
+
+      expect(result.channels).toEqual(['twitter', 'google-business', 'devto']);
+    });
+
     it('should extract personality traits', async () => {
       const mockLLM = vi.fn(async () =>
         JSON.stringify({

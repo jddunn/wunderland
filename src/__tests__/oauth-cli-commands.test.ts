@@ -41,6 +41,7 @@ describe('wunderland login', () => {
   let exitCode: number | undefined;
 
   beforeEach(() => {
+    vi.resetModules();
     exitCode = process.exitCode;
     process.exitCode = undefined;
   });
@@ -114,6 +115,61 @@ describe('wunderland login', () => {
       cap.restore();
     }
   });
+
+  it('supports LinkedIn OAuth provider', async () => {
+    vi.doMock('@framers/agentos/auth', () => ({
+      LinkedInOAuthFlow: class {
+        authenticate = vi.fn(async () => ({
+          accessToken: 'linkedin-token-0123456789012',
+          refreshToken: 'refresh-tok',
+          expiresAt: Date.now() + 3600_000,
+        }));
+      },
+      FileTokenStore: class {},
+    }));
+
+    const { default: cmdLogin } = await import('../cli/commands/login.js');
+    const cap = captureConsole();
+    try {
+      await cmdLogin([], { provider: 'linkedin', 'client-id': 'cid', 'client-secret': 'secret' }, globals);
+      const output = cap.logs.join('\n');
+      expect(output).toContain('LinkedIn');
+      expect(output).toContain('Authenticated');
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it('supports Farcaster token login and stores token metadata', async () => {
+    const saveMock = vi.fn(async () => {});
+    vi.doMock('@framers/agentos/auth', () => ({
+      FileTokenStore: class {
+        save = saveMock;
+      },
+    }));
+
+    const { default: cmdLogin } = await import('../cli/commands/login.js');
+    const cap = captureConsole();
+    try {
+      await cmdLogin(
+        [],
+        { provider: 'farcaster', 'neynar-api-key': 'ney-key', 'signer-uuid': 'signer-123', fid: '42' },
+        globals,
+      );
+      expect(saveMock).toHaveBeenCalledWith(
+        'farcaster',
+        expect.objectContaining({
+          accessToken: 'ney-key',
+          metadata: expect.objectContaining({ signerUuid: 'signer-123', fid: '42' }),
+        }),
+      );
+      const output = cap.logs.join('\n');
+      expect(output).toContain('Farcaster');
+      expect(output).toContain('Authenticated');
+    } finally {
+      cap.restore();
+    }
+  });
 });
 
 // ── Logout ────────────────────────────────────────────────────────────────────
@@ -122,6 +178,7 @@ describe('wunderland logout', () => {
   let exitCode: number | undefined;
 
   beforeEach(() => {
+    vi.resetModules();
     exitCode = process.exitCode;
     process.exitCode = undefined;
   });
@@ -200,6 +257,7 @@ describe('wunderland auth-status', () => {
   let exitCode: number | undefined;
 
   beforeEach(() => {
+    vi.resetModules();
     exitCode = process.exitCode;
     process.exitCode = undefined;
   });
@@ -214,9 +272,7 @@ describe('wunderland auth-status', () => {
       FileTokenStore: class {
         load = vi.fn(async () => null);
       },
-      OpenAIOAuthFlow: class {
-        isValid = vi.fn(() => false);
-      },
+      isTokenValid: vi.fn(() => false),
     }));
 
     const { default: cmdAuthStatus } = await import('../cli/commands/auth-status.js');
@@ -241,9 +297,7 @@ describe('wunderland auth-status', () => {
           expiresAt,
         }));
       },
-      OpenAIOAuthFlow: class {
-        isValid = vi.fn(() => true);
-      },
+      isTokenValid: vi.fn(() => true),
     }));
 
     const { default: cmdAuthStatus } = await import('../cli/commands/auth-status.js');
@@ -268,9 +322,7 @@ describe('wunderland auth-status', () => {
           expiresAt: Date.now() - 1000,
         }));
       },
-      OpenAIOAuthFlow: class {
-        isValid = vi.fn(() => false);
-      },
+      isTokenValid: vi.fn(() => false),
     }));
 
     const { default: cmdAuthStatus } = await import('../cli/commands/auth-status.js');
@@ -293,9 +345,7 @@ describe('wunderland auth-status', () => {
           expiresAt: Date.now() - 1000,
         }));
       },
-      OpenAIOAuthFlow: class {
-        isValid = vi.fn(() => false);
-      },
+      isTokenValid: vi.fn(() => false),
     }));
 
     const { default: cmdAuthStatus } = await import('../cli/commands/auth-status.js');

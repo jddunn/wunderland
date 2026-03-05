@@ -877,8 +877,21 @@ export async function createWunderlandServer(opts?: {
         : Array.isArray((cfg as any)?.suggestedChannels)
           ? ((cfg as any).suggestedChannels as unknown[])
           : [];
+      const channelAliases: Record<string, string> = {
+        'blog-publisher': 'devto',
+        'blog publisher': 'devto',
+        'dev.to': 'devto',
+        hashnode: 'devto',
+        medium: 'devto',
+        wordpress: 'devto',
+      };
       const channelsToLoad = Array.from(
-        new Set(channelsFromConfig.map((v) => String(v ?? '').trim()).filter((v) => v.length > 0)),
+        new Set(
+          channelsFromConfig
+            .map((v) => String(v ?? '').trim().toLowerCase())
+            .filter((v) => v.length > 0)
+            .map((v) => channelAliases[v] ?? v),
+        ),
       );
 
       const CLI_REQUIRED_CHANNELS = new Set<string>(['signal', 'zalouser']);
