@@ -12,6 +12,20 @@ import { loadConfig, updateConfig } from '../config/config-manager.js';
 import { loadEnv, mergeEnv } from '../config/env-manager.js';
 import { getSecretsForPlatform } from '../config/secrets.js';
 
+const CHANNEL_ALIASES: Record<string, string> = {
+  'blog-publisher': 'devto',
+  'blog publisher': 'devto',
+  'dev.to': 'devto',
+  hashnode: 'devto',
+  medium: 'devto',
+  wordpress: 'devto',
+};
+
+function normalizeChannelId(channelId: string): string {
+  const normalized = channelId.trim().toLowerCase();
+  return CHANNEL_ALIASES[normalized] ?? normalized;
+}
+
 // ── Sub-commands ────────────────────────────────────────────────────────────
 
 async function listChannels(globals: GlobalFlags): Promise<void> {
@@ -32,9 +46,10 @@ async function listChannels(globals: GlobalFlags): Promise<void> {
   }
 
   for (const channelId of activeChannels) {
-    const platform = CHANNEL_PLATFORMS.find((p) => p.id === channelId);
+    const normalizedChannelId = normalizeChannelId(channelId);
+    const platform = CHANNEL_PLATFORMS.find((p) => p.id === normalizedChannelId);
     const label = platform ? `${ui.ascii ? '' : `${platform.icon}  `}${platform.label}` : channelId;
-    const secrets = getSecretsForPlatform(channelId);
+    const secrets = getSecretsForPlatform(normalizedChannelId);
     const allSet = secrets.length === 0 || secrets.every((s) => !!env[s.envVar]);
     const status = allSet ? sColor('ready') : wColor('needs credentials');
     console.log(`    ${cColor(label.padEnd(24))} ${status}`);
@@ -74,7 +89,8 @@ async function addChannel(args: string[], globals: GlobalFlags): Promise<void> {
 }
 
 async function addChannelById(platformId: string, globals: GlobalFlags): Promise<void> {
-  const platform = CHANNEL_PLATFORMS.find((p) => p.id === platformId);
+  const normalizedPlatformId = normalizeChannelId(platformId);
+  const platform = CHANNEL_PLATFORMS.find((p) => p.id === normalizedPlatformId);
   if (!platform) {
     fmt.errorBlock('Unknown platform', `"${platformId}" is not a recognized channel. Available: ${CHANNEL_PLATFORMS.map((p) => p.id).join(', ')}`);
     process.exitCode = 1;
@@ -83,20 +99,29 @@ async function addChannelById(platformId: string, globals: GlobalFlags): Promise
 
   const config = await loadConfig(globals.config);
   const channels = config.channels || [];
+  const normalizedChannels = channels.map((id) => normalizeChannelId(id));
 
-  if (channels.includes(platformId)) {
+  if (normalizedChannels.includes(normalizedPlatformId)) {
     fmt.warning(`${platform.label} is already configured.`);
     return;
   }
 
-  // OAuth-capable platforms — offer interactive OAuth before manual token entry
-  const OAUTH_PLATFORMS = new Set(['twitter', 'instagram']);
-  if (OAUTH_PLATFORMS.has(platformId) && !globals.yes) {
+  // Login-assisted platforms — offer guided provider login before manual secret entry.
+  const LOGIN_ASSISTED_PLATFORMS = new Set([
+    'twitter',
+    'instagram',
+    'linkedin',
+    'facebook',
+    'bluesky',
+    'mastodon',
+    'farcaster',
+  ]);
+  if (LOGIN_ASSISTED_PLATFORMS.has(normalizedPlatformId) && !globals.yes) {
     const p = await import('@clack/prompts');
     const authMethod = await p.select({
       message: `How would you like to authenticate with ${platform.label}?`,
       options: [
-        { value: 'oauth' as const, label: 'OAuth 2.0 (recommended)', hint: 'Opens browser for authorization' },
+        { value: 'oauth' as const, label: 'Guided login (recommended)', hint: 'OAuth or token setup via wunderland login' },
         { value: 'manual' as const, label: 'Manual tokens', hint: 'Paste pre-obtained tokens from developer portal' },
       ],
     });
@@ -106,7 +131,7 @@ async function addChannelById(platformId: string, globals: GlobalFlags): Promise
     if (authMethod === 'oauth') {
       try {
         const loginMod = await import('./login.js');
-        const loginFlags: Record<string, string | boolean> = { provider: platformId };
+        const loginFlags: Record<string, string | boolean> = { provider: normalizedPlatformId };
         await loginMod.default([], loginFlags, globals);
       } catch (err) {
         fmt.errorBlock('OAuth failed', err instanceof Error ? err.message : String(err));
@@ -114,7 +139,7 @@ async function addChannelById(platformId: string, globals: GlobalFlags): Promise
       }
 
       // Save channel to config even if OAuth was used (tokens stored in FileTokenStore)
-      channels.push(platformId);
+      channels.push(normalizedPlatformId);
       await updateConfig({ channels }, globals.config);
       fmt.blank();
       fmt.ok(`Added ${cColor(platform.label)} channel with OAuth.`);
@@ -125,7 +150,7 @@ async function addChannelById(platformId: string, globals: GlobalFlags): Promise
   }
 
   // Prompt for secrets
-  const secrets = getSecretsForPlatform(platformId);
+  const secrets = getSecretsForPlatform(normalizedPlatformId);
   const env = await loadEnv(globals.config);
   const newKeys: Record<string, string> = {};
 
@@ -157,7 +182,7 @@ async function addChannelById(platformId: string, globals: GlobalFlags): Promise
   }
 
   // Save
-  channels.push(platformId);
+  channels.push(normalizedPlatformId);
   await updateConfig({ channels }, globals.config);
   if (Object.keys(newKeys).length > 0) {
     await mergeEnv(newKeys, globals.config);
@@ -178,17 +203,16 @@ async function removeChannel(args: string[], globals: GlobalFlags): Promise<void
 
   const config = await loadConfig(globals.config);
   const channels = config.channels || [];
-  const idx = channels.indexOf(platformId);
+  const normalizedPlatformId = normalizeChannelId(platformId);
+  const kept = channels.filter((id) => normalizeChannelId(id) !== normalizedPlatformId);
 
-  if (idx === -1) {
+  if (kept.length === channels.length) {
     fmt.warning(`${platformId} is not in the channel list.`);
     return;
   }
 
-  channels.splice(idx, 1);
-  await updateConfig({ channels }, globals.config);
-
-  fmt.ok(`Removed ${cColor(platformId)} channel.`);
+  await updateConfig({ channels: kept }, globals.config);
+  fmt.ok(`Removed ${cColor(normalizedPlatformId)} channel.`);
   fmt.blank();
 }
 
