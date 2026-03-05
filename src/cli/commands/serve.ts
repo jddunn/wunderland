@@ -156,6 +156,9 @@ export default async function cmdServe(
     return;
   }
 
+  // ── Restart policy ──────────────────────────────────────────────────────
+  const restartEnabled = flags['restart'] === true;
+
   // ── Write daemon info ──────────────────────────────────────────────────
   await writeDaemonInfo({
     seedId,
@@ -164,6 +167,8 @@ export default async function cmdServe(
     pid,
     configPath,
     startedAt: new Date().toISOString(),
+    restartCount: 0,
+    restartPolicy: restartEnabled ? 'on-crash' : 'never',
   });
 
   // ── Poll health ────────────────────────────────────────────────────────
@@ -193,6 +198,20 @@ export default async function cmdServe(
     );
   }
 
+  // ── Spawn watchdog (if --restart) ──────────────────────────────────────
+  let watchdogPid: number | undefined;
+  if (restartEnabled) {
+    watchdogPid = await spawnWatchdog({
+      seedId,
+      port,
+      spawnArgs: childArgs,
+      spawnCwd: path.dirname(configPath),
+      daemonDir,
+      maxRestarts: 10,
+      healthInterval: 10_000,
+    });
+  }
+
   // ── Print summary ──────────────────────────────────────────────────────
   fmt.section('Daemon Started');
   fmt.kvPair('Agent', accent(displayName));
@@ -200,10 +219,56 @@ export default async function cmdServe(
   fmt.kvPair('Port', String(port));
   fmt.kvPair('PID', String(pid));
   fmt.kvPair('Health', healthy ? sColor('ok') : iColor('pending'));
+  if (restartEnabled) {
+    fmt.kvPair('Restart', sColor(`enabled (watchdog PID: ${watchdogPid ?? 'unknown'})`));
+  }
   fmt.kvPair('Logs', accent(path.join(getDaemonDir(seedId), 'stdout.log')));
   fmt.blank();
   fmt.note(`Status:  ${accent('wunderland ps')}`);
   fmt.note(`Logs:    ${accent(`wunderland logs ${seedId}`)}`);
   fmt.note(`Stop:    ${accent(`wunderland stop ${seedId}`)}`);
   fmt.blank();
+}
+
+// ── Watchdog spawner ────────────────────────────────────────────────────
+
+async function spawnWatchdog(config: {
+  seedId: string;
+  port: number;
+  spawnArgs: string[];
+  spawnCwd: string;
+  daemonDir: string;
+  maxRestarts: number;
+  healthInterval: number;
+}): Promise<number | undefined> {
+  // Resolve the compiled watchdog module path.
+  const watchdogPath = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    '..', 'daemon', 'watchdog.js',
+  );
+
+  if (!existsSync(watchdogPath)) {
+    // Fallback: try relative to dist directory.
+    fmt.warning('Watchdog module not found — auto-restart will not be available.');
+    return undefined;
+  }
+
+  const configJson = JSON.stringify(config);
+  const child = spawn(process.execPath, [watchdogPath, '__watchdog__', configJson], {
+    detached: true,
+    stdio: 'ignore',
+    cwd: config.spawnCwd,
+    env: { ...process.env },
+  });
+
+  child.unref();
+  const wdPid = child.pid;
+
+  if (wdPid) {
+    // Update daemon.json with watchdog PID.
+    const { updateDaemonInfo } = await import('../daemon/daemon-state.js');
+    await updateDaemonInfo(config.seedId, { watchdogPid: wdPid });
+  }
+
+  return wdPid;
 }
