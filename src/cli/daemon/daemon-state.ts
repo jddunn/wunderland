@@ -26,6 +26,25 @@ export interface DaemonInfo {
   configPath: string;
   /** ISO 8601 timestamp of when the daemon was started. */
   startedAt: string;
+  /** Number of times the watchdog has restarted this daemon. */
+  restartCount: number;
+  /** Restart policy: 'never' (default) or 'on-crash' (watchdog active). */
+  restartPolicy: 'never' | 'on-crash';
+  /** PID of the watchdog process (present when restartPolicy is 'on-crash'). */
+  watchdogPid?: number;
+}
+
+/** Health check response from the /health endpoint. */
+export interface HealthResponse {
+  ok: boolean;
+  seedId: string;
+  name: string;
+  uptime?: number;
+  version?: string;
+  port?: number;
+  memory?: { rss: number; heap: number };
+  tools?: number;
+  channels?: number;
 }
 
 // ── Path helpers ───────────────────────────────────────────────────────────
@@ -83,6 +102,22 @@ export async function readAllDaemons(): Promise<DaemonInfo[]> {
   }
 
   return results;
+}
+
+/** Merge-update daemon.json fields without overwriting the entire file. */
+export async function updateDaemonInfo(
+  seedId: string,
+  partial: Partial<DaemonInfo>,
+): Promise<DaemonInfo | null> {
+  const existing = await readDaemonInfo(seedId);
+  if (!existing) return null;
+  const updated = { ...existing, ...partial };
+  const dir = getDaemonDir(seedId);
+  await writeFile(path.join(dir, 'daemon.json'), JSON.stringify(updated, null, 2) + '\n', 'utf-8');
+  if (partial.pid !== undefined) {
+    await writeFile(path.join(dir, 'daemon.pid'), String(partial.pid), 'utf-8');
+  }
+  return updated;
 }
 
 /** Remove daemon state directory (PID file, logs, metadata). */
@@ -184,4 +219,24 @@ export async function pollHealth(
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   return false;
+}
+
+/** Fetch health status from a daemon's /health endpoint. */
+export async function fetchDaemonHealth(
+  port: number,
+  timeoutMs = 2000,
+): Promise<{ status: 'ok' | 'slow' | 'down'; latencyMs: number; data?: HealthResponse }> {
+  const start = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`http://localhost:${port}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    const latencyMs = Date.now() - start;
+    if (!res.ok) return { status: 'down', latencyMs };
+    const data = (await res.json()) as HealthResponse;
+    return { status: latencyMs > 1000 ? 'slow' : 'ok', latencyMs, data };
+  } catch {
+    return { status: 'down', latencyMs: Date.now() - start };
+  }
 }

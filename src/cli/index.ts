@@ -52,6 +52,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('ps')}                    List running agent processes
       ${w('logs')} ${d('[seedId]')}        Tail agent logs
       ${w('stop')} ${d('[seedId]')}        Stop a running agent
+      ${w('monitor')}               Live dashboard of running agents
 
     ${w('Configure')}
       ${w('channels')}              List/add/remove channels
@@ -111,7 +112,9 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--output <dir>')}         Output directory for deploy (default: ./deploy)
     ${d('--region <code>')}        Fly.io region (default: iad)
     ${d('--force')}                Overwrite existing files
+    ${d('--restart')}               Auto-restart on crash (serve)
     ${d('--all')}                  Stop all running daemons (stop)
+    ${d('--no-health')}            Skip health polling (ps)
     ${d('--lines <n>')}            Number of log lines to show (logs, default: 50)
     ${d('--follow, -f')}           Stream new log lines (logs)
     ${d('--stderr')}               Show stderr instead of stdout (logs)
@@ -169,6 +172,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   ps:                () => import('./commands/ps.js'),
   logs:              () => import('./commands/logs.js'),
   stop:              () => import('./commands/stop.js'),
+  monitor:           () => import('./commands/monitor.js'),
   login:             () => import('./commands/login.js'),
   logout:            () => import('./commands/logout.js'),
   'auth-status':     () => import('./commands/auth-status.js'),
