@@ -43,9 +43,15 @@ function printHelp(opts?: { isExporting?: boolean }): void {
 
     ${w('Run')}
       ${w('chat')}                  Interactive assistant (REPL)
-      ${w('start')}                 Start server
+      ${w('start')}                 Start server (foreground)
       ${w('status')}                Agent & connection status
       ${w('hitl')}                  Watch/resolve approvals & checkpoints
+
+    ${w('Process')}
+      ${w('serve')}                 Start agent as background daemon
+      ${w('ps')}                    List running agent processes
+      ${w('logs')} ${d('[seedId]')}        Tail agent logs
+      ${w('stop')} ${d('[seedId]')}        Stop a running agent
 
     ${w('Configure')}
       ${w('channels')}              List/add/remove channels
@@ -105,6 +111,10 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--output <dir>')}         Output directory for deploy (default: ./deploy)
     ${d('--region <code>')}        Fly.io region (default: iad)
     ${d('--force')}                Overwrite existing files
+    ${d('--all')}                  Stop all running daemons (stop)
+    ${d('--lines <n>')}            Number of log lines to show (logs, default: 50)
+    ${d('--follow, -f')}           Stream new log lines (logs)
+    ${d('--stderr')}               Show stderr instead of stdout (logs)
     ${d('--skills-dir <path>')}    Load skills from directory
     ${d('--no-skills')}            Disable skill loading
 ${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}
@@ -155,6 +165,10 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   'ollama-setup':    () => import('./commands/ollama-setup.js'),
   'export-session':  () => import('./commands/export-session.js'),
   deploy:            () => import('./commands/deploy.js'),
+  serve:             () => import('./commands/serve.js'),
+  ps:                () => import('./commands/ps.js'),
+  logs:              () => import('./commands/logs.js'),
+  stop:              () => import('./commands/stop.js'),
   login:             () => import('./commands/login.js'),
   logout:            () => import('./commands/logout.js'),
   'auth-status':     () => import('./commands/auth-status.js'),
