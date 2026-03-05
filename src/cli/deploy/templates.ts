@@ -1,0 +1,187 @@
+/**
+ * @fileoverview Deployment artifact templates for Docker, Railway, and Fly.io.
+ * Pure functions that return file content strings — no I/O, no catalog logic.
+ * @module wunderland/cli/deploy/templates
+ */
+
+export type DeployTarget = 'docker' | 'railway' | 'fly';
+
+// ── Dockerfile ─────────────────────────────────────────────────────────────
+
+export function buildDockerfile(opts: {
+  installPackages: string[];
+  missingChannelNotes: string[];
+  port: number;
+}): string {
+  const installLine = ['wunderland@latest', ...opts.installPackages].join(' ');
+  const noteLines = opts.missingChannelNotes.length > 0
+    ? `# NOTE: Channels configured but not installed here: ${opts.missingChannelNotes.join(', ')}\n`
+    : '';
+
+  return `FROM node:20-alpine
+
+WORKDIR /data
+
+ENV NODE_ENV=production
+
+# Browser tool dependencies (Puppeteer + Chromium)
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+${noteLines}# Install Wunderland + selected extension packs
+RUN npm init -y
+RUN npm install --omit=dev ${installLine}
+RUN chown -R node:node /data
+USER node
+
+EXPOSE ${opts.port}
+
+# agent.config.json is mounted by docker-compose.yml
+CMD ["./node_modules/.bin/wunderland","start","--config","agent.config.json","--port","${opts.port}"]
+`;
+}
+
+// ── Docker Compose ─────────────────────────────────────────────────────────
+
+export function buildDockerCompose(port: number): string {
+  return `version: "3.9"
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    user: "node"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      # Persist per-agent workspaces for filesystem tools (assets/exports/tmp)
+      - WUNDERLAND_WORKSPACES_DIR=/data/workspaces
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    ports:
+      # Change the host port if you run multiple agents on one VPS.
+      - "${port}:${port}"
+    working_dir: /data
+    volumes:
+      - ./agent.config.json:/data/agent.config.json:ro
+      - ./workspaces:/data/workspaces
+      - ./skills:/data/skills:ro
+`;
+}
+
+// ── Railway ────────────────────────────────────────────────────────────────
+
+export function buildRailwayToml(port: number): string {
+  return `[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+
+[[services]]
+name = "agent"
+internalPort = ${port}
+`;
+}
+
+// ── Fly.io ─────────────────────────────────────────────────────────────────
+
+export function buildFlyToml(port: number, region?: string): string {
+  return `app = "wunderland-agent"
+primary_region = "${region ?? 'iad'}"
+
+[build]
+dockerfile = "Dockerfile"
+
+[http_service]
+internal_port = ${port}
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+
+[[services.http_checks]]
+interval = 15000
+grace_period = "10s"
+method = "GET"
+path = "/health"
+protocol = "http"
+timeout = 5000
+`;
+}
+
+// ── README ─────────────────────────────────────────────────────────────────
+
+export function buildReadme(opts: {
+  displayName: string;
+  target: DeployTarget;
+  port: number;
+}): string {
+  let instructions: string;
+
+  if (opts.target === 'docker') {
+    instructions = `## Quick start
+
+1. Copy \`.env.example\` to \`.env\` and fill in your secrets.
+2. \`docker compose up -d --build\`
+3. \`curl http://localhost:${opts.port}/health\`
+
+## Notes
+
+- If you run multiple agents on one VPS, change the host port in \`docker-compose.yml\`.
+- Keep the \`./workspaces\` folder persisted for filesystem tools (assets/exports/tmp).
+- Put custom SKILL.md files in \`./skills\` (optional). Mounted read-only into the container.
+- The container runs as a non-root user (\`node\`). Ensure \`./workspaces\` is writable by uid 1000.`;
+  } else if (opts.target === 'railway') {
+    instructions = `## Quick start
+
+1. Copy \`.env.example\` to \`.env\` and fill in your secrets.
+2. Push this directory to a Railway-linked Git repo, or run \`railway up\`.
+3. Set environment variables in the Railway dashboard.
+4. Health check: \`https://your-app.railway.app/health\``;
+  } else {
+    instructions = `## Quick start
+
+1. Copy \`.env.example\` to \`.env\` and fill in your secrets.
+2. \`fly launch --copy-config\`
+3. \`fly secrets import < .env\`
+4. \`fly deploy\`
+5. Health check: \`https://your-app.fly.dev/health\``;
+  }
+
+  return `# ${opts.displayName} (Self-hosted)
+
+Generated by \`wunderland deploy\`.
+
+${instructions}
+
+## Endpoints
+
+- \`GET  /health\` — Health check
+- \`POST /chat\`   — Chat API (\`{ "message": "Hello", "sessionId": "local" }\`)
+- \`GET  /hitl\`   — Human-in-the-loop approval UI
+
+## Skills
+
+Put custom SKILL.md files in the \`skills/\` directory.
+`;
+}
+
+// ── .gitignore ─────────────────────────────────────────────────────────────
+
+export function buildGitignore(): string {
+  return `.env
+workspaces/
+node_modules/
+`;
+}
