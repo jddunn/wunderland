@@ -49,6 +49,13 @@ import { loadAgentConfig, resolveLlmConfig } from '../config/load.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats, DiscoverySkillEntry } from '../discovery/index.js';
 import type { AgentPreset } from '../core/PresetLoader.js';
+import {
+  createWunderlandSeed,
+  DEFAULT_INFERENCE_HIERARCHY,
+  DEFAULT_SECURITY_PROFILE,
+  DEFAULT_STEP_UP_AUTH_CONFIG,
+} from '../core/index.js';
+import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 
 // =============================================================================
 // Public Types
@@ -528,20 +535,35 @@ async function resolveExtensionsFromOpts(opts: {
   }
 }
 
-function buildSystemPrompt(agentConfig: WunderlandAgentConfig, policy: NormalizedRuntimePolicy, skillsPrompt?: string): string {
-  const base = typeof agentConfig.systemPrompt === 'string' && agentConfig.systemPrompt.trim()
-    ? agentConfig.systemPrompt.trim()
-    : 'You are a Wunderland in-process agent runtime.';
+function buildLibrarySystemPrompt(agentConfig: WunderlandAgentConfig, policy: NormalizedRuntimePolicy, skillsPrompt?: string): string {
+  const displayName = agentConfig.displayName || agentConfig.agentName || 'Wunderland Agent';
+  const personality = agentConfig.personality || {};
+  const seed = createWunderlandSeed({
+    seedId: String(agentConfig.seedId || 'seed_library'),
+    name: displayName,
+    description: agentConfig.bio || 'In-process agent runtime',
+    hexacoTraits: {
+      honesty_humility: Number.isFinite(personality.honesty) ? personality.honesty! : 0.8,
+      emotionality: Number.isFinite(personality.emotionality) ? personality.emotionality! : 0.5,
+      extraversion: Number.isFinite(personality.extraversion) ? personality.extraversion! : 0.6,
+      agreeableness: Number.isFinite(personality.agreeableness) ? personality.agreeableness! : 0.7,
+      conscientiousness: Number.isFinite(personality.conscientiousness) ? personality.conscientiousness! : 0.8,
+      openness: Number.isFinite(personality.openness) ? personality.openness! : 0.7,
+    },
+    baseSystemPrompt: typeof agentConfig.systemPrompt === 'string' ? agentConfig.systemPrompt : undefined,
+    securityProfile: DEFAULT_SECURITY_PROFILE,
+    inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
+    stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
+  });
 
-  const parts = [
-    base,
-    `Execution mode: human-all (library approvals).`,
-    `Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}. Security tier: ${policy.securityTier}.`,
-    'When you need up-to-date information, use web_search and/or browser_* tools (if available).',
-    skillsPrompt || '',
-  ].filter(Boolean);
-
-  return parts.join('\n\n').trim();
+  return buildAgenticSystemPrompt({
+    seed,
+    policy,
+    mode: 'library',
+    lazyTools: false,
+    autoApproveToolCalls: false,
+    skillsPrompt: skillsPrompt || undefined,
+  });
 }
 
 // =============================================================================
@@ -705,7 +727,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     workingDirectory,
   };
 
-  const systemPrompt = buildSystemPrompt(agentConfig, policy, skillsPrompt);
+  const systemPrompt = buildLibrarySystemPrompt(agentConfig, policy, skillsPrompt);
 
   const sessions = new Map<string, Array<Record<string, unknown>>>();
 
