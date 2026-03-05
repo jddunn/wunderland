@@ -48,6 +48,8 @@ import {
   type NormalizedRuntimePolicy,
 } from '../runtime/policy.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
+import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
+import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 
 import type {
   WunderlandAdaptiveExecutionConfig,
@@ -599,7 +601,12 @@ export async function createWunderlandServer(opts?: {
   }
 
   const seedId = String(cfg.seedId || 'seed_local_agent');
-  const displayName = String(cfg.displayName || 'My Agent');
+  const displayName = resolveAgentDisplayName({
+    displayName: cfg.displayName,
+    agentName: cfg.agentName,
+    seedId,
+    fallback: 'My Agent',
+  });
   const description = String(cfg.bio || 'Autonomous Wunderbot');
   const p = cfg.personality || {};
 
@@ -1043,22 +1050,20 @@ export async function createWunderlandServer(opts?: {
     skillsPrompt = parts.filter(Boolean).join('\n\n');
   }
 
-  const systemPrompt = [
-    typeof (seed as any).baseSystemPrompt === 'string' ? (seed as any).baseSystemPrompt : String((seed as any).baseSystemPrompt),
-    'You are a local Wunderbot server.',
-    'If you are replying to an inbound channel message, respond with plain text. The runtime will deliver your final answer back to the same conversation. Do not call channel send tools unless you explicitly need to message a different conversation/channel.',
-    lazyTools
-      ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
-      : 'Tools are preloaded, and you can also use extensions_enable to load additional packs on demand.',
-    `Execution mode: ${policy.executionMode}. Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}.`,
-    autoApproveToolCalls
-      ? 'All tool calls are auto-approved (fully autonomous mode).'
-      : 'Tool calls that have side effects may require operator approval (HITL).',
-    turnApprovalMode !== 'off' ? `Turn checkpoints: ${turnApprovalMode}.` : '',
-    skillsPrompt || '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  const systemPrompt = buildAgenticSystemPrompt({
+    seed,
+    policy,
+    mode: 'server',
+    lazyTools,
+    autoApproveToolCalls,
+    channelNames: loadedChannelAdapters.length > 0
+      ? loadedChannelAdapters
+        .map((a: any) => a.displayName || a.platform)
+        .filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
+      : undefined,
+    skillsPrompt: skillsPrompt || undefined,
+    turnApprovalMode,
+  });
 
   const sessions = new Map<string, Array<Record<string, unknown>>>();
   const channelSessions = new Map<string, Array<Record<string, unknown>>>();

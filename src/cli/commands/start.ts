@@ -35,6 +35,7 @@ import {
 } from '../security/runtime-policy.js';
 import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
+import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
@@ -192,7 +193,13 @@ export default async function cmdStart(
     return;
   }
   const seedId = String(cfg.seedId || 'seed_local_agent');
-  const displayName = String(cfg.displayName || cfg.agentName || globalConfig.agentName || 'My Agent');
+  const displayName = resolveAgentDisplayName({
+    displayName: cfg.displayName,
+    agentName: cfg.agentName,
+    globalAgentName: globalConfig.agentName,
+    seedId,
+    fallback: 'My Agent',
+  });
   const description = String(cfg.bio || 'Autonomous Wunderbot');
   const p = cfg.personality || {};
   const policy = normalizeRuntimePolicy(cfg);
