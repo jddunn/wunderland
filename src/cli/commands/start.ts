@@ -44,6 +44,8 @@ import {
 import { HumanInteractionManager, type ChannelMessage, type IChannelAdapter } from '@framers/agentos';
 import { PairingManager } from '../../pairing/PairingManager.js';
 import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig } from '../../discovery/index.js';
+import { loadConfig } from '../config/config-manager.js';
+import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
@@ -134,6 +136,7 @@ export default async function cmdStart(
 
   // Load environment
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
+  const globalConfig = await loadConfig(globals.config);
 
   if (!existsSync(configPath)) {
     fmt.errorBlock('Missing config file', `${configPath}\nRun: ${accent('wunderland init my-agent')}`);
@@ -189,7 +192,7 @@ export default async function cmdStart(
     return;
   }
   const seedId = String(cfg.seedId || 'seed_local_agent');
-  const displayName = String(cfg.displayName || 'My Agent');
+  const displayName = String(cfg.displayName || cfg.agentName || globalConfig.agentName || 'My Agent');
   const description = String(cfg.bio || 'Autonomous Wunderbot');
   const p = cfg.personality || {};
   const policy = normalizeRuntimePolicy(cfg);
@@ -801,22 +804,15 @@ export default async function cmdStart(
       ? String((cfg as any).organizationId).trim()
       : undefined;
 
-  const systemPrompt = [
-    typeof seed.baseSystemPrompt === 'string' ? seed.baseSystemPrompt : String(seed.baseSystemPrompt),
-    'You are a local Wunderbot server.',
-    'If you are replying to an inbound channel message, respond with plain text. The runtime will deliver your final answer back to the same conversation. Do not call channel send tools unless you explicitly need to message a different conversation/channel.',
-    lazyTools
-      ? 'Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).'
-      : 'Tools are preloaded. You MUST use the provided tools for any query that needs real-time or external information (weather, news, web searches, current events, etc.). Never say you cannot access real-time data — call the appropriate tool instead.',
-    `Execution mode: ${policy.executionMode}. Permission set: ${policy.permissionSet}. Tool access profile: ${policy.toolAccessProfile}.`,
-    autoApproveToolCalls
-      ? 'All tool calls are auto-approved (fully autonomous mode).'
-      : 'Tool authorization is handled automatically by the runtime. Call tools freely — the system will handle any required approvals.',
-    turnApprovalMode !== 'off'
-      ? `Turn checkpoints: ${turnApprovalMode}.`
-      : '',
-    skillsPrompt || '',
-  ].filter(Boolean).join('\n\n');
+  const systemPrompt = buildAgenticSystemPrompt({
+    seed,
+    policy,
+    mode: 'server',
+    lazyTools,
+    autoApproveToolCalls,
+    skillsPrompt: skillsPrompt || undefined,
+    turnApprovalMode,
+  });
 
   const sessions = new Map<string, Array<Record<string, unknown>>>();
   const channelSessions = new Map<string, Array<Record<string, unknown>>>();
