@@ -57,6 +57,9 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('list-presets')}           List personality & agent presets
       ${w('config')}                Read/write config values
 
+    ${w('Deploy')}
+      ${w('deploy')}               Generate deployment artifacts (Docker, Railway, Fly)
+
     ${w('Advanced')}
       ${w('rag')}                   RAG memory management
       ${w('agency')}                Multi-agent collectives
@@ -98,6 +101,9 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--dir <path>')}           Working directory (seal)
     ${d('--format <json|table>')}  Output format (list-presets, skills, models, plugins)
     ${d('--lazy-tools')}           Start with only schema-on-demand meta tools
+    ${d('--target <docker|railway|fly>')} Deployment target (default: docker)
+    ${d('--output <dir>')}         Output directory for deploy (default: ./deploy)
+    ${d('--region <code>')}        Fly.io region (default: iad)
     ${d('--force')}                Overwrite existing files
     ${d('--skills-dir <path>')}    Load skills from directory
     ${d('--no-skills')}            Disable skill loading
@@ -148,6 +154,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   'import':       () => import('./commands/import-agent.js'),
   'ollama-setup':    () => import('./commands/ollama-setup.js'),
   'export-session':  () => import('./commands/export-session.js'),
+  deploy:            () => import('./commands/deploy.js'),
   login:             () => import('./commands/login.js'),
   logout:            () => import('./commands/logout.js'),
   'auth-status':     () => import('./commands/auth-status.js'),
