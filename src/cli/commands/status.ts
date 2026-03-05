@@ -19,6 +19,20 @@ import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
 import { TokenUsageTracker, type TokenUsageSummary } from '../../core/TokenUsageTracker.js';
 
+const CHANNEL_ALIASES: Record<string, string> = {
+  'blog-publisher': 'devto',
+  'blog publisher': 'devto',
+  'dev.to': 'devto',
+  hashnode: 'devto',
+  medium: 'devto',
+  wordpress: 'devto',
+};
+
+function normalizeChannelId(channelId: string): string {
+  const normalized = channelId.trim().toLowerCase();
+  return CHANNEL_ALIASES[normalized] ?? normalized;
+}
+
 export default async function cmdStatus(
   _args: string[],
   _flags: Record<string, string | boolean>,
@@ -82,9 +96,10 @@ export default async function cmdStatus(
     channelLines.push(`${muted(g.circle)} ${muted('No channels configured')}`);
   } else {
     for (const chId of channels) {
-      const platform = CHANNEL_PLATFORMS.find((p) => p.id === chId);
+      const normalizedChannelId = normalizeChannelId(chId);
+      const platform = CHANNEL_PLATFORMS.find((p) => p.id === normalizedChannelId);
       const label = platform ? `${ui.ascii ? '' : `${platform.icon}  `}${platform.label}` : chId;
-      const secrets = getSecretsForPlatform(chId);
+      const secrets = getSecretsForPlatform(normalizedChannelId);
       const ready = secrets.length === 0 || secrets.every((s) => !!(env[s.envVar] || process.env[s.envVar]));
       const icon = ready ? sColor(g.ok) : wColor(g.warn);
       const status = ready ? sColor('active') : wColor('needs credentials');

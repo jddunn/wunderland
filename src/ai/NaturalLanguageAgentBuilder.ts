@@ -87,6 +87,71 @@ export interface ExtractedAgentConfig {
 // Constants
 // ============================================================================
 
+const SUPPORTED_CHANNELS = [
+  'telegram',
+  'whatsapp',
+  'discord',
+  'slack',
+  'webchat',
+  'signal',
+  'imessage',
+  'google-chat',
+  'teams',
+  'matrix',
+  'zalo',
+  'email',
+  'sms',
+  'twitter',
+  'instagram',
+  'reddit',
+  'youtube',
+  'linkedin',
+  'facebook',
+  'threads',
+  'bluesky',
+  'mastodon',
+  'devto',
+  'pinterest',
+  'tiktok',
+  'farcaster',
+  'lemmy',
+  'google-business',
+  'nostr',
+  'twitch',
+  'line',
+  'feishu',
+  'mattermost',
+  'nextcloud-talk',
+  'tlon',
+  'irc',
+  'zalouser',
+] as const;
+
+const CHANNEL_ALIASES: Record<string, string> = {
+  x: 'twitter',
+  'twitter/x': 'twitter',
+  'x/twitter': 'twitter',
+  'zalo-personal': 'zalouser',
+  zalo_personal: 'zalouser',
+  'zalo personal': 'zalouser',
+  nextcloud: 'nextcloud-talk',
+  'nextcloud talk': 'nextcloud-talk',
+  'google chat': 'google-chat',
+  'ms teams': 'teams',
+  'microsoft teams': 'teams',
+  'google business': 'google-business',
+  'google business profile': 'google-business',
+  'google my business': 'google-business',
+  gbp: 'google-business',
+  'dev.to': 'devto',
+  'blog-publisher': 'devto',
+  blogpublisher: 'devto',
+  'blog publisher': 'devto',
+  hashnode: 'devto',
+  medium: 'devto',
+  wordpress: 'devto',
+};
+
 /**
  * System prompt for LLM extraction.
  * Lists all available options and defines the expected JSON schema.
@@ -103,14 +168,14 @@ const EXTRACTION_PROMPT = `You are an AI configuration expert. Extract structure
 - devops-assistant: Infrastructure and deployment specialist
 - personal-assistant: Friendly, organized daily helper
 
-**Available skills (18 curated):**
-web-search, weather, summarize, github, coding-agent, git, slack-helper, discord-helper, notion, obsidian, trello, apple-notes, apple-reminders, healthcheck, spotify-player, whisper-transcribe, 1password, image-gen
+**Available skills (36 curated):**
+1password, account-manager, apple-notes, apple-reminders, blog-publisher, bluesky-bot, coding-agent, content-creator, deep-research, discord-helper, facebook-bot, git, github, healthcheck, image-gen, instagram-bot, linkedin-bot, mastodon-bot, notion, obsidian, pinterest-bot, reddit-bot, seo-campaign, slack-helper, social-broadcast, spotify-player, summarize, threads-bot, tiktok-bot, trello, twitter-bot, weather, web-scraper, web-search, whisper-transcribe, youtube-bot
 
 **Available tools:**
 web-search, web-browser, cli-executor, giphy, image-search, voice-synthesis, news-search
 
-**Available channels (28 platforms):**
-telegram, whatsapp, discord, slack, webchat, signal, imessage, google-chat, teams, matrix, zalo, email, sms, nostr, twitch, line, feishu, mattermost, nextcloud-talk, tlon, irc, zalouser, reddit, twitter, instagram, tiktok, youtube, pinterest
+**Available channels (${SUPPORTED_CHANNELS.length} platforms):**
+${SUPPORTED_CHANNELS.join(', ')}
 
 **Security tiers:**
 - dangerous: All protections OFF (testing only)
@@ -296,59 +361,17 @@ export async function extractAgentConfig(
     }
 
     // Validate channel platforms (best-effort)
-    const validChannels = new Set<string>([
-      'telegram',
-      'whatsapp',
-      'discord',
-      'slack',
-      'webchat',
-      'signal',
-      'imessage',
-      'google-chat',
-      'teams',
-      'matrix',
-      'zalo',
-      'email',
-      'sms',
-      'nostr',
-      'twitch',
-      'line',
-      'feishu',
-      'mattermost',
-      'nextcloud-talk',
-      'tlon',
-      'irc',
-      'zalouser',
-      'reddit',
-      'twitter',
-      'instagram',
-      'tiktok',
-      'youtube',
-      'pinterest',
-    ]);
-
-    const channelAliases: Record<string, string> = {
-      x: 'twitter',
-      'twitter/x': 'twitter',
-      'zalo-personal': 'zalouser',
-      zalo_personal: 'zalouser',
-      'zalo personal': 'zalouser',
-      nextcloud: 'nextcloud-talk',
-      'nextcloud talk': 'nextcloud-talk',
-      'google chat': 'google-chat',
-      'ms teams': 'teams',
-      'microsoft teams': 'teams',
-    };
+    const validChannels = new Set<string>(SUPPORTED_CHANNELS);
 
     if (Array.isArray((extracted as any).channels)) {
       const raw = (extracted as any).channels as unknown[];
       const normalized = raw
         .map((v) => String(v ?? '').trim().toLowerCase())
         .filter(Boolean)
-        .map((v) => channelAliases[v] ?? v);
+        .map((v) => CHANNEL_ALIASES[v] ?? v);
 
       const invalid = normalized.filter((c) => !validChannels.has(c));
-      const filtered = normalized.filter((c) => validChannels.has(c));
+      const filtered = Array.from(new Set(normalized.filter((c) => validChannels.has(c))));
       if (invalid.length > 0) {
         console.warn(`Invalid channels [${invalid.join(', ')}], ignoring`);
       }
