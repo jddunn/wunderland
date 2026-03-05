@@ -61,6 +61,15 @@ export default async function cmdStop(
 async function stopDaemon(daemon: DaemonInfo, forceKill: boolean): Promise<void> {
   const { pid, seedId, displayName, port } = daemon;
 
+  // Kill watchdog first (prevent it from restarting the agent after we stop it).
+  if (daemon.watchdogPid && isDaemonAlive(daemon.watchdogPid)) {
+    try {
+      process.kill(daemon.watchdogPid, 'SIGTERM');
+    } catch {
+      // Watchdog may have already exited.
+    }
+  }
+
   if (!isDaemonAlive(pid)) {
     fmt.note(`${displayName} (PID: ${pid}) is already stopped.`);
     await removeDaemonInfo(seedId);

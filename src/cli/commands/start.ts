@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
+import { VERSION } from '../constants.js';
 import { accent, success as sColor, info as iColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
@@ -125,6 +126,8 @@ export default async function cmdStart(
   flags: Record<string, string | boolean>,
   globals: GlobalFlags,
 ): Promise<void> {
+  const startTime = Date.now();
+
   const configPath = typeof flags['config'] === 'string'
     ? path.resolve(process.cwd(), flags['config'])
     : path.resolve(process.cwd(), 'agent.config.json');
@@ -2082,7 +2085,21 @@ export default async function cmdStart(
       }
 
       if (req.method === 'GET' && url.pathname === '/health') {
-        sendJson(res, 200, { ok: true, seedId, name: displayName });
+        const mem = process.memoryUsage();
+        sendJson(res, 200, {
+          ok: true,
+          seedId,
+          name: displayName,
+          uptime: Math.floor((Date.now() - startTime) / 1000),
+          version: VERSION,
+          port,
+          memory: {
+            rss: Math.round(mem.rss / 1024 / 1024),
+            heap: Math.round(mem.heapUsed / 1024 / 1024),
+          },
+          tools: toolMap.size,
+          channels: adapterByPlatform.size,
+        });
         return;
       }
 
