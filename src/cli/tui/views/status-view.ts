@@ -17,6 +17,7 @@ import { checkEnvSecrets, getSecretsForPlatform } from '../../config/secrets.js'
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../../constants.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
+import { resolveAgentDisplayName } from '../../../runtime/agent-identity.js';
 
 export class StatusView {
   private screen: Screen;
@@ -69,7 +70,14 @@ export class StatusView {
     if (existsSync(localConfig)) {
       try {
         const cfg = JSON.parse(await readFile(localConfig, 'utf8'));
-        lines.push(`    ${muted('Name'.padEnd(20))} ${accent(cfg.displayName || 'Unknown')}`);
+        const resolvedName = resolveAgentDisplayName({
+          displayName: cfg.displayName,
+          agentName: cfg.agentName,
+          globalAgentName: config.agentName,
+          seedId: cfg.seedId,
+          fallback: 'Unknown',
+        });
+        lines.push(`    ${muted('Name'.padEnd(20))} ${accent(resolvedName)}`);
         lines.push(`    ${muted('Seed ID'.padEnd(20))} ${cfg.seedId || 'unknown'}`);
         if (cfg.bio) lines.push(`    ${muted('Bio'.padEnd(20))} ${dim(cfg.bio)}`);
       } catch {

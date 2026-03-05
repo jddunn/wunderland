@@ -16,6 +16,7 @@ import * as fmt from '../ui/format.js';
 import { loadConfig } from '../config/config-manager.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
+import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -232,7 +233,10 @@ export default async function cmdExportSession(
       : defaultOutputPath(format);
 
   // Read agent config for metadata
-  let agentName = config.agentName || 'Unknown Agent';
+  let agentName = resolveAgentDisplayName({
+    globalAgentName: config.agentName,
+    fallback: 'Unknown Agent',
+  });
   let seedId = 'unknown';
   let model = config.llmModel || 'unknown';
   let provider = config.llmProvider || 'unknown';
@@ -241,7 +245,13 @@ export default async function cmdExportSession(
   if (existsSync(localConfigPath)) {
     try {
       const cfg = JSON.parse(await readFile(localConfigPath, 'utf8'));
-      agentName = cfg.displayName || cfg.name || agentName;
+      agentName = resolveAgentDisplayName({
+        displayName: cfg.displayName ?? cfg.name,
+        agentName: cfg.agentName,
+        seedId: cfg.seedId,
+        globalAgentName: agentName,
+        fallback: agentName,
+      });
       seedId = cfg.seedId || seedId;
       if (cfg.llmModel) model = cfg.llmModel;
       if (cfg.llmProvider) provider = cfg.llmProvider;

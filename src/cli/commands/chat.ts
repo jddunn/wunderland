@@ -32,6 +32,7 @@ import { isValidSecurityTier, SECURITY_TIERS } from '../../security/SecurityTier
 import { isValidToolAccessProfile } from '../../social/ToolAccessProfiles.js';
 import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
+import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
@@ -70,6 +71,7 @@ function frameLine(content: string, innerWidth: number): string {
 
 /** Print the framed chat startup header. */
 function printChatHeader(info: {
+  agentName: string;
   provider: string;
   model: string;
   tools: number;
@@ -116,6 +118,7 @@ function printChatHeader(info: {
   lines.push(empty);
   lines.push(frameLine(divContent, innerWidth));
   lines.push(empty);
+  lines.push(kvLine('Agent', accent(info.agentName)));
   lines.push(kvLine('Provider', chalk.hex(C.cyan)(info.provider)));
   lines.push(kvLine('Model', chalk.hex(C.cyan)(info.model)));
   lines.push(kvLine('Tools', `${info.tools} loaded`));
@@ -780,13 +783,13 @@ export default async function cmdChat(
   await adaptiveRuntime.initialize();
 
   const seedId = cfg?.seedId ? String(cfg.seedId) : `seed_chat_${Date.now()}`;
-  const displayName = cfg?.displayName
-    ? String(cfg.displayName)
-    : cfg?.agentName
-      ? String(cfg.agentName)
-      : globalConfig.agentName
-        ? String(globalConfig.agentName)
-        : 'Wunderland CLI';
+  const displayName = resolveAgentDisplayName({
+    displayName: cfg?.displayName,
+    agentName: cfg?.agentName,
+    globalAgentName: globalConfig.agentName,
+    seedId,
+    fallback: 'Wunderland CLI',
+  });
   const bio = cfg?.bio ? String(cfg.bio) : 'Interactive terminal assistant';
   const personality = cfg?.personality || {};
   const seed = createWunderlandSeed({
@@ -847,6 +850,7 @@ export default async function cmdChat(
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
 
   printChatHeader({
+    agentName: displayName,
     provider: providerId,
     model,
     tools: toolMap.size,
