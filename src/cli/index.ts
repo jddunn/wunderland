@@ -63,6 +63,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('extensions')}            Extension management
       ${w('list-presets')}           List personality & agent presets
       ${w('config')}                Read/write config values
+      ${w('env')}                   Manage API keys & secrets
 
     ${w('Deploy')}
       ${w('deploy')}               Generate deployment artifacts (Docker, Railway, Fly)
@@ -179,6 +180,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   logout:            () => import('./commands/logout.js'),
   'auth-status':     () => import('./commands/auth-status.js'),
   upgrade:           () => import('./commands/upgrade.js'),
+  env:               () => import('./commands/env.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
