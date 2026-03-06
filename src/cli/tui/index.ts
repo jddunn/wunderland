@@ -32,11 +32,16 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
 
   let activeView: { dispose(): void } | null = null;
 
-  // Clean exit handler
-  const cleanup = () => {
+  // Tear down TUI (screen + views) without resolving exit promise
+  const teardown = () => {
     if (activeView) { activeView.dispose(); activeView = null; }
     dashboard.dispose();
     screen.dispose();
+  };
+
+  // Full cleanup: teardown + signal exit
+  const cleanup = () => {
+    teardown();
     exitResolve();
   };
 
@@ -81,15 +86,15 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
       }
 
       // Fall back to running CLI command (exit TUI first)
-      cleanup();
+      teardown();
       try {
         const { main } = await import('../index.js');
         await main([command === 'help' ? '--help' : command]);
       } catch (err) {
         console.error('Command failed:', err instanceof Error ? err.message : String(err));
       }
-      // TUI has been torn down; main() handles its own lifecycle.
-      // Don't force-exit — interactive commands (chat) need to keep running.
+      // Signal exit after the command completes
+      exitResolve();
     },
     onQuit: () => {
       cleanup();
