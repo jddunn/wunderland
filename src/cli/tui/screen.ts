@@ -21,6 +21,8 @@ export interface KeypressEvent {
 export class Screen {
   private resizeHandlers: (() => void)[] = [];
   private keypressHandlers: ((key: KeypressEvent) => void)[] = [];
+  /** Raw stdin 'keypress' listeners so we can remove them on dispose. */
+  private stdinListeners: ((_str: string | undefined, key: any) => void)[] = [];
   private inAltScreen = false;
   private disposed = false;
 
@@ -98,6 +100,7 @@ export class Screen {
       });
     };
 
+    this.stdinListeners.push(handler);
     process.stdin.on('keypress', handler);
     process.stdin.resume();
   }
@@ -123,6 +126,12 @@ export class Screen {
     }
     this.resizeHandlers = [];
     this.keypressHandlers = [];
+
+    // Remove keypress listeners from stdin
+    for (const handler of this.stdinListeners) {
+      process.stdin.removeListener('keypress', handler);
+    }
+    this.stdinListeners = [];
 
     // Restore stdin
     if (process.stdin.isTTY && process.stdin.isRaw) {

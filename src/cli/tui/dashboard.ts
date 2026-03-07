@@ -129,7 +129,9 @@ export class Dashboard {
           return true;
         },
         '/':       () => { if (this.searchMode) return false; this.enterSearch(); return true; },
-        '?':       () => { if (this.searchMode) return false; this.showHelp = !this.showHelp; this.renderDashboard(); return true; },
+        '?':       () => { if (this.searchMode) return false; this.openHelp(); return true; },
+        'shift+?': () => { if (this.searchMode) return false; this.openHelp(); return true; },
+        'shift+/': () => { if (this.searchMode) return false; this.openHelp(); return true; },
         'backspace': () => {
           if (!this.searchMode) return false;
           this.filter = this.filter.slice(0, -1);
@@ -138,14 +140,12 @@ export class Dashboard {
           return true;
         },
         'q':       () => {
-          if (this.showHelp) { this.showHelp = false; this.renderDashboard(); return true; }
           if (this.searchMode) return false;
           this.onQuit();
           return true;
         },
         'ctrl+c':  () => { this.onQuit(); },
         'escape':  () => {
-          if (this.showHelp) { this.showHelp = false; this.renderDashboard(); return; }
           if (this.searchMode) { this.exitSearch(); return; }
           this.onQuit();
         },
@@ -642,6 +642,7 @@ export class Dashboard {
         cols,
         rows,
         y: Math.max(0, Math.floor((viewportHeight - overlay.length) / 2)),
+        dimBackground: true,
       });
     }
 
@@ -649,13 +650,21 @@ export class Dashboard {
       const steps = getTourSteps({ ascii: ui.ascii });
       const step = steps[Math.max(0, Math.min(this.tourStep, steps.length - 1))];
       const overlayWidth = Math.min(Math.max(50, Math.min(78, cols - 8)), Math.max(24, cols - 4));
+
+      // Normalize height: pad to tallest step so the overlay stays fixed-size
+      const maxStepLines = Math.max(...steps.map(s => s.lines.length));
+      const paddedStepLines = [...step.lines];
+      while (paddedStepLines.length < maxStepLines) paddedStepLines.push('');
+
       const overlay = renderOverlayBox({
         title: `Tour: ${step.title} (${this.tourStep + 1}/${steps.length})`,
         width: overlayWidth,
         lines: [
-          ...step.lines,
+          '',
+          ...paddedStepLines,
           '',
           chalk.hex(C.dim)(getTourControlsLine({ ascii: ui.ascii })),
+          '',
         ],
       });
 
@@ -666,6 +675,7 @@ export class Dashboard {
         cols,
         rows,
         y: Math.max(0, Math.floor((viewportHeight - overlay.length) / 2)),
+        dimBackground: true,
       });
     }
 
@@ -794,17 +804,25 @@ export class Dashboard {
         ],
       });
 
-      outLines = stampOverlay({ screenLines: outLines, overlayLines: overlay, cols, rows });
+      outLines = stampOverlay({ screenLines: outLines, overlayLines: overlay, cols, rows, dimBackground: true });
     }
 
     if (this.tourActive) {
       const steps = getTourSteps({ ascii: ui.ascii });
       const step = steps[Math.max(0, Math.min(this.tourStep, steps.length - 1))];
       const overlayWidth = Math.min(Math.max(50, Math.min(78, cols - 8)), Math.max(24, cols - 4));
+
+      // Normalize height: pad to tallest step so the overlay stays fixed-size
+      const maxStepLines = Math.max(...steps.map(s => s.lines.length));
+      const paddedStepLines = [...step.lines];
+      while (paddedStepLines.length < maxStepLines) paddedStepLines.push('');
+
       const overlayLines = [
-        ...step.lines,
+        '',
+        ...paddedStepLines,
         '',
         chalk.hex(C.dim)(getTourControlsLine({ ascii: ui.ascii })),
+        '',
       ];
       const overlay = renderOverlayBox({
         title: `Tour: ${step.title} (${this.tourStep + 1}/${steps.length})`,
@@ -812,7 +830,7 @@ export class Dashboard {
         lines: overlayLines,
       });
 
-      outLines = stampOverlay({ screenLines: outLines, overlayLines: overlay, cols, rows });
+      outLines = stampOverlay({ screenLines: outLines, overlayLines: overlay, cols, rows, dimBackground: true });
     }
 
     this.screen.render(outLines.map(fit).join('\n'));
@@ -839,14 +857,11 @@ export class Dashboard {
   // ── Navigation ────────────────────────────────────────────────────────
 
   private moveCursor(delta: number): void {
-    const prev = this.cursor;
     const filteredLen = this.getFilteredActions().length;
-    this.cursor = Math.max(0, Math.min(Math.max(0, filteredLen - 1), this.cursor + delta));
+    if (filteredLen === 0) return;
 
-    // When cursor is already at boundary, scroll the viewport instead
-    if (this.cursor === prev && delta !== 0) {
-      this.scrollOffset += delta;
-    }
+    // Wrap around: up from first → last, down from last → first
+    this.cursor = ((this.cursor + delta) % filteredLen + filteredLen) % filteredLen;
 
     this.renderDashboard();
   }
@@ -876,7 +891,41 @@ export class Dashboard {
   }
 
   dispose(): void {
+    this.keys.clear();
+  }
+
+  // ── Help Overlay ──────────────────────────────────────────────────────
+
+  private openHelp(): void {
+    if (this.showHelp) { this.closeHelp(); return; }
+    if (this.tourActive) return;
+
+    this.showHelp = true;
+    this.searchMode = false;
+    this.filter = '';
+
+    this.keys.push({
+      name: 'dashboard-help',
+      bindings: {
+        '__text__': () => { return true; },
+        '__any__':  () => { return true; },
+        'ctrl+c':   () => { this.closeHelp(); this.onQuit(); return true; },
+        'escape':   () => { this.closeHelp(); return true; },
+        'q':        () => { this.closeHelp(); return true; },
+        '?':        () => { this.closeHelp(); return true; },
+        'shift+?':  () => { this.closeHelp(); return true; },
+        'shift+/':  () => { this.closeHelp(); return true; },
+      },
+    });
+
+    this.renderDashboard();
+  }
+
+  private closeHelp(): void {
+    if (!this.showHelp) return;
+    this.showHelp = false;
     this.keys.pop();
+    this.renderDashboard();
   }
 
   // ── Tour ───────────────────────────────────────────────────────────────
@@ -884,9 +933,10 @@ export class Dashboard {
   private openTour(): void {
     if (this.tourActive) return;
 
+    if (this.showHelp) this.closeHelp();
+
     this.tourActive = true;
     this.tourStep = 0;
-    this.showHelp = false;
     this.searchMode = false;
     this.filter = '';
 
@@ -947,8 +997,8 @@ export class Dashboard {
   }
 
   private enterSearch(): void {
+    if (this.showHelp) this.closeHelp();
     this.searchMode = true;
-    this.showHelp = false;
     this.filter = '';
     this.cursor = 0;
     this.renderDashboard();

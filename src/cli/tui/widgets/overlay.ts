@@ -4,7 +4,7 @@
  */
 
 import { dim, accent, bright } from '../../ui/theme.js';
-import { visibleLength, ansiPadEnd, sliceAnsi } from '../../ui/ansi-utils.js';
+import { visibleLength, ansiPadEnd, sliceAnsi, stripAnsi } from '../../ui/ansi-utils.js';
 import { glyphs } from '../../ui/glyphs.js';
 
 export function renderOverlayBox(opts: {
@@ -38,7 +38,8 @@ export function renderOverlayBox(opts: {
 
 /**
  * Stamp an overlay box into a screen buffer.
- * This intentionally replaces underlying rows (no alpha blending) to keep rendering simple and flicker-free.
+ * When `dimBackground` is true, all non-overlay rows are dimmed to create a
+ * modal scrim effect — the overlay pops while the dashboard fades behind it.
  */
 export function stampOverlay(opts: {
   screenLines: string[];
@@ -47,11 +48,20 @@ export function stampOverlay(opts: {
   rows: number;
   x?: number;
   y?: number;
+  dimBackground?: boolean;
 }): string[] {
   const screen = [...opts.screenLines];
   const overlay = opts.overlayLines;
 
   while (screen.length < opts.rows) screen.push('');
+
+  // Apply dim scrim to background — strips existing colors and re-paints in dim
+  if (opts.dimBackground) {
+    for (let i = 0; i < screen.length; i++) {
+      const stripped = stripAnsi(screen[i]);
+      screen[i] = ansiPadEnd(dim(stripped), opts.cols);
+    }
+  }
 
   const overlayWidth = Math.max(0, ...overlay.map((l) => visibleLength(l)));
   const overlayHeight = overlay.length;

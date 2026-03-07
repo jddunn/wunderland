@@ -674,6 +674,31 @@ export default async function cmdChat(
     for (const [k, v] of filtered.toolMap.entries()) toolMap.set(k, v);
   }
 
+  // ── Agent wallet extension (opt-in via agent.config.json wallet.enabled) ──
+  if (cfg?.wallet?.enabled) {
+    try {
+      const { createExtensionPack: createWalletPack } = await import(
+        '@framers/agentos-ext-wallet' as string
+      );
+      const walletPack = createWalletPack({
+        options: cfg.wallet,
+        secrets: cfg.secrets,
+        getSecret: (k: string) => process.env[k],
+        logger: { info: (m: string) => fmt.ok(m) },
+      });
+      for (const desc of walletPack.descriptors) {
+        if (desc.kind === 'tool' && desc.payload) {
+          const t = desc.payload as any;
+          toolMap.set(t.name, t);
+        }
+      }
+      await walletPack.onActivate?.();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      fmt.warning(`Wallet extension failed to load: ${msg}`);
+    }
+  }
+
   // Capability discovery — semantic search + graph re-ranking
   const discoveryOpts: WunderlandDiscoveryConfig = {};
   if (cfg?.discovery) {
