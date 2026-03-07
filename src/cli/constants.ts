@@ -112,6 +112,29 @@ export const PRODUCTIVITY_INTEGRATIONS = [
   { id: 'gmail', label: 'Gmail', icon: '\u{2709}\u{FE0F}', providers: ['gmail'] },
 ] as const;
 
+// ── Cloud Hosting Providers ─────────────────────────────────────────────────
+
+export const CLOUD_PROVIDERS = [
+  { id: 'vercel', label: 'Vercel', icon: '\u{25B2}', tier: 'p0', secretEnv: ['VERCEL_TOKEN', 'VERCEL_ORG_ID'], toolCount: 6, bestFor: 'Next.js, React, frontend frameworks' },
+  { id: 'cloudflare', label: 'Cloudflare Pages', icon: '\u{2601}\u{FE0F}', tier: 'p0', secretEnv: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'], toolCount: 6, bestFor: 'Static sites, Workers, edge-first apps' },
+  { id: 'netlify', label: 'Netlify', icon: '\u{1F310}', tier: 'p0', secretEnv: ['NETLIFY_AUTH_TOKEN'], toolCount: 5, bestFor: 'JAMstack, static sites, form handling' },
+  { id: 'digitalocean', label: 'DigitalOcean App Platform', icon: '\u{1F30A}', tier: 'p1', secretEnv: ['DIGITALOCEAN_TOKEN'], toolCount: 5, bestFor: 'Full-stack apps, managed databases' },
+  { id: 'railway', label: 'Railway', icon: '\u{1F682}', tier: 'p1', secretEnv: ['RAILWAY_TOKEN'], toolCount: 5, bestFor: 'Backend services, databases, quick deploys' },
+  { id: 'fly', label: 'Fly.io', icon: '\u{1F680}', tier: 'p1', secretEnv: ['FLY_API_TOKEN'], toolCount: 5, bestFor: 'Containers, global edge, low-latency APIs' },
+  { id: 'aws', label: 'AWS (S3 + CloudFront)', icon: '\u{1F4E6}', tier: 'p2', secretEnv: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'], toolCount: 4, bestFor: 'Enterprise, static hosting, CDN at scale' },
+  { id: 'heroku', label: 'Heroku', icon: '\u{1F7E3}', tier: 'p2', secretEnv: ['HEROKU_API_KEY'], toolCount: 4, bestFor: 'Prototypes, simple backend services' },
+  { id: 'linode', label: 'Linode (Akamai)', icon: '\u{1F5A5}\u{FE0F}', tier: 'p2', secretEnv: ['LINODE_TOKEN'], toolCount: 4, bestFor: 'VPS hosting, self-managed infrastructure' },
+] as const;
+
+// ── Domain Registrars ──────────────────────────────────────────────────────
+
+export const DOMAIN_REGISTRARS = [
+  { id: 'porkbun', label: 'Porkbun', icon: '\u{1F437}', secretEnv: ['PORKBUN_API_KEY', 'PORKBUN_SECRET_KEY'], toolCount: 5, dnsRecords: ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SRV', 'CAA'] },
+  { id: 'namecheap', label: 'Namecheap', icon: '\u{1F4B0}', secretEnv: ['NAMECHEAP_API_KEY', 'NAMECHEAP_USERNAME'], toolCount: 5, dnsRecords: ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SRV', 'CAA'] },
+  { id: 'godaddy', label: 'GoDaddy', icon: '\u{1F30D}', secretEnv: ['GODADDY_API_KEY', 'GODADDY_API_SECRET'], toolCount: 4, dnsRecords: ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SRV'] },
+  { id: 'cloudflare', label: 'Cloudflare Registrar', icon: '\u{2601}\u{FE0F}', secretEnv: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'], toolCount: 5, dnsRecords: ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SRV', 'CAA'] },
+] as const;
+
 // ── HEXACO Presets ──────────────────────────────────────────────────────────
 
 export const PERSONALITY_PRESETS = [

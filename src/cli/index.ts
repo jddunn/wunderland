@@ -61,6 +61,8 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('cron')}                  Scheduled jobs management
       ${w('skills')}                Skills management
       ${w('extensions')}            Extension management
+      ${w('cloud')}                 Cloud hosting providers
+      ${w('domains')}               Domain registrar management
       ${w('list-presets')}           List personality & agent presets
       ${w('config')}                Read/write config values
       ${w('env')}                   Manage API keys & secrets
@@ -177,6 +179,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   logs:              () => import('./commands/logs.js'),
   stop:              () => import('./commands/stop.js'),
   monitor:           () => import('./commands/monitor.js'),
+  cloud:             () => import('./commands/cloud.js'),
+  domains:           () => import('./commands/domains.js'),
   login:             () => import('./commands/login.js'),
   logout:            () => import('./commands/logout.js'),
   'auth-status':     () => import('./commands/auth-status.js'),
