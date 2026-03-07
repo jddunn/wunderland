@@ -819,7 +819,7 @@
         "openai.apiKey"
       ],
       "defaultPriority": 100,
-      "available": false,
+      "available": true,
       "defaultModel": "gpt-4o",
       "smallModel": "gpt-4o-mini",
       "apiBaseUrl": "https://api.openai.com/v1"
@@ -835,7 +835,7 @@
         "anthropic.apiKey"
       ],
       "defaultPriority": 100,
-      "available": false,
+      "available": true,
       "defaultModel": "claude-sonnet-4-5-20250929",
       "smallModel": "claude-haiku-4-5-20251001",
       "apiBaseUrl": "https://api.anthropic.com"
@@ -849,7 +849,7 @@
       "description": "Ollama local inference \u2014 run open-weight models (Llama, Mistral, etc.) on your own hardware.",
       "requiredSecrets": [],
       "defaultPriority": 90,
-      "available": false,
+      "available": true,
       "defaultModel": "llama3",
       "smallModel": "llama3.2:3b",
       "apiBaseUrl": "http://127.0.0.1:11434/v1"
@@ -867,7 +867,7 @@
         "aws.region"
       ],
       "defaultPriority": 80,
-      "available": false,
+      "available": true,
       "defaultModel": "anthropic.claude-sonnet",
       "smallModel": "anthropic.claude-haiku"
     },
@@ -882,7 +882,7 @@
         "gemini.apiKey"
       ],
       "defaultPriority": 90,
-      "available": false,
+      "available": true,
       "defaultModel": "gemini-2.0-flash",
       "smallModel": "gemini-2.0-flash-lite",
       "apiBaseUrl": "https://generativelanguage.googleapis.com"
@@ -898,7 +898,7 @@
         "github.copilotToken"
       ],
       "defaultPriority": 70,
-      "available": false,
+      "available": true,
       "defaultModel": "gpt-4o",
       "smallModel": "gpt-4o-mini",
       "apiBaseUrl": "https://api.githubcopilot.com"
@@ -915,7 +915,7 @@
         "cloudflare.apiToken"
       ],
       "defaultPriority": 60,
-      "available": false,
+      "available": true,
       "defaultModel": "(configurable)",
       "smallModel": "(configurable)"
     },
@@ -930,7 +930,7 @@
         "minimax.apiKey"
       ],
       "defaultPriority": 60,
-      "available": false,
+      "available": true,
       "defaultModel": "MiniMax-M2.1",
       "smallModel": "MiniMax-VL-01",
       "apiBaseUrl": "https://api.minimax.chat/v1"
@@ -946,7 +946,7 @@
         "qwen.apiKey"
       ],
       "defaultPriority": 60,
-      "available": false,
+      "available": true,
       "defaultModel": "qwen-max",
       "smallModel": "qwen-turbo",
       "apiBaseUrl": "https://portal.qwen.ai/v1"
@@ -962,7 +962,7 @@
         "moonshot.apiKey"
       ],
       "defaultPriority": 60,
-      "available": false,
+      "available": true,
       "defaultModel": "kimi-k2.5",
       "smallModel": "kimi-k2-instant",
       "apiBaseUrl": "https://api.moonshot.ai/v1"
@@ -978,7 +978,7 @@
         "xiaomi.apiKey"
       ],
       "defaultPriority": 50,
-      "available": false,
+      "available": true,
       "defaultModel": "mimo-v2-flash",
       "smallModel": "mimo-v2-flash",
       "apiBaseUrl": "https://api.xiaomimimo.com/anthropic"
@@ -994,7 +994,7 @@
         "venice.apiKey"
       ],
       "defaultPriority": 50,
-      "available": false,
+      "available": true,
       "defaultModel": "venice-default",
       "smallModel": "venice-fast",
       "apiBaseUrl": "https://api.venice.ai/v1"
@@ -1010,7 +1010,7 @@
         "openrouter.apiKey"
       ],
       "defaultPriority": 80,
-      "available": false,
+      "available": true,
       "defaultModel": "auto",
       "smallModel": "auto",
       "apiBaseUrl": "https://openrouter.ai/api/v1"
