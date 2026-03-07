@@ -140,7 +140,14 @@ export default async function cmdStart(
   const globalConfig = await loadConfig(globals.config);
 
   if (!existsSync(configPath)) {
-    fmt.errorBlock('Missing config file', `${configPath}\nRun: ${accent('wunderland init my-agent')}`);
+    fmt.errorBlock(
+      'Missing config file',
+      `${configPath}\n\n` +
+      `If you haven't created an agent yet:\n` +
+      `  ${accent('wunderland init my-agent')}\n\n` +
+      `If you already have one, cd into its directory first:\n` +
+      `  ${accent('cd my-agent && wunderland start')}`,
+    );
     process.exitCode = 1;
     return;
   }
@@ -687,6 +694,31 @@ export default async function cmdStart(
   });
   toolMap.clear();
   for (const [k, v] of filtered.toolMap.entries()) toolMap.set(k, v);
+
+  // ── Agent wallet extension (opt-in via agent.config.json wallet.enabled) ──
+  if (cfg?.wallet?.enabled) {
+    try {
+      const { createExtensionPack: createWalletPack } = await import(
+        '@framers/agentos-ext-wallet' as string
+      );
+      const walletPack = createWalletPack({
+        options: cfg.wallet,
+        secrets: cfg.secrets,
+        getSecret: (k: string) => process.env[k],
+        logger: { info: (m: string) => console.log(`[Server] ${m}`) },
+      });
+      for (const desc of walletPack.descriptors) {
+        if (desc.kind === 'tool' && desc.payload) {
+          const t = desc.payload as any;
+          toolMap.set(t.name, t);
+        }
+      }
+      await walletPack.onActivate?.();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Server] Wallet extension failed to load: ${msg}`);
+    }
+  }
 
   // Capability discovery — semantic search + graph re-ranking
   const discoveryOpts: WunderlandDiscoveryConfig = {};
@@ -2106,6 +2138,15 @@ export default async function cmdStart(
         return;
       }
 
+      if (req.method === 'GET' && url.pathname === '/chat') {
+        sendJson(res, 200, {
+          endpoint: 'POST /chat',
+          usage: 'Send a JSON body with { "message": "your prompt" }',
+          example: 'curl -X POST http://localhost:' + port + '/chat -H "Content-Type: application/json" -d \'{"message":"hello"}\'',
+        });
+        return;
+      }
+
       if (req.method === 'POST' && url.pathname === '/chat') {
         if (!isChatAuthorized(req, url, chatSecret)) {
           sendJson(res, 401, { error: 'Unauthorized' });
@@ -2485,7 +2526,18 @@ export default async function cmdStart(
     }
   });
 
-  await new Promise<void>((resolve) => {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        reject(new Error(
+          `Port ${port} is already in use.\n`
+          + `  Try a different port:  wunderland start --port ${port + 1}\n`
+          + `  Or kill the process using port ${port}:  lsof -ti:${port} | xargs kill`,
+        ));
+      } else {
+        reject(err);
+      }
+    });
     server.listen(port, '0.0.0.0', () => resolve());
   });
 
