@@ -3,9 +3,11 @@
  * Extracted from start.ts lines 2637-2730.
  */
 
+import * as path from 'node:path';
 import * as fmt from '../../ui/format.js';
 import { accent, success as sColor, info as iColor, warn as wColor } from '../../ui/theme.js';
 import { shutdownWunderlandOtel } from '../../observability/otel.js';
+import { recordAgentStart } from '../../config/agent-history.js';
 
 export async function startServerAndDisplay(ctx: any, server: import('node:http').Server): Promise<void> {
   const {
@@ -49,6 +51,13 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
     });
     server.listen(port, '0.0.0.0', () => resolve());
   });
+
+  // Record this agent in history for `wunderland agents`
+  recordAgentStart({
+    seedId,
+    displayName,
+    configPath: path.resolve(process.cwd(), 'agent.config.json'),
+  }).catch(() => { /* best-effort */ });
 
   // Best-effort OTEL shutdown on exit.
   const handleExit = async () => {

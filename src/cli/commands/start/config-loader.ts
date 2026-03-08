@@ -65,30 +65,62 @@ export async function loadAndValidateConfig(
     fmt.blank();
     p.intro(accent('Quick Setup'));
     fmt.note('No agent.config.json found in this directory.');
+    fmt.note('Each agent lives in its own directory with an agent.config.json file.');
+    fmt.blank();
 
-    const shouldSetup = await p.confirm({
-      message: `Create an agent configuration here?`,
-      initialValue: true,
+    const dirBasename = path.basename(process.cwd());
+    const setupChoice = await p.select({
+      message: 'What would you like to do?',
+      options: [
+        { value: 'here', label: `Set up an agent in this directory (./${dirBasename})` },
+        { value: 'subdir', label: 'Create a new agent in a subdirectory' },
+        { value: 'cancel', label: `Cancel — I'll run ${accent('wunderland init <name>')} manually` },
+      ],
     });
 
-    if (p.isCancel(shouldSetup) || !shouldSetup) {
-      fmt.errorBlock(
-        'Missing config file',
-        `Run ${accent('wunderland init my-agent')} to scaffold a new agent project.`,
-      );
-      process.exitCode = 1;
+    if (p.isCancel(setupChoice) || setupChoice === 'cancel') {
+      p.cancel('Setup cancelled.');
+      fmt.note(`Run ${accent('wunderland init my-agent')} to scaffold a new agent project.`);
       return false;
     }
 
-    // 1. Agent name
-    const dirBasename = path.basename(process.cwd());
-    const agentName = await p.text({
-      message: 'What should your agent be called?',
-      placeholder: toDisplayName(dirBasename),
-      defaultValue: toDisplayName(dirBasename),
-      validate: (val) => (!val.trim() ? 'Name cannot be empty' : undefined),
-    });
-    if (p.isCancel(agentName)) { p.cancel('Setup cancelled.'); return false; }
+    let targetDir = process.cwd();
+    let agentName: string;
+
+    if (setupChoice === 'subdir') {
+      // Prompt for subdirectory name
+      const subdirName = await p.text({
+        message: 'Agent directory name:',
+        placeholder: 'my-agent',
+        validate: (val) => {
+          if (!val.trim()) return 'Name cannot be empty';
+          if (/[/\\]/.test(val)) return 'Must be a simple directory name (no path separators)';
+          return undefined;
+        },
+      });
+      if (p.isCancel(subdirName)) { p.cancel('Setup cancelled.'); return false; }
+
+      targetDir = path.resolve(process.cwd(), subdirName as string);
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(targetDir, { recursive: true });
+
+      agentName = await p.text({
+        message: 'What should your agent be called?',
+        placeholder: toDisplayName(subdirName as string),
+        defaultValue: toDisplayName(subdirName as string),
+        validate: (val) => (!val.trim() ? 'Name cannot be empty' : undefined),
+      }) as string;
+      if (p.isCancel(agentName)) { p.cancel('Setup cancelled.'); return false; }
+    } else {
+      // Setup in current directory
+      agentName = await p.text({
+        message: 'What should your agent be called?',
+        placeholder: toDisplayName(dirBasename),
+        defaultValue: toDisplayName(dirBasename),
+        validate: (val) => (!val.trim() ? 'Name cannot be empty' : undefined),
+      }) as string;
+      if (p.isCancel(agentName)) { p.cancel('Setup cancelled.'); return false; }
+    }
 
     // 2. LLM provider + API key + model
     const llmResult = await runInitLlmStep({ nonInteractive: false });
@@ -117,7 +149,7 @@ export async function loadAndValidateConfig(
 
     // 4. Build config + write files
     const { config: builtConfig } = buildAgentConfig({
-      agentName: agentName as string,
+      agentName: agentName,
       llmProvider: llmResult.llmProvider,
       llmModel: llmResult.llmModel,
       llmAuthMethod: llmResult.llmAuthMethod,
@@ -129,10 +161,10 @@ export async function loadAndValidateConfig(
     envData['PORT'] = String(process.env.PORT || '3777');
 
     await writeAgentScaffold({
-      targetDir: process.cwd(),
+      targetDir,
       config: builtConfig,
       envData,
-      agentName: agentName as string,
+      agentName: agentName,
       writeEnv: Object.keys(llmResult.apiKeys).length > 0,
       skipExisting: true,
     });
@@ -140,6 +172,11 @@ export async function loadAndValidateConfig(
     // Save keys to global ~/.wunderland/.env
     if (Object.keys(llmResult.apiKeys).length > 0) {
       await mergeEnv(llmResult.apiKeys, globals.config);
+    }
+
+    // If we created a subdirectory, chdir into it
+    if (targetDir !== process.cwd()) {
+      process.chdir(targetDir);
     }
 
     // Reload env so the just-written .env is available
