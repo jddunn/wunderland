@@ -53,6 +53,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('hitl')}                  Watch/resolve approvals & checkpoints
 
     ${w('Process')}
+      ${w('agents')}                List all known agents (alias: ls)
       ${w('serve')}                 Start agent as background daemon
       ${w('ps')}                    List running agent processes
       ${w('logs')} ${d('[seedId]')}        Tail agent logs
@@ -181,6 +182,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   'export-session':  () => import('./commands/export-session.js'),
   deploy:            () => import('./commands/deploy.js'),
   serve:             () => import('./commands/serve.js'),
+  agents:            () => import('./commands/agents.js'),
+  ls:                () => import('./commands/agents.js'),
   ps:                () => import('./commands/ps.js'),
   logs:              () => import('./commands/logs.js'),
   stop:              () => import('./commands/stop.js'),
