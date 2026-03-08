@@ -277,7 +277,7 @@ export default async function cmdStart(
   const modelFromConfig = typeof cfg.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
   const model = typeof flags['model'] === 'string'
     ? String(flags['model'])
-    : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o-mini'));
+    : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
 
   // Auto-start Ollama if configured as provider
   const isOllamaProvider = providerId === 'ollama';
@@ -434,6 +434,19 @@ export default async function cmdStart(
       await broadcastHitlUpdate({ type: 'notification', notification });
     },
   });
+
+  // ── Capture startup output into a bordered panel ──────────────────────────
+  const startupLines: string[] = [];
+  const origLog = console.log;
+  const origInfo = console.info;
+  const captureLog = (...args: unknown[]) => {
+    const line = args.map(String).join(' ');
+    startupLines.push(line);
+  };
+  const origWarn = console.warn;
+  console.log = captureLog as typeof console.log;
+  console.info = captureLog as typeof console.info;
+  console.warn = captureLog as typeof console.warn;
 
   if (!lazyTools) {
     // Load extensions dynamically from agent.config.json or use defaults
@@ -1467,7 +1480,7 @@ export default async function cmdStart(
           channelId: welcomeChannelId,
           openaiApiKey,
           systemPrompt: (cfg as any)?.systemPrompt || '',
-          model: (cfg as any)?.llmModel || 'gpt-4o-mini',
+          model: (cfg as any)?.llmModel || 'gpt-4o',
         });
         if (discordAdapterWelcome.service) {
           welcomeHandler.registerOnService(discordAdapterWelcome.service);
@@ -1496,7 +1509,7 @@ export default async function cmdStart(
           openaiApiKey: openaiKeyPicks,
           systemPrompt: (cfg as any)?.systemPrompt || '',
           scraperApiUrl: scraperUrl,
-          model: (cfg as any)?.llmModel || 'gpt-4o-mini',
+          model: (cfg as any)?.llmModel || 'gpt-4o',
         });
         if (discordAdapterPicks.service) {
           picksHandler.startSchedule(discordAdapterPicks.service);
@@ -2568,6 +2581,20 @@ export default async function cmdStart(
   process.once('SIGTERM', () => void handleExit());
 
   // Status display
+  // ── Restore console and render captured startup output in a panel ────────
+  console.log = origLog;
+  console.info = origInfo;
+  console.warn = origWarn;
+  if (startupLines.length > 0) {
+    const { stripAnsi } = await import('../ui/ansi-utils.js');
+    // Filter out empty lines and deduplicate
+    const filtered = startupLines
+      .filter((l) => stripAnsi(l).trim().length > 0);
+    if (filtered.length > 0) {
+      await fmt.panel({ title: 'Startup', content: filtered.join('\n'), style: 'info' });
+    }
+  }
+
   fmt.section('Agent Server Running');
   fmt.kvPair('Agent', accent(displayName));
   fmt.kvPair('Seed ID', seedId);
