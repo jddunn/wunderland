@@ -7,12 +7,15 @@
 import * as p from '@clack/prompts';
 import boxen from 'boxen';
 import type { GlobalFlags, WizardState, SetupMode, ObservabilityPreset } from '../types.js';
-import { accent, success as sColor, warn as wColor } from '../ui/theme.js';
+import { accent, dim, muted, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { updateConfig } from '../config/config-manager.js';
 import { mergeEnv } from '../config/env-manager.js';
-import { URLS } from '../constants.js';
+import { URLS, PERSONALITY_PRESETS } from '../constants.js';
 import { buildOtelEnvVars, describeObservabilityPreset } from '../observability/otel-config.js';
+import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
+import { DEFAULT_HEXACO_TRAITS, type HEXACOTraits } from '../../core/types.js';
+import { getUiRuntime } from '../ui/runtime.js';
 import { runApiKeysWizard } from './api-keys-wizard.js';
 import { runChannelsWizard } from './channels-wizard.js';
 import { runPersonalityWizard } from './personality-wizard.js';
@@ -107,9 +110,33 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
     await runOllamaAutoConfig(state);
   }
 
-  // Step 3: Personality (Advanced only)
+  // Step 3: Personality
   if (state.mode === 'advanced') {
-    await runPersonalityWizard(state);
+    // Ask whether personality is enabled at all
+    const enablePersonality = await p.confirm({
+      message: 'Enable HEXACO personality system?',
+      initialValue: true,
+    });
+    if (!p.isCancel(enablePersonality)) {
+      state.personalityEnabled = enablePersonality;
+    }
+
+    if (state.personalityEnabled !== false) {
+      // Full personality wizard with custom HEXACO sliders
+      await runPersonalityWizard(state);
+
+      // Personality evolution toggle (advanced only)
+      const evolve = await p.confirm({
+        message: 'Enable personality evolution? (traits slowly drift based on interactions)',
+        initialValue: false,
+      });
+      if (!p.isCancel(evolve)) {
+        state.personalityEvolution = evolve;
+      }
+    }
+  } else {
+    // QuickStart: lightweight preset picker (no custom sliders)
+    await runQuickPersonalityPicker(state);
   }
 
   // Step 4: Channels (both modes — QuickStart defaults to webchat)
@@ -154,7 +181,10 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
     state.channels.length > 0 ? `Channels: ${state.channels.map((c) => accent(c)).join(', ')}` : null,
     extensionsSummary ? `Extensions: ${accent(extensionsSummary)}` : null,
     state.skills?.length ? `Skills: ${accent(state.skills.join(', '))}` : null,
-    state.personalityPreset ? `Personality: ${accent(state.personalityPreset)}` : null,
+    state.personalityEnabled === false
+      ? `Personality: ${wColor('disabled')}`
+      : state.personalityPreset ? `Personality: ${accent(state.personalityPreset)}` : null,
+    state.personalityEvolution ? `Personality evolution: ${accent('enabled')}` : null,
     state.voice ? `Voice: ${accent(state.voice.provider)}` : null,
     `Security: ${state.security.preLlmClassifier ? sColor('full pipeline') : wColor('minimal')}`,
   ].filter(Boolean).join('\n');
@@ -167,6 +197,38 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
     title: 'Review',
     titleAlignment: 'center',
   }));
+
+  // Show HEXACO bar chart if personality is set
+  if (state.personalityEnabled !== false && state.personalityPreset) {
+    let traits: HEXACOTraits | undefined;
+    if (state.personalityPreset === 'custom' && state.customHexaco) {
+      traits = { ...DEFAULT_HEXACO_TRAITS, ...state.customHexaco } as HEXACOTraits;
+    } else {
+      const presetKey = state.personalityPreset as keyof typeof HEXACO_PRESETS;
+      if (HEXACO_PRESETS[presetKey]) traits = HEXACO_PRESETS[presetKey];
+    }
+    if (traits) {
+      const ui = getUiRuntime();
+      const fill = ui.ascii ? '#' : '\u2588';
+      const empty = ui.ascii ? '.' : '\u2591';
+      const barW = 10;
+      const traitRows = [
+        { key: 'honesty_humility',  label: 'Honesty' },
+        { key: 'emotionality',      label: 'Emotion' },
+        { key: 'extraversion',      label: 'Extravert' },
+        { key: 'agreeableness',     label: 'Agreeable' },
+        { key: 'conscientiousness', label: 'Conscient' },
+        { key: 'openness',          label: 'Openness' },
+      ] as const;
+      const chart = traitRows.map((t) => {
+        const v = traits![t.key];
+        const filled = Math.round(v * barW);
+        return `  ${muted(t.label.padEnd(12))} ${accent(fill.repeat(filled))}${muted(empty.repeat(barW - filled))} ${dim(`${(v * 100).toFixed(0).padStart(3)}%`)}`;
+      }).join('\n');
+      console.log(chart);
+      fmt.blank();
+    }
+  }
 
   // Confirm
   if (!globals.yes) {
@@ -201,6 +263,8 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
       llmAuthMethod: state.llmAuthMethod,
       personalityPreset: state.personalityPreset,
       customHexaco: state.customHexaco,
+      personalityEnabled: state.personalityEnabled ?? true,
+      personalityEvolution: state.personalityEvolution ?? false,
       channels: state.channels,
       tools: Object.keys(state.toolKeys).length > 0 ? Object.keys(state.toolKeys) : undefined,
       extensions: state.extensions,
@@ -223,6 +287,31 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   }
   fmt.note(`Dashboard: ${fmt.link(URLS.saas)}`);
   fmt.blank();
+}
+
+// ── QuickStart personality picker ──────────────────────────────────────────────
+
+async function runQuickPersonalityPicker(state: WizardState): Promise<void> {
+  const options = [
+    { value: 'balanced', label: 'Balanced (default)', hint: 'neutral across all traits' },
+    ...PERSONALITY_PRESETS.map((preset) => ({
+      value: preset.id,
+      label: preset.label,
+      hint: preset.desc,
+    })),
+  ];
+
+  const selected = await p.select({
+    message: 'Choose a personality preset:',
+    options,
+  });
+
+  if (p.isCancel(selected)) return;
+
+  if (selected !== 'balanced') {
+    state.personalityPreset = selected as string;
+  }
+  // 'balanced' leaves personalityPreset undefined → default HEXACO traits
 }
 
 // ── Ollama auto-configuration sub-wizard ─────────────────────────────────────

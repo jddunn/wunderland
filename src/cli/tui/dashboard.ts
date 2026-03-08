@@ -31,12 +31,15 @@ interface QuickAction {
   shortcut?: string;
 }
 
+/** How much of the setup wizard has been completed. */
+type ConfigLevel = 'none' | 'partial' | 'full';
+
 interface DashboardState {
   agentName: string;
   llmInfo: string;
   channelCount: number;
   keys: { label: string; isSet: boolean }[];
-  isSetUp: boolean;
+  configLevel: ConfigLevel;
 }
 
 // ── Color Palette (hex values for chalk.hex) ───────────────────────────────
@@ -95,7 +98,7 @@ export class Dashboard {
     llmInfo: 'not configured',
     channelCount: 0,
     keys: [],
-    isSetUp: false,
+    configLevel: 'none',
   };
   private introPlayed = false;
 
@@ -179,7 +182,20 @@ export class Dashboard {
       } else if (config.llmAuthMethod === 'oauth') {
         this.state.llmInfo = 'openai (OAuth)';
       }
-      this.state.isSetUp = !!(config.llmProvider || config.llmAuthMethod);
+      // 3-tier config completeness:
+      //   full    = LLM provider + agent name + personality preset
+      //   partial = LLM provider set but missing name or personality
+      //   none    = no LLM provider at all
+      const hasLlm = !!(config.llmProvider || config.llmAuthMethod);
+      const hasName = !!(config.agentName && config.agentName !== 'My Wunderbot');
+      const hasPersonality = !!(config.personalityPreset);
+      if (hasLlm && hasName && hasPersonality) {
+        this.state.configLevel = 'full';
+      } else if (hasLlm) {
+        this.state.configLevel = 'partial';
+      } else {
+        this.state.configLevel = 'none';
+      }
       if (Array.isArray(config.channels)) {
         this.state.channelCount = config.channels.length;
       }
@@ -530,9 +546,11 @@ export class Dashboard {
       // Setup action shows configuration status
       let label: string;
       if (action.command === 'setup') {
-        const tag = this.state.isSetUp
+        const tag = this.state.configLevel === 'full'
           ? chalk.hex(C.green)(` (configured ${g.ok})`)
-          : chalk.hex(C.dim)(' (not configured)');
+          : this.state.configLevel === 'partial'
+            ? chalk.hex(C.gold)(` (partially configured)`)
+            : chalk.hex(C.dim)(' (not configured)');
         label = (selected ? chalk.hex(C.white).bold(action.label) : chalk.hex(C.text)(action.label)) + tag;
       } else {
         label = selected ? chalk.hex(C.white).bold(action.label) : chalk.hex(C.text)(action.label);
@@ -756,7 +774,11 @@ export class Dashboard {
 
       let label = selected ? chalk.hex(C.white).bold(action.label) : chalk.hex(C.text)(action.label);
       if (action.command === 'setup') {
-        label += this.state.isSetUp ? chalk.hex(C.green)(` (configured ${g.ok})`) : chalk.hex(C.dim)(' (not configured)');
+        label += this.state.configLevel === 'full'
+          ? chalk.hex(C.green)(` (configured ${g.ok})`)
+          : this.state.configLevel === 'partial'
+            ? chalk.hex(C.gold)(` (partially configured)`)
+            : chalk.hex(C.dim)(' (not configured)');
       }
 
       const hint = selected ? chalk.hex(C.cyan)(action.hint) : chalk.hex(C.dim)(action.hint);

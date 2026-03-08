@@ -18,6 +18,8 @@ import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../../constants.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
 import { resolveAgentDisplayName } from '../../../runtime/agent-identity.js';
+import { HEXACO_PRESETS } from '../../../core/WunderlandSeed.js';
+import { DEFAULT_HEXACO_TRAITS, type HEXACOTraits } from '../../../core/types.js';
 
 export class StatusView {
   private screen: Screen;
@@ -88,9 +90,77 @@ export class StatusView {
     }
     if (config.llmProvider) lines.push(`    ${muted('LLM Provider'.padEnd(20))} ${config.llmProvider}`);
     if (config.llmModel) lines.push(`    ${muted('LLM Model'.padEnd(20))} ${config.llmModel}`);
-    if (config.personalityPreset) {
-      const preset = PERSONALITY_PRESETS.find((p) => p.id === config.personalityPreset);
-      lines.push(`    ${muted('Personality'.padEnd(20))} ${preset ? preset.label : config.personalityPreset}`);
+    if (config.personalityEnabled === false) {
+      lines.push(`    ${muted('Personality'.padEnd(20))} ${wColor('disabled')}`);
+    } else {
+      // Resolve HEXACO traits: local config > preset > default
+      let traits: HEXACOTraits | undefined;
+      let presetLabel: string | undefined;
+
+      // Try local agent.config.json personality object first
+      if (existsSync(localConfig)) {
+        try {
+          const cfg = JSON.parse(await readFile(localConfig, 'utf8'));
+          if (cfg.personality) {
+            traits = {
+              honesty_humility: cfg.personality.honesty ?? cfg.personality.honesty_humility ?? 0.5,
+              emotionality: cfg.personality.emotionality ?? 0.5,
+              extraversion: cfg.personality.extraversion ?? 0.5,
+              agreeableness: cfg.personality.agreeableness ?? 0.5,
+              conscientiousness: cfg.personality.conscientiousness ?? 0.5,
+              openness: cfg.personality.openness ?? 0.5,
+            };
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Fall back to global config preset or custom values
+      if (!traits && config.personalityPreset) {
+        const presetMeta = PERSONALITY_PRESETS.find((p) => p.id === config.personalityPreset);
+        presetLabel = presetMeta?.label ?? config.personalityPreset;
+
+        if (config.personalityPreset === 'custom' && config.customHexaco) {
+          traits = { ...DEFAULT_HEXACO_TRAITS, ...config.customHexaco } as HEXACOTraits;
+        } else {
+          const presetKey = config.personalityPreset as keyof typeof HEXACO_PRESETS;
+          if (HEXACO_PRESETS[presetKey]) {
+            traits = HEXACO_PRESETS[presetKey];
+          }
+        }
+      }
+
+      if (presetLabel || config.personalityPreset) {
+        lines.push(`    ${muted('Personality'.padEnd(20))} ${accent(presetLabel || config.personalityPreset!)}`);
+      }
+      if (config.personalityEvolution) {
+        lines.push(`    ${muted('Evolution'.padEnd(20))} ${sColor('enabled')}`);
+      }
+
+      // Render HEXACO bar chart
+      if (traits) {
+        lines.push('');
+        lines.push(`  ${iColor(g.bulletHollow)} ${bright('HEXACO Profile')}`);
+        const traitDefs = [
+          { key: 'honesty_humility',  label: 'Honesty' },
+          { key: 'emotionality',      label: 'Emotion' },
+          { key: 'extraversion',      label: 'Extravert' },
+          { key: 'agreeableness',     label: 'Agreeable' },
+          { key: 'conscientiousness', label: 'Conscient' },
+          { key: 'openness',          label: 'Openness' },
+        ] as const;
+
+        const barWidth = 10;
+        const fillChar = ui.ascii ? '#' : '\u2588'; // █
+        const emptyChar = ui.ascii ? '.' : '\u2591'; // ░
+
+        for (const td of traitDefs) {
+          const val = traits[td.key];
+          const filled = Math.round(val * barWidth);
+          const bar = accent(fillChar.repeat(filled)) + muted(emptyChar.repeat(barWidth - filled));
+          const pct = dim(` ${(val * 100).toFixed(0).padStart(3)}%`);
+          lines.push(`    ${muted(td.label.padEnd(12))} ${bar}${pct}`);
+        }
+      }
     }
     lines.push('');
 
