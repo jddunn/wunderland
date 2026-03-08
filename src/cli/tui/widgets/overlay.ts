@@ -4,7 +4,7 @@
  */
 
 import { dim, accent, bright } from '../../ui/theme.js';
-import { visibleLength, ansiPadEnd, sliceAnsi, stripAnsi } from '../../ui/ansi-utils.js';
+import { visibleLength, ansiPadEnd, stripAnsi } from '../../ui/ansi-utils.js';
 import { glyphs } from '../../ui/glyphs.js';
 
 export function renderOverlayBox(opts: {
@@ -64,7 +64,9 @@ export function stampOverlay(opts: {
   const overlayWidth = Math.max(0, ...overlay.map((l) => visibleLength(l)));
   const overlayHeight = overlay.length;
 
-  const x = Math.max(0, Math.min(opts.x ?? Math.floor((opts.cols - overlayWidth) / 2), Math.max(0, opts.cols - overlayWidth)));
+  // Clamp x so the entire overlay (including right border) fits within cols
+  const idealX = opts.x ?? Math.floor((opts.cols - overlayWidth) / 2);
+  const x = Math.max(0, Math.min(idealX, opts.cols - overlayWidth));
   const y = Math.max(0, Math.min(opts.y ?? Math.floor((opts.rows - overlayHeight) / 2), Math.max(0, opts.rows - overlayHeight)));
 
   for (let i = 0; i < overlay.length; i++) {
@@ -72,8 +74,11 @@ export function stampOverlay(opts: {
     if (row < 0 || row >= screen.length) continue;
 
     const line = overlay[i] ?? '';
-    const padded = ansiPadEnd(`${' '.repeat(x)}${line}`, opts.cols);
-    screen[row] = visibleLength(padded) > opts.cols ? sliceAnsi(padded, 0, opts.cols) : padded;
+    // Build the line with x offset — don't clip the overlay itself
+    const prefix = ' '.repeat(x);
+    const combined = prefix + line;
+    // Pad to fill the row, but never clip the overlay's right border
+    screen[row] = ansiPadEnd(combined, opts.cols);
   }
 
   return screen;
