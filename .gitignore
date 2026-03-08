@@ -83,3 +83,8 @@ apps/frame.dev/prompts-originals/
 *.sqlite-wal
 *.sqlite3-shm
 *.sqlite3-wal
+
+# Generated HTML (CLI reference, brand pages, etc.)
+cli-reference.html
+docs/brand.html
+brand.html
