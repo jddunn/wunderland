@@ -4,9 +4,9 @@
  * @module wunderland/cli/ui/format
  */
 
-import chalk from 'chalk';
 import { success as sColor, error as eColor, warn as wColor, info as iColor, muted, dim, key as kColor, tool as tColor, channel as cColor, accent, bright } from './theme.js';
 import { glyphs } from './glyphs.js';
+import { printPanel } from './panel.js';
 
 // ── Prefixed output ─────────────────────────────────────────────────────────
 
@@ -114,26 +114,16 @@ export function hr(): void {
 
 // ── Error display ───────────────────────────────────────────────────────────
 
-/** Formatted error block. */
+/** Formatted error block (bordered panel). */
 export function errorBlock(title: string, detail?: string): void {
-  const g = glyphs();
-  console.log();
-  console.log(`  ${eColor(g.fail)} ${chalk.red.bold(title)}`);
-  if (detail) {
-    console.log(`    ${dim(detail)}`);
-  }
-  console.log();
+  const content = detail ? `${title}\n\n${detail}` : title;
+  printPanel({ title: 'Error', content, style: 'error' });
 }
 
-/** Formatted success block. */
+/** Formatted success block (bordered panel). */
 export function successBlock(title: string, detail?: string): void {
-  const g = glyphs();
-  console.log();
-  console.log(`  ${sColor(g.ok)} ${chalk.green.bold(title)}`);
-  if (detail) {
-    console.log(`    ${dim(detail)}`);
-  }
-  console.log();
+  const content = detail ? `${title}\n\n${detail}` : title;
+  printPanel({ title: 'Success', content, style: 'success' });
 }
 
 // ── Component wrappers ─────────────────────────────────────────────────────
@@ -149,8 +139,7 @@ export async function table(opts: TableOptions): Promise<void> {
 }
 
 /** Print a bordered panel (delegates to panel.ts). */
-export async function panel(opts: PanelOptions): Promise<void> {
-  const { printPanel } = await import('./panel.js');
+export function panel(opts: PanelOptions): void {
   printPanel(opts);
 }
 

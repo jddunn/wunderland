@@ -12,8 +12,8 @@ export interface UiRuntime {
 }
 
 const DEFAULT_RUNTIME: UiRuntime = {
-  // User preference: default to plain/no-color unless explicitly overridden.
-  theme: 'plain',
+  // Default to cyberpunk (colorized) — all themes should have colors.
+  theme: 'cyberpunk',
   ascii: false,
   noColor: false,
 };

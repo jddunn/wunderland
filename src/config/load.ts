@@ -86,7 +86,7 @@ export async function resolveLlmConfig(opts: {
   const model =
     typeof opts.llm?.model === 'string' && opts.llm.model.trim()
       ? opts.llm.model.trim()
-      : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o-mini'));
+      : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
 
   const baseUrl =
     providerId === 'openrouter'
