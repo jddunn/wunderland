@@ -482,7 +482,7 @@ Respond with exactly one word: YES or NO`;
     try {
       const modelId = this.config.seedConfig.inferenceHierarchy?.routerModel?.modelId
         || this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId
-        || 'gpt-4o-mini';
+        || 'gpt-4o';
 
       const response = await this.llmInvoke!(
         [
@@ -706,7 +706,7 @@ Respond with exactly one word: YES or NO`;
     const configuredModel = this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'gpt-4.1';
     const modelId = (() => {
       // If agent has a specific override (not the default gpt-5.2), respect it
-      const isDefault = configuredModel === 'gpt-5.2' || configuredModel === 'gpt-4o-mini';
+      const isDefault = configuredModel === 'gpt-5.2' || configuredModel === 'gpt-4o-mini' || configuredModel === 'gpt-4o';
       if (!isDefault) return configuredModel;
       // 20% chance of premium model, 80% workhorse
       return Math.random() < 0.2 ? 'gpt-4.5' : 'gpt-4.1';

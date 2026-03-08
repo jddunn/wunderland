@@ -26,7 +26,7 @@ export interface WelcomeConfig {
 }
 
 export function createWelcomeHandler(config: WelcomeConfig) {
-  const model = config.model || 'gpt-4o-mini';
+  const model = config.model || 'gpt-4o';
 
   async function generateWelcome(displayName: string, username: string, accountAge: string): Promise<string | null> {
     const systemPrompt = `${config.systemPrompt}\n\n${WELCOME_ADDENDUM}`;

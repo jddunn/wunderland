@@ -75,7 +75,7 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
 
     selectedProvider = choosePreferredProviderId(detected.map((d) => d.id));
     const provDef = SUPPORTED_LLM_PROVIDERS.find((p) => p.id === selectedProvider);
-    const selectedModel = (provDef?.models?.[0] as string | undefined) || 'gpt-4o-mini';
+    const selectedModel = (provDef?.models?.[0] as string | undefined) || 'gpt-4o';
 
     fmt.blank();
     fmt.ok(`Provider: ${accent(selectedProvider)}  Model: ${accent(selectedModel)}`);
@@ -206,7 +206,7 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
   }
 
   if (!selectedModel && provDef) {
-    selectedModel = provDef.models[0] as string || 'gpt-4o-mini';
+    selectedModel = provDef.models[0] as string || 'gpt-4o';
   }
 
   fmt.blank();

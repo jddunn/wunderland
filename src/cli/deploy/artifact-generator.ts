@@ -217,7 +217,7 @@ export function generateEnvTemplate(opts: {
 
   const lines: string[] = ['# Copy to .env and fill in real values'];
   lines.push(`PORT=${opts.port}`);
-  lines.push(`OPENAI_MODEL=${opts.llmModel ?? 'gpt-4o-mini'}`);
+  lines.push(`OPENAI_MODEL=${opts.llmModel ?? 'gpt-4o'}`);
   lines.push('');
 
   if (envVars.length > 0) {

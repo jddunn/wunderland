@@ -68,8 +68,8 @@ export function getTourSteps(opts: { ascii: boolean }): TourStep[] {
     {
       title: 'Style & Accessibility',
       lines: [
-        'Theme defaults to plain (no color).',
-        'Try: wunderland --theme cyberpunk',
+        'Theme defaults to cyberpunk (full color).',
+        'For no color: wunderland --theme plain',
         '',
         'ASCII mode: wunderland --ascii',
         'Persist: wunderland config set ui.theme cyberpunk',

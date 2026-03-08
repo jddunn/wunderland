@@ -50,7 +50,7 @@ export interface CuratedPicksConfig {
 }
 
 export function createCuratedPicksHandler(config: CuratedPicksConfig) {
-  const model = config.model || 'gpt-4o-mini';
+  const model = config.model || 'gpt-4o';
   const interval = config.intervalMs || BASE_INTERVAL;
   const postedUrls = new Set<string>();
   let picksToday = 0;

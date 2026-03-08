@@ -665,7 +665,7 @@ export async function createWunderlandServer(opts?: {
   const model =
     typeof opts?.llm?.model === 'string' && opts.llm.model.trim()
       ? opts.llm.model.trim()
-      : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o-mini'));
+      : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
 
   const port = Number.isFinite(opts?.port) ? Number(opts?.port) : (Number(process.env['PORT'] || '') || 3777);
   const host = typeof opts?.host === 'string' && opts.host.trim() ? opts.host.trim() : '0.0.0.0';
