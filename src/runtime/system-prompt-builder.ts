@@ -113,7 +113,12 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
   if (autoApproveToolCalls) {
     parts.push('All tool calls are auto-approved (fully autonomous mode).');
   } else {
-    parts.push('Tool authorization is handled automatically by the runtime. Call tools freely — the system will handle any required approvals.');
+    parts.push(
+      'Tool authorization is handled automatically by the runtime. Call tools freely — the system will handle any required approvals. '
+      + 'NEVER say "I cannot create files", "I cannot run commands", or "I don\'t have the capability". '
+      + 'You DO have shell_execute, file_write, file_read, browser_navigate, and other tools available. Always attempt the tool call. '
+      + 'If a tool call fails or is denied, explain that the action requires approval and suggest the user enable auto-approve mode with --auto-approve-tools.',
+    );
   }
   if (turnApprovalMode && turnApprovalMode !== 'off') {
     parts.push(`Turn checkpoints: ${turnApprovalMode}.`);
@@ -224,11 +229,24 @@ function buildConversationalStyleInstructions(seed: IWunderlandSeed): string {
 function buildToolResourcefulnessInstructions(): string {
   return [
     'Tool Usage & Resourcefulness:',
+    '- When the user gives you a specific URL to visit or check out, ALWAYS use browser_navigate to load that page directly. Do NOT use web_search for URLs — web search returns summaries, not the actual page content. browser_navigate returns the full page text and all links, allowing you to find specific details like footer links, contact info, and embedded content.',
     '- When web_search returns results, ALWAYS examine them carefully and present relevant findings to the user. Never say "I couldn\'t find information" when you received search results — extract and synthesize what was found.',
     '- If web_search results are insufficient for a specific query (real estate listings, product prices, domain lookups, etc.), use browser_navigate to visit the relevant website directly (e.g., zillow.com, ebay.com, namecheap.com). Enable browser tools first with extensions_enable if not loaded.',
+    '- After navigating to a page, use the returned links array to find specific links the user asks about. If you need more detail about a specific section, use browser_scrape with a CSS selector.',
     '- Chain multiple tool calls when needed: search → navigate → scrape → present findings.',
     '- Be persistent: if the first approach doesn\'t yield results, try alternative search queries or different websites.',
     '- Present data you find in a structured, readable format — tables, bullet points, or key-value pairs.',
     '- When you cannot access a specific service, explain what you tried and provide the most useful information you did find, rather than simply suggesting the user visit the website themselves.',
+    '',
+    'API Key Guidance (when tools return "not configured" errors):',
+    '- If a tool fails because an API key is missing, tell the user EXACTLY which env var to set and where to get the key:',
+    '  • web_search / research_aggregate: SERPER_API_KEY from https://serper.dev (free tier: 2,500 queries/mo). Alternatives: SERPAPI_API_KEY, BRAVE_API_KEY.',
+    '  • giphy_search: GIPHY_API_KEY from https://developers.giphy.com (free).',
+    '  • image_search: PEXELS_API_KEY from https://www.pexels.com/api/ (free). Alternatives: UNSPLASH_ACCESS_KEY, PIXABAY_API_KEY.',
+    '  • news_search: NEWSAPI_API_KEY from https://newsapi.org (free tier: 100 req/day).',
+    '  • voice tools: ELEVENLABS_API_KEY from https://elevenlabs.io (free tier available).',
+    '  • browser_navigate: Works without API keys (uses headless Chrome). May need CHROME_PATH if Chrome is not auto-detected.',
+    '- Format the guidance clearly: `export SERPER_API_KEY=your_key_here` (or add to .env file).',
+    '- After explaining the missing key, still try to help with alternative approaches (e.g., use browser_navigate instead of web_search).',
   ].join('\n');
 }

@@ -20,7 +20,7 @@ import type { ExtractedAgentConfig } from '../../ai/NaturalLanguageAgentBuilder.
 
 function buildEnvExample(opts: { llmProvider?: string; llmModel?: string }): string {
   const provider = typeof opts.llmProvider === 'string' ? opts.llmProvider.trim().toLowerCase() : 'openai';
-  const model = typeof opts.llmModel === 'string' && opts.llmModel.trim() ? opts.llmModel.trim() : 'gpt-4o-mini';
+  const model = typeof opts.llmModel === 'string' && opts.llmModel.trim() ? opts.llmModel.trim() : 'gpt-4o';
 
   const lines: string[] = ['# Copy to .env and fill in real values'];
 

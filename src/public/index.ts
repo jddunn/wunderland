@@ -287,7 +287,7 @@ function toToolInstance(tool: ITool): ToolInstance {
     hasSideEffects: tool.hasSideEffects,
     category,
     requiredCapabilities: tool.requiredCapabilities,
-    execute: tool.execute as any,
+    execute: ((input: any, context: any) => tool.execute(input, context)) as any,
   };
 }
 
@@ -500,24 +500,92 @@ async function resolveExtensionsFromOpts(opts: {
   try {
     const { resolveExtensionsByNames } = await import('../core/PresetExtensionResolver.js');
 
-    const result = await resolveExtensionsByNames(toolExts, voiceExts, prodExts, overrides);
+    // Auto-map env vars to extension options so library users get the same behavior as the CLI.
+    // Extension factories read from options first, then getSecret(), then process.env as last resort.
+    // Passing them explicitly via overrides ensures they're available at factory creation time.
+    const envOverrides: Record<string, { options: Record<string, string | undefined> }> = {
+      'web-search': {
+        options: {
+          serperApiKey: process.env['SERPER_API_KEY'],
+          serpApiKey: process.env['SERPAPI_API_KEY'],
+          braveApiKey: process.env['BRAVE_API_KEY'],
+        },
+      },
+      'web-browser': {
+        options: {
+          headless: 'true',
+          executablePath:
+            process.env['PUPPETEER_EXECUTABLE_PATH'] ||
+            process.env['CHROME_EXECUTABLE_PATH'] ||
+            process.env['CHROME_PATH'] || '',
+        },
+      },
+      giphy: { options: { giphyApiKey: process.env['GIPHY_API_KEY'] || '' } },
+      'image-search': {
+        options: {
+          pexelsApiKey: process.env['PEXELS_API_KEY'],
+          unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
+          pixabayApiKey: process.env['PIXABAY_API_KEY'],
+        },
+      },
+      'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] || '' } },
+      'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] || '' } },
+    };
+
+    // Merge env overrides with user-provided overrides (user takes precedence)
+    const mergedOverrides: Record<string, any> = {};
+    for (const [name, envOvr] of Object.entries(envOverrides)) {
+      const userOvr = overrides?.[name];
+      if (userOvr) {
+        mergedOverrides[name] = {
+          ...envOvr,
+          ...userOvr,
+          options: { ...(envOvr as any).options, ...((userOvr as any).options ?? {}) },
+        };
+      } else {
+        mergedOverrides[name] = envOvr;
+      }
+    }
+    // Include any user overrides for extensions not in envOverrides
+    if (overrides) {
+      for (const [name, ovr] of Object.entries(overrides)) {
+        if (!mergedOverrides[name]) mergedOverrides[name] = ovr;
+      }
+    }
+
+    const result = await resolveExtensionsByNames(toolExts, voiceExts, prodExts, mergedOverrides);
 
     if (result.missing.length > 0) {
       opts.logger.warn?.(`[wunderland] Some extensions not available: ${result.missing.join(', ')}`);
     }
 
-    // Invoke factories and extract ITool instances
+    // Invoke factories and extract ITool instances from extension pack descriptors
     const tools: ITool[] = [];
     const names: string[] = [];
 
     for (const pack of result.manifest.packs) {
       try {
-        const instances = typeof pack.factory === 'function' ? pack.factory() : [];
-        const toolArray = Array.isArray(instances) ? instances : [instances];
-        for (const instance of toolArray) {
-          if (instance && typeof instance === 'object' && 'name' in instance && typeof instance.execute === 'function') {
-            tools.push(instance as ITool);
-            names.push(instance.name);
+        const extensionPack = typeof pack.factory === 'function' ? await pack.factory() : null;
+        if (!extensionPack || typeof extensionPack !== 'object') continue;
+
+        // Extension packs return { name, version, descriptors, onActivate, onDeactivate }
+        // Tools live inside descriptors[].payload where descriptor.kind === 'tool'
+        const descriptors = (extensionPack as any).descriptors;
+        if (Array.isArray(descriptors)) {
+          for (const descriptor of descriptors) {
+            if (descriptor?.kind === 'tool' && descriptor.payload && typeof descriptor.payload.execute === 'function') {
+              tools.push(descriptor.payload as ITool);
+              names.push(descriptor.payload.name ?? descriptor.name ?? pack.name);
+            }
+          }
+        } else {
+          // Fallback: maybe it's a flat tool or array of tools
+          const toolArray = Array.isArray(extensionPack) ? extensionPack : [extensionPack];
+          for (const instance of toolArray) {
+            if (instance && typeof instance === 'object' && 'name' in instance && typeof (instance as any).execute === 'function') {
+              tools.push(instance as ITool);
+              names.push((instance as any).name);
+            }
           }
         }
       } catch (err) {
@@ -636,8 +704,12 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     }
   }
 
+  // When a preset is loaded and user didn't explicitly set tools, default to 'curated'
+  // so the agent has actual tool executors (shell_execute, file_write, etc.), not just skills.
+  const effectiveTools = opts.tools ?? (loadedPreset ? 'curated' : 'none');
+
   const { toolMap, droppedByPolicy, availability } = await resolveToolMap({
-    tools: opts.tools,
+    tools: effectiveTools,
     policy,
     logger,
   });
