@@ -64,6 +64,7 @@ const ACTIONS: QuickAction[] = [
   { label: 'Query RAG memory',    command: 'rag',        hint: 'wunderland rag',        shortcut: '7' },
   { label: 'Voice providers',     command: 'voice',      hint: 'wunderland voice',      shortcut: 'v' },
   { label: 'View status',         command: 'status',     hint: 'wunderland status',     shortcut: 's' },
+  { label: 'List agents',          command: 'agents',     hint: 'wunderland agents',     shortcut: 'a' },
   { label: 'Help',                command: 'help',       hint: 'wunderland --help',     shortcut: 'h' },
   { label: 'Tour / onboarding',   command: 'tour',       hint: 'press t',               shortcut: 't' },
 ];
