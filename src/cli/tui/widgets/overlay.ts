@@ -31,9 +31,7 @@ export function renderOverlayBox(opts: {
   }
   out.push(bot);
 
-  // Subtle drop shadow (dim) on the last column when space allows is too hard
-  // in a pure string render; keep it simple and readable.
-  return out.map((l) => dim(l) + '');
+  return out;
 }
 
 /**
