@@ -150,6 +150,7 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
     `Agent: ${accent(state.agentName)}`,
     `Observability: ${accent(describeObservabilityPreset(state.observabilityPreset))}`,
     `LLM: ${accent(state.llmProvider || 'none')} / ${accent(state.llmModel || 'default')}`,
+    state.llmAuthMethod === 'oauth' ? `Auth: ${accent('OAuth (ChatGPT subscription)')}` : null,
     state.channels.length > 0 ? `Channels: ${state.channels.map((c) => accent(c)).join(', ')}` : null,
     extensionsSummary ? `Extensions: ${accent(extensionsSummary)}` : null,
     state.skills?.length ? `Skills: ${accent(state.skills.join(', '))}` : null,
@@ -197,6 +198,7 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
       agentName: state.agentName,
       llmProvider: state.llmProvider,
       llmModel: state.llmModel,
+      llmAuthMethod: state.llmAuthMethod,
       personalityPreset: state.personalityPreset,
       customHexaco: state.customHexaco,
       channels: state.channels,
@@ -214,7 +216,11 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   // Done
   p.outro(sColor('Setup complete!'));
   fmt.blank();
-  fmt.note(`Next: ${sColor('wunderland init my-agent')} && ${sColor('wunderland start')}`);
+  if (state.llmAuthMethod === 'oauth') {
+    fmt.note(`Next: ${sColor('wunderland login')} → ${sColor('wunderland init my-agent')} → ${sColor('wunderland start')}`);
+  } else {
+    fmt.note(`Next: ${sColor('wunderland init my-agent')} && ${sColor('wunderland start')}`);
+  }
   fmt.note(`Dashboard: ${fmt.link(URLS.saas)}`);
   fmt.blank();
 }
