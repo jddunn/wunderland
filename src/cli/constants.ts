@@ -30,7 +30,7 @@ export const CREDENTIALS_DIR_NAME = 'credentials';
 // ── LLM Providers ───────────────────────────────────────────────────────────
 
 export const LLM_PROVIDERS = [
-  { id: 'openai', label: 'OpenAI', envVar: 'OPENAI_API_KEY', docsUrl: 'https://platform.openai.com/account/api-keys', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1', 'o4-mini'] },
+  { id: 'openai', label: 'OpenAI', envVar: 'OPENAI_API_KEY', docsUrl: 'https://platform.openai.com/account/api-keys', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'] },
   { id: 'anthropic', label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY', docsUrl: 'https://console.anthropic.com/settings/keys', models: ['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
   { id: 'openrouter', label: 'OpenRouter', envVar: 'OPENROUTER_API_KEY', docsUrl: 'https://openrouter.ai/keys', models: ['auto'] },
   { id: 'ollama', label: 'Ollama (local)', envVar: '', docsUrl: 'https://ollama.ai/', models: ['llama3', 'llama3.2:3b', 'mistral', 'codellama'] },

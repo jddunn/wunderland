@@ -14,7 +14,7 @@
   "suggestedSkills": ["weather", "apple-notes", "apple-reminders", "summarize"],
   "suggestedChannels": ["telegram", "whatsapp", "webchat"],
   "suggestedExtensions": {
-    "tools": ["web-search", "web-browser"],
+    "tools": ["web-search", "web-browser", "cli-executor"],
     "voice": ["voice-twilio"],
     "tts": ["tts-openai"],
     "stt": ["stt-openai"],

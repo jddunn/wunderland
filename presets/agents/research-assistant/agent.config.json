@@ -14,7 +14,7 @@
   "suggestedSkills": ["web-search", "summarize", "github"],
   "suggestedChannels": ["webchat", "slack"],
   "suggestedExtensions": {
-    "tools": ["web-search", "web-browser", "news-search"],
+    "tools": ["web-search", "web-browser", "news-search", "cli-executor"],
     "voice": [],
     "productivity": []
   },
