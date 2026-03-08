@@ -173,9 +173,13 @@ export class Dashboard {
       if (config.llmProvider && config.llmModel) {
         this.state.llmInfo = `${config.llmProvider} / ${config.llmModel}`;
       } else if (config.llmProvider) {
-        this.state.llmInfo = config.llmProvider;
+        this.state.llmInfo = config.llmAuthMethod === 'oauth'
+          ? `${config.llmProvider} (OAuth)`
+          : config.llmProvider;
+      } else if (config.llmAuthMethod === 'oauth') {
+        this.state.llmInfo = 'openai (OAuth)';
       }
-      this.state.isSetUp = !!(config.agentName && config.llmProvider);
+      this.state.isSetUp = !!(config.llmProvider || config.llmAuthMethod);
       if (Array.isArray(config.channels)) {
         this.state.channelCount = config.channels.length;
       }
