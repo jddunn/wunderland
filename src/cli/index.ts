@@ -152,7 +152,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   setup:          () => import('./commands/setup.js'),
   init:           () => import('./commands/init.js'),
   create:         () => import('./commands/create.js'),
-  start:          () => import('./commands/start.js'),
+  start:          () => import('./commands/start/index.js'),
   chat:           () => import('./commands/chat.js'),
   hitl:           () => import('./commands/hitl.js'),
   doctor:         () => import('./commands/doctor.js'),
