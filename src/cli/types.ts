@@ -21,6 +21,10 @@ export interface CliConfig {
   personalityPreset?: string;
   /** Custom HEXACO values (only used when preset === 'custom'). */
   customHexaco?: Record<string, number>;
+  /** Whether personality system is enabled (default true). */
+  personalityEnabled?: boolean;
+  /** Whether personality evolves from interactions (default false). */
+  personalityEvolution?: boolean;
   /** Active channel platforms. */
   channels?: string[];
   /** Enabled tool categories. */
@@ -163,6 +167,10 @@ export interface WizardState {
   };
   /** Selected skills. */
   skills?: string[];
+  /** Whether personality system is enabled (default true). */
+  personalityEnabled?: boolean;
+  /** Whether personality evolves from interactions (default false). */
+  personalityEvolution?: boolean;
 }
 
 // ── Observability ──────────────────────────────────────────────────────────
