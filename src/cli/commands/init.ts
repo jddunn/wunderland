@@ -12,54 +12,11 @@ import { accent, success as sColor, warn as wColor, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
 import { PresetLoader, type AgentPreset } from '../../core/PresetLoader.js';
-import { SECURITY_TIERS, isValidSecurityTier, getSecurityTier } from '../../security/SecurityTiers.js';
+import { isValidSecurityTier, getSecurityTier } from '../../security/SecurityTiers.js';
 import type { SecurityTierName } from '../../security/SecurityTiers.js';
-import { loadDotEnvIntoProcessUpward, mergeEnv, serializeEnvFile } from '../config/env-manager.js';
+import { loadDotEnvIntoProcessUpward, mergeEnv } from '../config/env-manager.js';
 import { runInitLlmStep } from '../wizards/init-llm-step.js';
-
-function toSeedId(dirName: string): string {
-  const base = dirName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48);
-  return base ? `seed_${base}` : `seed_${Date.now()}`;
-}
-
-function toDisplayName(dirName: string): string {
-  const cleaned = dirName.trim().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!cleaned) return 'My Agent';
-  return cleaned.split(' ').map((p) => (p ? p[0].toUpperCase() + p.slice(1) : p)).join(' ');
-}
-
-function buildEnvExample(opts: { llmProvider?: string; llmModel?: string }): string {
-  const provider = typeof opts.llmProvider === 'string' ? opts.llmProvider.trim().toLowerCase() : 'openai';
-  const model = typeof opts.llmModel === 'string' && opts.llmModel.trim() ? opts.llmModel.trim() : 'gpt-4o';
-
-  const lines: string[] = ['# Copy to .env and fill in real values'];
-
-  if (provider === 'openai') lines.push('OPENAI_API_KEY=sk-...');
-  else if (provider === 'openrouter') lines.push('OPENROUTER_API_KEY=...');
-  else if (provider === 'anthropic') lines.push('ANTHROPIC_API_KEY=...');
-  else if (provider === 'ollama') lines.push('# Ollama: no API key needed');
-  else lines.push(`# Provider "${provider}" not supported by CLI runtime`);
-
-  lines.push(`OPENAI_MODEL=${model}`);
-  lines.push('PORT=3777', '');
-
-  lines.push(
-    '# OBSERVABILITY (OpenTelemetry - opt-in)',
-    '# Enable OTEL in wunderland CLI runtime (wunderland start/chat):',
-    '# WUNDERLAND_OTEL_ENABLED=true',
-    '# WUNDERLAND_OTEL_LOGS_ENABLED=true',
-    '# OTEL_TRACES_EXPORTER=otlp',
-    '# OTEL_METRICS_EXPORTER=otlp',
-    '# OTEL_LOGS_EXPORTER=otlp',
-    '# OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318',
-    '# OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf',
-    '# OTEL_TRACES_SAMPLER=parentbased_traceidratio',
-    '# OTEL_TRACES_SAMPLER_ARG=0.1',
-    '',
-  );
-
-  return lines.join('\n');
-}
+import { buildAgentConfig, writeAgentScaffold } from '../helpers/build-agent-scaffold.js';
 
 export default async function cmdInit(
   args: string[],
@@ -105,7 +62,6 @@ export default async function cmdInit(
   let hexacoValues: (typeof HEXACO_PRESETS)[keyof typeof HEXACO_PRESETS] | undefined;
 
   if (presetFlag) {
-    // Try agent presets first (lowercase-hyphen IDs like "research-assistant")
     try {
       const loader = new PresetLoader();
       agentPreset = loader.loadPreset(presetFlag.toLowerCase().replace(/_/g, '-'));
@@ -124,11 +80,11 @@ export default async function cmdInit(
     }
   }
 
-  // ── Personality ────────────────────────────────────────────────────────
-  let personality: Record<string, number>;
+  // ── Resolve personality from preset ──────────────────────────────────────
+  let personalityTraits: Record<string, number> | undefined;
   if (agentPreset) {
     const t = agentPreset.hexacoTraits;
-    personality = {
+    personalityTraits = {
       honesty: t.honesty,
       emotionality: t.emotionality,
       extraversion: t.extraversion,
@@ -137,7 +93,7 @@ export default async function cmdInit(
       openness: t.openness,
     };
   } else if (hexacoValues) {
-    personality = {
+    personalityTraits = {
       honesty: hexacoValues.honesty_humility,
       emotionality: hexacoValues.emotionality,
       extraversion: hexacoValues.extraversion,
@@ -145,18 +101,9 @@ export default async function cmdInit(
       conscientiousness: hexacoValues.conscientiousness,
       openness: hexacoValues.openness,
     };
-  } else {
-    personality = {
-      honesty: 0.7,
-      emotionality: 0.5,
-      extraversion: 0.6,
-      agreeableness: 0.65,
-      conscientiousness: 0.8,
-      openness: 0.75,
-    };
   }
 
-  // ── Security ───────────────────────────────────────────────────────────
+  // ── Security tier ────────────────────────────────────────────────────────
   const VALID_TIERS = ['dangerous', 'permissive', 'balanced', 'strict', 'paranoid'];
   const securityTierFlag = typeof flags['security-tier'] === 'string'
     ? flags['security-tier'].toLowerCase()
@@ -176,28 +123,6 @@ export default async function cmdInit(
     }
   }
 
-  // Default to permissive tier for local development (allows CLI execution).
-  // Use --security-tier=balanced for stricter server-hosted setups.
-  const resolvedTierName: SecurityTierName = securityTierName ?? 'permissive';
-  const tierConfig = getSecurityTier(resolvedTierName);
-  const permissionSet = SECURITY_TIERS[resolvedTierName].permissionSet;
-  const executionMode =
-    resolvedTierName === 'dangerous' || resolvedTierName === 'permissive'
-      ? 'autonomous'
-      : resolvedTierName === 'paranoid'
-        ? 'human-all'
-        : 'human-dangerous';
-  const toolAccessProfile = (agentPreset as any)?.toolAccessProfile || 'developer';
-  const wrapToolOutputs = resolvedTierName !== 'dangerous';
-  const security = {
-    tier: tierConfig.name,
-    preLLMClassifier: tierConfig.pipelineConfig.enablePreLLM,
-    dualLLMAudit: tierConfig.pipelineConfig.enableDualLLMAudit,
-    outputSigning: tierConfig.pipelineConfig.enableOutputSigning,
-    riskThreshold: tierConfig.riskThreshold,
-    wrapToolOutputs,
-  };
-
   // ── Interactive LLM setup ──────────────────────────────────────────────
   const nonInteractive = _globals.yes || _globals.quiet || !process.stdin.isTTY || !process.stdout.isTTY;
   const skipKeys = flags['skip-keys'] === true || _globals.quiet;
@@ -205,6 +130,7 @@ export default async function cmdInit(
   let llmModel: string | undefined;
   let llmAuthMethod: 'api-key' | 'oauth' | undefined;
   let wroteEnv = false;
+  const envData: Record<string, string> = {};
 
   if (!skipKeys) {
     const llmResult = await runInitLlmStep({ nonInteractive });
@@ -213,19 +139,10 @@ export default async function cmdInit(
       llmModel = llmResult.llmModel;
       llmAuthMethod = llmResult.llmAuthMethod;
 
-      // Write project .env with collected keys
-      const envData: Record<string, string> = { ...llmResult.apiKeys };
-      if (llmResult.llmModel) {
-        envData['OPENAI_MODEL'] = llmResult.llmModel;
-      }
+      Object.assign(envData, llmResult.apiKeys);
+      if (llmResult.llmModel) envData['OPENAI_MODEL'] = llmResult.llmModel;
       envData['PORT'] = '3777';
-
-      await writeFile(
-        path.join(targetDir, '.env'),
-        serializeEnvFile(envData, `${agentPreset?.name ?? toDisplayName(dirName)} - generated by wunderland init`),
-        { encoding: 'utf8', mode: 0o600 },
-      );
-      wroteEnv = true;
+      wroteEnv = Object.keys(llmResult.apiKeys).length > 0;
 
       // Also save to global ~/.wunderland/.env
       await mergeEnv(llmResult.apiKeys, _globals.config);
@@ -243,12 +160,6 @@ export default async function cmdInit(
             const token = await clack.password({ message: 'GitHub PAT:' });
             if (!clack.isCancel(token) && token) {
               envData['GITHUB_TOKEN'] = String(token);
-              // Rewrite the .env to include the token
-              await writeFile(
-                path.join(targetDir, '.env'),
-                serializeEnvFile(envData, `${agentPreset?.name ?? toDisplayName(dirName)} - generated by wunderland init`),
-                { encoding: 'utf8', mode: 0o600 },
-              );
             }
           }
         }
@@ -257,58 +168,38 @@ export default async function cmdInit(
   }
 
   // ── Build config ───────────────────────────────────────────────────────
-  const config: Record<string, unknown> = {
-    seedId: toSeedId(dirName),
-    displayName: agentPreset?.name ?? toDisplayName(dirName),
-    bio: agentPreset?.description ?? 'Autonomous Wunderbot',
-    personality,
-    systemPrompt: 'You are an autonomous agent in the Wunderland network.',
-    security,
-    permissionSet,
-    executionMode,
-    observability: {
-      // Opt-in OpenTelemetry (OTEL) export. Host still controls exporters/sampling via OTEL_* env vars.
-      otel: { enabled: false, exportLogs: false },
-    },
-    skills: agentPreset?.suggestedSkills ?? [],
-    suggestedChannels: agentPreset?.suggestedChannels ?? [],
-    extensions: (agentPreset as any)?.suggestedExtensions,
-    extensionOverrides: (agentPreset as any)?.extensionOverrides,
-    toolAccessProfile,
-    presetId: agentPreset?.id,
-    skillsDir: './skills',
-  };
+  const { config } = buildAgentConfig({
+    agentName: dirName,
+    llmProvider,
+    llmModel,
+    llmAuthMethod,
+    personalityTraits,
+    securityTierName,
+    agentPreset: agentPreset ? {
+      name: agentPreset.name,
+      description: agentPreset.description,
+      hexacoTraits: agentPreset.hexacoTraits as unknown as Record<string, number>,
+      securityTier: agentPreset.securityTier,
+      suggestedSkills: agentPreset.suggestedSkills,
+      suggestedChannels: agentPreset.suggestedChannels,
+      suggestedExtensions: (agentPreset as any).suggestedExtensions,
+      extensionOverrides: (agentPreset as any).extensionOverrides,
+      toolAccessProfile: (agentPreset as any).toolAccessProfile,
+      id: agentPreset.id,
+    } : undefined,
+  });
 
-  // Include LLM provider/model in config if set
-  if (llmProvider) config.llmProvider = llmProvider;
-  if (llmModel) config.llmModel = llmModel;
-  if (llmAuthMethod === 'oauth') (config as any).llmAuthMethod = 'oauth';
+  // ── Write scaffold files ──────────────────────────────────────────────
+  await writeAgentScaffold({
+    targetDir,
+    config,
+    envData,
+    agentName: dirName,
+    writeEnv: wroteEnv,
+    personaMd: agentPreset?.persona,
+  });
 
-  // Write files
-  await writeFile(
-    path.join(targetDir, 'agent.config.json'),
-    JSON.stringify(config, null, 2) + '\n',
-    'utf8',
-  );
-
-  await writeFile(
-    path.join(targetDir, '.env.example'),
-    buildEnvExample({ llmProvider, llmModel }),
-    'utf8',
-  );
-
-  await writeFile(path.join(targetDir, '.gitignore'), '.env\nnode_modules\n', 'utf8');
-
-  // Create skills directory
-  const skillsDir = path.join(targetDir, 'skills');
-  await mkdir(skillsDir, { recursive: true });
-  await writeFile(path.join(skillsDir, '.gitkeep'), '', 'utf8');
-
-  // Copy PERSONA.md from preset if available
-  if (agentPreset?.persona) {
-    await writeFile(path.join(targetDir, 'PERSONA.md'), agentPreset.persona, 'utf8');
-  }
-
+  // ── README.md (init-specific) ─────────────────────────────────────────
   await writeFile(
     path.join(targetDir, 'README.md'),
     `# ${config.displayName}\n\nScaffolded by the Wunderland CLI.\n\n## Run\n\n\`\`\`bash\n${wroteEnv ? '' : 'cp .env.example .env\n'}wunderland start\n\`\`\`\n\nAgent server:\n- GET http://localhost:3777/health\n- POST http://localhost:3777/chat { "message": "Hello", "sessionId": "local" }\n- HITL UI: http://localhost:3777/hitl\n\nNotes:\n- \`wunderland start\` prints an \`HITL Secret\` on startup. Paste it into the HITL UI, or run: \`wunderland hitl watch --server http://localhost:3777 --secret <token>\`.\n- Approvals are controlled by \`executionMode\` in \`agent.config.json\`:\n  - \`human-dangerous\`: approve Tier 3 tools only\n  - \`human-all\`: approve every tool call\n  - \`autonomous\` (or \`wunderland start --auto-approve-tools\`): auto-approve everything\n- Optional: set \`hitl.turnApprovalMode\` to \`after-each-round\` to require per-round checkpoints.\n- Disable shell safety checks with: \`wunderland start --dangerously-skip-command-safety\` or \`wunderland start --dangerously-skip-permissions\`.\n\n## Observability (OpenTelemetry)\n\nWunderland supports opt-in OpenTelemetry (OTEL) export for auditing.\n\n- Enable via \`agent.config.json\`: set \`observability.otel.enabled=true\`.\n- Configure exporters via OTEL env vars in \`.env\` (see \`.env.example\`).\n\n## Skills\n\nAdd custom SKILL.md files to the \`skills/\` directory.\nEnable curated skills with: \`wunderland skills enable <name>\`\n`,
@@ -316,6 +207,9 @@ export default async function cmdInit(
   );
 
   // ── Output ─────────────────────────────────────────────────────────────
+  const resolvedTierName: SecurityTierName = securityTierName ?? 'permissive';
+  const tierConfig = getSecurityTier(resolvedTierName);
+
   fmt.section('Project Initialized');
   fmt.kvPair('Directory', accent(targetDir));
   fmt.kvPair('Seed ID', String(config.seedId));
@@ -351,12 +245,13 @@ export default async function cmdInit(
       const preset = PERSONALITY_PRESETS.find((p) => p.id === presetKey);
       fmt.kvPair('Personality', preset ? preset.label : presetKey);
     }
-    // Always show resolved security/permissions (defaulted or explicit)
     fmt.kvPair('Security Tier', accent(tierConfig.displayName));
     fmt.kvPair('', dim(tierConfig.description));
+    const executionMode = config.executionMode as string;
     fmt.kvPair('Execution Mode', executionMode === 'autonomous' ? wColor(executionMode) : sColor(executionMode));
-    fmt.kvPair('Tool Profile', accent(toolAccessProfile));
-    fmt.kvPair('CLI Execution', permissionSet === 'autonomous' ? wColor('enabled') : dim('disabled'));
+    fmt.kvPair('Tool Profile', accent(config.toolAccessProfile as string));
+    const permSet = config.permissionSet as string;
+    fmt.kvPair('CLI Execution', permSet === 'autonomous' ? wColor('enabled') : dim('disabled'));
   }
 
   fmt.kvPair('Skills Dir', dim('./skills'));
