@@ -1,0 +1,161 @@
+/**
+ * @fileoverview LLM provider resolution, Ollama auto-start, auth, OpenRouter fallback.
+ * Extracted from start.ts lines 359-485.
+ */
+
+import * as path from 'node:path';
+import type { LLMProviderConfig } from '../../openai/tool-calling.js';
+import * as fmt from '../../ui/format.js';
+import { accent } from '../../ui/theme.js';
+import { isOllamaRunning, startOllama, detectOllamaInstall } from '../../ollama/ollama-manager.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../config/workspace.js';
+
+export async function setupLlmProvider(ctx: any): Promise<boolean> {
+  const { flags, globals, cfg, policy, seedId } = ctx;
+
+  // Resolve provider/model from config (fallbacks preserve legacy env behavior).
+  const providerFlag = typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
+  const providerFromConfig = typeof cfg.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
+  const providerId = (flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai')).toLowerCase();
+  if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic']).has(providerId)) {
+    fmt.errorBlock(
+      'Unsupported LLM provider',
+      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic`,
+    );
+    process.exitCode = 1;
+    return false;
+  }
+
+  const modelFromConfig = typeof cfg.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
+  const model = typeof flags['model'] === 'string'
+    ? String(flags['model'])
+    : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
+
+  // Auto-start Ollama if configured as provider
+  const isOllamaProvider = providerId === 'ollama';
+  if (isOllamaProvider) {
+    const ollamaBin = await detectOllamaInstall();
+    if (ollamaBin) {
+      const running = await isOllamaRunning();
+      if (!running) {
+        fmt.note('Ollama is configured but not running - starting...');
+        try {
+          await startOllama();
+          fmt.ok('Ollama server started at http://localhost:11434');
+        } catch {
+          fmt.warning('Failed to start Ollama. Start it manually: ollama serve');
+        }
+      } else {
+        fmt.ok('Ollama server is running');
+      }
+    }
+  }
+
+  const portRaw = typeof flags['port'] === 'string' ? flags['port'] : (process.env['PORT'] || '');
+  const port = Number(portRaw) || 3777;
+
+  // OpenRouter fallback — when OPENROUTER_API_KEY is set, use it as automatic fallback
+  const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
+  const openrouterFallback: LLMProviderConfig | undefined = openrouterApiKey
+    ? {
+        apiKey: openrouterApiKey,
+        model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
+      }
+    : undefined;
+
+  const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
+  const dangerouslySkipCommandSafety =
+    flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
+  const autoApproveToolCalls =
+    globals.autoApproveTools || dangerouslySkipPermissions || policy.executionMode === 'autonomous';
+  const enableSkills = flags['no-skills'] !== true;
+  const lazyTools = flags['lazy-tools'] === true || cfg?.lazyTools === true;
+  const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
+  const workspaceAgentId = sanitizeAgentWorkspaceId(seedId);
+  // Expose a stable workspace directory path for extension packs (channels/tools) that need
+  // to persist lightweight state (rate limits, caches, etc.).
+  try {
+    const workspaceDir = path.join(workspaceBaseDir, workspaceAgentId);
+    if (!process.env['WUNDERLAND_WORKSPACE_DIR']) process.env['WUNDERLAND_WORKSPACE_DIR'] = workspaceDir;
+  } catch {
+    // ignore
+  }
+
+  const ollamaBaseUrl = (() => {
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
+    const base = raw || 'http://localhost:11434';
+    const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
+    if (normalized.endsWith('/v1')) return normalized;
+    return `${normalized}/v1`;
+  })();
+
+  const llmBaseUrl =
+    providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
+    : providerId === 'ollama' ? ollamaBaseUrl
+    : undefined;
+  // Resolve auth method (OAuth or API key)
+  const authMethod: 'api-key' | 'oauth' =
+    (cfg?.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
+      ? 'oauth'
+      : 'api-key';
+
+  let llmApiKey: string;
+  let oauthGetApiKey: (() => Promise<string>) | undefined;
+
+  if (authMethod === 'oauth') {
+    try {
+      const { OpenAIOAuthFlow, FileTokenStore } = await import('@framers/agentos/auth');
+      const flow = new OpenAIOAuthFlow({ tokenStore: new FileTokenStore() });
+      // Verify we have stored tokens
+      const initialKey = await flow.getAccessToken();
+      llmApiKey = initialKey;
+      oauthGetApiKey = () => flow.getAccessToken();
+    } catch (err) {
+      fmt.errorBlock(
+        'OAuth authentication required',
+        `Run ${accent('wunderland login')} to authenticate with your OpenAI subscription.`,
+      );
+      process.exitCode = 1;
+      return false;
+    }
+  } else {
+    llmApiKey =
+      providerId === 'openrouter' ? openrouterApiKey
+      : providerId === 'ollama' ? 'ollama'
+      : providerId === 'openai' ? (process.env['OPENAI_API_KEY'] || '')
+      : providerId === 'anthropic' ? (process.env['ANTHROPIC_API_KEY'] || '')
+      : (process.env['OPENAI_API_KEY'] || '');
+  }
+
+  const canUseLLM =
+    authMethod === 'oauth'
+      ? true
+      : providerId === 'ollama'
+        ? true
+        : providerId === 'openrouter'
+          ? !!openrouterApiKey
+          : providerId === 'anthropic'
+            ? !!process.env['ANTHROPIC_API_KEY']
+            : !!llmApiKey || !!openrouterFallback;
+
+  ctx.providerId = providerId;
+  ctx.model = model;
+  ctx.port = port;
+  ctx.openrouterFallback = openrouterFallback;
+  ctx.dangerouslySkipPermissions = dangerouslySkipPermissions;
+  ctx.dangerouslySkipCommandSafety = dangerouslySkipCommandSafety;
+  ctx.autoApproveToolCalls = autoApproveToolCalls;
+  ctx.enableSkills = enableSkills;
+  ctx.lazyTools = lazyTools;
+  ctx.workspaceBaseDir = workspaceBaseDir;
+  ctx.workspaceAgentId = workspaceAgentId;
+  ctx.llmBaseUrl = llmBaseUrl;
+  ctx.llmApiKey = llmApiKey;
+  ctx.oauthGetApiKey = oauthGetApiKey;
+  ctx.canUseLLM = canUseLLM;
+  ctx.authMethod = authMethod;
+
+  return true;
+}
