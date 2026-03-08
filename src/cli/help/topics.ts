@@ -11,6 +11,7 @@ import { getUiRuntime } from '../ui/runtime.js';
 
 export type HelpTopicId =
   | 'getting-started'
+  | 'auth'
   | 'tui'
   | 'ui'
   | 'presets'
@@ -22,6 +23,11 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     id: 'getting-started',
     title: 'Getting Started',
     summary: 'First-run onboarding: setup, doctor, chat, start.',
+  },
+  {
+    id: 'auth',
+    title: 'Authentication & OAuth',
+    summary: 'OAuth login, API keys, and subscription auth.',
   },
   {
     id: 'tui',
@@ -73,6 +79,7 @@ export function printHelpTopic(topicRaw: string): void {
 
   const resolved: HelpTopicId | null = (() => {
     if (topic === 'getting-started' || topic === 'gettingstarted' || topic === 'quickstart') return 'getting-started';
+    if (topic === 'auth' || topic === 'login' || topic === 'oauth' || topic === 'subscription') return 'auth';
     if (topic === 'tui' || topic === 'dashboard') return 'tui';
     if (topic === 'ui' || topic === 'theme' || topic === 'themes' || topic === 'style' || topic === 'ascii') return 'ui';
     if (topic === 'presets' || topic === 'preset') return 'presets';
@@ -84,7 +91,7 @@ export function printHelpTopic(topicRaw: string): void {
   if (!resolved) {
     console.log();
     console.log(`  ${wColor(g.warn)} ${bright('Unknown help topic')} ${muted(topicRaw)}`);
-    console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help tui')}${dim(', ')}${accent('wunderland help ui')}${dim(', ')}${accent('wunderland help presets')}`);
+    console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help auth')}${dim(', ')}${accent('wunderland help tui')}${dim(', ')}${accent('wunderland help presets')}`);
     console.log();
     return;
   }
@@ -100,6 +107,10 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${muted('$')} ${accent('wunderland setup')}`);
     console.log(`     ${dim('Interactive wizard: LLM provider, keys, channels, personality.')}`);
     console.log();
+    console.log(`     ${dim('Or: Log in with your ChatGPT subscription (no API key needed):')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland login')}`);
+    console.log(`     ${dim('See:')} ${accent('wunderland help auth')}`);
+    console.log();
     console.log(`  ${iColor('2')} ${bright('Verify your environment')}`);
     console.log(`     ${muted('$')} ${accent('wunderland doctor')}`);
     console.log(`     ${dim('Checks config, keys, and connectivity.')}`);
@@ -114,6 +125,39 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`  ${hr()}`);
     console.log(`  ${dim('Prefer scaffolding a project?')}`);
     console.log(`     ${muted('$')} ${accent('wunderland init my-agent --preset research-assistant')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'auth') {
+    printTitle('Authentication & OAuth');
+    console.log(`  ${bright('Use your ChatGPT subscription instead of an API key.')}`);
+    console.log(`  ${dim('OAuth uses the same device code flow as the Codex CLI.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('Log in')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland login')}`);
+    console.log(`     ${dim('Opens platform.openai.com/device — enter the displayed code.')}`);
+    console.log(`     ${dim('Tokens are stored at ~/.wunderland/auth/openai.json (auto-refresh).')}`);
+    console.log();
+    console.log(`  ${iColor('2')} ${bright('Check status')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland auth-status')}`);
+    console.log();
+    console.log(`  ${iColor('3')} ${bright('Log out')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland logout')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Using OAuth with chat/start:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland chat --oauth')}`);
+    console.log(`     ${dim('Or set in agent.config.json:')} ${accent('"llmAuthMethod": "oauth"')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Plans with included API credits:')}`);
+    console.log(`     ${dim('ChatGPT Plus')}   $20/mo   → $5/mo API credits`);
+    console.log(`     ${dim('ChatGPT Pro')}    $200/mo  → $50/mo API credits + unlimited Codex`);
+    console.log(`     ${dim('ChatGPT Team')}   $25-30/seat/mo → shared API credit pool`);
+    console.log();
+    console.log(`  ${dim('Only OpenAI offers consumer OAuth. Anthropic/Google require API keys.')}`);
+    console.log(`  ${dim('Full guide:')} ${accent(`${URLS.docs}/guides/openai-oauth`)}`);
     console.log();
     return;
   }
@@ -137,7 +181,7 @@ export function printHelpTopic(topicRaw: string): void {
 
   if (resolved === 'ui') {
     printTitle('UI / Themes');
-    console.log(`  ${dim('Defaults:')} ${bright('plain')} theme (no color), with auto ASCII fallback in limited terminals.`);
+    console.log(`  ${dim('Defaults:')} ${bright('cyberpunk')} theme (full color), with auto ASCII fallback in limited terminals.`);
     console.log();
     console.log(`  ${dim('Theme:')}`);
     console.log(`     ${muted('$')} ${accent('wunderland --theme cyberpunk')}`);
@@ -221,6 +265,6 @@ export function printHelpTopicsList(): void {
     console.log(`    ${chalk.white(t.id.padEnd(16))} ${dim(t.summary)}`);
   }
   console.log();
-  console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help tui')}${dim(', ')}${accent('wunderland help ui')}${dim(', ')}${accent('wunderland help presets')}`);
+  console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help auth')}${dim(', ')}${accent('wunderland help tui')}${dim(', ')}${accent('wunderland help presets')}`);
   console.log();
 }

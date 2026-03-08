@@ -41,6 +41,11 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('create')} ${d('[description]')}  Create agent from natural language
       ${w('doctor')}                Health check
 
+    ${w('Auth')}
+      ${w('login')}                 Log in with ChatGPT subscription (OAuth)
+      ${w('logout')}                Remove stored OAuth tokens
+      ${w('auth-status')}           Check authentication status
+
     ${w('Run')}
       ${w('chat')}                  Interactive assistant (REPL)
       ${w('start')}                 Start server (foreground)
@@ -97,7 +102,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--quiet, -q')}            Suppress banner
     ${d('--yes, -y')}              Auto-confirm prompts (non-interactive where possible)
     ${d('--auto-approve-tools')}   Auto-approve tool calls (fully autonomous)
-    ${d('--theme <plain|cyberpunk>')} UI theme (default: plain)
+    ${d('--theme <plain|cyberpunk>')} UI theme (default: cyberpunk)
     ${d('--ascii')}                Force ASCII-only UI (auto-fallback in limited terminals)
     ${d('--no-color')}             Disable colors (also: NO_COLOR env)
     ${d('--dry-run')}              Preview without writing
@@ -125,6 +130,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--stderr')}               Show stderr instead of stdout (logs)
     ${d('--check')}                Check for updates without installing (upgrade)
     ${d('--skills-dir <path>')}    Load skills from directory
+    ${d('--oauth')}                Use ChatGPT subscription instead of API key (chat/start)
     ${d('--no-skills')}            Disable skill loading
 ${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}
     ${d('--dangerously-skip-permissions')}  Skip permission/approval checks (dangerous)
@@ -205,9 +211,9 @@ export async function main(argv: string[]): Promise<void> {
   const resolvedTheme =
     parseUiTheme(flags['theme'])
     ?? parseUiTheme(cfg.ui?.theme)
-    ?? 'plain';
+    ?? 'cyberpunk';
   const resolvedAscii = globals.ascii || cfg.ui?.ascii === true || detectAsciiFallback();
-  const resolvedNoColor = globals.noColor || resolvedTheme === 'plain';
+  const resolvedNoColor = globals.noColor;
 
   setUiRuntime({ theme: resolvedTheme, ascii: resolvedAscii, noColor: resolvedNoColor });
   globals.theme = resolvedTheme;

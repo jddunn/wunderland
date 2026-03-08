@@ -15,6 +15,8 @@ export interface CliConfig {
   llmProvider?: string;
   /** Default model ID. */
   llmModel?: string;
+  /** Auth method: 'api-key' (default) or 'oauth' for ChatGPT subscription tokens. */
+  llmAuthMethod?: 'api-key' | 'oauth';
   /** HEXACO preset key or 'custom'. */
   personalityPreset?: string;
   /** Custom HEXACO values (only used when preset === 'custom'). */
@@ -117,6 +119,8 @@ export interface WizardState {
   llmProvider?: string;
   /** Selected model. */
   llmModel?: string;
+  /** Auth method: 'api-key' (default) or 'oauth' for ChatGPT subscription tokens. */
+  llmAuthMethod?: 'api-key' | 'oauth';
   /** HEXACO preset key or 'custom'. */
   personalityPreset?: string;
   /** Custom HEXACO overrides. */

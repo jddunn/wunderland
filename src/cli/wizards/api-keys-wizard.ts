@@ -68,11 +68,18 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
 
   // ── Provider selection & individual key prompts ────────────────────────────
   // Select providers
-  const options = LLM_PROVIDERS.map((prov) => ({
-    value: prov.id,
-    label: prov.label,
-    hint: prov.id === 'ollama' ? 'local, no key needed' : undefined,
-  }));
+  const options = [
+    ...LLM_PROVIDERS.map((prov) => ({
+      value: prov.id,
+      label: prov.label,
+      hint: prov.id === 'ollama' ? 'local, no key needed' : undefined,
+    })),
+    {
+      value: 'openai-oauth',
+      label: 'OpenAI (Subscription)',
+      hint: 'ChatGPT Plus/Pro — no API key needed',
+    },
+  ];
 
   const selected = await p.multiselect({
     message: 'Which LLM providers do you want to use?',
@@ -83,7 +90,17 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
 
   if (p.isCancel(selected)) return;
 
-  const providers = selected as string[];
+  const rawProviders = selected as string[];
+
+  // Handle OpenAI OAuth selection
+  const wantsOAuth = rawProviders.includes('openai-oauth');
+  const providers = rawProviders.filter((id) => id !== 'openai-oauth');
+
+  if (wantsOAuth) {
+    state.llmProvider = state.llmProvider || 'openai';
+    state.llmAuthMethod = 'oauth';
+    fmt.note('Run "wunderland login" after setup to authenticate with your OpenAI subscription.');
+  }
 
   // Collect keys for each provider
   for (const provId of providers) {
@@ -93,6 +110,12 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
     // Ollama doesn't need a key
     if (!provider.envVar) {
       state.llmProvider = state.llmProvider || provId;
+      continue;
+    }
+
+    // Skip OpenAI key prompt if using OAuth
+    if (provId === 'openai' && state.llmAuthMethod === 'oauth') {
+      state.llmProvider = state.llmProvider || 'openai';
       continue;
     }
 
