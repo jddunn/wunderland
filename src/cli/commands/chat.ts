@@ -324,7 +324,7 @@ export default async function cmdChat(
   const modelFromConfig = typeof cfg?.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
   const model = typeof flags['model'] === 'string'
     ? String(flags['model'])
-    : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o-mini'));
+    : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
 
   // OpenRouter fallback (OpenAI provider only)
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
@@ -418,6 +418,18 @@ export default async function cmdChat(
     shutdown?: () => Promise<void>;
   }
   const channelAdapters: ChannelAdapterInstance[] = [];
+
+  // ── Capture startup output into a bordered panel ────────────────────────
+  const startupLines: string[] = [];
+  const origLog = console.log;
+  const origInfo = console.info;
+  const origWarn = console.warn;
+  const captureLog = (...args: unknown[]) => {
+    startupLines.push(args.map(String).join(' '));
+  };
+  console.log = captureLog as typeof console.log;
+  console.info = captureLog as typeof console.info;
+  console.warn = captureLog as typeof console.warn;
 
   if (!lazyTools) {
     // Read extensions from agent.config.json if present
@@ -873,6 +885,18 @@ export default async function cmdChat(
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
+
+  // ── Restore console and render captured startup output in a panel ──────
+  console.log = origLog;
+  console.info = origInfo;
+  console.warn = origWarn;
+  if (startupLines.length > 0) {
+    const { stripAnsi } = await import('../ui/ansi-utils.js');
+    const filtered = startupLines.filter((l) => stripAnsi(l).trim().length > 0);
+    if (filtered.length > 0) {
+      await fmt.panel({ title: 'Startup', content: filtered.join('\n'), style: 'info' });
+    }
+  }
 
   printChatHeader({
     agentName: displayName,
