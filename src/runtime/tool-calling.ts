@@ -49,6 +49,19 @@ import {
 
 const tracer = trace.getTracer('wunderland.runtime');
 
+/**
+ * When a tool fails, suggest alternative tools the LLM can try instead.
+ * The LLM sees `suggestedFallbacks` in the error response and can act on it.
+ */
+const TOOL_FALLBACK_MAP: Record<string, string[]> = {
+  'web_search': ['browser_navigate', 'news_search', 'research_aggregate'],
+  'news_search': ['web_search', 'browser_navigate'],
+  'research_aggregate': ['web_search', 'browser_navigate'],
+  'fact_check': ['web_search', 'browser_navigate'],
+  'image_search': ['web_search', 'browser_navigate'],
+  'giphy_search': ['web_search'],
+};
+
 // Initialize Safe Guardrails (singleton)
 let _guardrails: SafeGuardrails | undefined;
 function getGuardrails(): SafeGuardrails {
@@ -1213,12 +1226,25 @@ export async function runToolCallingTurn(opts: {
               severity: SeverityNumber.ERROR,
               attributes: { tool_name: toolName, duration_ms: durationMs, round },
             });
+            const errMsg = err instanceof Error ? err.message : String(err);
+            // Enrich with API key guidance when available
+            let apiKeyGuidance: string | undefined;
+            try {
+              const { getApiKeyGuidance } = await import('@framers/agentos-extensions-registry');
+              apiKeyGuidance = getApiKeyGuidance(errMsg, toolName) ?? undefined;
+            } catch { /* best-effort */ }
+            const fallbacks = TOOL_FALLBACK_MAP[toolName];
+            const availableFallbacks = fallbacks?.filter(f => opts.toolMap?.has(f));
             opts.messages.push({
               role: 'tool',
               tool_call_id: call.id,
-              content: JSON.stringify({ error: `Tool threw: ${err instanceof Error ? err.message : String(err)}` }),
+              content: JSON.stringify({
+                error: `Tool threw: ${errMsg}`,
+                ...(apiKeyGuidance ? { apiKeyGuidance } : null),
+                ...(availableFallbacks?.length ? { suggestedFallbacks: availableFallbacks } : null),
+              }),
             });
-            const failReply = maybeFailClosed(`Tool ${toolName} threw: ${err instanceof Error ? err.message : String(err)}`);
+            const failReply = maybeFailClosed(`Tool ${toolName} threw: ${errMsg}`);
             if (failReply) return failReply;
             continue;
           }
@@ -1231,7 +1257,24 @@ export async function runToolCallingTurn(opts: {
             attributes: { tool_name: toolName, success: result?.success === true, duration_ms: durationMs, round },
           });
 
-          const payload = result?.success ? redactToolOutputForLLM(result.output) : { error: result?.error || 'Tool failed' };
+          let payload: unknown;
+          if (result?.success) {
+            payload = redactToolOutputForLLM(result.output);
+          } else {
+            const errorMsg = result?.error || 'Tool failed';
+            let apiKeyHint: string | undefined;
+            try {
+              const { getApiKeyGuidance } = await import('@framers/agentos-extensions-registry');
+              apiKeyHint = getApiKeyGuidance(errorMsg, toolName) ?? undefined;
+            } catch { /* best-effort */ }
+            const fallbacksOnFail = TOOL_FALLBACK_MAP[toolName];
+            const availableFallbacksOnFail = fallbacksOnFail?.filter(f => opts.toolMap?.has(f));
+            payload = {
+              error: errorMsg,
+              ...(apiKeyHint ? { apiKeyGuidance: apiKeyHint } : null),
+              ...(availableFallbacksOnFail?.length ? { suggestedFallbacks: availableFallbacksOnFail } : null),
+            };
+          }
           const json = safeJsonStringify(payload, 20000);
           console.log(`[tool-calling] Tool ${toolName} result: success=${result?.success}, output=${json.slice(0, 300)}`);
           const content = shouldWrapToolOutputs

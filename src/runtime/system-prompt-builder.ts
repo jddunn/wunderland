@@ -99,7 +99,19 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
 
   // 8. Extension loading strategy.
   if (lazyTools) {
-    parts.push('Use extensions_list + extensions_enable to load tools on demand (schema-on-demand).');
+    parts.push(
+      'Tools are loaded on demand. You have meta-tools to discover and enable capabilities:\n'
+      + '- extensions_list: See all available tool packs and their install status\n'
+      + '- extensions_enable: Load a tool pack into your current session (e.g. web-search, cli-executor, giphy)\n'
+      + '- discover_capabilities: Semantic search across all indexed capabilities\n'
+      + '\n'
+      + 'When you need a capability (web search, file ops, image search, etc.), '
+      + 'call extensions_enable to load it, then use the loaded tools. '
+      + 'Common packs: web-search, web-browser, cli-executor, giphy, image-search, news-search, content-extraction, deep-research.\n'
+      + '\n'
+      + 'If a tool fails due to a missing API key, relay the apiKeyGuidance from the error response '
+      + 'to the user — it tells them which environment variable to set and where to get the key.',
+    );
   } else {
     parts.push(
       'Tools are preloaded. You MUST use the provided tools for any query that needs real-time or external information '
@@ -234,9 +246,17 @@ function buildToolResourcefulnessInstructions(): string {
     '- If web_search results are insufficient for a specific query (real estate listings, product prices, domain lookups, etc.), use browser_navigate to visit the relevant website directly (e.g., zillow.com, ebay.com, namecheap.com). Enable browser tools first with extensions_enable if not loaded.',
     '- After navigating to a page, use the returned links array to find specific links the user asks about. If you need more detail about a specific section, use browser_scrape with a CSS selector.',
     '- Chain multiple tool calls when needed: search → navigate → scrape → present findings.',
-    '- Be persistent: if the first approach doesn\'t yield results, try alternative search queries or different websites.',
     '- Present data you find in a structured, readable format — tables, bullet points, or key-value pairs.',
-    '- When you cannot access a specific service, explain what you tried and provide the most useful information you did find, rather than simply suggesting the user visit the website themselves.',
+    '',
+    'Tool Fallback Strategy (CRITICAL — follow this strictly):',
+    '- If any tool returns an error with suggestedFallbacks, you MUST try those fallback tools immediately before giving up.',
+    '- If web_search fails or returns empty: use browser_navigate to visit news/search sites directly (reuters.com, bbc.com, apnews.com, cnn.com, news.google.com). Scrape the content.',
+    '- If news_search fails: use web_search, or browser_navigate to news sites directly.',
+    '- If image_search fails: use web_search to find images, or browser_navigate to image sites (unsplash.com, pexels.com).',
+    '- For current events/news: try web_search → news_search → browser_navigate to news sites → research_aggregate. Try ALL of these before giving up.',
+    '- For specific URLs: use browser_navigate directly, not web_search.',
+    '- NEVER say "I cannot retrieve", "I\'m unable to access", or "I don\'t have access to real-time data". Always try at least 2-3 alternative approaches before reporting failure.',
+    '- If a tool fails due to missing API keys, STILL try alternative tools that don\'t require keys (browser_navigate works without API keys).',
     '',
     'API Key Guidance (when tools return "not configured" errors):',
     '- If a tool fails because an API key is missing, tell the user EXACTLY which env var to set and where to get the key:',
@@ -247,6 +267,6 @@ function buildToolResourcefulnessInstructions(): string {
     '  • voice tools: ELEVENLABS_API_KEY from https://elevenlabs.io (free tier available).',
     '  • browser_navigate: Works without API keys (uses headless Chrome). May need CHROME_PATH if Chrome is not auto-detected.',
     '- Format the guidance clearly: `export SERPER_API_KEY=your_key_here` (or add to .env file).',
-    '- After explaining the missing key, still try to help with alternative approaches (e.g., use browser_navigate instead of web_search).',
+    '- After explaining the missing key, IMMEDIATELY try alternative approaches (e.g., use browser_navigate instead of web_search). Do not wait for the user to configure the key.',
   ].join('\n');
 }

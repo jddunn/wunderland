@@ -157,11 +157,13 @@ export type WunderlandOptions = {
   /**
    * Tool sources:
    * - 'none': no tools (pure chat)
-   * - 'curated': curated tool packs (requires optional deps)
+   * - 'lazy': meta tools only — agent discovers & enables packs on demand (default)
+   * - 'curated': curated tool packs eagerly loaded (requires optional deps)
    * - object: curated + custom tools
    */
   tools?:
     | 'none'
+    | 'lazy'
     | 'curated'
     | {
         curated?: ToolRegistryConfig;
@@ -613,7 +615,7 @@ async function resolveExtensionsFromOpts(opts: {
   }
 }
 
-function buildLibrarySystemPrompt(agentConfig: WunderlandAgentConfig, policy: NormalizedRuntimePolicy, skillsPrompt?: string): string {
+function buildLibrarySystemPrompt(agentConfig: WunderlandAgentConfig, policy: NormalizedRuntimePolicy, skillsPrompt?: string, lazyTools = false): string {
   const displayName = resolveAgentDisplayName({
     displayName: agentConfig.displayName,
     agentName: agentConfig.agentName,
@@ -643,7 +645,7 @@ function buildLibrarySystemPrompt(agentConfig: WunderlandAgentConfig, policy: No
     seed,
     policy,
     mode: 'library',
-    lazyTools: false,
+    lazyTools,
     autoApproveToolCalls: false,
     skillsPrompt: skillsPrompt || undefined,
   });
@@ -706,9 +708,9 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 
   const approvalsMode: WunderlandApprovalsMode = opts.approvals?.mode ?? 'deny-side-effects';
 
-  // When a preset is loaded and user didn't explicitly set tools, default to 'curated'
-  // so the agent has actual tool executors (shell_execute, file_write, etc.), not just skills.
-  const effectiveTools = opts.tools ?? (loadedPreset ? 'curated' : 'none');
+  // When a preset is loaded, default to 'curated' (eagerly loaded tools).
+  // Otherwise default to 'lazy' — meta tools only, agent discovers & enables packs on demand.
+  const effectiveTools = opts.tools ?? (loadedPreset ? 'curated' : 'lazy');
 
   const { toolMap, droppedByPolicy, availability } = await resolveToolMap({
     tools: effectiveTools,
@@ -767,6 +769,35 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     });
   }
 
+  // Schema-on-demand meta tools — always in lazy mode, optional in curated mode
+  const isLazyMode = effectiveTools === 'lazy';
+  if (isLazyMode || effectiveTools === 'curated') {
+    try {
+      const { createSchemaOnDemandTools } = await import('../cli/openai/schema-on-demand.js');
+      const sodTools = createSchemaOnDemandTools({
+        toolMap: toolMap as any,
+        runtimeDefaults: {
+          workingDirectory,
+          headlessBrowser: true,
+          dangerouslySkipCommandSafety: false,
+          agentWorkspace: { agentId: workspace.agentId, baseDir: workspace.baseDir },
+        },
+        logger,
+        onToolsChanged: () => {
+          // Best-effort re-index discovery with newly-loaded tools
+          discoveryManager.reindex?.({ toolMap }).catch(() => {});
+        },
+      });
+      for (const t of sodTools) {
+        if (t?.name) toolMap.set(t.name, toToolInstance(t as any));
+      }
+    } catch (err) {
+      logger.warn?.('[wunderland] Schema-on-demand tools failed to load (continuing without)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const telemetryConfig: WunderlandTaskOutcomeTelemetryConfig = {
     ...(agentConfig.taskOutcomeTelemetry ?? {}),
     ...(opts.taskOutcomeTelemetry ?? {}),
@@ -805,7 +836,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     workingDirectory,
   };
 
-  const systemPrompt = buildLibrarySystemPrompt(agentConfig, policy, skillsPrompt);
+  const systemPrompt = buildLibrarySystemPrompt(agentConfig, policy, skillsPrompt, isLazyMode);
 
   const sessions = new Map<string, Array<Record<string, unknown>>>();
 
