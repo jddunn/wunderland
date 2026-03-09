@@ -117,6 +117,8 @@ export function createSchemaOnDemandTools(opts: {
    */
   allowUnknownPackages?: boolean;
   logger?: { info?: (...args: any[]) => void; warn?: (...args: any[]) => void; error?: (...args: any[]) => void };
+  /** Called after extensions_enable loads new tools into toolMap. */
+  onToolsChanged?: (toolsAdded: string[]) => void;
 }): ToolInstance[] {
   const enabledPackages = new Set<string>();
   const log = opts.logger ?? console;
@@ -279,9 +281,13 @@ export function createSchemaOnDemandTools(opts: {
       const pack = factory({ options: packOptions, logger: log });
 
       try {
+        const packSecrets = buildDefaultPackOptions(packageName, opts.runtimeDefaults);
         await pack?.onActivate?.({
           logger: log,
-          getSecret: () => undefined,
+          getSecret: (key: string) => {
+            const val = packSecrets[key];
+            return typeof val === 'string' ? val : undefined;
+          },
         });
       } catch (err: any) {
         return {
@@ -311,6 +317,11 @@ export function createSchemaOnDemandTools(opts: {
       }
 
       enabledPackages.add(packageName);
+
+      // Notify caller so discovery can re-index
+      if (toolsAdded.length > 0) {
+        opts.onToolsChanged?.(toolsAdded);
+      }
 
       let toolsBlockedByPolicy: string[] | undefined;
       // Enforce permission set + tool access profile after dynamic extension loads.

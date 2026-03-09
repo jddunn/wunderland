@@ -284,8 +284,8 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   // Done
   const g = glyphs();
   const nextCmd = state.llmAuthMethod === 'oauth'
-    ? `wunderland login → wunderland init my-agent → wunderland start`
-    : `wunderland init my-agent && wunderland start`;
+    ? `wunderland login → wunderland init my-agent → cd my-agent → wunderland start`
+    : `wunderland init my-agent && cd my-agent && wunderland start`;
 
   fmt.blank();
   fmt.panel({

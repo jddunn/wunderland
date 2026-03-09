@@ -399,6 +399,18 @@ export class WunderlandDiscoveryManager {
   }
 
   /**
+   * Re-index the discovery engine with an updated toolMap.
+   * Called after schema-on-demand loads new tools at runtime.
+   */
+  async reindex(opts: { toolMap: Map<string, ToolLike> }): Promise<void> {
+    if (!this._initialized || !this._engine) return;
+
+    const sources = this.gatherSources(opts.toolMap);
+    const coOccurrences = derivePresetCoOccurrences();
+    await this._engine.initialize(sources, coOccurrences);
+  }
+
+  /**
    * Teardown: stop file watchers, release resources.
    */
   async close(): Promise<void> {
