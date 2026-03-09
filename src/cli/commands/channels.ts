@@ -62,6 +62,16 @@ async function addChannel(args: string[], globals: GlobalFlags): Promise<void> {
 
   if (!platformId) {
     // Interactive mode — use @clack/prompts
+    fmt.blank();
+    fmt.panel({
+      title: 'Add Channel',
+      style: 'info',
+      content: [
+        'Channels connect your agent to messaging platforms.',
+        'Select a platform and configure its credentials.',
+      ].join('\n'),
+    });
+    fmt.blank();
     const ui = getUiRuntime();
     const p = await import('@clack/prompts');
     const options = CHANNEL_PLATFORMS.map((ch) => ({

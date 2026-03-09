@@ -11,11 +11,38 @@
   },
   "securityTier": "balanced",
   "toolAccessProfile": "social-creative",
-  "suggestedSkills": ["summarize", "image-gen"],
-  "suggestedChannels": ["webchat"],
+  "suggestedSkills": [
+    "summarize",
+    "image-gen"
+  ],
+  "suggestedChannels": [
+    "webchat"
+  ],
   "suggestedExtensions": {
-    "tools": ["web-search", "giphy", "image-search"],
+    "tools": [
+      "web-search",
+      "giphy",
+      "image-search"
+    ],
     "voice": [],
     "productivity": []
+  },
+  "discovery": {
+    "enabled": true,
+    "recallProfile": "precision",
+    "graphBoostFactor": 1.05,
+    "tier1MinRelevance": 0.35
+  },
+  "rag": {
+    "enabled": true,
+    "preset": "balanced",
+    "includeGraphRag": false,
+    "includeAudit": false,
+    "defaultTopK": 6,
+    "strategy": "similarity",
+    "rewrite": {
+      "enabled": true,
+      "maxVariants": 2
+    }
   }
 }

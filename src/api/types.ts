@@ -97,6 +97,118 @@ export interface WunderlandAdaptiveExecutionConfig {
   forceFailOpenWhenDegraded?: boolean;
 }
 
+export type WunderlandExtensionConfig = {
+  tools?: string[];
+  voice?: string[];
+  productivity?: string[];
+  channels?: string[];
+  [category: string]: string[] | undefined;
+};
+
+export interface WunderlandAgentDiscoveryConfig {
+  /** Enable/disable discovery. Default: auto-detect based on embedding availability. */
+  enabled?: boolean;
+  /**
+   * Recall profile for discovery context.
+   * - aggressive: higher recall (default)
+   * - balanced: AgentOS default budgets/topK
+   * - precision: lower token footprint, tighter TopK
+   */
+  recallProfile?: 'aggressive' | 'balanced' | 'precision';
+  /** Tier 0 token budget. Default: 200. */
+  tier0Budget?: number;
+  /** Tier 1 token budget. Default: 800. */
+  tier1Budget?: number;
+  /** Tier 2 token budget. Default: 2000. */
+  tier2Budget?: number;
+  /** Number of Tier 1 candidates. Default: 5. */
+  tier1TopK?: number;
+  /** Number of Tier 2 candidates. Default: 2. */
+  tier2TopK?: number;
+  /** Minimum relevance threshold for Tier 1 retrieval. */
+  tier1MinRelevance?: number;
+  /** Graph re-ranking multiplier when graph edges support a match. */
+  graphBoostFactor?: number;
+  /** Embedding provider override. */
+  embeddingProvider?: string;
+  /** Embedding model override. */
+  embeddingModel?: string;
+  /** Scan ~/.wunderland/capabilities/ for manifests. Default: true. */
+  scanManifests?: boolean;
+  /** Advanced passthrough overrides for AgentOS discovery config. */
+  config?: Record<string, unknown>;
+}
+
+export interface WunderlandAgentRagConfig {
+  /** Enable RAG-backed memory/query tools for this agent. */
+  enabled?: boolean;
+  /**
+   * Backend base URL.
+   * Accepts forms like:
+   * - http://localhost:3001
+   * - http://localhost:3001/api
+   * - http://localhost:3001/api/agentos/rag
+   */
+  backendUrl?: string;
+  /** Static bearer token for hosted backends. */
+  authToken?: string;
+  /** Environment variable containing the bearer token. */
+  authTokenEnvVar?: string;
+  /** Default collections to search across. */
+  collectionIds?: string[];
+  /** Convenience alias when targeting one primary collection. */
+  defaultCollectionId?: string;
+  /** Default Top-K for memory retrieval. */
+  defaultTopK?: number;
+  /** Retrieval preset. */
+  preset?: 'fast' | 'balanced' | 'accurate';
+  /** Include GraphRAG context in default queries. */
+  includeGraphRag?: boolean;
+  /** Include audit trail in default queries. */
+  includeAudit?: boolean;
+  /** Include pipeline debug trace in default queries. */
+  includeDebug?: boolean;
+  /** Minimum similarity threshold. */
+  similarityThreshold?: number;
+  /** Include metadata in returned chunks. */
+  includeMetadata?: boolean;
+  /** Optional metadata filters. */
+  filters?: Record<string, unknown>;
+  /** Optional post-retrieval strategy. */
+  strategy?: 'similarity' | 'mmr' | 'hybrid_search';
+  /** Strategy-specific parameters. */
+  strategyParams?: {
+    mmrLambda?: number;
+    mmrCandidateMultiplier?: number;
+  };
+  /** Extra query variants to merge with the primary query. */
+  queryVariants?: string[];
+  /** Optional query rewrite controls. */
+  rewrite?: {
+    enabled?: boolean;
+    maxVariants?: number;
+  };
+  /** Expose the read-oriented memory tool. Default: true when rag.enabled=true. */
+  exposeMemoryRead?: boolean;
+  /** Expose the explicit rag_query tool. Default: true when rag.enabled=true. */
+  exposeRagQuery?: boolean;
+}
+
+export interface WunderlandAgentPersonaRegistryConfig {
+  /** Enable AgentOS persona registry loading. */
+  enabled?: boolean;
+  /** Include AgentOS built-in personas. Default: true. */
+  includeBuiltIns?: boolean;
+  /** Additional local directories containing persona JSON files. */
+  paths?: string[];
+  /** Recursively scan persona directories. Default: true. */
+  recursive?: boolean;
+  /** File extension to load (for example `.json` or `.persona.json`). */
+  fileExtension?: string;
+  /** Default selected AgentOS persona ID. */
+  selectedPersonaId?: string;
+}
+
 /**
  * Minimal shape of the `agent.config.json` schema used by Wunderland CLI/runtime.
  * This is the "control-plane" config you export from dashboards and run with
@@ -104,11 +216,14 @@ export interface WunderlandAdaptiveExecutionConfig {
  */
 export type WunderlandAgentConfig = {
   seedId?: string;
+  presetId?: string;
   displayName?: string;
   /** Alias for displayName — used by global CLI config (`~/.wunderland/config.json`). */
   agentName?: string;
   bio?: string;
   systemPrompt?: string;
+  /** Default selected AgentOS persona ID applied at runtime/tool context scope. */
+  selectedPersonaId?: string;
   personality?: Partial<{
     honesty: number;
     emotionality: number;
@@ -139,11 +254,8 @@ export type WunderlandAgentConfig = {
   toolAccessProfile?: ToolAccessProfileName | string | null;
   executionMode?: WunderlandExecutionMode | string | null;
   lazyTools?: boolean;
-  extensions?: {
-    tools?: string[];
-    voice?: string[];
-    productivity?: string[];
-  };
+  skills?: string[];
+  extensions?: WunderlandExtensionConfig;
   extensionOverrides?: Record<
     string,
     {
@@ -201,33 +313,11 @@ export type WunderlandAgentConfig = {
   wallet?: import('../wallet/types.js').WalletConfig;
 
   /** Capability discovery configuration. */
-  discovery?: {
-    /** Enable/disable discovery. Default: auto-detect based on embedding availability. */
-    enabled?: boolean;
-    /**
-     * Recall profile for discovery context.
-     * - aggressive: higher recall (default)
-     * - balanced: AgentOS default budgets/topK
-     * - precision: lower token footprint, tighter TopK
-     */
-    recallProfile?: 'aggressive' | 'balanced' | 'precision';
-    /** Tier 0 token budget. Default: 200. */
-    tier0Budget?: number;
-    /** Tier 1 token budget. Default: 800. */
-    tier1Budget?: number;
-    /** Tier 2 token budget. Default: 2000. */
-    tier2Budget?: number;
-    /** Number of Tier 1 candidates. Default: 5. */
-    tier1TopK?: number;
-    /** Number of Tier 2 candidates. Default: 2. */
-    tier2TopK?: number;
-    /** Embedding provider override. */
-    embeddingProvider?: string;
-    /** Embedding model override. */
-    embeddingModel?: string;
-    /** Scan ~/.wunderland/capabilities/ for manifests. Default: true. */
-    scanManifests?: boolean;
-  };
+  discovery?: WunderlandAgentDiscoveryConfig;
+  /** RAG / long-term memory configuration. */
+  rag?: WunderlandAgentRagConfig;
+  /** AgentOS persona registry configuration. */
+  personaRegistry?: WunderlandAgentPersonaRegistryConfig;
 };
 
 export type WunderlandProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic';

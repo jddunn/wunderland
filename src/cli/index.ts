@@ -70,6 +70,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('cloud')}                 Cloud hosting providers
       ${w('domains')}               Domain registrar management
       ${w('list-presets')}           List personality & agent presets
+      ${w('list-personas')}          List AgentOS personas
       ${w('config')}                Read/write config values
       ${w('env')}                   Manage API keys & secrets
 
@@ -165,6 +166,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   seal:           () => import('./commands/seal.js'),
   'verify-seal':  () => import('./commands/verify-seal.js'),
   'list-presets': () => import('./commands/list-presets.js'),
+  'list-personas': () => import('./commands/list-personas.js'),
   skills:         () => import('./commands/skills.js'),
   extensions:     () => import('./commands/extensions.js'),
   rag:            () => import('./commands/rag.js'),

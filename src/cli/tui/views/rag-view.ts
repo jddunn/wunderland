@@ -10,6 +10,12 @@ import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
 import { wrapInFrame } from '../layout.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
+import { normalizeRagApiBaseUrl } from '../../../rag/rag-client.js';
+
+function getRagBackendUrl(): string {
+  const base = process.env['WUNDERLAND_BACKEND_URL'] ?? process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
+  return normalizeRagApiBaseUrl(base);
+}
 
 export class RagView {
   private screen: Screen;
@@ -120,7 +126,7 @@ export class RagView {
       lines.push(`  ${muted('No results found.')}`);
     } else {
       lines.push(`  ${dim('Type a query and press Enter to search RAG memory.')}`);
-      lines.push(`  ${dim('Note: Requires backend to be running (wunderland start).')}`);
+      lines.push(`  ${dim('Note: Requires a backend exposing /api/agentos/rag (set WUNDERLAND_BACKEND_URL if needed).')}`);
     }
 
     lines.push('');
@@ -153,17 +159,22 @@ export class RagView {
     this.cursor = 0;
 
     try {
-      const res = await fetch(`http://localhost:3001/api/rag/query`, {
+      const res = await fetch(`${getRagBackendUrl()}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: this.query, limit: 10 }),
+        body: JSON.stringify({
+          query: this.query,
+          topK: 10,
+          preset: 'balanced',
+          includeGraphRag: true,
+        }),
       });
       if (res.ok) {
         const data = await res.json() as any;
-        this.results = (data.results || []).map((r: any) => ({
+        this.results = (data.chunks || []).map((r: any) => ({
           score: r.score ?? r.similarity ?? 0,
           text: r.text || r.content || '',
-          source: r.source || r.collection || 'unknown',
+          source: r.metadata?.source || r.documentId || r.collection || 'unknown',
         }));
       }
     } catch {
@@ -220,7 +231,8 @@ export class RagView {
       `${accent(upDown)} move  ${accent(enter)} details  ${accent('esc')} edit query`,
       '',
       `${bright('Notes')}`,
-      `${dim('-')} Requires the backend running: ${accent('wunderland start')}`,
+      `${dim('-')} Requires a backend exposing ${accent('/api/agentos/rag')}.`,
+      `${dim('-')} Override the default host with ${accent('WUNDERLAND_BACKEND_URL=http://host:3001')}.`,
       `${dim('-')} Press ${accent('?')} again or ${accent('esc')} to close this overlay.`,
     ];
   }

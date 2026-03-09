@@ -16,6 +16,10 @@ const SAMPLE_CONFIG = {
   seedId: 'seed_test',
   displayName: 'Test Agent',
   bio: 'A test agent',
+  selectedPersonaId: 'voice_assistant_persona',
+  llmProvider: 'openrouter',
+  llmModel: 'openai/gpt-4o-mini',
+  llmAuthMethod: 'oauth',
   personality: {
     honesty: 0.8,
     emotionality: 0.5,
@@ -32,6 +36,24 @@ const SAMPLE_CONFIG = {
   },
   skills: ['summarize', 'github'],
   suggestedChannels: ['webchat', 'slack'],
+  extensions: {
+    tools: ['agentos-rag'],
+  },
+  discovery: {
+    enabled: true,
+    graphBoostFactor: 1.3,
+  },
+  rag: {
+    enabled: true,
+    strategy: 'hybrid_search',
+    defaultTopK: 8,
+    collectionIds: ['knowledge_base'],
+  },
+  personaRegistry: {
+    enabled: true,
+    includeBuiltIns: true,
+    paths: ['./personas'],
+  },
 };
 
 const SAMPLE_PERSONA = '# Test Agent\n\nYou are a helpful test agent with broad knowledge.';
@@ -84,6 +106,18 @@ describe('AgentManifest round-trip export -> validate -> import', () => {
     expect(manifest.channels).toEqual(['webchat', 'slack']);
     expect(manifest.persona).toBe(SAMPLE_PERSONA);
     expect(manifest.systemPrompt).toBe('You are a test agent.');
+    expect(manifest.selectedPersonaId).toBe('voice_assistant_persona');
+    expect(manifest.rag).toEqual({
+      enabled: true,
+      strategy: 'hybrid_search',
+      defaultTopK: 8,
+      collectionIds: ['knowledge_base'],
+    });
+    expect(manifest.personaRegistry).toEqual({
+      enabled: true,
+      includeBuiltIns: true,
+      paths: ['./personas'],
+    });
     expect(manifest.exportedAt).toBeTruthy();
     expect(manifest.sealed).toBe(false);
 
@@ -110,6 +144,26 @@ describe('AgentManifest round-trip export -> validate -> import', () => {
     expect(importedConfig.skills).toEqual(['summarize', 'github']);
     expect(importedConfig.suggestedChannels).toEqual(['webchat', 'slack']);
     expect(importedConfig.systemPrompt).toBe('You are a test agent.');
+    expect(importedConfig.selectedPersonaId).toBe('voice_assistant_persona');
+    expect(importedConfig.llmProvider).toBe('openrouter');
+    expect(importedConfig.llmModel).toBe('openai/gpt-4o-mini');
+    expect(importedConfig.llmAuthMethod).toBe('oauth');
+    expect(importedConfig.extensions).toEqual({ tools: ['agentos-rag'] });
+    expect(importedConfig.discovery).toEqual({
+      enabled: true,
+      graphBoostFactor: 1.3,
+    });
+    expect(importedConfig.rag).toEqual({
+      enabled: true,
+      strategy: 'hybrid_search',
+      defaultTopK: 8,
+      collectionIds: ['knowledge_base'],
+    });
+    expect(importedConfig.personaRegistry).toEqual({
+      enabled: true,
+      includeBuiltIns: true,
+      paths: ['./personas'],
+    });
 
     // Verify PERSONA.md was created and content matches
     const importedPersonaPath = join(importedDir, 'PERSONA.md');

@@ -9,12 +9,33 @@ import type { ToolInstance } from '../../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../../openai/schema-on-demand.js';
 import { filterToolMapByPolicy } from '../../security/runtime-policy.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
+import { createConfiguredRagTools } from '../../../rag/runtime-tools.js';
 import { HumanInteractionManager, type IChannelAdapter } from '@framers/agentos';
 
 type ExtensionHttpHandler = (
   req: import('node:http').IncomingMessage,
   res: import('node:http').ServerResponse,
 ) => Promise<boolean> | boolean;
+
+function toToolInstance(tool: {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  hasSideEffects?: boolean;
+  category?: string;
+  requiredCapabilities?: string[];
+  execute: (...args: any[]) => any;
+}): ToolInstance {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema as any,
+    hasSideEffects: tool.hasSideEffects === true,
+    category: typeof tool.category === 'string' && tool.category.trim() ? tool.category : 'productivity',
+    requiredCapabilities: tool.requiredCapabilities,
+    execute: tool.execute as any,
+  };
+}
 
 export async function loadExtensions(ctx: any): Promise<void> {
   const {
@@ -334,6 +355,11 @@ export async function loadExtensions(ctx: any): Promise<void> {
     logger: console,
   })) {
     toolMap.set(meta.name, meta);
+  }
+
+  for (const ragTool of createConfiguredRagTools(cfg ?? {})) {
+    if (!ragTool?.name) continue;
+    toolMap.set(ragTool.name, toToolInstance(ragTool as any));
   }
 
   // Enforce tool access profile + permission set so the model only sees allowed tools.

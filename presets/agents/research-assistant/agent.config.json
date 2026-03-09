@@ -11,10 +11,22 @@
   },
   "securityTier": "balanced",
   "toolAccessProfile": "assistant",
-  "suggestedSkills": ["web-search", "summarize", "github"],
-  "suggestedChannels": ["webchat", "slack"],
+  "suggestedSkills": [
+    "web-search",
+    "summarize",
+    "github"
+  ],
+  "suggestedChannels": [
+    "webchat",
+    "slack"
+  ],
   "suggestedExtensions": {
-    "tools": ["web-search", "web-browser", "news-search", "cli-executor"],
+    "tools": [
+      "web-search",
+      "web-browser",
+      "news-search",
+      "cli-executor"
+    ],
     "voice": [],
     "productivity": []
   },
@@ -22,6 +34,24 @@
     "web-search": {
       "enabled": true,
       "priority": 25
+    }
+  },
+  "discovery": {
+    "enabled": true,
+    "recallProfile": "aggressive",
+    "graphBoostFactor": 1.2,
+    "tier1MinRelevance": 0.2
+  },
+  "rag": {
+    "enabled": true,
+    "preset": "accurate",
+    "includeGraphRag": true,
+    "includeAudit": true,
+    "defaultTopK": 8,
+    "strategy": "mmr",
+    "rewrite": {
+      "enabled": true,
+      "maxVariants": 2
     }
   }
 }

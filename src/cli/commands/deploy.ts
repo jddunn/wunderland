@@ -13,8 +13,9 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import type { DeployTarget } from '../deploy/templates.js';
-import { accent, success as sColor } from '../ui/theme.js';
+import { accent, success as sColor, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { generateDeployArtifacts } from '../deploy/artifact-generator.js';
 
 const VALID_TARGETS: DeployTarget[] = ['docker', 'railway', 'fly'];
@@ -179,56 +180,43 @@ export default async function cmdDeploy(
   // ── Print summary ─────────────────────────────────────────────────────
   const { summary } = result;
   const relOutput = path.relative(process.cwd(), outputDir) || '.';
+  const g = glyphs();
+  const generatedFiles = Array.from(result.files.keys());
 
-  fmt.section(dryRun ? 'Deploy (dry run)' : 'Deploy');
-  fmt.kvPair('Target', accent(summary.target));
-  fmt.kvPair('Port', String(summary.port));
-  fmt.kvPair('Agent', accent(summary.displayName));
-  fmt.kvPair('Output', accent(relOutput));
+  const summaryLines: (string | null)[] = [
+    `Target:  ${accent(summary.target)}`,
+    `Agent:   ${accent(summary.displayName)}`,
+    `Port:    ${String(summary.port)}`,
+    `Output:  ${accent(relOutput)}`,
+    `Files:   ${dim(generatedFiles.join(', '))}`,
+  ];
 
   const allPkgs = [...summary.extensionPackages, ...summary.channelPackages];
-  if (allPkgs.length > 0) {
-    fmt.kvPair('Packages', allPkgs.join(', '));
+  if (allPkgs.length > 0) summaryLines.push(`Packages: ${allPkgs.join(', ')}`);
+  if (summary.channels.length > 0) summaryLines.push(`Channels: ${summary.channels.join(', ')}`);
+  if (summary.skills.length > 0) summaryLines.push(`Skills:  ${summary.skills.join(', ')}`);
+  if (summary.requiredEnvVars.length > 0) summaryLines.push(`Env vars: ${summary.requiredEnvVars.length} required (see .env.example)`);
+
+  if (!dryRun) {
+    const deployCmd = target === 'docker'
+      ? `cd ${relOutput} && cp .env.example .env && docker compose up -d --build`
+      : target === 'railway'
+        ? `cd ${relOutput} && cp .env.example .env && railway up`
+        : `cd ${relOutput} && cp .env.example .env && fly launch --copy-config`;
+    summaryLines.push('', `Next: ${sColor(deployCmd)}`);
   }
 
-  if (summary.requiredEnvVars.length > 0) {
-    fmt.kvPair('Env vars', `${summary.requiredEnvVars.length} required (see .env.example)`);
-  }
-
-  if (summary.channels.length > 0) {
-    fmt.kvPair('Channels', summary.channels.join(', '));
-  }
-
-  if (summary.skills.length > 0) {
-    fmt.kvPair('Skills', summary.skills.join(', '));
-  }
+  fmt.blank();
+  fmt.panel({
+    title: dryRun ? 'Deploy (dry run)' : `${g.ok} Deploy Artifacts Generated`,
+    style: dryRun ? 'info' : 'success',
+    content: summaryLines.filter(Boolean).join('\n'),
+  });
 
   if (summary.missingChannelNotes.length > 0) {
     fmt.blank();
     fmt.warning(`Channel packs not on public npm: ${summary.missingChannelNotes.join(', ')}`);
     fmt.note('These channels require deploying from source or publishing the packages.');
-  }
-
-  fmt.blank();
-
-  const generatedFiles = Array.from(result.files.keys());
-  fmt.note(`Generated: ${generatedFiles.join(', ')}`);
-
-  if (!dryRun) {
-    fmt.blank();
-    if (target === 'docker') {
-      fmt.note(
-        `Next: ${sColor(`cd ${relOutput}`)} && ${sColor('cp .env.example .env')} && ${sColor('docker compose up -d --build')}`,
-      );
-    } else if (target === 'railway') {
-      fmt.note(
-        `Next: ${sColor(`cd ${relOutput}`)} && ${sColor('cp .env.example .env')} && ${sColor('railway up')}`,
-      );
-    } else {
-      fmt.note(
-        `Next: ${sColor(`cd ${relOutput}`)} && ${sColor('cp .env.example .env')} && ${sColor('fly launch --copy-config')}`,
-      );
-    }
   }
 
   fmt.blank();

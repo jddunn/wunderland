@@ -87,6 +87,42 @@ describe('wunderland public API — skills & extensions', () => {
     expect(diag.tools.count).toBeGreaterThanOrEqual(0);
   });
 
+  it('applies preset defaults from agent config and merges preset skills', async () => {
+    vi.doMock('../core/PresetSkillResolver.js', () => ({
+      resolveSkillsByNames: vi.fn(async (names: string[]) => ({
+        prompt: `[Skills: ${names.join(', ')}]`,
+        skills: names.map((name) => ({ name })),
+        resolvedSkills: [],
+        version: 1,
+        createdAt: new Date(),
+      })),
+    }));
+
+    mockOpenAIChatCompletionSequence([simpleChatResponse('hello')]);
+
+    const app = await createWunderland({
+      llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
+      tools: 'none',
+      agentConfig: {
+        presetId: 'research-assistant',
+        skills: ['custom-skill'],
+      },
+      discovery: { enabled: false },
+    });
+
+    expect(app.diagnostics().policy.securityTier).toBe('balanced');
+    expect(app.diagnostics().skills.names.slice().sort()).toEqual([
+      'custom-skill',
+      'github',
+      'summarize',
+      'web-search',
+    ]);
+
+    const session = app.session('preset-config');
+    await session.sendText('hi');
+    expect(session.messages()[0]?.content).toContain('meticulous and thorough research assistant');
+  });
+
   it('accepts extensions option without crashing when registry unavailable', async () => {
     mockOpenAIChatCompletionSequence([simpleChatResponse('hello')]);
 
