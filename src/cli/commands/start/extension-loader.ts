@@ -137,6 +137,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
       const runtimeOverrides: Record<string, any> = {
         'cli-executor': {
           options: {
+            workingDirectory: process.cwd(),
             filesystem: { allowRead: permissions.filesystem.read, allowWrite: permissions.filesystem.write },
             agentWorkspace: {
               agentId: workspaceAgentId,
