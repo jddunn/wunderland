@@ -55,17 +55,24 @@ describe('wunderland login', () => {
     const { default: cmdLogin } = await import('../cli/commands/login.js');
     const cap = captureConsole();
     try {
-      await cmdLogin([], { provider: 'anthropic' }, globals);
+      await cmdLogin([], { provider: 'nonexistent-provider' }, globals);
       expect(process.exitCode).toBe(1);
       const output = cap.logs.join('\n');
-      expect(output).toContain('Unsupported provider');
-      expect(output).toContain('anthropic');
+      expect(output).toContain('Unknown provider');
     } finally {
       cap.restore();
     }
   });
 
   it('defaults provider to openai when no flag given', async () => {
+    // Mock @clack/prompts to auto-select openai-oauth (avoids interactive TTY hang)
+    vi.doMock('@clack/prompts', () => ({
+      intro: vi.fn(),
+      cancel: vi.fn(),
+      isCancel: vi.fn(() => false),
+      select: vi.fn(async () => 'openai-oauth'),
+    }));
+
     // Mock the auth module to verify it's called
     vi.doMock('@framers/agentos/auth', () => ({
       OpenAIOAuthFlow: class {
@@ -74,8 +81,11 @@ describe('wunderland login', () => {
           refreshToken: 'refresh-tok',
           expiresAt: Date.now() + 3600_000,
         }));
+        isValid = vi.fn(() => false);
       },
-      FileTokenStore: class {},
+      FileTokenStore: class {
+        load = vi.fn(async () => null);
+      },
     }));
 
     // Re-import so the mock takes effect
@@ -94,13 +104,24 @@ describe('wunderland login', () => {
   });
 
   it('shows error on auth failure', async () => {
+    // Mock @clack/prompts to auto-select openai-oauth (avoids interactive TTY hang)
+    vi.doMock('@clack/prompts', () => ({
+      intro: vi.fn(),
+      cancel: vi.fn(),
+      isCancel: vi.fn(() => false),
+      select: vi.fn(async () => 'openai-oauth'),
+    }));
+
     vi.doMock('@framers/agentos/auth', () => ({
       OpenAIOAuthFlow: class {
         authenticate = vi.fn(async () => {
           throw new Error('Network timeout');
         });
+        isValid = vi.fn(() => false);
       },
-      FileTokenStore: class {},
+      FileTokenStore: class {
+        load = vi.fn(async () => null);
+      },
     }));
 
     const { default: cmdLogin } = await import('../cli/commands/login.js');
