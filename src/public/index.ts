@@ -47,15 +47,19 @@ import type {
 } from '../api/types.js';
 import { WunderlandConfigError } from '../config/errors.js';
 import { loadAgentConfig, resolveLlmConfig } from '../config/load.js';
+import {
+  buildDiscoveryOptionsFromAgentConfig,
+  resolveEffectiveAgentConfig,
+} from '../config/effective-agent-config.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats, DiscoverySkillEntry } from '../discovery/index.js';
-import type { AgentPreset } from '../core/PresetLoader.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../core/index.js';
+import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 
 // =============================================================================
@@ -115,6 +119,11 @@ export type WunderlandDiagnostics = {
     agentId: string;
     baseDir: string;
     workingDirectory: string;
+  };
+  persona?: {
+    selectedId?: string;
+    name?: string;
+    availableCount: number;
   };
   discovery?: WunderlandDiscoveryStats;
 };
@@ -337,7 +346,7 @@ async function resolveToolMap(opts: {
 
 async function resolveSkillsFromOpts(opts: {
   skills: WunderlandOptions['skills'];
-  preset?: AgentPreset;
+  agentConfig?: WunderlandAgentConfig;
   logger: Required<NonNullable<WunderlandOptions['logger']>>;
 }): Promise<{
   skillsPrompt: string;
@@ -346,7 +355,7 @@ async function resolveSkillsFromOpts(opts: {
 }> {
   const empty = { skillsPrompt: '', skillEntries: [], skillNames: [] as string[] };
   const skillsOpt = opts.skills;
-  const presetSkills = opts.preset?.suggestedSkills ?? [];
+  const configSkills = Array.isArray(opts.agentConfig?.skills) ? opts.agentConfig.skills : [];
 
   // Collect all named skills (from option + preset, deduplicated)
   let namedSkills: string[] = [];
@@ -363,10 +372,10 @@ async function resolveSkillsFromOpts(opts: {
     includeDefaults = skillsOpt.includeDefaults ?? false;
   }
 
-  // Merge preset skills (dedup)
-  if (presetSkills.length > 0 && !namedSkills.includes('all')) {
+  // Merge config-declared skills (dedup)
+  if (configSkills.length > 0 && !namedSkills.includes('all')) {
     const existing = new Set(namedSkills);
-    for (const name of presetSkills) {
+    for (const name of configSkills) {
       if (!existing.has(name)) namedSkills.push(name);
     }
   }
@@ -464,7 +473,7 @@ async function resolveSkillsFromOpts(opts: {
 
 async function resolveExtensionsFromOpts(opts: {
   extensions: WunderlandOptions['extensions'];
-  preset?: AgentPreset;
+  agentConfig?: WunderlandAgentConfig;
   logger: Required<NonNullable<WunderlandOptions['logger']>>;
 }): Promise<{
   extensionTools: ITool[];
@@ -472,26 +481,26 @@ async function resolveExtensionsFromOpts(opts: {
 }> {
   const empty = { extensionTools: [], extensionNames: [] as string[] };
   const extOpt = opts.extensions;
-  const presetExt = opts.preset?.suggestedExtensions;
+  const configExt = opts.agentConfig?.extensions;
 
   // Collect extension names by category
-  let toolExts = [...(extOpt?.tools ?? [])];
-  let voiceExts = [...(extOpt?.voice ?? [])];
-  let prodExts = [...(extOpt?.productivity ?? [])];
-  const overrides = extOpt?.overrides;
+  let toolExts = [...(configExt?.tools ?? [])];
+  let voiceExts = [...(configExt?.voice ?? [])];
+  let prodExts = [...(configExt?.productivity ?? [])];
+  const overrides = {
+    ...(opts.agentConfig?.extensionOverrides ?? {}),
+    ...(extOpt?.overrides ?? {}),
+  };
 
-  // Merge from preset (dedup)
-  if (presetExt) {
-    const mergeDedup = (target: string[], source: string[] | undefined) => {
-      const existing = new Set(target);
-      for (const name of source ?? []) {
-        if (!existing.has(name)) target.push(name);
-      }
-    };
-    mergeDedup(toolExts, presetExt.tools);
-    mergeDedup(voiceExts, presetExt.voice);
-    mergeDedup(prodExts, presetExt.productivity);
-  }
+  const mergeDedup = (target: string[], source: string[] | undefined) => {
+    const existing = new Set(target);
+    for (const name of source ?? []) {
+      if (!existing.has(name)) target.push(name);
+    }
+  };
+  mergeDedup(toolExts, extOpt?.tools);
+  mergeDedup(voiceExts, extOpt?.voice);
+  mergeDedup(prodExts, extOpt?.productivity);
 
   if (toolExts.length === 0 && voiceExts.length === 0 && prodExts.length === 0) {
     return empty;
@@ -654,7 +663,18 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   };
 
   const workingDirectory = opts.workingDirectory ? path.resolve(opts.workingDirectory) : process.cwd();
-  const agentConfig = await loadAgentConfig({ agentConfig: opts.agentConfig, configPath: opts.configPath, workingDirectory });
+  const loadedAgentConfig = await loadAgentConfig({ agentConfig: opts.agentConfig, configPath: opts.configPath, workingDirectory });
+  const {
+    agentConfig,
+    preset: loadedPreset,
+    selectedPersona,
+    availablePersonas,
+  } = await resolveEffectiveAgentConfig({
+    agentConfig: loadedAgentConfig,
+    workingDirectory,
+    presetId: opts.preset,
+    logger,
+  });
 
   const policy = normalizeRuntimePolicy(agentConfig as any);
   const permissions = getPermissionsForSet(policy.permissionSet);
@@ -686,24 +706,6 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 
   const approvalsMode: WunderlandApprovalsMode = opts.approvals?.mode ?? 'deny-side-effects';
 
-  // Load preset (if specified) — provides default tools, skills, extensions, and personality
-  let loadedPreset: AgentPreset | undefined;
-  if (opts.preset) {
-    try {
-      const { PresetLoader } = await import('../core/PresetLoader.js');
-      const loader = new PresetLoader();
-      loadedPreset = loader.loadPreset(opts.preset);
-      logger.debug?.(`[wunderland] Loaded preset "${opts.preset}"`, {
-        skills: loadedPreset.suggestedSkills,
-        extensions: loadedPreset.suggestedExtensions,
-      });
-    } catch (err) {
-      logger.warn?.(`[wunderland] Failed to load preset "${opts.preset}" (continuing without)`, {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
   // When a preset is loaded and user didn't explicitly set tools, default to 'curated'
   // so the agent has actual tool executors (shell_execute, file_write, etc.), not just skills.
   const effectiveTools = opts.tools ?? (loadedPreset ? 'curated' : 'none');
@@ -717,40 +719,33 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   // Resolve named extensions → add their tools to toolMap
   const { extensionTools } = await resolveExtensionsFromOpts({
     extensions: opts.extensions,
-    preset: loadedPreset,
+    agentConfig,
     logger,
   });
   for (const t of extensionTools) {
     if (t?.name) toolMap.set(t.name, toToolInstance(t));
   }
 
+  for (const t of createConfiguredRagTools(agentConfig)) {
+    if (t?.name) toolMap.set(t.name, toToolInstance(t));
+  }
+
   // Resolve skills → get prompt text + entries for discovery indexing
   const { skillsPrompt, skillEntries, skillNames } = await resolveSkillsFromOpts({
     skills: opts.skills,
-    preset: loadedPreset,
+    agentConfig,
     logger,
   });
 
   // Capability discovery — semantic search + graph re-ranking for tool/skill context
-  const discoveryOpts: WunderlandDiscoveryConfig = { ...opts.discovery };
-  if (agentConfig.discovery) {
-    const d = agentConfig.discovery;
-    discoveryOpts.enabled ??= d.enabled;
-    discoveryOpts.recallProfile ??= d.recallProfile;
-    discoveryOpts.embeddingProvider ??= d.embeddingProvider;
-    discoveryOpts.embeddingModel ??= d.embeddingModel;
-    discoveryOpts.scanManifestDirs ??= d.scanManifests;
-    if (d.tier0Budget || d.tier1Budget || d.tier2Budget || d.tier1TopK || d.tier2TopK) {
-      discoveryOpts.config = {
-        ...(discoveryOpts.config ?? {}),
-        ...(d.tier0Budget !== undefined ? { tier0TokenBudget: d.tier0Budget } : {}),
-        ...(d.tier1Budget !== undefined ? { tier1TokenBudget: d.tier1Budget } : {}),
-        ...(d.tier2Budget !== undefined ? { tier2TokenBudget: d.tier2Budget } : {}),
-        ...(d.tier1TopK !== undefined ? { tier1TopK: d.tier1TopK } : {}),
-        ...(d.tier2TopK !== undefined ? { tier2TopK: d.tier2TopK } : {}),
-      };
-    }
-  }
+  const discoveryOpts: WunderlandDiscoveryConfig = {
+    ...buildDiscoveryOptionsFromAgentConfig(agentConfig),
+    ...opts.discovery,
+    config: {
+      ...(buildDiscoveryOptionsFromAgentConfig(agentConfig).config ?? {}),
+      ...(opts.discovery?.config ?? {}),
+    },
+  };
   const discoveryManager = new WunderlandDiscoveryManager(discoveryOpts);
   try {
     await discoveryManager.initialize({
@@ -791,9 +786,14 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     logger,
   });
   await adaptiveRuntime.initialize();
+  const activePersonaId =
+    typeof agentConfig.selectedPersonaId === 'string' && agentConfig.selectedPersonaId.trim()
+      ? agentConfig.selectedPersonaId.trim()
+      : String(agentConfig.seedId || workspace.agentId);
 
   const baseToolContext: Record<string, unknown> = {
     agentId: workspace.agentId,
+    personaId: activePersonaId,
     securityTier: policy.securityTier,
     permissionSet: policy.permissionSet,
     toolAccessProfile: policy.toolAccessProfile,
@@ -830,6 +830,11 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       names: [...skillNames].sort(),
     },
     workspace: { agentId: workspace.agentId, baseDir: workspace.baseDir, workingDirectory },
+    persona: {
+      selectedId: activePersonaId !== String(agentConfig.seedId || workspace.agentId) ? activePersonaId : undefined,
+      name: selectedPersona?.name,
+      availableCount: availablePersonas?.length ?? 0,
+    },
     discovery: discoveryManager.getStats(),
   });
 
@@ -931,7 +936,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         scope: {
           sessionId: id,
           userId,
-          personaId: workspace.agentId,
+          personaId: activePersonaId,
           tenantId,
         },
         requestedToolFailureMode: sendOpts?.toolFailureMode,
@@ -1024,7 +1029,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
             scope: {
               sessionId: id,
               userId,
-              personaId: workspace.agentId,
+              personaId: activePersonaId,
               tenantId,
             },
             degraded: adaptiveDecision.degraded || fallbackTriggered,

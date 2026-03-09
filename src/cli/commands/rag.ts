@@ -10,13 +10,11 @@ import { accent, dim, success as sColor, error as eColor } from '../ui/theme.js'
 import * as fmt from '../ui/format.js';
 import { getUiRuntime } from '../ui/runtime.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+import { normalizeRagApiBaseUrl } from '../../rag/rag-client.js';
 
-function getBackendUrl(): string {
-  return process.env.WUNDERLAND_BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
-}
-
-function ragUrl(base: string): string {
-  return base.replace(/\/+$/, '') + '/agentos/rag';
+function getRagBaseUrl(): string {
+  const base = process.env.WUNDERLAND_BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+  return normalizeRagApiBaseUrl(base);
 }
 
 function arrow(): string {
@@ -24,7 +22,7 @@ function arrow(): string {
 }
 
 async function ragFetch(urlPath: string, options?: { method?: string; body?: unknown }): Promise<any> {
-  const base = ragUrl(getBackendUrl());
+  const base = getRagBaseUrl();
   const method = options?.method ?? 'GET';
   const res = await fetch(`${base}${urlPath}`, {
     method,
@@ -75,7 +73,7 @@ async function cmdIngestImage(args: string[]): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const base = ragUrl(getBackendUrl());
+  const base = getRagBaseUrl();
   const data = await readFile(filePath);
   const formData = new FormData();
   formData.append('file', new Blob([data]), path.basename(filePath));
@@ -93,7 +91,7 @@ async function cmdIngestAudio(args: string[]): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const base = ragUrl(getBackendUrl());
+  const base = getRagBaseUrl();
   const data = await readFile(filePath);
   const formData = new FormData();
   formData.append('file', new Blob([data]), path.basename(filePath));
@@ -344,7 +342,7 @@ async function cmdHealth(): Promise<void> {
     fmt.blank();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const backendUrl = getBackendUrl();
+    const backendUrl = getRagBaseUrl();
     let hint = '';
     if (message.includes('fetch failed') || message.includes('ECONNREFUSED')) {
       hint = `\n\nBackend not running at ${backendUrl}.\nStart it with: cd backend && npx tsx src/main.ts`;

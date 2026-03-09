@@ -160,7 +160,16 @@ export default async function cmdCreate(
 ): Promise<void> {
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
-  p.intro(accent('Natural Language Agent Creator'));
+  fmt.blank();
+  fmt.panel({
+    title: 'Natural Language Agent Creator',
+    style: 'info',
+    content: [
+      'Describe your agent in plain English and the CLI will',
+      'extract a full configuration using your LLM provider.',
+    ].join('\n'),
+  });
+  fmt.blank();
 
   // ── Step 1: Get description ─────────────────────────────────────────────
   let description = args.join(' ').trim();
@@ -388,8 +397,18 @@ export default async function cmdCreate(
   }
 
   // ── Output ───────────────────────────────────────────────────────────────
-  p.outro(sColor('Agent created successfully!'));
+  const g = glyphs();
   fmt.blank();
-  fmt.note(`Next: ${sColor(`cd ${dirName}`)} && ${sColor('cp .env.example .env')} && ${sColor('wunderland start')}`);
+  fmt.panel({
+    title: `${g.ok} Agent Created`,
+    style: 'success',
+    content: [
+      `Agent:     ${accent(String(config.displayName))}`,
+      `Directory: ${dim('./' + dirName + '/')}`,
+      `Security:  ${securityTier}`,
+      '',
+      `Next: ${sColor(`cd ${dirName} && cp .env.example .env && wunderland start`)}`,
+    ].join('\n'),
+  });
   fmt.blank();
 }

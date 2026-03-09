@@ -328,11 +328,15 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
   const tenantId =
     (typeof (message as any)?.organizationId === 'string' && String((message as any).organizationId).trim())
     || defaultTenantId;
+  const activePersonaId =
+    typeof ctx.cfg?.selectedPersonaId === 'string' && ctx.cfg.selectedPersonaId.trim()
+      ? ctx.cfg.selectedPersonaId.trim()
+      : seed.seedId;
   const adaptiveDecision = adaptiveRuntime.resolveTurnDecision({
     scope: {
       sessionId: sessionKey,
       userId: senderId,
-      personaId: seed.seedId,
+      personaId: activePersonaId,
       tenantId: tenantId || undefined,
     },
   });
@@ -345,7 +349,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
     if (canUseLLM) {
       const toolContext = {
         gmiId: `wunderland-channel-${sessionKey}`,
-        personaId: seed.seedId,
+        personaId: activePersonaId,
         userContext: {
           userId: senderId,
           platform,
@@ -500,7 +504,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
         scope: {
           sessionId: sessionKey,
           userId: senderId,
-          personaId: seed.seedId,
+          personaId: activePersonaId,
           tenantId: tenantId || undefined,
         },
         degraded: adaptiveDecision.degraded || fallbackTriggered,

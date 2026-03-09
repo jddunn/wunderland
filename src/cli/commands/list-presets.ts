@@ -45,6 +45,8 @@ export default async function cmdListPresets(
         securityTier: p.securityTier,
         suggestedSkills: p.suggestedSkills,
         suggestedChannels: p.suggestedChannels,
+        discovery: p.discovery,
+        rag: p.rag,
       })),
     };
     console.log(JSON.stringify(output, null, 2));
@@ -60,12 +62,14 @@ export default async function cmdListPresets(
         { label: 'ID', width: 22 },
         { label: 'Name', width: 26 },
         { label: 'Security', width: 12 },
+        { label: 'RAG', width: 10 },
         { label: 'Skills' },
       ],
       rows: agentPresets.map((p) => [
         accent(p.id),
         p.name,
         muted(p.securityTier),
+        p.rag?.enabled ? info(`${p.rag.preset ?? 'on'}`) : dim('off'),
         p.suggestedSkills.length > 0 ? info(p.suggestedSkills.join(dim(', '))) : dim('none'),
       ]),
     });

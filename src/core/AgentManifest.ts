@@ -6,6 +6,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { WunderlandAgentConfig } from '../api/types.js';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -61,12 +63,35 @@ export interface AgentManifest {
 
   /** Custom system prompt */
   systemPrompt?: string;
+  /** Default selected AgentOS persona ID */
+  selectedPersonaId?: string;
+  /** Optional LLM defaults */
+  llmProvider?: string;
+  llmModel?: string;
+  llmAuthMethod?: 'api-key' | 'oauth';
+  /** Optional extension configuration */
+  extensions?: WunderlandAgentConfig['extensions'];
+  extensionOverrides?: WunderlandAgentConfig['extensionOverrides'];
+  /** Optional discovery and RAG configuration */
+  discovery?: WunderlandAgentConfig['discovery'];
+  rag?: WunderlandAgentConfig['rag'];
+  /** Optional AgentOS persona registry configuration */
+  personaRegistry?: WunderlandAgentConfig['personaRegistry'];
 
   /** Integrity hash from sealed.json (if sealed) */
   configHash?: string;
 
   /** Whether the agent was sealed at export time */
   sealed?: boolean;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function cloneJson<T>(value: T): T {
+  if (value === undefined) return value;
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 // ============================================================================
@@ -111,7 +136,7 @@ export function exportAgent(dir: string): AgentManifest {
   const manifest: AgentManifest = {
     manifestVersion: 1,
     exportedAt: new Date().toISOString(),
-    presetId: cfg.presetId as string | undefined,
+    presetId: typeof cfg.presetId === 'string' ? cfg.presetId : undefined,
     seedId: String(cfg.seedId ?? ''),
     name: String(cfg.displayName ?? ''),
     description: String(cfg.bio ?? ''),
@@ -126,9 +151,26 @@ export function exportAgent(dir: string): AgentManifest {
     securityTier: (cfg.security as Record<string, unknown>)?.tier as string | undefined,
     security: cfg.security as AgentManifest['security'],
     skills: Array.isArray(cfg.skills) ? (cfg.skills as string[]) : [],
-    channels: Array.isArray(cfg.suggestedChannels) ? (cfg.suggestedChannels as string[]) : [],
+    channels: Array.isArray(cfg.channels)
+      ? (cfg.channels as string[])
+      : Array.isArray(cfg.suggestedChannels)
+        ? (cfg.suggestedChannels as string[])
+        : [],
     persona,
     systemPrompt: typeof cfg.systemPrompt === 'string' ? cfg.systemPrompt : undefined,
+    selectedPersonaId: typeof cfg.selectedPersonaId === 'string' ? cfg.selectedPersonaId : undefined,
+    llmProvider: typeof cfg.llmProvider === 'string' ? cfg.llmProvider : undefined,
+    llmModel: typeof cfg.llmModel === 'string' ? cfg.llmModel : undefined,
+    llmAuthMethod: cfg.llmAuthMethod === 'oauth' || cfg.llmAuthMethod === 'api-key' ? cfg.llmAuthMethod : undefined,
+    extensions: isPlainObject(cfg.extensions) ? cloneJson(cfg.extensions as AgentManifest['extensions']) : undefined,
+    extensionOverrides: isPlainObject(cfg.extensionOverrides)
+      ? cloneJson(cfg.extensionOverrides as AgentManifest['extensionOverrides'])
+      : undefined,
+    discovery: isPlainObject(cfg.discovery) ? cloneJson(cfg.discovery as AgentManifest['discovery']) : undefined,
+    rag: isPlainObject(cfg.rag) ? cloneJson(cfg.rag as AgentManifest['rag']) : undefined,
+    personaRegistry: isPlainObject(cfg.personaRegistry)
+      ? cloneJson(cfg.personaRegistry as AgentManifest['personaRegistry'])
+      : undefined,
     configHash,
     sealed,
   };
@@ -161,6 +203,15 @@ export function importAgent(manifest: AgentManifest, targetDir: string): void {
     skills: manifest.skills,
     suggestedChannels: manifest.channels,
     presetId: manifest.presetId,
+    selectedPersonaId: manifest.selectedPersonaId,
+    llmProvider: manifest.llmProvider,
+    llmModel: manifest.llmModel,
+    llmAuthMethod: manifest.llmAuthMethod,
+    extensions: cloneJson(manifest.extensions),
+    extensionOverrides: cloneJson(manifest.extensionOverrides),
+    discovery: cloneJson(manifest.discovery),
+    rag: cloneJson(manifest.rag),
+    personaRegistry: cloneJson(manifest.personaRegistry),
     skillsDir: './skills',
   };
 
@@ -202,6 +253,15 @@ export function validateManifest(data: unknown): data is AgentManifest {
   if (typeof d.hexacoTraits !== 'object' || d.hexacoTraits === null) return false;
   if (!Array.isArray(d.skills)) return false;
   if (!Array.isArray(d.channels)) return false;
+  if ('selectedPersonaId' in d && d.selectedPersonaId !== undefined && typeof d.selectedPersonaId !== 'string') return false;
+  if ('llmProvider' in d && d.llmProvider !== undefined && typeof d.llmProvider !== 'string') return false;
+  if ('llmModel' in d && d.llmModel !== undefined && typeof d.llmModel !== 'string') return false;
+  if ('llmAuthMethod' in d && d.llmAuthMethod !== undefined && d.llmAuthMethod !== 'api-key' && d.llmAuthMethod !== 'oauth') return false;
+  if ('extensions' in d && d.extensions !== undefined && !isPlainObject(d.extensions)) return false;
+  if ('extensionOverrides' in d && d.extensionOverrides !== undefined && !isPlainObject(d.extensionOverrides)) return false;
+  if ('discovery' in d && d.discovery !== undefined && !isPlainObject(d.discovery)) return false;
+  if ('rag' in d && d.rag !== undefined && !isPlainObject(d.rag)) return false;
+  if ('personaRegistry' in d && d.personaRegistry !== undefined && !isPlainObject(d.personaRegistry)) return false;
 
   return true;
 }

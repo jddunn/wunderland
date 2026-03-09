@@ -17,6 +17,7 @@ import {
   normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
 } from '../runtime/policy.js';
+import { SkillRegistry, resolveDefaultSkillsDirs } from '../skills/index.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
 import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
@@ -30,7 +31,13 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../core/index.js';
+import {
+  buildDiscoveryOptionsFromAgentConfig,
+  resolveEffectiveAgentConfig,
+} from '../config/effective-agent-config.js';
 import { resolveExtensionsByNames } from '../core/PresetExtensionResolver.js';
+import { WunderlandDiscoveryManager } from '../discovery/index.js';
+import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import type { WunderlandAgentConfig, WunderlandLLMConfig, WunderlandWorkspace } from './types.js';
 
 type LoggerLike = {
@@ -61,6 +68,26 @@ function consoleLogger(): Required<LoggerLike> {
     info: (msg, meta) => console.log(msg, meta ?? ''),
     warn: (msg, meta) => console.warn(msg, meta ?? ''),
     error: (msg, meta) => console.error(msg, meta ?? ''),
+  };
+}
+
+function toToolInstance(tool: {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  hasSideEffects?: boolean;
+  category?: string;
+  requiredCapabilities?: string[];
+  execute: (...args: any[]) => any;
+}): ToolInstance {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema as any,
+    hasSideEffects: tool.hasSideEffects === true,
+    category: typeof tool.category === 'string' && tool.category.trim() ? tool.category : 'productivity',
+    requiredCapabilities: tool.requiredCapabilities,
+    execute: tool.execute as any,
   };
 }
 
@@ -308,6 +335,11 @@ async function loadToolMapFromAgentConfig(opts: {
     toolMap.set(metaTool.name, metaTool);
   }
 
+  for (const ragTool of createConfiguredRagTools(cfg)) {
+    if (!ragTool?.name) continue;
+    toolMap.set(ragTool.name, toToolInstance(ragTool as any));
+  }
+
   // Enforce policy (tool access profile + permission set).
   const filtered = filterToolMapByPolicy({ toolMap, toolAccessProfile: policy.toolAccessProfile, permissions });
   return { toolMap: filtered.toolMap, preloadedPackages };
@@ -339,7 +371,12 @@ export async function createWunderlandChatRuntime(opts: {
     warn: opts.logger?.warn ?? baseLogger.warn,
     error: opts.logger?.error ?? baseLogger.error,
   };
-  const agentConfig = opts.agentConfig ?? {};
+  const workingDirectory = opts.workingDirectory ?? process.cwd();
+  const { agentConfig } = await resolveEffectiveAgentConfig({
+    agentConfig: opts.agentConfig ?? {},
+    workingDirectory,
+    logger,
+  });
   const policy = normalizeRuntimePolicy(agentConfig as any);
   const turnApprovalMode = inferTurnApprovalMode(agentConfig);
   const strictToolNames = resolveStrictToolNames((agentConfig as any)?.toolCalling?.strictToolNames);
@@ -355,8 +392,11 @@ export async function createWunderlandChatRuntime(opts: {
   };
 
   const seed = buildSeedFromAgentConfig(agentConfig, seedIdForWorkspace);
+  const activePersonaId =
+    typeof agentConfig.selectedPersonaId === 'string' && agentConfig.selectedPersonaId.trim()
+      ? agentConfig.selectedPersonaId.trim()
+      : seed.seedId;
   const dangerouslySkipCommandSafety = false;
-  const workingDirectory = opts.workingDirectory ?? process.cwd();
 
   const { toolMap } = await loadToolMapFromAgentConfig({
     agentConfig,
@@ -367,6 +407,73 @@ export async function createWunderlandChatRuntime(opts: {
     logger,
   });
 
+  let skillsPrompt = '';
+  const skillEntries: Array<{ name: string; description: string; content: string }> = [];
+  const skillRegistry = new SkillRegistry();
+  const dirs = resolveDefaultSkillsDirs({ cwd: workingDirectory });
+  if (dirs.length > 0) {
+    try {
+      await skillRegistry.loadFromDirs(dirs);
+      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
+      if (snapshot.prompt) skillsPrompt = snapshot.prompt;
+      if (typeof skillRegistry.listAll === 'function') {
+        for (const entry of skillRegistry.listAll() as any[]) {
+          const skill = entry.skill ?? entry;
+          skillEntries.push({
+            name: skill.name ?? 'unknown',
+            description: skill.description ?? '',
+            content: skill.content ?? '',
+          });
+        }
+      }
+    } catch (error) {
+      logger.warn?.('[wunderland/api] Failed to load filesystem skills', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (Array.isArray(agentConfig.skills) && agentConfig.skills.length > 0) {
+    try {
+      const { resolveSkillsByNames } = await import('../core/PresetSkillResolver.js');
+      const snapshot = await resolveSkillsByNames(agentConfig.skills);
+      if (snapshot?.prompt) {
+        skillsPrompt = [skillsPrompt, snapshot.prompt].filter(Boolean).join('\n\n');
+      }
+      if (Array.isArray(snapshot?.skills)) {
+        const existing = new Set(skillEntries.map((entry) => entry.name));
+        for (const skill of snapshot.skills as any[]) {
+          const name = typeof skill === 'string' ? skill : skill.name ?? 'unknown';
+          if (!existing.has(name)) {
+            skillEntries.push({ name, description: '', content: '' });
+            existing.add(name);
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn?.('[wunderland/api] Failed to resolve curated skills', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const discoveryManager = new WunderlandDiscoveryManager(buildDiscoveryOptionsFromAgentConfig(agentConfig));
+  try {
+    await discoveryManager.initialize({
+      toolMap,
+      skillEntries: skillEntries.length > 0 ? skillEntries : undefined,
+      llmConfig: { providerId: opts.llm.providerId, apiKey: opts.llm.apiKey, baseUrl: opts.llm.baseUrl },
+    });
+    const metaTool = discoveryManager.getMetaTool();
+    if (metaTool) {
+      toolMap.set(metaTool.name, toToolInstance(metaTool as any));
+    }
+  } catch (error) {
+    logger.warn?.('[wunderland/api] Discovery initialization failed (continuing without)', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   const sessions = new Map<string, Array<Record<string, unknown>>>();
   const autoApprove =
     opts.autoApproveToolCalls === true || policy.executionMode === 'autonomous';
@@ -376,6 +483,7 @@ export async function createWunderlandChatRuntime(opts: {
     mode: 'library',
     lazyTools: agentConfig.lazyTools === true,
     autoApproveToolCalls: autoApprove,
+    skillsPrompt: skillsPrompt || undefined,
     turnApprovalMode,
   });
 
@@ -392,6 +500,7 @@ export async function createWunderlandChatRuntime(opts: {
 
   const toolContext: Record<string, unknown> = {
     agentId: workspace.agentId,
+    personaId: activePersonaId,
     securityTier: policy.securityTier,
     permissionSet: policy.permissionSet,
     toolAccessProfile: policy.toolAccessProfile,

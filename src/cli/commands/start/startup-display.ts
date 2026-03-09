@@ -5,7 +5,7 @@
 
 import * as path from 'node:path';
 import * as fmt from '../../ui/format.js';
-import { accent, success as sColor, info as iColor, warn as wColor } from '../../ui/theme.js';
+import { accent, dim, success as sColor, info as iColor, warn as wColor } from '../../ui/theme.js';
 import { shutdownWunderlandOtel } from '../../observability/otel.js';
 import { recordAgentStart } from '../../config/agent-history.js';
 
@@ -103,6 +103,9 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
   fmt.section('Agent Server Running');
   fmt.kvPair('Agent', accent(displayName));
   fmt.kvPair('Seed ID', seedId);
+  if (ctx.selectedPersona) {
+    fmt.kvPair('AgentOS Persona', `${accent(ctx.selectedPersona.name)} ${dim(`(${ctx.selectedPersona.id})`)}`);
+  }
   fmt.kvPair('LLM Provider', providerId);
   fmt.kvPair('Model', model);
   fmt.kvPair('API Key', canUseLLM ? sColor('configured') : wColor('not set'));

@@ -10,6 +10,7 @@ import type { GlobalFlags } from '../types.js';
 import { PERSONALITY_PRESETS } from '../constants.js';
 import { accent, success as sColor, warn as wColor, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
 import { PresetLoader, type AgentPreset } from '../../core/PresetLoader.js';
 import { isValidSecurityTier, getSecurityTier } from '../../security/SecurityTiers.js';
@@ -178,13 +179,16 @@ export default async function cmdInit(
     agentPreset: agentPreset ? {
       name: agentPreset.name,
       description: agentPreset.description,
-      hexacoTraits: agentPreset.hexacoTraits as unknown as Record<string, number>,
+      hexacoTraits: agentPreset.hexacoTraits,
       securityTier: agentPreset.securityTier,
       suggestedSkills: agentPreset.suggestedSkills,
       suggestedChannels: agentPreset.suggestedChannels,
       suggestedExtensions: (agentPreset as any).suggestedExtensions,
       extensionOverrides: (agentPreset as any).extensionOverrides,
       toolAccessProfile: (agentPreset as any).toolAccessProfile,
+      discovery: (agentPreset as any).discovery,
+      rag: (agentPreset as any).rag,
+      persona: agentPreset.persona,
       id: agentPreset.id,
     } : undefined,
   });
@@ -209,59 +213,43 @@ export default async function cmdInit(
   // ── Output ─────────────────────────────────────────────────────────────
   const resolvedTierName: SecurityTierName = securityTierName ?? 'permissive';
   const tierConfig = getSecurityTier(resolvedTierName);
+  const g = glyphs();
 
-  fmt.section('Project Initialized');
-  fmt.kvPair('Directory', accent(targetDir));
-  fmt.kvPair('Seed ID', String(config.seedId));
-  fmt.kvPair('Display Name', String(config.displayName));
-
-  if (llmProvider) {
-    fmt.kvPair('LLM Provider', accent(llmProvider));
-    fmt.kvPair('Model', accent(llmModel || 'default'));
-  }
+  const summaryLines: (string | null)[] = [
+    `Agent:     ${accent(String(config.displayName))}`,
+    `Directory: ${dim(targetDir)}`,
+    `Seed ID:   ${String(config.seedId)}`,
+    llmProvider ? `Provider:  ${accent(llmProvider)}` : null,
+    llmModel ? `Model:     ${accent(llmModel)}` : null,
+  ];
 
   if (agentPreset) {
-    fmt.kvPair('Preset', accent(agentPreset.id));
-    fmt.kvPair('Security Tier', accent(agentPreset.securityTier));
+    summaryLines.push(`Preset:    ${accent(agentPreset.id)}`);
+    summaryLines.push(`Security:  ${accent(agentPreset.securityTier)}`);
     if (agentPreset.suggestedSkills.length > 0) {
-      fmt.kvPair('Skills', agentPreset.suggestedSkills.join(', '));
-    }
-    if (agentPreset.suggestedChannels.length > 0) {
-      fmt.kvPair('Channels', agentPreset.suggestedChannels.join(', '));
-    }
-    const presetExtensions = (agentPreset as any)?.suggestedExtensions;
-    if (presetExtensions) {
-      const extensionParts: string[] = [];
-      if (presetExtensions.tools?.length) extensionParts.push(`tools: ${presetExtensions.tools.join(', ')}`);
-      if (presetExtensions.voice?.length) extensionParts.push(`voice: ${presetExtensions.voice.join(', ')}`);
-      if (presetExtensions.productivity?.length) extensionParts.push(`productivity: ${presetExtensions.productivity.join(', ')}`);
-      if (extensionParts.length > 0) {
-        fmt.kvPair('Extensions', extensionParts.join('; '));
-      }
+      summaryLines.push(`Skills:    ${agentPreset.suggestedSkills.join(', ')}`);
     }
   } else {
     const presetKey = presetFlag?.toUpperCase().replace(/-/g, '_');
     if (presetKey && hexacoValues) {
       const preset = PERSONALITY_PRESETS.find((p) => p.id === presetKey);
-      fmt.kvPair('Personality', preset ? preset.label : presetKey);
+      summaryLines.push(`Personality: ${preset ? preset.label : presetKey}`);
     }
-    fmt.kvPair('Security Tier', accent(tierConfig.displayName));
-    fmt.kvPair('', dim(tierConfig.description));
+    summaryLines.push(`Security:  ${accent(tierConfig.displayName)}`);
     const executionMode = config.executionMode as string;
-    fmt.kvPair('Execution Mode', executionMode === 'autonomous' ? wColor(executionMode) : sColor(executionMode));
-    fmt.kvPair('Tool Profile', accent(config.toolAccessProfile as string));
-    const permSet = config.permissionSet as string;
-    fmt.kvPair('CLI Execution', permSet === 'autonomous' ? wColor('enabled') : dim('disabled'));
+    summaryLines.push(`Execution: ${executionMode === 'autonomous' ? wColor(executionMode) : sColor(executionMode)}`);
   }
 
-  fmt.kvPair('Skills Dir', dim('./skills'));
+  const nextCmd = wroteEnv
+    ? `cd ${dirName} && wunderland start`
+    : `cd ${dirName} && cp .env.example .env && wunderland start`;
+  summaryLines.push('', `Next: ${sColor(nextCmd)}`);
+
   fmt.blank();
-
-  if (wroteEnv) {
-    fmt.note(`Next: ${sColor(`cd ${dirName}`)} && ${sColor('wunderland start')}`);
-  } else {
-    fmt.note(`Next: ${sColor(`cd ${dirName}`)} && ${sColor('cp .env.example .env')} && ${sColor('wunderland start')}`);
-  }
-  fmt.note(`Restrict permissions: ${dim('wunderland init --security-tier=balanced')}`);
+  fmt.panel({
+    title: `${g.ok} Agent Scaffolded`,
+    style: 'success',
+    content: summaryLines.filter(Boolean).join('\n'),
+  });
   fmt.blank();
 }
