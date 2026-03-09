@@ -39,6 +39,8 @@ export interface HealthResponse {
   ok: boolean;
   seedId: string;
   name: string;
+  persona?: { id?: string; name?: string };
+  personasAvailable?: number;
   uptime?: number;
   version?: string;
   port?: number;

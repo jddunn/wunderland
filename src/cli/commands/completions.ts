@@ -33,6 +33,7 @@ const COMMANDS: [cmd: string, desc: string][] = [
   ['seal', 'Seal agent config (integrity hash)'],
   ['verify-seal', 'Verify sealed.json integrity'],
   ['list-presets', 'List personality & agent presets'],
+  ['list-personas', 'List AgentOS personas'],
   ['skills', 'Skills management'],
   ['extensions', 'Extension management'],
   ['rag', 'RAG memory management'],

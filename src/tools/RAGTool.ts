@@ -7,6 +7,7 @@
 
 import type { ITool, ToolExecutionResult, ToolExecutionContext, JSONSchemaObject } from '@framers/agentos';
 import type { RAGAuditTrail } from '@framers/agentos';
+import { WunderlandRAGClient, type RAGQueryInput } from '../rag/rag-client.js';
 
 /** Optional audit log interface (matches ActionAuditLog.log signature). */
 interface AuditLogLike {
@@ -23,6 +24,24 @@ export interface RAGToolConfig {
   backendUrl: string;
   authToken?: string;
   defaultTopK?: number;
+  defaultCollectionIds?: string[];
+  preset?: 'fast' | 'balanced' | 'accurate';
+  includeAudit?: boolean;
+  includeGraphRag?: boolean;
+  includeDebug?: boolean;
+  queryVariants?: string[];
+  rewrite?: {
+    enabled?: boolean;
+    maxVariants?: number;
+  };
+  strategy?: 'similarity' | 'mmr' | 'hybrid_search';
+  strategyParams?: {
+    mmrLambda?: number;
+    mmrCandidateMultiplier?: number;
+  };
+  similarityThreshold?: number;
+  filters?: Record<string, unknown>;
+  includeMetadata?: boolean;
   /** Optional audit log for recording RAG operations. */
   auditLog?: AuditLogLike;
   /** Agent seed ID for audit attribution. */
@@ -33,10 +52,11 @@ export const RAG_TOOL_ID = 'rag_query';
 
 export class RAGTool implements ITool {
   readonly id = RAG_TOOL_ID;
-  readonly name = 'RAG Memory Query';
+  readonly name = RAG_TOOL_ID;
   readonly displayName = 'RAG Memory Query';
   readonly description = 'Search the agent knowledge base using semantic and keyword retrieval. Returns relevant document chunks with audit trail.';
   readonly hasSideEffects = false;
+  readonly category = 'memory';
 
   readonly inputSchema: JSONSchemaObject = {
     type: 'object',
@@ -44,46 +64,64 @@ export class RAGTool implements ITool {
       query: { type: 'string', description: 'The search query text.' },
       topK: { type: 'number', description: 'Maximum number of results to return (default: 5).' },
       collectionId: { type: 'string', description: 'Optional collection ID to search within.' },
+      preset: { type: 'string', enum: ['fast', 'balanced', 'accurate'], description: 'Retrieval preset override.' },
+      includeGraphRag: { type: 'boolean', description: 'When true, include graph-based entity and relationship context.' },
+      includeAudit: { type: 'boolean', description: 'When true, include RAG audit metadata.' },
+      debug: { type: 'boolean', description: 'When true, include pipeline debug trace.' },
     },
     required: ['query'],
   };
 
   private readonly config: RAGToolConfig;
+  private readonly client: WunderlandRAGClient;
 
   constructor(config: RAGToolConfig) {
     this.config = config;
+    this.client = new WunderlandRAGClient({ baseUrl: config.backendUrl, authToken: config.authToken });
   }
 
   async execute(input: Record<string, unknown>, _context?: ToolExecutionContext): Promise<ToolExecutionResult> {
     const query = input.query as string;
     const topK = (input.topK as number) ?? this.config.defaultTopK ?? 5;
     const collectionId = input.collectionId as string | undefined;
-
-    const baseUrl = this.config.backendUrl.replace(/\/+$/, '') + '/api/agentos/rag';
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.config.authToken) headers['Authorization'] = `Bearer ${this.config.authToken}`;
+    const request: RAGQueryInput = {
+      query,
+      topK,
+      preset:
+        (input.preset as RAGQueryInput['preset'])
+        ?? this.config.preset
+        ?? undefined,
+      collectionIds: collectionId
+        ? [collectionId]
+        : this.config.defaultCollectionIds,
+      includeAudit:
+        typeof input.includeAudit === 'boolean'
+          ? input.includeAudit
+          : (this.config.includeAudit ?? true),
+      includeGraphRag:
+        typeof input.includeGraphRag === 'boolean'
+          ? input.includeGraphRag
+          : (this.config.includeGraphRag ?? false),
+      debug:
+        typeof input.debug === 'boolean'
+          ? input.debug
+          : (this.config.includeDebug ?? false),
+      queryVariants: this.config.queryVariants,
+      rewrite: this.config.rewrite,
+      strategy: this.config.strategy,
+      strategyParams: this.config.strategyParams,
+      similarityThreshold: this.config.similarityThreshold,
+      filters: this.config.filters,
+      includeMetadata: this.config.includeMetadata,
+    };
 
     try {
-      const res = await fetch(`${baseUrl}/query`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          query,
-          topK,
-          collectionIds: collectionId ? [collectionId] : undefined,
-          includeAudit: true,
-        }),
-      });
-
-      if (!res.ok) {
-        return { success: false, output: `RAG query failed (${res.status})` };
-      }
-
-      const result = await res.json() as any;
+      const result = await this.client.query(request);
       const chunks = (result.chunks ?? []).map((c: any) => ({
         content: c.content,
         score: c.score,
         documentId: c.documentId,
+        metadata: c.metadata,
       }));
 
       // Log audit trail if available
@@ -124,6 +162,8 @@ export class RAGTool implements ITool {
           durationMs: auditTrail.summary.totalDurationMs,
         };
       }
+      if (result.graphContext) output.graphContext = result.graphContext;
+      if (result.debugTrace) output.debugTrace = result.debugTrace;
 
       return {
         success: true,

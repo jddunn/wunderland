@@ -6,6 +6,11 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type {
+  WunderlandAgentDiscoveryConfig,
+  WunderlandAgentRagConfig,
+  WunderlandExtensionConfig,
+} from '../api/types.js';
 
 // ============================================================================
 // Types
@@ -44,18 +49,19 @@ export interface AgentPreset {
   suggestedChannels: string[];
 
   /** Suggested extension providers to auto-enable for this agent */
-  suggestedExtensions?: {
-    tools?: string[];
-    voice?: string[];
-    productivity?: string[];
-    channels?: string[];
-  };
+  suggestedExtensions?: WunderlandExtensionConfig;
 
   /** Optional per-extension overrides (enabled, priority, options) */
   extensionOverrides?: Record<string, { enabled?: boolean; priority?: number; options?: unknown }>;
 
   /** Optional tool access profile (controls which tools are enabled) */
   toolAccessProfile?: string;
+
+  /** Optional discovery defaults to apply when this preset is used. */
+  discovery?: WunderlandAgentDiscoveryConfig;
+
+  /** Optional RAG defaults to apply when this preset is used. */
+  rag?: WunderlandAgentRagConfig;
 
   /** Full contents of the PERSONA.md file */
   persona: string;
@@ -280,6 +286,8 @@ export class PresetLoader {
       suggestedExtensions: config.suggestedExtensions as AgentPreset['suggestedExtensions'],
       extensionOverrides: config.extensionOverrides as AgentPreset['extensionOverrides'],
       toolAccessProfile: config.toolAccessProfile as AgentPreset['toolAccessProfile'],
+      discovery: config.discovery as AgentPreset['discovery'],
+      rag: config.rag as AgentPreset['rag'],
       persona,
     };
   }

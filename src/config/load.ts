@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { WunderlandAgentConfig, WunderlandProviderId } from '../api/types.js';
 import type { LLMProviderConfig } from '../runtime/tool-calling.js';
 import { WunderlandConfigError } from './errors.js';
+import { resolveEffectiveAgentConfig } from './effective-agent-config.js';
 import { validateWunderlandAgentConfig } from './schema.js';
 
 export async function loadAgentConfig(opts: {
@@ -12,7 +13,14 @@ export async function loadAgentConfig(opts: {
   configPath?: string;
   workingDirectory: string;
 }): Promise<WunderlandAgentConfig> {
-  if (opts.agentConfig) return opts.agentConfig;
+  if (opts.agentConfig) {
+    return (
+      await resolveEffectiveAgentConfig({
+        agentConfig: opts.agentConfig,
+        workingDirectory: opts.workingDirectory,
+      })
+    ).agentConfig;
+  }
   if (!opts.configPath) return {};
 
   const configPath = path.resolve(opts.workingDirectory, opts.configPath);
@@ -41,7 +49,12 @@ export async function loadAgentConfig(opts: {
     throw new WunderlandConfigError('Invalid agent config.', validated.issues.map((i) => ({ ...i, path: i.path || 'config' })));
   }
 
-  return validated.config;
+  return (
+    await resolveEffectiveAgentConfig({
+      agentConfig: validated.config,
+      workingDirectory: opts.workingDirectory,
+    })
+  ).agentConfig;
 }
 
 export function resolveProviderId(raw: unknown): WunderlandProviderId {
@@ -154,4 +167,3 @@ export async function resolveLlmConfig(opts: {
 
   return { providerId, apiKey, model, baseUrl, fallback, canUseLLM, openaiFallbackEnabled, authMethod, getApiKey };
 }
-

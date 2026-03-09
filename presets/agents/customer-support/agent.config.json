@@ -11,11 +11,37 @@
   },
   "securityTier": "strict",
   "toolAccessProfile": "social-citizen",
-  "suggestedSkills": ["healthcheck"],
-  "suggestedChannels": ["webchat", "telegram", "whatsapp", "discord"],
+  "suggestedSkills": [
+    "healthcheck"
+  ],
+  "suggestedChannels": [
+    "webchat",
+    "telegram",
+    "whatsapp",
+    "discord"
+  ],
   "suggestedExtensions": {
-    "tools": ["web-search", "giphy"],
-    "voice": ["voice-twilio"],
+    "tools": [
+      "web-search",
+      "giphy"
+    ],
+    "voice": [
+      "voice-twilio"
+    ],
     "productivity": []
+  },
+  "discovery": {
+    "enabled": true,
+    "recallProfile": "balanced",
+    "graphBoostFactor": 1,
+    "tier1MinRelevance": 0.4
+  },
+  "rag": {
+    "enabled": true,
+    "preset": "balanced",
+    "includeGraphRag": false,
+    "includeAudit": false,
+    "defaultTopK": 6,
+    "strategy": "similarity"
   }
 }

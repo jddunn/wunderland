@@ -8,23 +8,27 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../../types.js';
-import { accent } from '../../ui/theme.js';
+import { accent, dim } from '../../ui/theme.js';
 import * as fmt from '../../ui/format.js';
+import { glyphs } from '../../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward, mergeEnv } from '../../config/env-manager.js';
 import { loadConfig } from '../../config/config-manager.js';
+import { resolveEffectiveAgentConfig } from '../../../config/effective-agent-config.js';
 import { buildAgentConfig, writeAgentScaffold, toDisplayName } from '../../helpers/build-agent-scaffold.js';
 import { runInitLlmStep } from '../../wizards/init-llm-step.js';
 import { verifySealedConfig } from '../../seal-utils.js';
 import { PERSONALITY_PRESETS } from '../../constants.js';
-import { success as sColor } from '../../ui/theme.js';
 
 export interface ConfigLoaderContext {
   flags: Record<string, string | boolean>;
   globals: GlobalFlags;
   cfg: any;
+  rawAgentConfig?: any;
   configRaw: string;
   globalConfig: any;
   configDir: string;
+  selectedPersona?: any;
+  availablePersonas?: any[];
 }
 
 /**
@@ -62,10 +66,20 @@ export async function loadAndValidateConfig(
     }
 
     const p = await import('@clack/prompts');
+    const g = glyphs();
+    const origCwd = process.cwd();
     fmt.blank();
-    p.intro(accent('Quick Setup'));
-    fmt.note('No agent.config.json found in this directory.');
-    fmt.note('Each agent lives in its own directory with an agent.config.json file.');
+    fmt.panel({
+      title: 'Quick Setup',
+      style: 'info',
+      content: [
+        'No agent.config.json found in this directory.',
+        '',
+        'Each agent lives in its own directory with an',
+        'agent.config.json file. You can have as many',
+        'agents as you want — just put each in its own folder.',
+      ].join('\n'),
+    });
     fmt.blank();
 
     const dirBasename = path.basename(process.cwd());
@@ -128,8 +142,13 @@ export async function loadAndValidateConfig(
 
     // 3. Personality preset
     let personalityPresetKey: string | undefined;
+    let personalityTraits: Record<string, number> | undefined;
     if (globalConfig.personalityPreset) {
-      personalityPresetKey = globalConfig.personalityPreset;
+      if (globalConfig.personalityPreset === 'custom' && globalConfig.customHexaco) {
+        personalityTraits = globalConfig.customHexaco as Record<string, number>;
+      } else {
+        personalityPresetKey = globalConfig.personalityPreset;
+      }
     } else {
       const presetOptions = [
         { value: 'balanced', label: 'Balanced (default)', hint: 'neutral across all traits' },
@@ -154,7 +173,17 @@ export async function loadAndValidateConfig(
       llmModel: llmResult.llmModel,
       llmAuthMethod: llmResult.llmAuthMethod,
       personalityPresetKey,
+      personalityTraits,
     });
+    ctx.rawAgentConfig = JSON.parse(JSON.stringify(builtConfig));
+
+    const effectiveBuiltConfigResult = (
+      await resolveEffectiveAgentConfig({
+        agentConfig: builtConfig as any,
+        workingDirectory: targetDir,
+      })
+    );
+    const effectiveBuiltConfig = effectiveBuiltConfigResult.agentConfig;
 
     const envData: Record<string, string> = { ...llmResult.apiKeys };
     if (llmResult.llmModel) envData['OPENAI_MODEL'] = llmResult.llmModel;
@@ -162,7 +191,7 @@ export async function loadAndValidateConfig(
 
     await writeAgentScaffold({
       targetDir,
-      config: builtConfig,
+      config: effectiveBuiltConfig as Record<string, unknown>,
       envData,
       agentName: agentName,
       writeEnv: Object.keys(llmResult.apiKeys).length > 0,
@@ -182,11 +211,25 @@ export async function loadAndValidateConfig(
     // Reload env so the just-written .env is available
     await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
-    p.outro(sColor('Agent configured! Starting server...'));
+    fmt.blank();
+    fmt.panel({
+      title: `${g.ok} Agent Configured`,
+      style: 'success',
+      content: [
+        `Agent:     ${accent(agentName)}`,
+        `Directory: ${dim(targetDir === origCwd ? './' : './' + path.relative(origCwd, targetDir) + '/')}`,
+        `Config:    agent.config.json`,
+        llmResult.llmProvider ? `Provider:  ${llmResult.llmProvider}` : null,
+        '',
+        'Starting server...',
+      ].filter(Boolean).join('\n'),
+    });
     fmt.blank();
 
-    cfg = builtConfig;
-    configRaw = JSON.stringify(builtConfig, null, 2);
+    cfg = effectiveBuiltConfig;
+    configRaw = JSON.stringify(effectiveBuiltConfig, null, 2);
+    ctx.selectedPersona = effectiveBuiltConfigResult.selectedPersona;
+    ctx.availablePersonas = effectiveBuiltConfigResult.availablePersonas;
   } else {
     // ── Load existing config from disk ────────────────────────────────────
     const configDir = path.dirname(configPath);
@@ -234,6 +277,19 @@ export async function loadAndValidateConfig(
       process.exitCode = 1;
       return false;
     }
+
+    ctx.rawAgentConfig = JSON.parse(JSON.stringify(cfg));
+
+    const effectiveConfigResult = (
+      await resolveEffectiveAgentConfig({
+        agentConfig: cfg,
+        workingDirectory: configDir,
+      })
+    );
+    cfg = effectiveConfigResult.agentConfig;
+    configRaw = JSON.stringify(cfg, null, 2);
+    ctx.selectedPersona = effectiveConfigResult.selectedPersona;
+    ctx.availablePersonas = effectiveConfigResult.availablePersonas;
 
     ctx.configDir = configDir;
   }

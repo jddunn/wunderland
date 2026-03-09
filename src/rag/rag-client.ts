@@ -29,7 +29,23 @@ export interface RAGQueryInput {
   collectionIds?: string[];
   topK?: number;
   preset?: 'fast' | 'balanced' | 'accurate';
+  similarityThreshold?: number;
   metadataFilter?: Record<string, unknown>;
+  filters?: Record<string, unknown>;
+  includeMetadata?: boolean;
+  strategy?: 'similarity' | 'mmr' | 'hybrid_search';
+  strategyParams?: {
+    mmrLambda?: number;
+    mmrCandidateMultiplier?: number;
+  };
+  queryVariants?: string[];
+  rewrite?: {
+    enabled?: boolean;
+    maxVariants?: number;
+  };
+  includeAudit?: boolean;
+  includeGraphRag?: boolean;
+  debug?: boolean;
 }
 
 export interface RAGQueryResult {
@@ -44,6 +60,9 @@ export interface RAGQueryResult {
   }>;
   totalResults: number;
   processingTimeMs: number;
+  auditTrail?: RAGAuditTrailData;
+  graphContext?: Record<string, unknown>;
+  debugTrace?: Array<{ step: string; ms: number; data: Record<string, unknown> }>;
 }
 
 export interface RAGCollection {
@@ -249,7 +268,7 @@ export class WunderlandRAGClient {
   private readonly timeout: number;
 
   constructor(config: RAGClientConfig) {
-    this.baseUrl = config.baseUrl.replace(/\/+$/, '') + '/api/agentos/rag';
+    this.baseUrl = normalizeRagApiBaseUrl(config.baseUrl);
     this.headers = { 'Content-Type': 'application/json' };
     if (config.authToken) {
       this.headers['Authorization'] = `Bearer ${config.authToken}`;
@@ -512,4 +531,12 @@ export class WunderlandRAGClient {
   async health(): Promise<RAGHealth> {
     return this.request('GET', '/health');
   }
+}
+
+export function normalizeRagApiBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '');
+  if (trimmed.endsWith('/api/agentos/rag')) return trimmed;
+  if (trimmed.endsWith('/agentos/rag')) return `${trimmed.startsWith('http') ? trimmed.replace(/\/agentos\/rag$/, '') : trimmed}/api/agentos/rag`;
+  if (trimmed.endsWith('/api')) return `${trimmed}/agentos/rag`;
+  return `${trimmed}/api/agentos/rag`;
 }

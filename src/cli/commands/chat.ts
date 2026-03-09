@@ -40,7 +40,12 @@ import {
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../../core/index.js';
 import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig } from '../../discovery/index.js';
+import {
+  buildDiscoveryOptionsFromAgentConfig,
+  resolveEffectiveAgentConfig,
+} from '../../config/effective-agent-config.js';
 import { loadConfig } from '../config/config-manager.js';
+import { createConfiguredRagTools } from '../../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
 
 // ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
@@ -201,6 +206,26 @@ function chatPrompt(): string {
   return `  ${frameBorder(frame.v)} ${chalk.hex(C.brightCyan)(g.cursor)} `;
 }
 
+function toToolInstance(tool: {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  hasSideEffects?: boolean;
+  category?: string;
+  requiredCapabilities?: string[];
+  execute: (...args: any[]) => any;
+}): ToolInstance {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema as any,
+    hasSideEffects: tool.hasSideEffects === true,
+    category: typeof tool.category === 'string' && tool.category.trim() ? tool.category : 'productivity',
+    requiredCapabilities: tool.requiredCapabilities,
+    execute: tool.execute as any,
+  };
+}
+
 // ── Command ─────────────────────────────────────────────────────────────────
 
 export default async function cmdChat(
@@ -254,6 +279,17 @@ export default async function cmdChat(
     }
     // Unsealed config parse errors are non-fatal (defaults apply).
   }
+
+  cfg = (
+    await resolveEffectiveAgentConfig({
+      agentConfig: (cfg ?? {}) as any,
+      workingDirectory: process.cwd(),
+      logger: {
+        warn: (msg, meta) => console.warn(msg, meta ?? ''),
+        debug: (msg, meta) => console.debug(msg, meta ?? ''),
+      },
+    })
+  ).agentConfig;
 
   await startWunderlandOtel({ serviceName: 'wunderland-chat' });
 
@@ -673,6 +709,11 @@ export default async function cmdChat(
     toolMap.set(tool.name, tool);
   }
 
+  for (const ragTool of createConfiguredRagTools(cfg ?? {})) {
+    if (!ragTool?.name) continue;
+    toolMap.set(ragTool.name, toToolInstance(ragTool as any));
+  }
+
   // Enforce tool access profile + permission set.
   // CLI defaults: `developer` profile + `autonomous` perms → allows CLI tools.
   // Config-based: respects agent.config.json settings.
@@ -712,23 +753,7 @@ export default async function cmdChat(
   }
 
   // Capability discovery — semantic search + graph re-ranking
-  const discoveryOpts: WunderlandDiscoveryConfig = {};
-  if (cfg?.discovery) {
-    const d = cfg.discovery as Record<string, unknown>;
-    if (typeof d.enabled === 'boolean') discoveryOpts.enabled = d.enabled;
-    if (d.recallProfile === 'aggressive' || d.recallProfile === 'balanced' || d.recallProfile === 'precision') {
-      discoveryOpts.recallProfile = d.recallProfile;
-    }
-    if (typeof d.embeddingProvider === 'string') discoveryOpts.embeddingProvider = d.embeddingProvider;
-    if (typeof d.embeddingModel === 'string') discoveryOpts.embeddingModel = d.embeddingModel;
-    if (typeof d.scanManifests === 'boolean') discoveryOpts.scanManifestDirs = d.scanManifests;
-    const budgetFields = { tier0Budget: 'tier0TokenBudget', tier1Budget: 'tier1TokenBudget', tier2Budget: 'tier2TokenBudget', tier1TopK: 'tier1TopK', tier2TopK: 'tier2TopK' } as const;
-    const configOverrides: Record<string, number> = {};
-    for (const [src, dest] of Object.entries(budgetFields)) {
-      if (typeof d[src] === 'number') configOverrides[dest] = d[src] as number;
-    }
-    if (Object.keys(configOverrides).length > 0) discoveryOpts.config = configOverrides as any;
-  }
+  const discoveryOpts: WunderlandDiscoveryConfig = buildDiscoveryOptionsFromAgentConfig(cfg ?? {});
   // Skills — load from filesystem dirs + config-declared skills (BEFORE discovery so we can pass entries)
   let skillsPrompt = '';
   const skillEntries: Array<{ name: string; description: string; content: string; category?: string; tags?: string[] }> = [];
@@ -759,13 +784,10 @@ export default async function cmdChat(
     }
 
     // 2. Config-declared skills (from agent.config.json "skills" array)
-    const configPath = path.resolve(process.cwd(), 'agent.config.json');
     try {
-      const { readFile } = await import('node:fs/promises');
-      const cfgRaw = JSON.parse(await readFile(configPath, 'utf8'));
-      if (Array.isArray(cfgRaw.skills) && cfgRaw.skills.length > 0) {
+      if (Array.isArray(cfg?.skills) && cfg.skills.length > 0) {
         const { resolveSkillsByNames } = await import('../../core/PresetSkillResolver.js');
-        const presetSnapshot = await resolveSkillsByNames(cfgRaw.skills as string[]);
+        const presetSnapshot = await resolveSkillsByNames(cfg.skills as string[]);
         if (presetSnapshot.prompt) parts.push(presetSnapshot.prompt);
         // Extract skill names for discovery
         if (Array.isArray(presetSnapshot.skills)) {
@@ -846,6 +868,10 @@ export default async function cmdChat(
     inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
     stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
   });
+  const activePersonaId =
+    typeof cfg?.selectedPersonaId === 'string' && cfg.selectedPersonaId.trim()
+      ? cfg.selectedPersonaId.trim()
+      : seedId;
 
   const systemPrompt = buildAgenticSystemPrompt({
     seed,
@@ -863,7 +889,7 @@ export default async function cmdChat(
   const sessionId = `wunderland-cli-${Date.now()}`;
   const toolContext = {
     gmiId: sessionId,
-    personaId: seedId,
+    personaId: activePersonaId,
     userContext: { userId: process.env['USER'] || 'local-user' },
     agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
     interactiveSession: true,
@@ -1009,7 +1035,7 @@ export default async function cmdChat(
       scope: {
         sessionId,
         userId: localUserId,
-        personaId: seedId,
+        personaId: activePersonaId,
         tenantId,
       },
     });
@@ -1062,7 +1088,7 @@ export default async function cmdChat(
           scope: {
             sessionId,
             userId: localUserId,
-            personaId: seedId,
+            personaId: activePersonaId,
             tenantId,
           },
           degraded: adaptiveDecision.degraded || fallbackTriggered,

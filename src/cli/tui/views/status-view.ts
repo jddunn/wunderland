@@ -20,6 +20,7 @@ import { getUiRuntime } from '../../ui/runtime.js';
 import { resolveAgentDisplayName } from '../../../runtime/agent-identity.js';
 import { HEXACO_PRESETS } from '../../../core/WunderlandSeed.js';
 import { DEFAULT_HEXACO_TRAITS, type HEXACOTraits } from '../../../core/types.js';
+import { resolveEffectiveAgentConfig } from '../../../config/effective-agent-config.js';
 
 export class StatusView {
   private screen: Screen;
@@ -69,9 +70,20 @@ export class StatusView {
     // Agent section
     lines.push(`  ${iColor(g.bulletHollow)} ${bright('Agent')}`);
     const localConfig = path.resolve(process.cwd(), 'agent.config.json');
+    let resolvedAgentConfig: any | undefined;
+    let selectedPersona: any | undefined;
+    let availablePersonas: any[] | undefined;
     if (existsSync(localConfig)) {
       try {
-        const cfg = JSON.parse(await readFile(localConfig, 'utf8'));
+        const rawCfg = JSON.parse(await readFile(localConfig, 'utf8'));
+        const effective = await resolveEffectiveAgentConfig({
+          agentConfig: rawCfg,
+          workingDirectory: process.cwd(),
+        });
+        const cfg = effective.agentConfig;
+        resolvedAgentConfig = cfg;
+        selectedPersona = effective.selectedPersona;
+        availablePersonas = effective.availablePersonas;
         const resolvedName = resolveAgentDisplayName({
           displayName: cfg.displayName,
           agentName: cfg.agentName,
@@ -82,6 +94,23 @@ export class StatusView {
         lines.push(`    ${muted('Name'.padEnd(20))} ${accent(resolvedName)}`);
         lines.push(`    ${muted('Seed ID'.padEnd(20))} ${cfg.seedId || 'unknown'}`);
         if (cfg.bio) lines.push(`    ${muted('Bio'.padEnd(20))} ${dim(cfg.bio)}`);
+        if (cfg.presetId) lines.push(`    ${muted('Preset'.padEnd(20))} ${accent(cfg.presetId)}`);
+        if (selectedPersona) {
+          lines.push(`    ${muted('AgentOS Persona'.padEnd(20))} ${accent(selectedPersona.name)} ${dim(`(${selectedPersona.id})`)}`);
+        }
+        if (cfg.rag?.enabled) {
+          lines.push(
+            `    ${muted('RAG'.padEnd(20))} ${accent(cfg.rag.preset || 'balanced')}${cfg.rag.includeGraphRag ? dim(' + graph') : ''}`,
+          );
+        }
+        if (cfg.discovery?.enabled) {
+          lines.push(
+            `    ${muted('Discovery'.padEnd(20))} ${accent(cfg.discovery.recallProfile || 'aggressive')}`,
+          );
+        }
+        if (Array.isArray(availablePersonas) && availablePersonas.length > 0) {
+          lines.push(`    ${muted('Persona Registry'.padEnd(20))} ${dim(`${availablePersonas.length} available`)}`);
+        }
       } catch {
         lines.push(`    ${wColor('Error reading agent.config.json')}`);
       }
@@ -97,21 +126,16 @@ export class StatusView {
       let traits: HEXACOTraits | undefined;
       let presetLabel: string | undefined;
 
-      // Try local agent.config.json personality object first
-      if (existsSync(localConfig)) {
-        try {
-          const cfg = JSON.parse(await readFile(localConfig, 'utf8'));
-          if (cfg.personality) {
-            traits = {
-              honesty_humility: cfg.personality.honesty ?? cfg.personality.honesty_humility ?? 0.5,
-              emotionality: cfg.personality.emotionality ?? 0.5,
-              extraversion: cfg.personality.extraversion ?? 0.5,
-              agreeableness: cfg.personality.agreeableness ?? 0.5,
-              conscientiousness: cfg.personality.conscientiousness ?? 0.5,
-              openness: cfg.personality.openness ?? 0.5,
-            };
-          }
-        } catch { /* ignore */ }
+      // Try resolved local agent.config.json personality object first
+      if (resolvedAgentConfig?.personality) {
+        traits = {
+          honesty_humility: resolvedAgentConfig.personality.honesty ?? resolvedAgentConfig.personality.honesty_humility ?? 0.5,
+          emotionality: resolvedAgentConfig.personality.emotionality ?? 0.5,
+          extraversion: resolvedAgentConfig.personality.extraversion ?? 0.5,
+          agreeableness: resolvedAgentConfig.personality.agreeableness ?? 0.5,
+          conscientiousness: resolvedAgentConfig.personality.conscientiousness ?? 0.5,
+          openness: resolvedAgentConfig.personality.openness ?? 0.5,
+        };
       }
 
       // Fall back to global config preset or custom values

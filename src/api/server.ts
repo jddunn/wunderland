@@ -29,6 +29,10 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../core/index.js';
+import {
+  buildDiscoveryOptionsFromAgentConfig,
+  resolveEffectiveAgentConfig,
+} from '../config/effective-agent-config.js';
 import { loadDotEnvIntoProcessUpward } from '../cli/config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 import {
@@ -49,7 +53,16 @@ import {
 } from '../runtime/policy.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
+import {
+  buildPersonaSessionKey,
+  createRequestScopedToolMap,
+  extractRequestedPersonaId,
+  resolveRequestScopedPersonaRuntime,
+} from '../runtime/request-persona.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
+import { WunderlandDiscoveryManager } from '../discovery/index.js';
+import { createConfiguredRagTools } from '../rag/runtime-tools.js';
+import { maybeProxyAgentosRagRequest } from '../rag/http-proxy.js';
 
 import type {
   WunderlandAdaptiveExecutionConfig,
@@ -73,6 +86,26 @@ function consoleLogger(): Required<LoggerLike> {
     info: (msg, meta) => console.log(msg, meta ?? ''),
     warn: (msg, meta) => console.warn(msg, meta ?? ''),
     error: (msg, meta) => console.error(msg, meta ?? ''),
+  };
+}
+
+function toToolInstance(tool: {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  hasSideEffects?: boolean;
+  category?: string;
+  requiredCapabilities?: string[];
+  execute: (...args: any[]) => any;
+}): ToolInstance {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema as any,
+    hasSideEffects: tool.hasSideEffects === true,
+    category: typeof tool.category === 'string' && tool.category.trim() ? tool.category : 'productivity',
+    requiredCapabilities: tool.requiredCapabilities,
+    execute: tool.execute as any,
   };
 }
 
@@ -525,6 +558,8 @@ export type WunderlandServerHandle = {
   canUseLLM: boolean;
   toolCount: number;
   channelCount: number;
+  selectedPersonaId?: string;
+  personaCount: number;
   pairingEnabled: boolean;
   policy: NormalizedRuntimePolicy;
   autoApproveToolCalls: boolean;
@@ -599,8 +634,21 @@ export async function createWunderlandServer(opts?: {
     }
     cfg = JSON.parse(await readFile(configPath, 'utf8'));
   }
+  const rawAgentConfig = JSON.parse(JSON.stringify(cfg)) as WunderlandAgentConfig;
+  const effectiveConfigResult = await resolveEffectiveAgentConfig({
+    agentConfig: cfg,
+    workingDirectory,
+    logger,
+  });
+  cfg = effectiveConfigResult.agentConfig;
+  const selectedPersona = effectiveConfigResult.selectedPersona;
+  const availablePersonas = effectiveConfigResult.availablePersonas;
 
   const seedId = String(cfg.seedId || 'seed_local_agent');
+  const activePersonaId =
+    typeof cfg.selectedPersonaId === 'string' && cfg.selectedPersonaId.trim()
+      ? cfg.selectedPersonaId.trim()
+      : seedId;
   const displayName = resolveAgentDisplayName({
     displayName: cfg.displayName,
     agentName: cfg.agentName,
@@ -1018,6 +1066,11 @@ export async function createWunderlandServer(opts?: {
     toolMap.set((meta as any).name, meta as any);
   }
 
+  for (const ragTool of createConfiguredRagTools(cfg)) {
+    if (!ragTool?.name) continue;
+    toolMap.set(ragTool.name, toToolInstance(ragTool as any));
+  }
+
   const filtered = filterToolMapByPolicy({
     toolMap,
     toolAccessProfile: policy.toolAccessProfile,
@@ -1027,6 +1080,7 @@ export async function createWunderlandServer(opts?: {
   for (const [k, v] of filtered.toolMap.entries()) toolMap.set(k, v);
 
   let skillsPrompt = '';
+  const skillEntries: Array<{ name: string; description: string; content: string }> = [];
   if (enableSkills) {
     const parts: string[] = [];
     const skillRegistry = new SkillRegistry();
@@ -1035,6 +1089,16 @@ export async function createWunderlandServer(opts?: {
       await skillRegistry.loadFromDirs(dirs);
       const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
       if (snapshot.prompt) parts.push(snapshot.prompt);
+      if (typeof skillRegistry.listAll === 'function') {
+        for (const entry of skillRegistry.listAll() as any[]) {
+          const skill = entry.skill ?? entry;
+          skillEntries.push({
+            name: skill.name ?? 'unknown',
+            description: skill.description ?? '',
+            content: skill.content ?? '',
+          });
+        }
+      }
     }
 
     if (Array.isArray((cfg as any).skills) && (cfg as any).skills.length > 0) {
@@ -1042,12 +1106,39 @@ export async function createWunderlandServer(opts?: {
         const { resolveSkillsByNames } = await import('../core/PresetSkillResolver.js');
         const presetSnapshot = await (resolveSkillsByNames as any)((cfg as any).skills);
         if (presetSnapshot?.prompt) parts.push(presetSnapshot.prompt);
+        if (Array.isArray(presetSnapshot?.skills)) {
+          const existing = new Set(skillEntries.map((entry) => entry.name));
+          for (const skill of presetSnapshot.skills as any[]) {
+            const name = typeof skill === 'string' ? skill : skill.name ?? 'unknown';
+            if (!existing.has(name)) {
+              skillEntries.push({ name, description: '', content: '' });
+              existing.add(name);
+            }
+          }
+        }
       } catch {
         // optional
       }
     }
 
     skillsPrompt = parts.filter(Boolean).join('\n\n');
+  }
+
+  const discoveryManager = new WunderlandDiscoveryManager(buildDiscoveryOptionsFromAgentConfig(cfg));
+  try {
+    await discoveryManager.initialize({
+      toolMap,
+      skillEntries: skillEntries.length > 0 ? skillEntries : undefined,
+      llmConfig: { providerId: providerId as any, apiKey: llmApiKey, baseUrl: llmBaseUrl },
+    });
+    const metaTool = discoveryManager.getMetaTool();
+    if (metaTool) {
+      toolMap.set(metaTool.name, toToolInstance(metaTool as any));
+    }
+  } catch (err) {
+    logger.warn?.('[wunderland/api] Discovery initialization failed (continuing without)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const systemPrompt = buildAgenticSystemPrompt({
@@ -1257,7 +1348,7 @@ export async function createWunderlandServer(opts?: {
       scope: {
         sessionId: sessionKey,
         userId: senderId,
-        personaId: seed.seedId,
+        personaId: activePersonaId,
         tenantId: tenantId || undefined,
       },
     });
@@ -1270,7 +1361,7 @@ export async function createWunderlandServer(opts?: {
       if (canUseLLM) {
         const toolContext: Record<string, unknown> = {
           gmiId: `wunderland-channel-${sessionKey}`,
-          personaId: seed.seedId,
+          personaId: activePersonaId,
           userContext: {
             userId: senderId,
             platform,
@@ -1386,7 +1477,7 @@ export async function createWunderlandServer(opts?: {
           scope: {
             sessionId: sessionKey,
             userId: senderId,
-            personaId: seed.seedId,
+            personaId: activePersonaId,
             tenantId: tenantId || undefined,
           },
           degraded: adaptiveDecision.degraded || fallbackTriggered,
@@ -1441,8 +1532,11 @@ export async function createWunderlandServer(opts?: {
   const server = createServer(async (req, res) => {
     try {
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Wunderland-HITL-Secret, X-Api-Key');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, X-Api-Key, X-Wunderland-HITL-Secret, X-Wunderland-Chat-Secret, X-Wunderland-Feed-Secret',
+      );
 
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
@@ -1451,6 +1545,32 @@ export async function createWunderlandServer(opts?: {
       }
 
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+      if (await maybeProxyAgentosRagRequest({ req, res, url, agentConfig: cfg, logger })) {
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/agentos/personas') {
+        sendJson(res, 200, {
+          selectedPersonaId: activePersonaId !== seedId ? activePersonaId : undefined,
+          selectedPersona: selectedPersona ?? undefined,
+          personas: availablePersonas ?? [],
+        });
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname.startsWith('/api/agentos/personas/')) {
+        const personaId = decodeURIComponent(url.pathname.slice('/api/agentos/personas/'.length));
+        const persona = Array.isArray(availablePersonas)
+          ? availablePersonas.find((entry) => entry.id === personaId)
+          : undefined;
+        if (!persona) {
+          sendJson(res, 404, { error: `Persona '${personaId}' not found.` });
+          return;
+        }
+        sendJson(res, 200, { persona });
+        return;
+      }
 
       if (url.pathname.startsWith('/pairing')) {
         if (req.method === 'GET' && url.pathname === '/pairing') {
@@ -1639,7 +1759,13 @@ export async function createWunderlandServer(opts?: {
       }
 
       if (req.method === 'GET' && url.pathname === '/health') {
-        sendJson(res, 200, { ok: true, seedId, name: displayName });
+        sendJson(res, 200, {
+          ok: true,
+          seedId,
+          name: displayName,
+          persona: selectedPersona ?? (activePersonaId !== seedId ? { id: activePersonaId } : undefined),
+          personasAvailable: Array.isArray(availablePersonas) ? availablePersonas.length : 0,
+        });
         return;
       }
 
@@ -1658,6 +1784,45 @@ export async function createWunderlandServer(opts?: {
         let toolCallCount = 0;
         const sessionId =
           typeof parsed.sessionId === 'string' && parsed.sessionId.trim() ? parsed.sessionId.trim().slice(0, 128) : 'default';
+        const requestedPersonaId = extractRequestedPersonaId(parsed);
+        let requestActivePersonaId = activePersonaId;
+        let requestSystemPrompt = systemPrompt;
+        let requestToolMap = toolMap;
+
+        if (requestedPersonaId && requestedPersonaId !== activePersonaId) {
+          const personaRuntime = await resolveRequestScopedPersonaRuntime({
+            rawAgentConfig,
+            requestedPersonaId,
+            workingDirectory,
+            logger,
+            policy,
+            mode: 'server',
+            lazyTools,
+            autoApproveToolCalls,
+            turnApprovalMode,
+            skillsPrompt: skillsPrompt || undefined,
+            channelNames:
+              loadedChannelAdapters.length > 0
+                ? loadedChannelAdapters
+                  .map((adapter: any) => adapter.displayName || adapter.platform)
+                  .filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
+                : undefined,
+          });
+
+          if (!personaRuntime) {
+            sendJson(res, 400, {
+              error: `Persona '${requestedPersonaId}' not found.`,
+              availablePersonaIds: Array.isArray(availablePersonas) ? availablePersonas.map((persona) => persona.id) : [],
+            });
+            return;
+          }
+
+          requestActivePersonaId = personaRuntime.activePersonaId;
+          requestSystemPrompt = personaRuntime.systemPrompt;
+          requestToolMap = createRequestScopedToolMap(toolMap, personaRuntime.agentConfig);
+        }
+
+        const internalSessionId = buildPersonaSessionKey(sessionId, requestActivePersonaId);
         const requestedToolFailureMode =
           typeof parsed.toolFailureMode === 'string' ? parsed.toolFailureMode : undefined;
         const tenantId =
@@ -1667,25 +1832,25 @@ export async function createWunderlandServer(opts?: {
           scope: {
             sessionId,
             userId: sessionId,
-            personaId: seed.seedId,
+            personaId: requestActivePersonaId,
             tenantId: tenantId || undefined,
           },
           requestedToolFailureMode,
         });
 
         if (parsed.reset === true) {
-          sessions.delete(sessionId);
+          sessions.delete(internalSessionId);
         }
 
-        let messages = sessions.get(sessionId);
+        let messages = sessions.get(internalSessionId);
         if (!messages) {
-          messages = [{ role: 'system', content: systemPrompt }];
-          sessions.set(sessionId, messages);
+          messages = [{ role: 'system', content: requestSystemPrompt }];
+          sessions.set(internalSessionId, messages);
         }
 
         if (messages.length > 200) {
           messages = [messages[0], ...messages.slice(-120)];
-          sessions.set(sessionId, messages);
+          sessions.set(internalSessionId, messages);
         }
 
         messages.push({ role: 'user', content: message });
@@ -1693,8 +1858,8 @@ export async function createWunderlandServer(opts?: {
         try {
           if (canUseLLM) {
             const toolContext: Record<string, unknown> = {
-              gmiId: `wunderland-server-${sessionId}`,
-              personaId: seed.seedId,
+              gmiId: `wunderland-server-${internalSessionId}`,
+              personaId: requestActivePersonaId,
               userContext: {
                 userId: sessionId,
                 ...(tenantId ? { organizationId: tenantId } : null),
@@ -1723,7 +1888,7 @@ export async function createWunderlandServer(opts?: {
               apiKey: llmApiKey,
               model,
               messages,
-              toolMap,
+              toolMap: requestToolMap,
               toolContext,
               maxRounds: 8,
               dangerouslySkipPermissions: autoApproveToolCalls,
@@ -1743,7 +1908,7 @@ export async function createWunderlandServer(opts?: {
                   severity: tool.hasSideEffects === true ? 'high' : 'low',
                   category: toAgentosApprovalCategory(tool),
                   agentId: seed.seedId,
-                  context: { toolName: tool.name, args, sessionId },
+                  context: { toolName: tool.name, args, sessionId, personaId: requestActivePersonaId },
                   reversible: tool.hasSideEffects !== true,
                   requestedAt: new Date(),
                   timeoutMs: 5 * 60_000,
@@ -1755,7 +1920,7 @@ export async function createWunderlandServer(opts?: {
                   ? undefined
                   : async ({ round, toolCalls }) => {
                       if (autoApproveToolCalls) return true;
-                      const checkpointId = `checkpoint-${seedId}-${sessionId}-${round}-${randomUUID()}`;
+                      const checkpointId = `checkpoint-${seedId}-${internalSessionId}-${round}-${randomUUID()}`;
                       const completedWork = toolCalls.map((c) => {
                         const effect = c.hasSideEffects ? 'side effects' : 'read-only';
                         const preview = safeJsonStringify(c.args, 800);
@@ -1765,7 +1930,7 @@ export async function createWunderlandServer(opts?: {
                       const checkpointPromise = hitlManager
                         .checkpoint({
                           checkpointId,
-                          workflowId: `chat-${sessionId}`,
+                          workflowId: `chat-${internalSessionId}`,
                           currentPhase: `tool-round-${round}`,
                           progress: Math.min(1, (round + 1) / 8),
                           completedWork,
@@ -1810,7 +1975,7 @@ export async function createWunderlandServer(opts?: {
               scope: {
                 sessionId,
                 userId: sessionId,
-                personaId: seed.seedId,
+                personaId: requestActivePersonaId,
                 tenantId: tenantId || undefined,
               },
               degraded: adaptiveDecision.degraded || fallbackTriggered,
@@ -1825,7 +1990,7 @@ export async function createWunderlandServer(opts?: {
           }
         }
 
-        sendJson(res, 200, { reply });
+        sendJson(res, 200, { reply, personaId: requestActivePersonaId });
         return;
       }
 
@@ -1868,7 +2033,7 @@ export async function createWunderlandServer(opts?: {
         try {
           const ctx: Record<string, unknown> = {
             gmiId: 'tool-api',
-            personaId: seedId,
+            personaId: activePersonaId,
             permissionSet: policy.permissionSet,
             securityTier: policy.securityTier,
             executionMode: 'autonomous',
@@ -1930,6 +2095,7 @@ export async function createWunderlandServer(opts?: {
     });
 
     await adaptiveRuntime.close();
+    await discoveryManager.close().catch(() => undefined);
     await shutdownWunderlandOtel();
   };
 
@@ -1954,6 +2120,8 @@ export async function createWunderlandServer(opts?: {
     canUseLLM,
     toolCount: toolMap.size,
     channelCount: adapterByPlatform.size,
+    selectedPersonaId: activePersonaId !== seedId ? activePersonaId : undefined,
+    personaCount: availablePersonas?.length ?? 0,
     pairingEnabled,
     policy,
     autoApproveToolCalls,

@@ -11,11 +11,39 @@
   },
   "securityTier": "balanced",
   "toolAccessProfile": "assistant",
-  "suggestedSkills": ["summarize", "coding-agent"],
-  "suggestedChannels": ["webchat", "slack"],
+  "suggestedSkills": [
+    "summarize",
+    "coding-agent"
+  ],
+  "suggestedChannels": [
+    "webchat",
+    "slack"
+  ],
   "suggestedExtensions": {
-    "tools": ["web-search", "web-browser", "cli-executor"],
+    "tools": [
+      "web-search",
+      "web-browser",
+      "cli-executor"
+    ],
     "voice": [],
     "productivity": []
+  },
+  "discovery": {
+    "enabled": true,
+    "recallProfile": "balanced",
+    "graphBoostFactor": 1.15,
+    "tier1MinRelevance": 0.25
+  },
+  "rag": {
+    "enabled": true,
+    "preset": "accurate",
+    "includeGraphRag": true,
+    "includeAudit": true,
+    "defaultTopK": 8,
+    "strategy": "mmr",
+    "rewrite": {
+      "enabled": true,
+      "maxVariants": 2
+    }
   }
 }

@@ -40,6 +40,10 @@ const SAMPLE_CONFIG = {
   displayName: 'TestBot',
   bio: 'A helpful test agent',
   presetId: 'preset-alpha',
+  selectedPersonaId: 'voice_assistant_persona',
+  llmProvider: 'openrouter',
+  llmModel: 'openai/gpt-4o-mini',
+  llmAuthMethod: 'oauth',
   personality: {
     honesty: 0.9,
     emotionality: 0.4,
@@ -51,6 +55,34 @@ const SAMPLE_CONFIG = {
   systemPrompt: 'You are TestBot, a meticulous tester.',
   skills: ['web-search', 'code-exec'],
   suggestedChannels: ['telegram', 'discord'],
+  extensions: {
+    tools: ['agentos-rag'],
+    channels: ['discord'],
+  },
+  extensionOverrides: {
+    'agentos-rag': {
+      enabled: true,
+      priority: 5,
+      options: { mode: 'hybrid' },
+    },
+  },
+  discovery: {
+    enabled: true,
+    recallProfile: 'precision',
+    graphBoostFactor: 1.4,
+  },
+  rag: {
+    enabled: true,
+    strategy: 'hybrid_search',
+    defaultTopK: 7,
+    collectionIds: ['knowledge_base'],
+    includeGraphRag: true,
+  },
+  personaRegistry: {
+    enabled: true,
+    includeBuiltIns: true,
+    paths: ['./personas'],
+  },
   security: {
     tier: 'standard',
     preLLMClassifier: true,
@@ -160,6 +192,15 @@ describe('exportAgent', () => {
     expect(manifest.skills).toEqual(SAMPLE_CONFIG.skills);
     expect(manifest.channels).toEqual(SAMPLE_CONFIG.suggestedChannels);
     expect(manifest.systemPrompt).toBe(SAMPLE_CONFIG.systemPrompt);
+    expect(manifest.selectedPersonaId).toBe(SAMPLE_CONFIG.selectedPersonaId);
+    expect(manifest.llmProvider).toBe(SAMPLE_CONFIG.llmProvider);
+    expect(manifest.llmModel).toBe(SAMPLE_CONFIG.llmModel);
+    expect(manifest.llmAuthMethod).toBe(SAMPLE_CONFIG.llmAuthMethod);
+    expect(manifest.extensions).toEqual(SAMPLE_CONFIG.extensions);
+    expect(manifest.extensionOverrides).toEqual(SAMPLE_CONFIG.extensionOverrides);
+    expect(manifest.discovery).toEqual(SAMPLE_CONFIG.discovery);
+    expect(manifest.rag).toEqual(SAMPLE_CONFIG.rag);
+    expect(manifest.personaRegistry).toEqual(SAMPLE_CONFIG.personaRegistry);
   });
 
   it('should set manifestVersion to 1', () => {
@@ -315,7 +356,35 @@ describe('importAgent', () => {
   it('should write agent.config.json with correct field mapping', () => {
     const manifest = buildMinimalManifest({
       presetId: 'preset-alpha',
+      selectedPersonaId: 'voice_assistant_persona',
+      llmProvider: 'openrouter',
+      llmModel: 'openai/gpt-4o-mini',
+      llmAuthMethod: 'oauth',
       systemPrompt: 'Custom prompt here.',
+      extensions: {
+        tools: ['agentos-rag'],
+      },
+      extensionOverrides: {
+        'agentos-rag': {
+          enabled: true,
+          priority: 9,
+          options: { mode: 'hybrid' },
+        },
+      },
+      discovery: {
+        enabled: true,
+        recallProfile: 'balanced',
+      },
+      rag: {
+        enabled: true,
+        strategy: 'hybrid_search',
+        defaultTopK: 8,
+      },
+      personaRegistry: {
+        enabled: true,
+        includeBuiltIns: true,
+        selectedPersonaId: 'voice_assistant_persona',
+      },
       securityTier: 'standard',
       security: {
         preLLMClassifier: true,
@@ -340,6 +409,32 @@ describe('importAgent', () => {
     expect(writtenConfig.suggestedChannels).toEqual(['telegram', 'discord']);
     expect(writtenConfig.systemPrompt).toBe('Custom prompt here.');
     expect(writtenConfig.presetId).toBe('preset-alpha');
+    expect(writtenConfig.selectedPersonaId).toBe('voice_assistant_persona');
+    expect(writtenConfig.llmProvider).toBe('openrouter');
+    expect(writtenConfig.llmModel).toBe('openai/gpt-4o-mini');
+    expect(writtenConfig.llmAuthMethod).toBe('oauth');
+    expect(writtenConfig.extensions).toEqual({ tools: ['agentos-rag'] });
+    expect(writtenConfig.extensionOverrides).toEqual({
+      'agentos-rag': {
+        enabled: true,
+        priority: 9,
+        options: { mode: 'hybrid' },
+      },
+    });
+    expect(writtenConfig.discovery).toEqual({
+      enabled: true,
+      recallProfile: 'balanced',
+    });
+    expect(writtenConfig.rag).toEqual({
+      enabled: true,
+      strategy: 'hybrid_search',
+      defaultTopK: 8,
+    });
+    expect(writtenConfig.personaRegistry).toEqual({
+      enabled: true,
+      includeBuiltIns: true,
+      selectedPersonaId: 'voice_assistant_persona',
+    });
     expect(writtenConfig.skillsDir).toBe('./skills');
   });
 
@@ -479,6 +574,16 @@ describe('validateManifest', () => {
   it('should return true for a valid manifest', () => {
     const manifest = buildMinimalManifest();
     expect(validateManifest(manifest)).toBe(true);
+  });
+
+  it('should return false for invalid persona/RAG optional field types', () => {
+    const manifest = {
+      ...buildMinimalManifest(),
+      selectedPersonaId: 42,
+      rag: 'enabled',
+      personaRegistry: ['personas'],
+    };
+    expect(validateManifest(manifest)).toBe(false);
   });
 
   it('should return false for null', () => {

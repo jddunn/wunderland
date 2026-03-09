@@ -19,6 +19,7 @@ import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
 import { TokenUsageTracker, type TokenUsageSummary } from '../../core/TokenUsageTracker.js';
 import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
+import { resolveEffectiveAgentConfig } from '../../config/effective-agent-config.js';
 
 const CHANNEL_ALIASES: Record<string, string> = {
   'blog-publisher': 'devto',
@@ -55,7 +56,11 @@ export default async function cmdStatus(
   const localConfig = path.resolve(process.cwd(), 'agent.config.json');
   if (existsSync(localConfig)) {
     try {
-      const cfg = JSON.parse(await readFile(localConfig, 'utf8'));
+      const rawCfg = JSON.parse(await readFile(localConfig, 'utf8'));
+      const { agentConfig: cfg, selectedPersona, availablePersonas } = await resolveEffectiveAgentConfig({
+        agentConfig: rawCfg,
+        workingDirectory: process.cwd(),
+      });
       const resolvedName = resolveAgentDisplayName({
         displayName: cfg.displayName,
         agentName: cfg.agentName,
@@ -66,6 +71,23 @@ export default async function cmdStatus(
       agentLines.push(`${muted('Name'.padEnd(20))} ${accent(resolvedName)}`);
       agentLines.push(`${muted('Seed ID'.padEnd(20))} ${cfg.seedId || 'unknown'}`);
       if (cfg.bio) agentLines.push(`${muted('Bio'.padEnd(20))} ${dim(cfg.bio)}`);
+      if (cfg.presetId) agentLines.push(`${muted('Preset'.padEnd(20))} ${accent(cfg.presetId)}`);
+      if (selectedPersona) {
+        agentLines.push(`${muted('AgentOS Persona'.padEnd(20))} ${accent(selectedPersona.name)} ${dim(`(${selectedPersona.id})`)}`);
+      }
+      if (cfg.rag?.enabled) {
+        agentLines.push(
+          `${muted('RAG'.padEnd(20))} ${accent(cfg.rag.preset || 'balanced')}${cfg.rag.includeGraphRag ? dim(' + graph') : ''}`,
+        );
+      }
+      if (cfg.discovery?.enabled) {
+        agentLines.push(
+          `${muted('Discovery'.padEnd(20))} ${accent(cfg.discovery.recallProfile || 'aggressive')}`,
+        );
+      }
+      if (Array.isArray(availablePersonas) && availablePersonas.length > 0) {
+        agentLines.push(`${muted('Persona Registry'.padEnd(20))} ${dim(`${availablePersonas.length} available`)}`);
+      }
     } catch {
       agentLines.push(`${muted('Config'.padEnd(20))} ${wColor('error reading agent.config.json')}`);
     }
