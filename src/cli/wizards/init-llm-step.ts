@@ -46,8 +46,6 @@ function choosePreferredProviderId(detectedProviderIds: string[]): string {
  * Returns collected keys + provider/model, or `null` if the user cancelled.
  */
 export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<InitLlmResult | null> {
-  fmt.section('LLM Configuration');
-
   const apiKeys: Record<string, string> = {};
   let selectedProvider: string | undefined;
   let useOAuth = false;
@@ -87,8 +85,19 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     };
   }
 
+  // Interactive — show info panel
+  fmt.blank();
+  fmt.panel({
+    title: 'LLM Configuration',
+    style: 'info',
+    content: detected.length > 0
+      ? `Detected ${detected.length} API key${detected.length > 1 ? 's' : ''} in your environment.\nSelect a provider and model to continue.`
+      : 'Select an LLM provider and enter your API key.\nSupported: OpenAI, Anthropic, OpenRouter, Ollama.',
+  });
+  fmt.blank();
+
   if (detected.length > 0) {
-    fmt.note('Detected API keys in environment:');
+    fmt.note('Detected API keys:');
     fmt.blank();
     for (const d of detected) {
       fmt.maskedKey(d.label, d.value);

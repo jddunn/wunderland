@@ -53,6 +53,16 @@ const SAMPLE_CONFIG = {
   securityTier: 'standard',
   suggestedSkills: ['web-search', 'summarize'],
   suggestedChannels: ['webchat', 'slack'],
+  discovery: {
+    enabled: true,
+    recallProfile: 'aggressive',
+    graphBoostFactor: 1.2,
+  },
+  rag: {
+    enabled: true,
+    preset: 'accurate',
+    includeGraphRag: true,
+  },
 };
 
 const SAMPLE_PERSONA = '# Research Assistant\n\nYou are a meticulous researcher.';
@@ -141,6 +151,10 @@ describe('PresetLoader.loadPreset', () => {
     expect(preset.securityTier).toBe('standard');
     expect(preset.suggestedSkills).toEqual(['web-search', 'summarize']);
     expect(preset.suggestedChannels).toEqual(['webchat', 'slack']);
+    expect(preset.discovery?.enabled).toBe(true);
+    expect(preset.discovery?.graphBoostFactor).toBe(1.2);
+    expect(preset.rag?.preset).toBe('accurate');
+    expect(preset.rag?.includeGraphRag).toBe(true);
     expect(preset.persona).toBe(SAMPLE_PERSONA);
   });
 

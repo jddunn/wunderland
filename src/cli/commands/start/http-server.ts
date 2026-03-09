@@ -12,6 +12,13 @@ import {
   safeJsonStringify,
   type ToolInstance,
 } from '../../openai/tool-calling.js';
+import { maybeProxyAgentosRagRequest } from '../../../rag/http-proxy.js';
+import {
+  buildPersonaSessionKey,
+  createRequestScopedToolMap,
+  extractRequestedPersonaId,
+  resolveRequestScopedPersonaRuntime,
+} from '../../../runtime/request-persona.js';
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
@@ -141,15 +148,27 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
     defaultTenantId,
     port,
     startTime,
+    cfg,
+    rawAgentConfig,
+    globalConfig,
+    configDir,
+    lazyTools,
+    skillsPrompt,
+    selectedPersona,
+    availablePersonas,
   } = ctx;
+  const activePersonaId =
+    typeof cfg?.selectedPersonaId === 'string' && cfg.selectedPersonaId.trim()
+      ? cfg.selectedPersonaId.trim()
+      : seed.seedId;
 
   const server = createServer(async (req, res) => {
     try {
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
       res.setHeader(
         'Access-Control-Allow-Headers',
-        'Content-Type, X-Wunderland-HITL-Secret, X-Wunderland-Chat-Secret, X-Wunderland-Feed-Secret',
+        'Content-Type, Authorization, X-API-Key, X-Wunderland-HITL-Secret, X-Wunderland-Chat-Secret, X-Wunderland-Feed-Secret',
       );
 
       if (req.method === 'OPTIONS') {
@@ -159,6 +178,32 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
       }
 
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+      if (await maybeProxyAgentosRagRequest({ req, res, url, agentConfig: cfg })) {
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/agentos/personas') {
+        sendJson(res, 200, {
+          selectedPersonaId: activePersonaId !== seed.seedId ? activePersonaId : undefined,
+          selectedPersona: selectedPersona ?? undefined,
+          personas: availablePersonas ?? [],
+        });
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname.startsWith('/api/agentos/personas/')) {
+        const personaId = decodeURIComponent(url.pathname.slice('/api/agentos/personas/'.length));
+        const persona = Array.isArray(availablePersonas)
+          ? availablePersonas.find((entry: any) => entry?.id === personaId)
+          : undefined;
+        if (!persona) {
+          sendJson(res, 404, { error: `Persona '${personaId}' not found.` });
+          return;
+        }
+        sendJson(res, 200, { persona });
+        return;
+      }
 
       if (url.pathname.startsWith('/pairing')) {
         if (req.method === 'GET' && url.pathname === '/pairing') {
@@ -742,6 +787,8 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           uptime: Math.floor((Date.now() - startTime) / 1000),
           version: VERSION,
           port,
+          persona: selectedPersona ?? (activePersonaId !== seed.seedId ? { id: activePersonaId } : undefined),
+          personasAvailable: Array.isArray(availablePersonas) ? availablePersonas.length : 0,
           memory: {
             rss: Math.round(mem.rss / 1024 / 1024),
             heap: Math.round(mem.heapUsed / 1024 / 1024),
@@ -755,8 +802,8 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
       if (req.method === 'GET' && url.pathname === '/chat') {
         sendJson(res, 200, {
           endpoint: 'POST /chat',
-          usage: 'Send a JSON body with { "message": "your prompt" }',
-          example: 'curl -X POST http://localhost:' + port + '/chat -H "Content-Type: application/json" -d \'{"message":"hello"}\'',
+          usage: 'Send a JSON body with { "message": "your prompt" }. Optional fields: sessionId, personaId, reset, tenantId, toolFailureMode.',
+          example: 'curl -X POST http://localhost:' + port + '/chat -H "Content-Type: application/json" -d \'{"message":"hello","personaId":"voice_assistant_persona"}\'',
         });
         return;
       }
@@ -782,6 +829,39 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
         const sessionId = typeof parsed.sessionId === 'string' && parsed.sessionId.trim()
           ? parsed.sessionId.trim().slice(0, 128)
           : 'default';
+        const requestedPersonaId = extractRequestedPersonaId(parsed);
+        let requestActivePersonaId = activePersonaId;
+        let requestSystemPrompt = systemPrompt;
+        let requestToolMap = toolMap;
+
+        if (requestedPersonaId && requestedPersonaId !== activePersonaId) {
+          const personaRuntime = await resolveRequestScopedPersonaRuntime({
+            rawAgentConfig: rawAgentConfig ?? cfg,
+            requestedPersonaId,
+            workingDirectory: configDir ?? process.cwd(),
+            policy,
+            mode: 'server',
+            lazyTools: lazyTools === true,
+            autoApproveToolCalls,
+            turnApprovalMode,
+            skillsPrompt: skillsPrompt || undefined,
+            globalAgentName: globalConfig?.agentName,
+          });
+
+          if (!personaRuntime) {
+            sendJson(res, 400, {
+              error: `Persona '${requestedPersonaId}' not found.`,
+              availablePersonaIds: Array.isArray(availablePersonas) ? availablePersonas.map((persona: any) => persona.id) : [],
+            });
+            return;
+          }
+
+          requestActivePersonaId = personaRuntime.activePersonaId;
+          requestSystemPrompt = personaRuntime.systemPrompt;
+          requestToolMap = createRequestScopedToolMap(toolMap, personaRuntime.agentConfig);
+        }
+
+        const internalSessionId = buildPersonaSessionKey(sessionId, requestActivePersonaId);
         const requestedToolFailureMode =
           typeof parsed.toolFailureMode === 'string' ? parsed.toolFailureMode : undefined;
         const tenantId =
@@ -792,26 +872,26 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           scope: {
             sessionId,
             userId: sessionId,
-            personaId: seed.seedId,
+            personaId: requestActivePersonaId,
             tenantId: tenantId || undefined,
           },
           requestedToolFailureMode,
         });
 
         if (parsed.reset === true) {
-          sessions.delete(sessionId);
+          sessions.delete(internalSessionId);
         }
 
-        let messages = sessions.get(sessionId);
+        let messages = sessions.get(internalSessionId);
         if (!messages) {
-          messages = [{ role: 'system', content: systemPrompt }];
-          sessions.set(sessionId, messages);
+          messages = [{ role: 'system', content: requestSystemPrompt }];
+          sessions.set(internalSessionId, messages);
         }
 
         // Keep a soft cap to avoid unbounded memory in long-running servers.
         if (messages.length > 200) {
           messages = [messages[0]!, ...messages.slice(-120)];
-          sessions.set(sessionId, messages);
+          sessions.set(internalSessionId, messages);
         }
 
         messages.push({ role: 'user', content: message });
@@ -851,7 +931,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
                     names.add(toolName);
                   }
                 }
-                for (const [name] of toolMap) {
+                for (const [name] of requestToolMap) {
                   if (name.startsWith('extensions_') || name === 'discover_capabilities') names.add(name);
                 }
                 if (names.size > 0) apiDiscoveredToolNames = names;
@@ -861,8 +941,8 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
             }
 
             const toolContext = {
-              gmiId: `wunderland-server-${sessionId}`,
-              personaId: seed.seedId,
+              gmiId: `wunderland-server-${internalSessionId}`,
+              personaId: requestActivePersonaId,
               userContext: {
                 userId: sessionId,
                 ...(tenantId ? { organizationId: tenantId } : null),
@@ -893,7 +973,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
             const apiFilteredGetToolDefs = useFilteredToolDefs
               ? () => {
                 const filtered = new Map<string, ToolInstance>();
-                for (const [name, tool] of toolMap) {
+                for (const [name, tool] of requestToolMap) {
                   if (apiDiscoveredToolNames!.has(name)) {
                     filtered.set(name, tool);
                   }
@@ -907,7 +987,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
               apiKey: llmApiKey,
               model,
               messages,
-              toolMap,
+              toolMap: requestToolMap,
               ...(apiFilteredGetToolDefs && { getToolDefs: apiFilteredGetToolDefs }),
               toolContext,
               maxRounds: 8,
@@ -929,7 +1009,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
                   severity: tool.hasSideEffects === true ? 'high' : 'low',
                   category: toAgentosApprovalCategory(tool),
                   agentId: seed.seedId,
-                  context: { toolName: tool.name, args, sessionId },
+                  context: { toolName: tool.name, args, sessionId, personaId: requestActivePersonaId },
                   reversible: tool.hasSideEffects !== true,
                   requestedAt: new Date(),
                   timeoutMs: 5 * 60_000,
@@ -939,7 +1019,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
               askCheckpoint: turnApprovalMode === 'off' ? undefined : async ({ round, toolCalls }: any) => {
                 if (autoApproveToolCalls) return true;
 
-                const checkpointId = `checkpoint-${seedId}-${sessionId}-${round}-${randomUUID()}`;
+                const checkpointId = `checkpoint-${seedId}-${internalSessionId}-${round}-${randomUUID()}`;
                 const completedWork = toolCalls.map((c: any) => {
                   const effect = c.hasSideEffects ? 'side effects' : 'read-only';
                   const preview = safeJsonStringify(c.args, 800);
@@ -949,7 +1029,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
                 const timeoutMs = 5 * 60_000;
                 const checkpointPromise = hitlManager.checkpoint({
                   checkpointId,
-                  workflowId: `chat-${sessionId}`,
+                  workflowId: `chat-${internalSessionId}`,
                   currentPhase: `tool-round-${round}`,
                   progress: Math.min(1, (round + 1) / 8),
                   completedWork,
@@ -996,7 +1076,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
               scope: {
                 sessionId,
                 userId: sessionId,
-                personaId: seed.seedId,
+                personaId: requestActivePersonaId,
                 tenantId: tenantId || undefined,
               },
               degraded: adaptiveDecision.degraded || fallbackTriggered,
@@ -1014,7 +1094,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           reply = reply.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
           reply = reply.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
         }
-        sendJson(res, 200, { reply });
+        sendJson(res, 200, { reply, personaId: requestActivePersonaId });
         return;
       }
 

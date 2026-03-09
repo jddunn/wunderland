@@ -5,10 +5,10 @@
  */
 
 import * as p from '@clack/prompts';
-import boxen from 'boxen';
 import type { GlobalFlags, WizardState, SetupMode, ObservabilityPreset } from '../types.js';
 import { accent, dim, muted, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { updateConfig } from '../config/config-manager.js';
 import { mergeEnv } from '../config/env-manager.js';
 import { URLS, PERSONALITY_PRESETS } from '../constants.js';
@@ -46,7 +46,17 @@ function createDefaultState(): WizardState {
 }
 
 export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
-  p.intro(accent('Wunderland Setup'));
+  fmt.blank();
+  fmt.panel({
+    title: 'Wunderland Setup',
+    style: 'brand',
+    content: [
+      'Configure your agent step by step.',
+      'QuickStart gets you running in 3 steps,',
+      'Advanced gives full control over all settings.',
+    ].join('\n'),
+  });
+  fmt.blank();
 
   // Step 1: Mode selection
   const mode = await p.select<SetupMode>({
@@ -189,14 +199,8 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
     `Security: ${state.security.preLlmClassifier ? sColor('full pipeline') : wColor('minimal')}`,
   ].filter(Boolean).join('\n');
 
-  console.log(boxen(summary, {
-    padding: 1,
-    margin: { top: 1, bottom: 1, left: 2, right: 2 },
-    borderStyle: 'round',
-    borderColor: '#a855f7',
-    title: 'Review',
-    titleAlignment: 'center',
-  }));
+  fmt.blank();
+  fmt.panel({ title: 'Review', style: 'brand', content: summary });
 
   // Show HEXACO bar chart if personality is set
   if (state.personalityEnabled !== false && state.personalityPreset) {
@@ -278,14 +282,23 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   }
 
   // Done
-  p.outro(sColor('Setup complete!'));
+  const g = glyphs();
+  const nextCmd = state.llmAuthMethod === 'oauth'
+    ? `wunderland login → wunderland init my-agent → wunderland start`
+    : `wunderland init my-agent && wunderland start`;
+
   fmt.blank();
-  if (state.llmAuthMethod === 'oauth') {
-    fmt.note(`Next: ${sColor('wunderland login')} → ${sColor('wunderland init my-agent')} → ${sColor('wunderland start')}`);
-  } else {
-    fmt.note(`Next: ${sColor('wunderland init my-agent')} && ${sColor('wunderland start')}`);
-  }
-  fmt.note(`Dashboard: ${fmt.link(URLS.saas)}`);
+  fmt.panel({
+    title: `${g.ok} Setup Complete`,
+    style: 'success',
+    content: [
+      `Agent:  ${accent(state.agentName)}`,
+      `LLM:    ${accent(state.llmProvider || 'none')} / ${accent(state.llmModel || 'default')}`,
+      '',
+      `Next: ${sColor(nextCmd)}`,
+      `Dashboard: ${fmt.link(URLS.saas)}`,
+    ].join('\n'),
+  });
   fmt.blank();
 }
 

@@ -209,6 +209,9 @@ describe('validateWunderlandAgentConfig — discovery field', () => {
         embeddingProvider: 'openai',
         embeddingModel: 'text-embedding-3-small',
         scanManifests: true,
+        tier1MinRelevance: 0.25,
+        graphBoostFactor: 1.2,
+        config: { registerMetaTool: true },
       },
     });
     const discoveryIssues = issues.filter((i) => i.path.startsWith('discovery'));
@@ -272,6 +275,14 @@ describe('validateWunderlandAgentConfig — discovery field', () => {
     expect(discoveryIssues.length).toBeGreaterThan(0);
   });
 
+  it('reports issue when discovery.config is not an object', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      discovery: { config: 'bad' },
+    });
+    const discoveryIssues = issues.filter((i) => i.path === 'discovery.config');
+    expect(discoveryIssues.length).toBeGreaterThan(0);
+  });
+
   it('accepts discovery.recallProfile enum values', () => {
     for (const recallProfile of ['aggressive', 'balanced', 'precision']) {
       const { issues } = validateWunderlandAgentConfig({
@@ -304,5 +315,90 @@ describe('validateWunderlandAgentConfig — discovery field', () => {
     });
     const toolCallingIssues = issues.filter((i) => i.path === 'toolCalling.strictToolNames');
     expect(toolCallingIssues.length).toBeGreaterThan(0);
+  });
+});
+
+describe('validateWunderlandAgentConfig — rag field', () => {
+  it('accepts valid rag config', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      rag: {
+        enabled: true,
+        backendUrl: 'http://localhost:3001',
+        defaultTopK: 6,
+        preset: 'accurate',
+        collectionIds: ['docs'],
+        includeGraphRag: true,
+        includeAudit: true,
+        includeDebug: false,
+        queryVariants: ['agent memory'],
+        filters: { category: 'knowledge_base' },
+        strategy: 'hybrid_search',
+        strategyParams: { mmrLambda: 0.7, mmrCandidateMultiplier: 5 },
+        rewrite: { enabled: true, maxVariants: 2 },
+      },
+    });
+    const ragIssues = issues.filter((i) => i.path.startsWith('rag'));
+    expect(ragIssues).toHaveLength(0);
+  });
+
+  it('reports invalid rag enum fields', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      rag: {
+        preset: 'slow',
+        strategy: 'semantic_magic',
+      },
+    });
+    expect(issues.some((i) => i.path === 'rag.preset')).toBe(true);
+    expect(issues.some((i) => i.path === 'rag.strategy')).toBe(true);
+  });
+
+  it('reports invalid rag nested field types', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      rag: {
+        collectionIds: 'docs',
+        queryVariants: 'variant',
+        filters: 'bad',
+        strategyParams: { mmrLambda: '0.7' },
+        rewrite: { enabled: 'yes' },
+      },
+    });
+    expect(issues.some((i) => i.path === 'rag.collectionIds')).toBe(true);
+    expect(issues.some((i) => i.path === 'rag.queryVariants')).toBe(true);
+    expect(issues.some((i) => i.path === 'rag.filters')).toBe(true);
+    expect(issues.some((i) => i.path === 'rag.strategyParams.mmrLambda')).toBe(true);
+    expect(issues.some((i) => i.path === 'rag.rewrite.enabled')).toBe(true);
+  });
+});
+
+describe('validateWunderlandAgentConfig — personaRegistry field', () => {
+  it('accepts valid persona registry config', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      selectedPersonaId: 'voice_assistant_persona',
+      personaRegistry: {
+        enabled: true,
+        includeBuiltIns: true,
+        paths: ['./personas'],
+        recursive: true,
+        fileExtension: '.json',
+        selectedPersonaId: 'voice_assistant_persona',
+      },
+    });
+    expect(issues.filter((issue) => issue.path.startsWith('personaRegistry'))).toHaveLength(0);
+    expect(issues.filter((issue) => issue.path === 'selectedPersonaId')).toHaveLength(0);
+  });
+
+  it('reports invalid persona registry field types', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      selectedPersonaId: 123,
+      personaRegistry: {
+        enabled: 'yes',
+        paths: './personas',
+        recursive: 'sometimes',
+      },
+    });
+    expect(issues.some((issue) => issue.path === 'selectedPersonaId')).toBe(true);
+    expect(issues.some((issue) => issue.path === 'personaRegistry.enabled')).toBe(true);
+    expect(issues.some((issue) => issue.path === 'personaRegistry.paths')).toBe(true);
+    expect(issues.some((issue) => issue.path === 'personaRegistry.recursive')).toBe(true);
   });
 });

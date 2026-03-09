@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
+import type { AgentPreset } from '../../core/PresetLoader.js';
 import { SECURITY_TIERS, getSecurityTier } from '../../security/SecurityTiers.js';
 import type { SecurityTierName } from '../../security/SecurityTiers.js';
 import { serializeEnvFile } from '../config/env-manager.js';
@@ -74,18 +75,22 @@ export interface BuildAgentConfigOptions {
   personalityTraits?: Record<string, number>;
   securityTierName?: SecurityTierName;
   /** Agent preset overrides (from PresetLoader). */
-  agentPreset?: {
-    name?: string;
-    description?: string;
-    hexacoTraits?: Record<string, number>;
-    securityTier?: string;
-    suggestedSkills?: string[];
-    suggestedChannels?: string[];
-    suggestedExtensions?: Record<string, string[]>;
-    extensionOverrides?: Record<string, unknown>;
-    toolAccessProfile?: string;
-    id?: string;
-  };
+  agentPreset?: Pick<
+    AgentPreset,
+    | 'name'
+    | 'description'
+    | 'hexacoTraits'
+    | 'securityTier'
+    | 'suggestedSkills'
+    | 'suggestedChannels'
+    | 'suggestedExtensions'
+    | 'extensionOverrides'
+    | 'toolAccessProfile'
+    | 'discovery'
+    | 'rag'
+    | 'persona'
+    | 'id'
+  >;
 }
 
 export interface AgentConfigResult {
@@ -102,7 +107,7 @@ export function buildAgentConfig(opts: BuildAgentConfigOptions): AgentConfigResu
   } else if (agentPreset?.hexacoTraits) {
     const t = agentPreset.hexacoTraits;
     personality = {
-      honesty: t.honesty ?? t.honesty_humility ?? 0.7,
+      honesty: t.honesty ?? 0.7,
       emotionality: t.emotionality ?? 0.5,
       extraversion: t.extraversion ?? 0.6,
       agreeableness: t.agreeableness ?? 0.65,
@@ -128,7 +133,11 @@ export function buildAgentConfig(opts: BuildAgentConfigOptions): AgentConfigResu
   }
 
   // ── Security ─────────────────────────────────────────────────────────────
-  const resolvedTierName: SecurityTierName = opts.securityTierName ?? 'permissive';
+  const presetTier =
+    typeof agentPreset?.securityTier === 'string' && agentPreset.securityTier in SECURITY_TIERS
+      ? (agentPreset.securityTier as SecurityTierName)
+      : undefined;
+  const resolvedTierName: SecurityTierName = opts.securityTierName ?? presetTier ?? 'balanced';
   const tierConfig = getSecurityTier(resolvedTierName);
   const permissionSet = SECURITY_TIERS[resolvedTierName].permissionSet;
   const executionMode =
@@ -137,7 +146,9 @@ export function buildAgentConfig(opts: BuildAgentConfigOptions): AgentConfigResu
       : resolvedTierName === 'paranoid'
         ? 'human-all'
         : 'human-dangerous';
-  const toolAccessProfile = agentPreset?.toolAccessProfile || 'developer';
+  const toolAccessProfile =
+    agentPreset?.toolAccessProfile
+    || (resolvedTierName === 'dangerous' || resolvedTierName === 'permissive' ? 'developer' : 'assistant');
   const wrapToolOutputs = resolvedTierName !== 'dangerous';
 
   const security = {
@@ -155,7 +166,6 @@ export function buildAgentConfig(opts: BuildAgentConfigOptions): AgentConfigResu
     displayName: agentPreset?.name ?? toDisplayName(agentName),
     bio: agentPreset?.description ?? 'Autonomous Wunderbot',
     personality,
-    systemPrompt: 'You are an autonomous agent in the Wunderland network.',
     security,
     permissionSet,
     executionMode,
@@ -169,7 +179,15 @@ export function buildAgentConfig(opts: BuildAgentConfigOptions): AgentConfigResu
     toolAccessProfile,
     presetId: agentPreset?.id,
     skillsDir: './skills',
+    discovery: agentPreset?.discovery,
+    rag: agentPreset?.rag,
   };
+
+  if (agentPreset?.persona) {
+    config.systemPrompt = agentPreset.persona;
+  } else {
+    config.systemPrompt = 'You are an autonomous agent in the Wunderland network.';
+  }
 
   if (opts.llmProvider) config.llmProvider = opts.llmProvider;
   if (opts.llmModel) config.llmModel = opts.llmModel;

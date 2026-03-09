@@ -7,7 +7,9 @@ import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import type { WizardState } from '../types.js';
 import { LLM_PROVIDERS } from '../constants.js';
+import { accent } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { glyphs } from '../ui/glyphs.js';
 import { importEnvBlock } from '../config/env-manager.js';
 
 export async function runApiKeysWizard(state: WizardState): Promise<void> {
@@ -166,5 +168,23 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
         state.llmModel = model as string;
       }
     }
+  }
+
+  // Summary panel
+  if (state.llmProvider) {
+    const g = glyphs();
+    const keyCount = Object.keys(state.apiKeys).length;
+    fmt.blank();
+    fmt.panel({
+      title: `${g.ok} LLM Configured`,
+      style: 'success',
+      content: [
+        `Provider: ${accent(state.llmProvider)}`,
+        state.llmModel ? `Model:    ${accent(state.llmModel)}` : null,
+        state.llmAuthMethod === 'oauth' ? `Auth:     OAuth (subscription)` : null,
+        keyCount > 0 ? `Keys:     ${keyCount} saved` : null,
+      ].filter(Boolean).join('\n'),
+    });
+    fmt.blank();
   }
 }

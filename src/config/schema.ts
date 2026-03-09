@@ -33,9 +33,11 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
   };
 
   expectString('seedId');
+  expectString('presetId');
   expectString('displayName');
   expectString('bio');
   expectString('systemPrompt');
+  expectString('selectedPersonaId');
   expectString('llmProvider');
   expectString('llmModel');
   expectString('toolFailureMode');
@@ -44,6 +46,9 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
   expectString('toolAccessProfile');
   expectString('executionMode');
   expectBoolean('lazyTools');
+  if (cfg.skills !== undefined && !isStringArray(cfg.skills)) {
+    issues.push({ path: 'skills', message: 'Expected string[]' });
+  }
 
   if (typeof cfg.toolFailureMode === 'string') {
     const m = cfg.toolFailureMode.trim().toLowerCase();
@@ -68,14 +73,10 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
       issues.push({ path: 'extensions', message: 'Expected object.' });
     } else {
       const exts = cfg.extensions as Record<string, unknown>;
-      if (exts.tools !== undefined && !isStringArray(exts.tools)) {
-        issues.push({ path: 'extensions.tools', message: 'Expected string[]' });
-      }
-      if (exts.voice !== undefined && !isStringArray(exts.voice)) {
-        issues.push({ path: 'extensions.voice', message: 'Expected string[]' });
-      }
-      if (exts.productivity !== undefined && !isStringArray(exts.productivity)) {
-        issues.push({ path: 'extensions.productivity', message: 'Expected string[]' });
+      for (const [key, value] of Object.entries(exts)) {
+        if (value !== undefined && !isStringArray(value)) {
+          issues.push({ path: `extensions.${key}`, message: 'Expected string[]' });
+        }
       }
     }
   }
@@ -105,6 +106,11 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
           issues.push({ path: `discovery.${numField}`, message: 'Expected number.' });
         }
       }
+      for (const numField of ['tier1MinRelevance', 'graphBoostFactor']) {
+        if (disc[numField] !== undefined && typeof disc[numField] !== 'number') {
+          issues.push({ path: `discovery.${numField}`, message: 'Expected number.' });
+        }
+      }
       for (const strField of ['embeddingProvider', 'embeddingModel']) {
         if (disc[strField] !== undefined && typeof disc[strField] !== 'string') {
           issues.push({ path: `discovery.${strField}`, message: 'Expected string.' });
@@ -123,6 +129,111 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
       }
       if (disc.scanManifests !== undefined && typeof disc.scanManifests !== 'boolean') {
         issues.push({ path: 'discovery.scanManifests', message: 'Expected boolean.' });
+      }
+      if (disc.config !== undefined && !isPlainObject(disc.config)) {
+        issues.push({ path: 'discovery.config', message: 'Expected object.' });
+      }
+    }
+  }
+
+  if (cfg.rag !== undefined) {
+    if (!isPlainObject(cfg.rag)) {
+      issues.push({ path: 'rag', message: 'Expected object.' });
+    } else {
+      const rag = cfg.rag as Record<string, unknown>;
+      for (const boolField of [
+        'enabled',
+        'includeGraphRag',
+        'includeAudit',
+        'includeDebug',
+        'includeMetadata',
+        'exposeMemoryRead',
+        'exposeRagQuery',
+      ]) {
+        if (rag[boolField] !== undefined && typeof rag[boolField] !== 'boolean') {
+          issues.push({ path: `rag.${boolField}`, message: 'Expected boolean.' });
+        }
+      }
+      for (const strField of ['backendUrl', 'authToken', 'authTokenEnvVar', 'defaultCollectionId']) {
+        if (rag[strField] !== undefined && typeof rag[strField] !== 'string') {
+          issues.push({ path: `rag.${strField}`, message: 'Expected string.' });
+        }
+      }
+      for (const numField of ['defaultTopK', 'similarityThreshold']) {
+        if (rag[numField] !== undefined && typeof rag[numField] !== 'number') {
+          issues.push({ path: `rag.${numField}`, message: 'Expected number.' });
+        }
+      }
+      if (rag.collectionIds !== undefined && !isStringArray(rag.collectionIds)) {
+        issues.push({ path: 'rag.collectionIds', message: 'Expected string[]' });
+      }
+      if (rag.queryVariants !== undefined && !isStringArray(rag.queryVariants)) {
+        issues.push({ path: 'rag.queryVariants', message: 'Expected string[]' });
+      }
+      if (rag.preset !== undefined) {
+        if (
+          typeof rag.preset !== 'string'
+          || !['fast', 'balanced', 'accurate'].includes(rag.preset)
+        ) {
+          issues.push({ path: 'rag.preset', message: 'Expected "fast", "balanced", or "accurate".' });
+        }
+      }
+      if (rag.strategy !== undefined) {
+        if (
+          typeof rag.strategy !== 'string'
+          || !['similarity', 'mmr', 'hybrid_search'].includes(rag.strategy)
+        ) {
+          issues.push({ path: 'rag.strategy', message: 'Expected "similarity", "mmr", or "hybrid_search".' });
+        }
+      }
+      if (rag.filters !== undefined && !isPlainObject(rag.filters)) {
+        issues.push({ path: 'rag.filters', message: 'Expected object.' });
+      }
+      if (rag.strategyParams !== undefined) {
+        if (!isPlainObject(rag.strategyParams)) {
+          issues.push({ path: 'rag.strategyParams', message: 'Expected object.' });
+        } else {
+          const params = rag.strategyParams as Record<string, unknown>;
+          for (const numField of ['mmrLambda', 'mmrCandidateMultiplier']) {
+            if (params[numField] !== undefined && typeof params[numField] !== 'number') {
+              issues.push({ path: `rag.strategyParams.${numField}`, message: 'Expected number.' });
+            }
+          }
+        }
+      }
+      if (rag.rewrite !== undefined) {
+        if (!isPlainObject(rag.rewrite)) {
+          issues.push({ path: 'rag.rewrite', message: 'Expected object.' });
+        } else {
+          const rewrite = rag.rewrite as Record<string, unknown>;
+          if (rewrite.enabled !== undefined && typeof rewrite.enabled !== 'boolean') {
+            issues.push({ path: 'rag.rewrite.enabled', message: 'Expected boolean.' });
+          }
+          if (rewrite.maxVariants !== undefined && typeof rewrite.maxVariants !== 'number') {
+            issues.push({ path: 'rag.rewrite.maxVariants', message: 'Expected number.' });
+          }
+        }
+      }
+    }
+  }
+
+  if (cfg.personaRegistry !== undefined) {
+    if (!isPlainObject(cfg.personaRegistry)) {
+      issues.push({ path: 'personaRegistry', message: 'Expected object.' });
+    } else {
+      const registry = cfg.personaRegistry as Record<string, unknown>;
+      for (const boolField of ['enabled', 'includeBuiltIns', 'recursive']) {
+        if (registry[boolField] !== undefined && typeof registry[boolField] !== 'boolean') {
+          issues.push({ path: `personaRegistry.${boolField}`, message: 'Expected boolean.' });
+        }
+      }
+      for (const strField of ['fileExtension', 'selectedPersonaId']) {
+        if (registry[strField] !== undefined && typeof registry[strField] !== 'string') {
+          issues.push({ path: `personaRegistry.${strField}`, message: 'Expected string.' });
+        }
+      }
+      if (registry.paths !== undefined && !isStringArray(registry.paths)) {
+        issues.push({ path: 'personaRegistry.paths', message: 'Expected string[]' });
       }
     }
   }
