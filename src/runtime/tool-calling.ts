@@ -59,6 +59,8 @@ const TOOL_FALLBACK_MAP: Record<string, string[]> = {
   'research_aggregate': ['web_search', 'browser_navigate'],
   'fact_check': ['web_search', 'browser_navigate'],
   'image_search': ['web_search', 'browser_navigate'],
+  'agent_delegate': ['agent_ping', 'agent_broadcast'],
+  'agent_broadcast': ['agent_delegate'],
   'giphy_search': ['web_search'],
 };
 
