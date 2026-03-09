@@ -37,20 +37,48 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
 
   const isOllamaProvider = providerId === 'ollama';
 
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'EADDRINUSE') {
-        reject(new Error(
-          `Port ${port} is already in use.\n`
-          + `  Try a different port:  wunderland start --port ${port + 1}\n`
+  // Auto-find a free port if the requested one is in use.
+  const maxPortAttempts = 10;
+  let actualPort = port;
+  for (let attempt = 0; attempt < maxPortAttempts; attempt++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (err: NodeJS.ErrnoException) => {
+          server.removeListener('listening', onListening);
+          reject(err);
+        };
+        const onListening = () => {
+          server.removeListener('error', onError);
+          resolve();
+        };
+        server.once('error', onError);
+        server.once('listening', onListening);
+        server.listen(actualPort, '0.0.0.0');
+      });
+      break; // success
+    } catch (err: any) {
+      if (err?.code === 'EADDRINUSE') {
+        const nextPort = actualPort + 1;
+        if (attempt < maxPortAttempts - 1) {
+          console.warn(`Port ${actualPort} in use, trying ${nextPort}...`);
+          server.close();
+          actualPort = nextPort;
+          continue;
+        }
+        throw new Error(
+          `Ports ${port}-${actualPort} are all in use.\n`
+          + `  Try a different port:  wunderland start --port ${actualPort + 1}\n`
           + `  Or kill the process using port ${port}:  lsof -ti:${port} | xargs kill`,
-        ));
-      } else {
-        reject(err);
+        );
       }
-    });
-    server.listen(port, '0.0.0.0', () => resolve());
-  });
+      throw err;
+    }
+  }
+  // Update ctx.port so downstream display/URLs reflect the actual port
+  if (actualPort !== port) {
+    ctx.port = actualPort;
+    fmt.note(`Using port ${actualPort} (${port} was in use).`);
+  }
 
   // Record this agent in history for `wunderland agents`
   recordAgentStart({
@@ -112,7 +140,8 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
   if (providerId === 'openai' && openrouterFallback) {
     fmt.kvPair('Fallback', sColor('OpenRouter (auto)'));
   }
-  fmt.kvPair('Port', String(port));
+  const activePort = ctx.port;
+  fmt.kvPair('Port', String(activePort));
   fmt.kvPair('Tools', `${toolMap.size} loaded`);
   fmt.kvPair('Channels', `${adapterByPlatform.size} loaded`);
   const dStats = discoveryManager.getStats();
@@ -132,12 +161,12 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
     fmt.kvPair('Ollama', sColor('http://localhost:11434'));
   }
   fmt.blank();
-  fmt.ok(`Health: ${iColor(`http://localhost:${port}/health`)}`);
-  fmt.ok(`Chat:   ${iColor(`POST http://localhost:${port}/chat`)}`);
-  fmt.ok(`HITL:   ${iColor(`http://localhost:${port}/hitl`)}`);
-  fmt.ok(`Pairing: ${iColor(`http://localhost:${port}/pairing`)}`);
+  fmt.ok(`Health: ${iColor(`http://localhost:${activePort}/health`)}`);
+  fmt.ok(`Chat:   ${iColor(`POST http://localhost:${activePort}/chat`)}`);
+  fmt.ok(`HITL:   ${iColor(`http://localhost:${activePort}/hitl`)}`);
+  fmt.ok(`Pairing: ${iColor(`http://localhost:${activePort}/pairing`)}`);
   if (!autoApproveToolCalls) {
-    fmt.note(`CLI HITL: ${accent(`wunderland hitl watch --server http://localhost:${port} --secret ${hitlSecret}`)}`);
+    fmt.note(`CLI HITL: ${accent(`wunderland hitl watch --server http://localhost:${activePort} --secret ${hitlSecret}`)}`);
   }
   fmt.blank();
 }
