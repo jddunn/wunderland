@@ -404,7 +404,22 @@ export function createDefaultFolderConfig(
         defaultPolicy: 'deny',
         inheritFromTier: true,
         rules: [
+          // 1. Deny sensitive dotfiles first (first-match-wins: these must precede broad ~/**)
+          { pattern: '~/.ssh/**', read: false, write: false, description: 'Block SSH keys' },
+          { pattern: '~/.gnupg/**', read: false, write: false, description: 'Block GPG keys' },
+          { pattern: '~/.aws/**', read: false, write: false, description: 'Block AWS credentials' },
+          { pattern: '~/.config/gcloud/**', read: false, write: false, description: 'Block GCloud credentials' },
+          // 2. CWD — full read/write in the directory where the agent was started
+          { pattern: `${process.cwd()}/**`, read: true, write: true, description: 'Startup directory' },
+          // 3. Common writable directories
+          { pattern: '~/Documents/**', read: true, write: true, description: 'User documents' },
+          { pattern: '~/Desktop/**', read: true, write: true, description: 'User desktop' },
+          { pattern: '~/Downloads/**', read: true, write: true, description: 'User downloads' },
+          { pattern: '~/Projects/**', read: true, write: true, description: 'User projects' },
           { pattern: '~/workspace/**', read: true, write: true, description: 'Agent workspace' },
+          // 4. User home — read-only fallback for everything else under ~/
+          { pattern: '~/**', read: true, write: false, description: 'Read user home' },
+          // 5. System temp + logs
           { pattern: '/tmp/**', read: true, write: true, description: 'Temp files' },
           { pattern: '/var/log/**', read: true, write: false, description: 'Read-only logs' },
         ],
