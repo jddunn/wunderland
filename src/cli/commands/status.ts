@@ -43,11 +43,62 @@ export default async function cmdStatus(
   // Load env files
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
+  const format = typeof _flags['format'] === 'string' ? _flags['format'] : 'table';
   const config = await loadConfig(globals.config);
   const env = await loadEnv(globals.config);
   const ui = getUiRuntime();
   const g = glyphs();
 
+  // ── JSON output ──────────────────────────────────────────────────────────
+  if (format === 'json') {
+    const localConfig = path.resolve(process.cwd(), 'agent.config.json');
+    let agent: Record<string, unknown> = { hasConfig: false };
+    if (existsSync(localConfig)) {
+      try {
+        const rawCfg = JSON.parse(await readFile(localConfig, 'utf8'));
+        const { agentConfig: cfg, selectedPersona, availablePersonas } = await resolveEffectiveAgentConfig({
+          agentConfig: rawCfg,
+          workingDirectory: process.cwd(),
+        });
+        agent = {
+          hasConfig: true,
+          displayName: cfg.displayName,
+          seedId: cfg.seedId,
+          bio: cfg.bio,
+          presetId: cfg.presetId,
+          persona: selectedPersona ? { id: selectedPersona.id, name: selectedPersona.name } : null,
+          personaCount: Array.isArray(availablePersonas) ? availablePersonas.length : 0,
+          rag: cfg.rag ?? null,
+          discovery: cfg.discovery ?? null,
+        };
+      } catch { agent = { hasConfig: true, error: 'failed to parse agent.config.json' }; }
+    }
+
+    const secretStatus = checkEnvSecrets();
+    const llmKeys = secretStatus.filter((s) => ['openai', 'anthropic', 'openrouter'].some((p) => s.providers.includes(p)));
+    const toolKeys = secretStatus.filter((s) => ['serper', 'serpapi', 'brave', 'elevenlabs', 'giphy', 'newsapi', 'pexels', 'unsplash'].some((p) => s.providers.includes(p)));
+
+    const channels = (config.channels || []).map((chId: string) => {
+      const normalizedChannelId = normalizeChannelId(chId);
+      const secrets = getSecretsForPlatform(normalizedChannelId);
+      const ready = secrets.length === 0 || secrets.every((s) => !!(env[s.envVar] || process.env[s.envVar]));
+      return { id: chId, ready };
+    });
+
+    const usage = globalTokenTracker.getUsage();
+
+    console.log(JSON.stringify({
+      agent,
+      global: { agentName: config.agentName, llmProvider: config.llmProvider, llmModel: config.llmModel, lastSetup: config.lastSetup },
+      llmKeys: llmKeys.map((s) => ({ envVar: s.envVar, isSet: s.isSet })),
+      toolKeys: toolKeys.map((s) => ({ envVar: s.envVar, isSet: s.isSet })),
+      channels,
+      tokenUsage: globalTokenTracker.hasUsage() ? usage : null,
+    }, null, 2));
+    return;
+  }
+
+  // ── Table output ─────────────────────────────────────────────────────────
   fmt.section('Wunderland Status');
   fmt.blank();
 
