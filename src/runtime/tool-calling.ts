@@ -1276,8 +1276,9 @@ export async function runToolCallingTurn(opts: {
             // Enrich with API key guidance when available
             let apiKeyGuidance: string | undefined;
             try {
-              const { getApiKeyGuidance } = await import('@framers/agentos-extensions-registry');
-              apiKeyGuidance = getApiKeyGuidance(errMsg, toolName) ?? undefined;
+              const registry = await import('@framers/agentos-extensions-registry');
+              const getApiKeyGuidance = (registry as any).getApiKeyGuidance;
+              if (typeof getApiKeyGuidance === 'function') apiKeyGuidance = getApiKeyGuidance(errMsg, toolName) ?? undefined;
             } catch { /* best-effort */ }
             const fallbacks = TOOL_FALLBACK_MAP[toolName];
             const availableFallbacks = fallbacks?.filter(f => opts.toolMap?.has(f));
@@ -1310,8 +1311,9 @@ export async function runToolCallingTurn(opts: {
             const errorMsg = result?.error || 'Tool failed';
             let apiKeyHint: string | undefined;
             try {
-              const { getApiKeyGuidance } = await import('@framers/agentos-extensions-registry');
-              apiKeyHint = getApiKeyGuidance(errorMsg, toolName) ?? undefined;
+              const registry = await import('@framers/agentos-extensions-registry');
+              const getApiKeyGuidance = (registry as any).getApiKeyGuidance;
+              if (typeof getApiKeyGuidance === 'function') apiKeyHint = getApiKeyGuidance(errorMsg, toolName) ?? undefined;
             } catch { /* best-effort */ }
             const fallbacksOnFail = TOOL_FALLBACK_MAP[toolName];
             const availableFallbacksOnFail = fallbacksOnFail?.filter(f => opts.toolMap?.has(f));
