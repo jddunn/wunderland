@@ -30,19 +30,33 @@ export const CREDENTIALS_DIR_NAME = 'credentials';
 // ── LLM Providers ───────────────────────────────────────────────────────────
 
 export const LLM_PROVIDERS = [
-  { id: 'openai', label: 'OpenAI', envVar: 'OPENAI_API_KEY', docsUrl: 'https://platform.openai.com/account/api-keys', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'] },
-  { id: 'anthropic', label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY', docsUrl: 'https://console.anthropic.com/settings/keys', models: ['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
-  { id: 'openrouter', label: 'OpenRouter', envVar: 'OPENROUTER_API_KEY', docsUrl: 'https://openrouter.ai/keys', models: ['auto'] },
-  { id: 'ollama', label: 'Ollama (local)', envVar: '', docsUrl: 'https://ollama.ai/', models: ['llama3', 'llama3.2:3b', 'mistral', 'codellama'] },
-  { id: 'bedrock', label: 'AWS Bedrock', envVar: 'AWS_ACCESS_KEY_ID', docsUrl: 'https://docs.aws.amazon.com/bedrock/latest/userguide/', models: ['anthropic.claude-sonnet', 'anthropic.claude-haiku'] },
-  { id: 'gemini', label: 'Google Gemini', envVar: 'GEMINI_API_KEY', docsUrl: 'https://aistudio.google.com/apikey', models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-pro'] },
-  { id: 'github-copilot', label: 'GitHub Copilot', envVar: 'GITHUB_COPILOT_TOKEN', docsUrl: 'https://github.com/settings/copilot', models: ['gpt-4o', 'gpt-4o-mini'] },
-  { id: 'minimax', label: 'Minimax', envVar: 'MINIMAX_API_KEY', docsUrl: 'https://platform.minimaxi.com/', models: ['MiniMax-M2.1', 'MiniMax-VL-01'] },
-  { id: 'qwen', label: 'Qwen', envVar: 'QWEN_API_KEY', docsUrl: 'https://portal.qwen.ai/', models: ['qwen-max', 'qwen-turbo'] },
-  { id: 'moonshot', label: 'Moonshot', envVar: 'MOONSHOT_API_KEY', docsUrl: 'https://platform.moonshot.cn/', models: ['kimi-k2.5', 'kimi-k2-instant'] },
-  { id: 'venice', label: 'Venice', envVar: 'VENICE_API_KEY', docsUrl: 'https://venice.ai/settings/api', models: ['venice-default', 'venice-fast'] },
-  { id: 'cloudflare-ai', label: 'Cloudflare AI Gateway', envVar: 'CLOUDFLARE_API_TOKEN', docsUrl: 'https://developers.cloudflare.com/ai-gateway/', models: ['(configurable)'] },
-  { id: 'xiaomi-mimo', label: 'Xiaomi Mimo', envVar: 'XIAOMI_API_KEY', docsUrl: 'https://dev.mi.com/mimo', models: ['mimo-v2-flash'] },
+  { id: 'openai', label: 'OpenAI', envVar: 'OPENAI_API_KEY', signupUrl: 'https://platform.openai.com/api-keys', docsUrl: 'https://platform.openai.com/docs', validationUrl: 'https://api.openai.com/v1/models', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'] },
+  { id: 'anthropic', label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY', signupUrl: 'https://console.anthropic.com/settings/keys', docsUrl: 'https://docs.anthropic.com', validationUrl: 'https://api.anthropic.com/v1/messages', models: ['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
+  { id: 'openrouter', label: 'OpenRouter', envVar: 'OPENROUTER_API_KEY', signupUrl: 'https://openrouter.ai/keys', docsUrl: 'https://openrouter.ai/docs', validationUrl: 'https://openrouter.ai/api/v1/models', models: ['auto'] },
+  { id: 'ollama', label: 'Ollama (local)', envVar: '', signupUrl: 'https://ollama.ai/download', docsUrl: 'https://ollama.ai/', validationUrl: '', models: ['llama3', 'llama3.2:3b', 'mistral', 'codellama'] },
+  { id: 'bedrock', label: 'AWS Bedrock', envVar: 'AWS_ACCESS_KEY_ID', signupUrl: 'https://console.aws.amazon.com/bedrock/', docsUrl: 'https://docs.aws.amazon.com/bedrock/latest/userguide/', validationUrl: '', models: ['anthropic.claude-sonnet', 'anthropic.claude-haiku'] },
+  { id: 'gemini', label: 'Google Gemini', envVar: 'GEMINI_API_KEY', signupUrl: 'https://aistudio.google.com/apikey', docsUrl: 'https://ai.google.dev/docs', validationUrl: 'https://generativelanguage.googleapis.com/v1beta/models', models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-pro'] },
+  { id: 'github-copilot', label: 'GitHub Copilot', envVar: 'GITHUB_COPILOT_TOKEN', signupUrl: 'https://github.com/settings/copilot', docsUrl: 'https://docs.github.com/en/copilot', validationUrl: '', models: ['gpt-4o', 'gpt-4o-mini'] },
+  { id: 'minimax', label: 'Minimax', envVar: 'MINIMAX_API_KEY', signupUrl: 'https://platform.minimaxi.com/', docsUrl: 'https://platform.minimaxi.com/', validationUrl: '', models: ['MiniMax-M2.1', 'MiniMax-VL-01'] },
+  { id: 'qwen', label: 'Qwen', envVar: 'QWEN_API_KEY', signupUrl: 'https://portal.qwen.ai/', docsUrl: 'https://portal.qwen.ai/', validationUrl: '', models: ['qwen-max', 'qwen-turbo'] },
+  { id: 'moonshot', label: 'Moonshot', envVar: 'MOONSHOT_API_KEY', signupUrl: 'https://platform.moonshot.cn/', docsUrl: 'https://platform.moonshot.cn/', validationUrl: '', models: ['kimi-k2.5', 'kimi-k2-instant'] },
+  { id: 'venice', label: 'Venice', envVar: 'VENICE_API_KEY', signupUrl: 'https://venice.ai/settings/api', docsUrl: 'https://venice.ai/', validationUrl: '', models: ['venice-default', 'venice-fast'] },
+  { id: 'cloudflare-ai', label: 'Cloudflare AI Gateway', envVar: 'CLOUDFLARE_API_TOKEN', signupUrl: 'https://dash.cloudflare.com/', docsUrl: 'https://developers.cloudflare.com/ai-gateway/', validationUrl: '', models: ['(configurable)'] },
+  { id: 'xiaomi-mimo', label: 'Xiaomi Mimo', envVar: 'XIAOMI_API_KEY', signupUrl: 'https://dev.mi.com/mimo', docsUrl: 'https://dev.mi.com/mimo', validationUrl: '', models: ['mimo-v2-flash'] },
+] as const;
+
+// ── Tool API Key Providers ─────────────────────────────────────────────────
+
+export const TOOL_KEY_PROVIDERS = [
+  { id: 'serper', label: 'Serper (Google Search)', envVar: 'SERPER_API_KEY', category: 'search', signupUrl: 'https://serper.dev/api-key', validationUrl: 'https://google.serper.dev/search' },
+  { id: 'brave', label: 'Brave Search', envVar: 'BRAVE_API_KEY', category: 'search', signupUrl: 'https://brave.com/search/api/', validationUrl: 'https://api.search.brave.com/res/v1/web/search' },
+  { id: 'newsapi', label: 'NewsAPI', envVar: 'NEWSAPI_API_KEY', category: 'search', signupUrl: 'https://newsapi.org/register', validationUrl: 'https://newsapi.org/v2/top-headlines' },
+  { id: 'giphy', label: 'Giphy', envVar: 'GIPHY_API_KEY', category: 'media', signupUrl: 'https://developers.giphy.com/dashboard/', validationUrl: '' },
+  { id: 'pexels', label: 'Pexels', envVar: 'PEXELS_API_KEY', category: 'media', signupUrl: 'https://www.pexels.com/api/new/', validationUrl: '' },
+  { id: 'unsplash', label: 'Unsplash', envVar: 'UNSPLASH_ACCESS_KEY', category: 'media', signupUrl: 'https://unsplash.com/developers', validationUrl: '' },
+  { id: 'pixabay', label: 'Pixabay', envVar: 'PIXABAY_API_KEY', category: 'media', signupUrl: 'https://pixabay.com/api/docs/', validationUrl: '' },
+  { id: 'elevenlabs', label: 'ElevenLabs (TTS)', envVar: 'ELEVENLABS_API_KEY', category: 'voice', signupUrl: 'https://elevenlabs.io/app/settings/api-keys', validationUrl: 'https://api.elevenlabs.io/v1/user' },
+  { id: 'github', label: 'GitHub', envVar: 'GITHUB_TOKEN', category: 'devtools', signupUrl: 'https://github.com/settings/tokens', validationUrl: 'https://api.github.com/user' },
 ] as const;
 
 // ── Channel Platforms ───────────────────────────────────────────────────────
