@@ -9,6 +9,7 @@ export * from './MemoryReadTool.js';
 export * from './FeedSearchTool.js';
 export * from './RAGTool.js';
 export * from './LlmsTxtDiscovery.js';
+export * from './RequestFolderAccessTool.js';
 
 // Backward-compat aliases (deprecated)
 export * from './GiphyTool.js';
