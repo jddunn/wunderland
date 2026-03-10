@@ -14,6 +14,8 @@ import * as path from 'node:path';
 import {
   checkFolderAccess,
   expandTilde,
+  matchesGlob,
+  type FolderAccessRule,
   type FolderPermissionConfig,
 } from './FolderPermissions.js';
 import type { GranularPermissions } from './SecurityTiers.js';
@@ -144,6 +146,24 @@ const FILESYSTEM_TOOLS = new Set([
 ]);
 
 /**
+ * Paths that can NEVER be escalated, even with explicit user approval.
+ * These represent credentials, keys, and system-critical files that should
+ * only be accessed by editing the agent's folder permission config directly.
+ */
+const NON_ESCALATABLE_PATTERNS: string[] = [
+  '~/.ssh/**',
+  '~/.gnupg/**',
+  '~/.aws/**',
+  '~/.config/gcloud/**',
+  '~/.kube/**',
+  '/etc/shadow',
+  '/etc/passwd',
+  '/etc/sudoers',
+  '/root/**',
+  '/boot/**',
+];
+
+/**
  * Safe Guardrails - validates tool calls before execution
  */
 export class SafeGuardrails {
@@ -197,6 +217,44 @@ export class SafeGuardrails {
    */
   setTierPermissions(agentId: string, permissions: GranularPermissions['filesystem']): void {
     this.tierPermissions.set(agentId, permissions);
+  }
+
+  /**
+   * Get folder permissions for an agent (if configured).
+   */
+  getFolderPermissions(agentId: string): FolderPermissionConfig | undefined {
+    return this.folderPermissions.get(agentId);
+  }
+
+  /**
+   * Check whether a filesystem path is eligible for permission escalation.
+   * Returns false for sensitive paths (credentials, keys, system files) that
+   * should never be granted through runtime requests.
+   */
+  isEscalatable(filepath: string): boolean {
+    const resolved = path.resolve(expandTilde(filepath));
+    for (const pattern of NON_ESCALATABLE_PATTERNS) {
+      if (matchesGlob(resolved, pattern)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Append a folder access rule to an agent's permission config at runtime.
+   * If no config exists, creates one with `defaultPolicy: 'deny'`.
+   */
+  addFolderRule(agentId: string, rule: FolderAccessRule): void {
+    const existing = this.folderPermissions.get(agentId);
+    if (existing) {
+      // Insert before the last rule so broad fallback rules stay at the end
+      existing.rules.push(rule);
+    } else {
+      this.folderPermissions.set(agentId, {
+        defaultPolicy: 'deny',
+        inheritFromTier: true,
+        rules: [rule],
+      });
+    }
   }
 
   /**
