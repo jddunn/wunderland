@@ -145,6 +145,8 @@ async function sendChannelText(
  * Must be called before any other channel-handler export.
  */
 export function initChannelRuntime(ctx: ChannelRuntimeCtx): void {
+  // Ensure the map exists (it's never pre-initialized on ctx).
+  if (!ctx.adapterByPlatform) (ctx as any).adapterByPlatform = new Map();
   const { adapterByPlatform, loadedChannelAdapters } = ctx;
   for (const adapter of loadedChannelAdapters) {
     const platform = (adapter as any)?.platform;
