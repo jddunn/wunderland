@@ -62,10 +62,18 @@ const TOOL_FALLBACK_MAP: Record<string, string[]> = {
   'agent_delegate': ['agent_ping', 'agent_broadcast'],
   'agent_broadcast': ['agent_delegate'],
   'giphy_search': ['web_search'],
+  'file_read': ['request_folder_access'],
+  'file_write': ['request_folder_access'],
+  'list_directory': ['request_folder_access'],
+  'shell_execute': ['request_folder_access'],
 };
 
 // Initialize Safe Guardrails (singleton)
 let _guardrails: SafeGuardrails | undefined;
+/** Access the singleton SafeGuardrails instance (creates one if needed). */
+export function getGuardrailsInstance(): SafeGuardrails {
+  return getGuardrails();
+}
 function getGuardrails(): SafeGuardrails {
   if (!_guardrails) {
     _guardrails = new SafeGuardrails({
@@ -1209,10 +1217,46 @@ export async function runToolCallingTurn(opts: {
                 });
 
                 if (!guardrailsCheck.allowed) {
+                  // Attempt automatic permission escalation via HITL
+                  const deniedPaths = (guardrailsCheck.violations || [])
+                    .map(v => v.attemptedPath)
+                    .filter((p): p is string => !!p);
+                  const allEscalatable = deniedPaths.length > 0 && deniedPaths.every(p => guardrails.isEscalatable(p));
+
+                  if (allEscalatable && opts.askPermission) {
+                    const operation = deniedPaths.length > 0 ? (guardrailsCheck.violations?.[0]?.operation || tool.name) : tool.name;
+                    const isWrite = operation.includes('write') || operation.includes('delete') || operation.includes('append');
+                    // Present as a folder access request to the user
+                    const escalationTool = {
+                      ...tool,
+                      name: `folder_access:${tool.name}`,
+                      description: `Grant ${isWrite ? 'write' : 'read'} access to: ${deniedPaths.join(', ')}`,
+                    } as ToolInstance;
+                    const approved = await opts.askPermission(escalationTool, { paths: deniedPaths, operation: isWrite ? 'write' : 'read', originalTool: tool.name });
+
+                    if (approved) {
+                      // Add rules for each denied path
+                      for (const p of deniedPaths) {
+                        const dir = p.endsWith('/') ? p : path.dirname(p);
+                        guardrails.addFolderRule(agentId, {
+                          pattern: `${dir}/**`,
+                          read: true,
+                          write: isWrite,
+                          description: `Granted at runtime for ${tool.name}`,
+                        });
+                      }
+                      // Retry the original tool execution
+                      return await tool.execute(args, opts.toolContext);
+                    }
+                  }
+
                   return {
                     success: false,
                     error: guardrailsCheck.reason,
-                    output: { violations: guardrailsCheck.violations },
+                    output: {
+                      violations: guardrailsCheck.violations,
+                      canRequestAccess: allEscalatable,
+                    },
                   };
                 }
 
