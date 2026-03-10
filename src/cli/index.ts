@@ -37,6 +37,8 @@ function printHelp(opts?: { isExporting?: boolean }): void {
   ${c('Commands (grouped):')}
     ${w('Onboarding')}
       ${w('setup')}                 Wizard: keys, channels, personality
+      ${w('new')}                   Create agent (interactive, preset, NL, or import)
+      ${w('quickstart')}            Detect env → scaffold → go
       ${w('init')} ${d('<dir>')}            Scaffold an agent project
       ${w('create')} ${d('[description]')}  Create agent from natural language
       ${w('doctor')}                Health check
@@ -477,6 +479,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   upgrade:           () => import('./commands/upgrade.js'),
   env:               () => import('./commands/env.js'),
   completions:       () => import('./commands/completions.js'),
+  quickstart:        () => import('./commands/quickstart.js'),
+  new:               () => import('./commands/new.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
@@ -526,6 +530,54 @@ export async function main(argv: string[]): Promise<void> {
     }
     const shouldTui = globals.tui || (!globals.noTui && !globals.quiet && process.stdout.isTTY);
     if (shouldTui) {
+      // First-run detection: if no config exists, show welcome flow instead of TUI
+      const { existsSync } = await import('node:fs');
+      const { homedir } = await import('node:os');
+      const configExists = existsSync(`${homedir()}/.wunderland/config.json`);
+      if (!configExists) {
+        const p = await import('@clack/prompts');
+        await printBanner();
+        fmt.panel({
+          title: 'Welcome to Wunderland',
+          style: 'brand',
+          content: [
+            'Deploy autonomous AI agents with personality, memory, and real skills.',
+            '',
+            'This looks like your first time — let\'s get you set up.',
+          ].join('\n'),
+        });
+        fmt.blank();
+
+        const action = await p.select({
+          message: 'How would you like to get started?',
+          options: [
+            { value: 'quickstart', label: 'Quick Start', hint: 'API key + scaffold + go' },
+            { value: 'setup', label: 'Full Setup', hint: 'interactive wizard with all options' },
+            { value: 'create', label: 'Describe Your Agent', hint: 'plain English → agent config' },
+            { value: 'tui', label: 'Skip to Dashboard', hint: 'I know what I\'m doing' },
+          ],
+        });
+
+        if (p.isCancel(action)) return;
+
+        if (action === 'quickstart') {
+          const cmdQuickstart = (await import('./commands/quickstart.js')).default;
+          await cmdQuickstart([], flags, globals);
+          return;
+        }
+        if (action === 'setup') {
+          const cmdSetup = (await import('./commands/setup.js')).default;
+          await cmdSetup([], flags, globals);
+          return;
+        }
+        if (action === 'create') {
+          const cmdCreate = (await import('./commands/create.js')).default;
+          await cmdCreate([], flags, globals);
+          return;
+        }
+        // 'tui' falls through to normal TUI launch
+      }
+
       const { launchTui } = await import('./tui/index.js');
       await launchTui(globals);
       return;
