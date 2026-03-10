@@ -193,9 +193,6 @@ async function disableExtension(name: string): Promise<void> {
  * List all available extensions.
  */
 async function listExtensions(flags: Record<string, string | boolean>): Promise<void> {
-  const g = glyphs();
-  fmt.section('Available Extensions');
-
   try {
     const { getAvailableExtensions } = await import('@framers/agentos-extensions-registry');
     const available = await getAvailableExtensions();
@@ -213,6 +210,9 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
       console.log(JSON.stringify({ tools, voice, productivity, channels }, null, 2));
       return;
     }
+
+    const g = glyphs();
+    fmt.section('Available Extensions');
 
     // Table format
     if (tools.length > 0) {

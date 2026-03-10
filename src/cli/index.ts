@@ -147,6 +147,285 @@ ${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command ou
   `);
 }
 
+interface CommandHelpEntry {
+  summary: string;
+  usage: string[];
+  examples?: string[];
+  notes?: string[];
+}
+
+const COMMAND_HELP: Record<string, CommandHelpEntry> = {
+  setup: {
+    summary: 'Interactive onboarding wizard for keys, channels, and defaults.',
+    usage: ['wunderland setup [--yes] [--no-tui]'],
+    examples: ['wunderland setup', 'wunderland setup --yes --ascii --no-tui'],
+  },
+  init: {
+    summary: 'Scaffold a new agent project from a preset.',
+    usage: ['wunderland init <dir> [--preset <name>] [--security-tier <tier>] [--provider <id>]'],
+    examples: ['wunderland init my-agent --preset research-assistant', 'wunderland init ops-bot --preset operations-assistant --security-tier strict'],
+  },
+  create: {
+    summary: 'Create an agent config from a natural-language description.',
+    usage: ['wunderland create [description] [--managed] [--yes]'],
+    examples: ['wunderland create "Build a research assistant that summarizes the web."', 'wunderland create "Customer support bot for Shopify orders" --managed'],
+  },
+  doctor: {
+    summary: 'Check local configuration, API keys, and service connectivity.',
+    usage: ['wunderland doctor [--no-tui] [--ascii]'],
+    examples: ['wunderland doctor', 'wunderland doctor --no-tui --ascii'],
+  },
+  login: {
+    summary: 'Authenticate with a ChatGPT subscription using OAuth.',
+    usage: ['wunderland login'],
+    examples: ['wunderland login'],
+    notes: ['Use `wunderland auth-status` to inspect the stored session.'],
+  },
+  logout: {
+    summary: 'Remove stored OAuth credentials.',
+    usage: ['wunderland logout'],
+    examples: ['wunderland logout'],
+  },
+  'auth-status': {
+    summary: 'Show the current OAuth authentication status.',
+    usage: ['wunderland auth-status'],
+    examples: ['wunderland auth-status'],
+  },
+  chat: {
+    summary: 'Run the interactive terminal assistant.',
+    usage: ['wunderland chat [--oauth] [--model <id>] [--auto-approve-tools]'],
+    examples: ['wunderland chat', 'wunderland chat --oauth'],
+  },
+  start: {
+    summary: 'Start the local agent server in the foreground.',
+    usage: ['wunderland start [--port <number>] [--oauth] [--lazy-tools]'],
+    examples: ['wunderland start', 'wunderland start --port 3777 --ascii --no-tui'],
+  },
+  status: {
+    summary: 'Show agent, runtime, and connectivity status for the current project.',
+    usage: ['wunderland status [--no-tui]'],
+    examples: ['wunderland status'],
+  },
+  hitl: {
+    summary: 'Inspect and resolve approval checkpoints.',
+    usage: ['wunderland hitl [checkpoints|actions] [options]'],
+    examples: ['wunderland hitl', 'wunderland hitl checkpoints'],
+  },
+  agents: {
+    summary: 'List known agents on the local machine.',
+    usage: ['wunderland agents', 'wunderland ls'],
+    examples: ['wunderland agents', 'wunderland ls'],
+  },
+  ls: {
+    summary: 'Alias for `wunderland agents`.',
+    usage: ['wunderland ls'],
+    examples: ['wunderland ls'],
+  },
+  serve: {
+    summary: 'Start the current agent as a background daemon.',
+    usage: ['wunderland serve [--port <number>] [--restart] [--yes]'],
+    examples: ['wunderland serve --port 3777', 'wunderland serve --restart --yes'],
+  },
+  ps: {
+    summary: 'List running agent daemons.',
+    usage: ['wunderland ps [--no-health]'],
+    examples: ['wunderland ps', 'wunderland ps --no-health'],
+  },
+  logs: {
+    summary: 'Show or follow daemon logs.',
+    usage: ['wunderland logs [seedId] [--lines <n>] [--follow] [--stderr]'],
+    examples: ['wunderland logs seed_my_agent --lines 100', 'wunderland logs seed_my_agent --follow'],
+  },
+  stop: {
+    summary: 'Stop a running agent daemon.',
+    usage: ['wunderland stop [seedId] [--all] [--yes]'],
+    examples: ['wunderland stop seed_my_agent', 'wunderland stop --all --yes'],
+  },
+  monitor: {
+    summary: 'Show a live dashboard of running agents.',
+    usage: ['wunderland monitor'],
+    examples: ['wunderland monitor'],
+  },
+  channels: {
+    summary: 'Manage channel integrations for the current agent.',
+    usage: ['wunderland channels [list|add|remove] [options]'],
+    examples: ['wunderland channels list', 'wunderland channels add discord'],
+  },
+  models: {
+    summary: 'Inspect or change provider/model defaults.',
+    usage: ['wunderland models [list|set-default|test] [options]'],
+    examples: ['wunderland models list', 'wunderland models set-default openai gpt-4o'],
+  },
+  voice: {
+    summary: 'Inspect configured voice providers and test synthesis.',
+    usage: ['wunderland voice [status|test <text>]'],
+    examples: ['wunderland voice status', 'wunderland voice test "Hello from Wunderland"'],
+  },
+  cron: {
+    summary: 'Inspect scheduled job support and scheduler status.',
+    usage: ['wunderland cron'],
+    examples: ['wunderland cron'],
+  },
+  skills: {
+    summary: 'List, inspect, enable, or disable skills.',
+    usage: ['wunderland skills [list|info|enable|disable] [options]'],
+    examples: ['wunderland skills', 'wunderland skills info web-search'],
+  },
+  extensions: {
+    summary: 'List or inspect installed and available extensions.',
+    usage: ['wunderland extensions [list|info] [options]'],
+    examples: ['wunderland extensions', 'wunderland extensions info web-browser'],
+  },
+  cloud: {
+    summary: 'Inspect cloud hosting provider integrations.',
+    usage: ['wunderland cloud [list|info <provider>]'],
+    examples: ['wunderland cloud', 'wunderland cloud info railway'],
+  },
+  domains: {
+    summary: 'Inspect domain registrar integrations.',
+    usage: ['wunderland domains [list|info <registrar>]'],
+    examples: ['wunderland domains', 'wunderland domains info cloudflare'],
+  },
+  'list-presets': {
+    summary: 'List built-in personality and agent presets.',
+    usage: ['wunderland list-presets [--format json|table]'],
+    examples: ['wunderland list-presets', 'wunderland list-presets --format json'],
+  },
+  'list-personas': {
+    summary: 'List built-in AgentOS personas.',
+    usage: ['wunderland list-personas [--format json|table]'],
+    examples: ['wunderland list-personas', 'wunderland list-personas --format json'],
+  },
+  config: {
+    summary: 'Read or write CLI configuration values.',
+    usage: ['wunderland config [get <key>|set <key> <value>|list]'],
+    examples: ['wunderland config list', 'wunderland config set ui.theme cyberpunk'],
+  },
+  env: {
+    summary: 'Manage environment variables and secrets.',
+    usage: ['wunderland env [list|get|set|delete|import] [options]'],
+    examples: ['wunderland env list', 'wunderland env get OPENAI_API_KEY'],
+  },
+  deploy: {
+    summary: 'Generate deployment artifacts for Docker, Railway, or Fly.',
+    usage: ['wunderland deploy [--target <docker|railway|fly>] [--output <dir>] [--force]'],
+    examples: ['wunderland deploy --target docker', 'wunderland deploy --target fly --region iad'],
+  },
+  rag: {
+    summary: 'Manage vector and graph RAG collections, ingestion, and queries.',
+    usage: ['wunderland rag [ingest|query|collections|documents|graph] [options]'],
+    examples: ['wunderland rag query "What do we know about ACME?"', 'wunderland rag collections list'],
+  },
+  agency: {
+    summary: 'Manage multi-agent collectives and handoffs.',
+    usage: ['wunderland agency [create|status|list|handoff] [options]'],
+    examples: ['wunderland agency list', 'wunderland agency create ops-team'],
+  },
+  workflows: {
+    summary: 'Run or inspect workflow executions.',
+    usage: ['wunderland workflows [list|run|status|cancel] [options]'],
+    examples: ['wunderland workflows list', 'wunderland workflows run nightly-summary'],
+  },
+  evaluate: {
+    summary: 'Run evaluation datasets and inspect results.',
+    usage: ['wunderland evaluate [list|run|results] [options]'],
+    examples: ['wunderland evaluate list', 'wunderland evaluate run support-regression'],
+  },
+  knowledge: {
+    summary: 'Inspect the knowledge graph and local memories.',
+    usage: ['wunderland knowledge [stats|query|entities|relations] [options]'],
+    examples: ['wunderland knowledge stats', 'wunderland knowledge query "refund policy"'],
+  },
+  provenance: {
+    summary: 'Inspect provenance settings and verify audit trails.',
+    usage: ['wunderland provenance [status|verify|tail] [options]'],
+    examples: ['wunderland provenance status', 'wunderland provenance verify --dir .'],
+  },
+  marketplace: {
+    summary: 'Search and install marketplace assets.',
+    usage: ['wunderland marketplace [search|info|install] [options]'],
+    examples: ['wunderland marketplace search browser', 'wunderland marketplace info web-browser'],
+  },
+  seal: {
+    summary: 'Generate a `sealed.json` integrity record for the current agent config.',
+    usage: ['wunderland seal [--dir <path>] [--force]'],
+    examples: ['wunderland seal', 'wunderland seal --dir . --force'],
+  },
+  'verify-seal': {
+    summary: 'Verify a `sealed.json` file against the local agent config.',
+    usage: ['wunderland verify-seal <sealed.json> [--dir <path>]'],
+    examples: ['wunderland verify-seal sealed.json'],
+  },
+  export: {
+    summary: 'Export the current agent as a manifest.',
+    usage: ['wunderland export [--output <path>] [--force]'],
+    examples: ['wunderland export', 'wunderland export --output agent.manifest.json --force'],
+  },
+  import: {
+    summary: 'Import an agent manifest into a local project directory.',
+    usage: ['wunderland import <manifest.json> [--dir <target>] [--force]'],
+    examples: ['wunderland import ./agent.manifest.json', 'wunderland import ./agent.manifest.json --dir ./imported-agent'],
+  },
+  plugins: {
+    summary: 'List installed extension packs and plugins.',
+    usage: ['wunderland plugins [--format json|table]'],
+    examples: ['wunderland plugins', 'wunderland plugins --format json'],
+  },
+  'export-session': {
+    summary: 'Export a chat session transcript.',
+    usage: ['wunderland export-session [--format json|md] [--output <path>]'],
+    examples: ['wunderland export-session --format md --output session.md'],
+  },
+  'ollama-setup': {
+    summary: 'Configure Ollama as the local LLM provider.',
+    usage: ['wunderland ollama-setup [model] [--yes]'],
+    examples: ['wunderland ollama-setup', 'wunderland ollama-setup llama3.1:8b --yes'],
+  },
+  upgrade: {
+    summary: 'Check for updates or self-update the CLI.',
+    usage: ['wunderland upgrade [--check]'],
+    examples: ['wunderland upgrade --check', 'wunderland upgrade'],
+  },
+  completions: {
+    summary: 'Print shell completion scripts.',
+    usage: ['wunderland completions <bash|zsh|fish>'],
+    examples: ['wunderland completions zsh', 'wunderland completions bash'],
+  },
+  version: {
+    summary: 'Print the installed CLI version.',
+    usage: ['wunderland version'],
+    examples: ['wunderland version'],
+  },
+};
+
+function printCommandHelp(command: string): boolean {
+  const entry = COMMAND_HELP[command];
+  if (!entry) return false;
+
+  const c = accent;
+  const d = dim;
+  const w = chalk.white;
+
+  console.log(`
+  ${c('Command:')} ${w(command)}
+    ${entry.summary}
+
+  ${c('Usage:')}
+${entry.usage.map((line) => `    ${w(line)}`).join('\n')}
+${entry.examples?.length ? `
+  ${c('Examples:')}
+${entry.examples.map((line) => `    ${w(line)}`).join('\n')}` : ''}${entry.notes?.length ? `
+
+  ${c('Notes:')}
+${entry.notes.map((line) => `    ${d(line)}`).join('\n')}` : ''}
+
+  ${d('Full reference:')} ${accent('wunderland --help')}
+  ${d('Quick guides:')}   ${accent('wunderland help getting-started')}
+  `);
+
+  return true;
+}
+
 // ── Command dispatch ────────────────────────────────────────────────────────
 
 /** Command registry — lazy imports for fast startup. */
@@ -260,12 +539,15 @@ export async function main(argv: string[]): Promise<void> {
   if (globals.help && command !== 'help') {
     if (typeof flags['export-png'] === 'string') {
       const { withExport } = await import('./export/export-middleware.js');
-      const helpHandler = async () => { printCompactHeader(); printHelp({ isExporting: true }); };
+      const helpHandler = async () => {
+        printCompactHeader();
+        if (!printCommandHelp(command)) printHelp({ isExporting: true });
+      };
       await withExport(helpHandler, [], flags, globals, '--help');
       return;
     }
     if (!globals.quiet) printCompactHeader();
-    printHelp();
+    if (!printCommandHelp(command)) printHelp();
     return;
   }
 

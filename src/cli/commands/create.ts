@@ -18,6 +18,20 @@ import { SECURITY_TIERS, getSecurityTier, isValidSecurityTier, type SecurityTier
 import { extractAgentConfig } from '../../ai/NaturalLanguageAgentBuilder.js';
 import type { ExtractedAgentConfig } from '../../ai/NaturalLanguageAgentBuilder.js';
 
+type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+export function describeCreateConfidence(conf: number | undefined): { level: ConfidenceLevel; percent: number } | null {
+  if (conf === undefined) return null;
+
+  const percent = Math.max(0, Math.min(100, Math.round(conf * 100)));
+  const level: ConfidenceLevel =
+    conf >= 0.8 ? 'high'
+    : conf >= 0.5 ? 'medium'
+    : 'low';
+
+  return { level, percent };
+}
+
 function buildEnvExample(opts: { llmProvider?: string; llmModel?: string }): string {
   const provider = typeof opts.llmProvider === 'string' ? opts.llmProvider.trim().toLowerCase() : 'openai';
   const model = typeof opts.llmModel === 'string' && opts.llmModel.trim() ? opts.llmModel.trim() : 'gpt-4o';
@@ -235,19 +249,20 @@ export default async function cmdCreate(
 
   const confidence = extracted.confidence ?? {};
 
-  function formatConfidenceBadge(conf: number | undefined): string {
-    if (conf === undefined) return '';
-    const g = glyphs();
-    const pct = `${Math.round(conf * 100)}%`;
-    if (conf >= 0.8) return sColor(`${g.ok} ${pct}`);
-    if (conf >= 0.5) return wColor(`${g.warn} ${pct}`);
-    return eColor(`${g.fail} ${pct}`);
+  function formatConfidenceHint(conf: number | undefined): string {
+    const summary = describeCreateConfidence(conf);
+    if (!summary) return '';
+
+    const text = dim(`(${summary.percent}% confidence)`);
+    if (summary.level === 'high') return sColor(text);
+    if (summary.level === 'medium') return wColor(text);
+    return eColor(text);
   }
 
   function formatField(value: unknown, confidenceKey: string): string {
-    const confBadge = formatConfidenceBadge(confidence[confidenceKey]);
+    const confHint = formatConfidenceHint(confidence[confidenceKey]);
     const valueStr = typeof value === 'object' ? JSON.stringify(value, null, 2).slice(0, 100) : String(value);
-    return `${accent(valueStr)}${confBadge ? ` ${confBadge}` : ''}`;
+    return `${accent(valueStr)}${confHint ? ` ${confHint}` : ''}`;
   }
 
   fmt.kvPair('Display Name', extracted.displayName ? formatField(extracted.displayName, 'displayName') : dim('(not set)'));
@@ -259,8 +274,8 @@ export default async function cmdCreate(
   }
 
   if (extracted.skills && extracted.skills.length > 0) {
-    const badge = formatConfidenceBadge(confidence.skills);
-    fmt.kvPair('Skills', `${extracted.skills.join(', ')}${badge ? ` ${badge}` : ''}`);
+    const hint = formatConfidenceHint(confidence.skills);
+    fmt.kvPair('Skills', `${extracted.skills.join(', ')}${hint ? ` ${hint}` : ''}`);
   }
 
   if (extracted.extensions) {
