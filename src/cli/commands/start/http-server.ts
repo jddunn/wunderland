@@ -896,6 +896,13 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
 
         messages.push({ role: 'user', content: message });
 
+        // Work on a shallow copy so a mid-flight tool-call failure
+        // doesn't corrupt the persisted session history with orphaned
+        // tool_calls entries (OpenAI rejects the entire conversation
+        // if an assistant message with tool_calls isn't followed by
+        // matching tool response messages).
+        const workingMessages = [...messages];
+
         try {
           if (canUseLLM) {
             // Capability discovery — inject tiered context AND build filtered tool set
@@ -903,9 +910,9 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
             try {
               const discoveryResult = await discoveryManager.discoverForTurn(message);
               if (discoveryResult) {
-                for (let i = messages.length - 1; i >= 1; i--) {
-                  if (typeof messages[i]?.content === 'string' && String(messages[i]!.content).startsWith('[Capability Context]')) {
-                    messages.splice(i, 1);
+                for (let i = workingMessages.length - 1; i >= 1; i--) {
+                  if (typeof workingMessages[i]?.content === 'string' && String(workingMessages[i]!.content).startsWith('[Capability Context]')) {
+                    workingMessages.splice(i, 1);
                   }
                 }
                 const ctxParts: string[] = ['[Capability Context]', discoveryResult.tier0];
@@ -915,7 +922,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
                 if (discoveryResult.tier2.length > 0) {
                   ctxParts.push(discoveryResult.tier2.map((r: any) => r.fullText).join('\n'));
                 }
-                messages.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
+                workingMessages.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
 
                 // Extract discovered tool names for filtered tool defs
                 const names = new Set<string>();
@@ -986,7 +993,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
               providerId,
               apiKey: llmApiKey,
               model,
-              messages,
+              messages: workingMessages,
               toolMap: requestToolMap,
               ...(apiFilteredGetToolDefs && { getToolDefs: apiFilteredGetToolDefs }),
               toolContext,
@@ -1067,6 +1074,11 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
               'Set an API key in .env (OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY) or use Ollama, then retry.\n\n' +
               `You said: ${message}`;
           }
+          // Turn succeeded — commit working messages back to the session.
+          // This replaces the stored array so any new entries (assistant
+          // replies, tool calls/responses) are persisted for continuity,
+          // but only after a clean round-trip with the LLM provider.
+          sessions.set(internalSessionId, workingMessages);
         } catch (error) {
           turnFailed = true;
           throw error;
