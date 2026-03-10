@@ -17,6 +17,7 @@ import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
 import { DEFAULT_HEXACO_TRAITS, type HEXACOTraits } from '../../core/types.js';
 import { getUiRuntime } from '../ui/runtime.js';
 import { runApiKeysWizard } from './api-keys-wizard.js';
+
 import { runChannelsWizard } from './channels-wizard.js';
 import { runPersonalityWizard } from './personality-wizard.js';
 import { runVoiceWizard } from './voice-wizard.js';
@@ -119,6 +120,9 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   if (state.llmProvider === 'ollama') {
     await runOllamaAutoConfig(state);
   }
+
+  // Step 2c: Tool API Keys (optional — search, media, voice, devtools)
+  await runToolKeysWizard(state);
 
   // Step 3: Personality
   if (state.mode === 'advanced') {
