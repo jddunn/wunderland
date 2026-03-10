@@ -12,6 +12,49 @@ import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { importEnvBlock } from '../config/env-manager.js';
 
+// ── Key validation ──────────────────────────────────────────────────────────
+
+async function validateApiKey(providerId: string, apiKey: string): Promise<{ valid: boolean; detail: string; latency: number }> {
+  const provider = LLM_PROVIDERS.find((p) => p.id === providerId);
+  if (!provider?.validationUrl) return { valid: true, detail: 'no validation endpoint', latency: 0 };
+
+  const start = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const headers: Record<string, string> = {};
+
+    if (providerId === 'anthropic') {
+      headers['x-api-key'] = apiKey;
+      headers['anthropic-version'] = '2023-06-01';
+      headers['content-type'] = 'application/json';
+      // Send minimal request — 400 = key is valid, 401 = invalid
+      const res = await fetch(provider.validationUrl, {
+        method: 'POST', signal: controller.signal, headers,
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+      });
+      clearTimeout(timer);
+      const latency = Date.now() - start;
+      if (res.status === 401) return { valid: false, detail: '401 Unauthorized', latency };
+      return { valid: true, detail: `${res.status} (${latency}ms)`, latency };
+    }
+
+    // Default: Bearer token + HEAD/GET
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    const method = providerId === 'gemini' ? 'GET' : 'HEAD';
+    const url = providerId === 'gemini' ? `${provider.validationUrl}?key=${apiKey}` : provider.validationUrl;
+    const finalHeaders = providerId === 'gemini' ? {} : headers;
+
+    const res = await fetch(url, { method, signal: controller.signal, headers: finalHeaders });
+    clearTimeout(timer);
+    const latency = Date.now() - start;
+    if (res.status === 401 || res.status === 403) return { valid: false, detail: `${res.status} Unauthorized`, latency };
+    return { valid: true, detail: `${latency}ms`, latency };
+  } catch (err: any) {
+    return { valid: false, detail: err?.message || 'connection failed', latency: Date.now() - start };
+  }
+}
+
 export async function runApiKeysWizard(state: WizardState): Promise<void> {
   // ── .env paste import ──────────────────────────────────────────────────────
   const wantsPaste = await p.confirm({
@@ -142,11 +185,40 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
 
     if (p.isCancel(apiKey)) continue;
     if (apiKey) {
-      state.apiKeys[provider.envVar] = apiKey as string;
-      state.llmProvider = state.llmProvider || provId;
+      // Validate the key in real-time
+      const validation = await validateApiKey(provId, apiKey as string);
+      if (validation.valid) {
+        fmt.ok(`${provider.label}: key valid (${validation.detail})`);
+        state.apiKeys[provider.envVar] = apiKey as string;
+        state.llmProvider = state.llmProvider || provId;
+      } else {
+        fmt.fail(`${provider.label}: ${validation.detail}`);
+        fmt.note(`Get a key: ${fmt.link(provider.signupUrl)}`);
+        // Offer retry
+        const retry = await p.confirm({ message: 'Try a different key?', initialValue: true });
+        if (!p.isCancel(retry) && retry) {
+          const retryKey = await p.password({ message: `${provider.label} API Key (retry):` });
+          if (!p.isCancel(retryKey) && retryKey) {
+            const retryValidation = await validateApiKey(provId, retryKey as string);
+            if (retryValidation.valid) {
+              fmt.ok(`${provider.label}: key valid (${retryValidation.detail})`);
+              state.apiKeys[provider.envVar] = retryKey as string;
+              state.llmProvider = state.llmProvider || provId;
+            } else {
+              fmt.fail(`${provider.label}: still invalid — saving anyway, you can update later.`);
+              state.apiKeys[provider.envVar] = retryKey as string;
+              state.llmProvider = state.llmProvider || provId;
+            }
+          }
+        } else {
+          // Save anyway — user might fix later
+          state.apiKeys[provider.envVar] = apiKey as string;
+          state.llmProvider = state.llmProvider || provId;
+        }
+      }
+    } else {
+      fmt.note(`Get one at: ${fmt.link(provider.signupUrl)}`);
     }
-
-    fmt.note(`Get one at: ${fmt.link(provider.docsUrl)}`);
   }
 
   // Select default model
