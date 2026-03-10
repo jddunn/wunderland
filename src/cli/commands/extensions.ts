@@ -7,9 +7,29 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import { accent, dim } from '../ui/theme.js';
+import { accent, dim, muted, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
+
+// ── Extension search scoring ────────────────────────────────────────────────
+
+function scoreExtension(ext: { name: string; displayName: string; description: string; category: string }, query: string): number {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return 0;
+
+  const searchable = [ext.name, ext.displayName, ext.description, ext.category].join(' ').toLowerCase();
+
+  let score = 0;
+  for (const term of terms) {
+    if (ext.name.toLowerCase() === term) { score += 50; continue; }
+    if (ext.name.toLowerCase().includes(term)) { score += 30; continue; }
+    if (ext.displayName.toLowerCase().includes(term)) { score += 25; continue; }
+    if (ext.category.toLowerCase() === term) { score += 20; continue; }
+    if (ext.description.toLowerCase().includes(term)) { score += 10; continue; }
+    if (searchable.includes(term)) { score += 5; continue; }
+  }
+  return Math.round(score / terms.length);
+}
 
 // ── Config helpers ──────────────────────────────────────────────────────────
 
@@ -42,6 +62,10 @@ export default async function cmdExtensions(
     return listExtensions(flags);
   }
 
+  if (subcommand === 'search') {
+    return searchExtensions(args.slice(1), flags);
+  }
+
   if (subcommand === 'info') {
     return showExtensionInfo(args[1], flags);
   }
@@ -61,7 +85,7 @@ export default async function cmdExtensions(
     return;
   }
 
-  fmt.errorBlock('Unknown subcommand', `"${subcommand}" is not a valid extensions subcommand.`);
+  fmt.errorBlock('Unknown subcommand', `"${subcommand}" is not a valid extensions subcommand.\nUsage: wunderland extensions <list|search|info|enable|disable> [options]`);
   process.exitCode = 1;
 }
 
@@ -192,7 +216,59 @@ async function disableExtension(name: string): Promise<void> {
 /**
  * List all available extensions.
  */
+async function searchExtensions(args: string[], flags: Record<string, string | boolean>): Promise<void> {
+  const query = args.join(' ').trim();
+  if (!query) {
+    fmt.errorBlock('Missing search query', 'Usage: wunderland extensions search <query>\n\nExamples:\n  wunderland extensions search "browser"\n  wunderland extensions search voice\n  wunderland extensions search search');
+    process.exitCode = 1;
+    return;
+  }
+
+  try {
+    const { getAvailableExtensions } = await import('@framers/agentos-extensions-registry');
+    const available = await getAvailableExtensions();
+    const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+
+    const scored = available
+      .map((ext: any) => ({ ext, score: scoreExtension(ext, query) }))
+      .filter((r: any) => r.score > 0)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, 10);
+
+    if (format === 'json') {
+      console.log(JSON.stringify({ query, results: scored.map((r: any) => ({ ...r.ext, relevance: r.score })) }, null, 2));
+      return;
+    }
+
+    if (scored.length === 0) {
+      fmt.warning(`No extensions match "${query}".`);
+      fmt.note(`Try: ${accent('wunderland extensions list')} to see all available extensions.`);
+      return;
+    }
+
+    const g = glyphs();
+    const maxScore = scored[0].score;
+    fmt.section(`Extensions matching "${query}"`);
+    fmt.blank();
+
+    for (const { ext, score } of scored) {
+      const pct = Math.min(100, Math.round((score / maxScore) * 100));
+      const bar = pct >= 80 ? sColor(`(${pct}%)`) : pct >= 50 ? wColor(`(${pct}%)`) : dim(`(${pct}%)`);
+      const status = ext.available ? sColor(g.ok) : muted(g.circle);
+      console.log(`  ${status} ${accent(((ext as any).name || '').padEnd(24))} ${muted(ext.category.padEnd(14))} ${bar}  ${muted(ext.description)}`);
+    }
+    fmt.blank();
+    fmt.note(`Enable: ${accent('wunderland extensions enable <name>')}`);
+    fmt.blank();
+  } catch {
+    fmt.errorBlock('Extensions registry not available', 'Install @framers/agentos-extensions-registry to use this command.');
+    process.exitCode = 1;
+  }
+}
+
 async function listExtensions(flags: Record<string, string | boolean>): Promise<void> {
+  const categoryFilter = typeof flags['category'] === 'string' ? flags['category'].toLowerCase() : null;
+
   try {
     const { getAvailableExtensions } = await import('@framers/agentos-extensions-registry');
     const available = await getAvailableExtensions();
@@ -204,18 +280,38 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
     const productivity = available.filter((e) => cat(e) === 'productivity');
     const channels = available.filter((e) => cat(e) === 'channel');
 
+    // Apply category filter
+    const showTools = !categoryFilter || 'tool'.includes(categoryFilter) || 'integration'.includes(categoryFilter);
+    const showVoice = !categoryFilter || 'voice'.includes(categoryFilter);
+    const showProductivity = !categoryFilter || 'productivity'.includes(categoryFilter);
+    const showChannels = !categoryFilter || 'channel'.includes(categoryFilter);
+
     const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
 
     if (format === 'json') {
-      console.log(JSON.stringify({ tools, voice, productivity, channels }, null, 2));
+      const output: Record<string, unknown> = {};
+      if (showTools) output.tools = tools;
+      if (showVoice) output.voice = voice;
+      if (showProductivity) output.productivity = productivity;
+      if (showChannels) output.channels = channels;
+      console.log(JSON.stringify(output, null, 2));
       return;
     }
 
     const g = glyphs();
     fmt.section('Available Extensions');
 
+    // Category summary
+    const summaryParts: string[] = [];
+    if (showTools) summaryParts.push(`Tools (${tools.length})`);
+    if (showVoice) summaryParts.push(`Voice (${voice.length})`);
+    if (showProductivity) summaryParts.push(`Productivity (${productivity.length})`);
+    if (showChannels) summaryParts.push(`Channels (${channels.length})`);
+    fmt.blank();
+    fmt.note(summaryParts.join('  |  '));
+
     // Table format
-    if (tools.length > 0) {
+    if (showTools && tools.length > 0) {
       fmt.blank();
       fmt.note(accent('Tools:'));
       for (const ext of tools) {
@@ -224,7 +320,7 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
       }
     }
 
-    if (voice.length > 0) {
+    if (showVoice && voice.length > 0) {
       fmt.blank();
       fmt.note(accent('Voice:'));
       for (const ext of voice) {
@@ -233,7 +329,7 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
       }
     }
 
-    if (productivity.length > 0) {
+    if (showProductivity && productivity.length > 0) {
       fmt.blank();
       fmt.note(accent('Productivity:'));
       for (const ext of productivity) {
@@ -242,7 +338,7 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
       }
     }
 
-    if (channels.length > 0) {
+    if (showChannels && channels.length > 0) {
       fmt.blank();
       fmt.note(accent('Channels:'));
       for (const ext of channels.slice(0, 10)) {
@@ -255,7 +351,8 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
     }
 
     fmt.blank();
-    fmt.note(`Total: ${available.length} extensions (${available.filter((e) => e.available).length} installed)`);
+    fmt.note(`Total: ${available.length} extensions (${available.filter((e: any) => e.available).length} installed)`);
+    fmt.note(`Search: ${accent('wunderland extensions search <query>')}`);
   } catch (err) {
     fmt.errorBlock('Extensions registry not available', 'Install @framers/agentos-extensions-registry to use this command.');
     process.exitCode = 1;
