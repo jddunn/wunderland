@@ -5,11 +5,12 @@
 
 import { randomUUID } from 'node:crypto';
 import * as fmt from '../../ui/format.js';
-import type { ToolInstance } from '../../openai/tool-calling.js';
+import { type ToolInstance, getGuardrailsInstance } from '../../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../../openai/schema-on-demand.js';
 import { filterToolMapByPolicy } from '../../security/runtime-policy.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
 import { createConfiguredRagTools } from '../../../rag/runtime-tools.js';
+import { createRequestFolderAccessTool } from '../../../tools/RequestFolderAccessTool.js';
 import { HumanInteractionManager, type IChannelAdapter } from '@framers/agentos';
 
 type ExtensionHttpHandler = (
@@ -395,6 +396,30 @@ export async function loadExtensions(ctx: any): Promise<void> {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[Server] Wallet extension failed to load: ${msg}`);
     }
+  }
+
+  // ── Runtime folder access request tool ──
+  if (!ctx.dangerouslySkipPermissions) {
+    const folderAccessTool = createRequestFolderAccessTool({
+      guardrails: getGuardrailsInstance(),
+      agentId: ctx.seedId ?? workspaceAgentId,
+      requestPermission: async (req) => {
+        const actionId = `folder-access-${randomUUID()}`;
+        const decision = await hitlManager.requestApproval({
+          actionId,
+          description: `Grant ${req.operation.toUpperCase()} access to ${req.path}${req.recursive ? '/**' : ''}?\nReason: ${req.reason}`,
+          severity: req.operation === 'write' ? 'high' : 'medium',
+          category: 'folder-permission',
+          agentId: ctx.seedId ?? workspaceAgentId,
+          context: { path: req.path, operation: req.operation, reason: req.reason },
+          reversible: true,
+          requestedAt: new Date(),
+          timeoutMs: 5 * 60_000,
+        } as any);
+        return (decision as any)?.approved === true;
+      },
+    });
+    toolMap.set('request_folder_access', folderAccessTool as any);
   }
 
   ctx.toolMap = toolMap;

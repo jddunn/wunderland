@@ -129,7 +129,11 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
       'Tool authorization is handled automatically by the runtime. Call tools freely — the system will handle any required approvals. '
       + 'NEVER say "I cannot create files", "I cannot run commands", or "I don\'t have the capability". '
       + 'You DO have shell_execute, file_write, file_read, browser_navigate, and other tools available. Always attempt the tool call. '
-      + 'If a tool call fails or is denied, explain that the action requires approval and suggest the user enable auto-approve mode with --auto-approve-tools.',
+      + 'If a tool call fails or is denied, explain that the action requires approval and suggest the user enable auto-approve mode with --auto-approve-tools.\n\n'
+      + 'FOLDER PERMISSIONS: If a filesystem tool is denied due to folder permissions, '
+      + 'use the request_folder_access tool to ask the user for permission. Explain WHY you need access. '
+      + 'If approved, retry the original operation. If denied, acknowledge that the user chose not to grant access. '
+      + 'NEVER say "I don\'t have permission" and give up — always request access first.',
     );
   }
   if (turnApprovalMode && turnApprovalMode !== 'off') {

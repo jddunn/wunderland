@@ -18,7 +18,7 @@ import { getUiRuntime } from '../ui/runtime.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
-import { runToolCallingTurn, safeJsonStringify, truncateString, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
+import { runToolCallingTurn, safeJsonStringify, truncateString, getGuardrailsInstance, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
@@ -47,6 +47,7 @@ import {
 import { loadConfig } from '../config/config-manager.js';
 import { createConfiguredRagTools } from '../../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
+import { createRequestFolderAccessTool } from '../../tools/RequestFolderAccessTool.js';
 
 // ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
 
@@ -987,6 +988,20 @@ export default async function cmdChat(
     const answer = (await rl.question(q)).trim().toLowerCase();
     return answer === 'y' || answer === 'yes';
   };
+
+  // ── Runtime folder access request tool ──
+  if (!dangerouslySkipPermissions) {
+    const folderAccessTool = createRequestFolderAccessTool({
+      guardrails: getGuardrailsInstance(),
+      agentId: seedId,
+      requestPermission: async (req) => {
+        const q = `  ${wColor(glyphs().warn)} Grant ${req.operation.toUpperCase()} access to ${tColor(req.path)}${req.recursive ? '/**' : ''}?\n  ${dim(`Reason: ${req.reason}`)}\n  ${muted('[y/N]')} `;
+        const answer = (await rl.question(q)).trim().toLowerCase();
+        return answer === 'y' || answer === 'yes';
+      },
+    });
+    toolMap.set('request_folder_access', folderAccessTool as any);
+  }
 
   const askCheckpoint = turnApprovalMode === 'off'
     ? undefined
