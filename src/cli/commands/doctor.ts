@@ -7,14 +7,14 @@
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import { info as iColor, bright } from '../ui/theme.js';
+import { info as iColor, bright, dim, muted } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { createStepProgress } from '../ui/progress.js';
 import { getConfigPath } from '../config/config-manager.js';
 import { getEnvPath, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
-import { URLS } from '../constants.js';
+import { URLS, LLM_PROVIDERS, TOOL_KEY_PROVIDERS } from '../constants.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -41,8 +41,7 @@ export default async function cmdDoctor(
   // Load env files so secrets are available
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
-  fmt.section('Wunderland Doctor');
-  fmt.blank();
+  const format = typeof _flags['format'] === 'string' ? _flags['format'] : 'table';
 
   // Build all step labels
   const configPath = getConfigPath(globals.config);
@@ -74,6 +73,41 @@ export default async function cmdDoctor(
     { label: 'OpenAI API', url: 'https://api.openai.com/v1/models' },
     { label: URLS.website, url: URLS.website },
   ];
+
+  // ── JSON output ──────────────────────────────────────────────────────────
+  if (format === 'json') {
+    const connectivity: Array<{ label: string; url: string; ok: boolean; latency: number }> = [];
+    for (const ep of endpoints) {
+      const result = await checkReachable(ep.url);
+      connectivity.push({ label: ep.label, url: ep.url, ok: result.ok, latency: result.latency });
+    }
+
+    const output = {
+      configuration: {
+        configJson: { path: configPath, exists: existsSync(configPath) },
+        envFile: { path: envPath, exists: existsSync(envPath) },
+        agentConfig: { path: localConfig, exists: existsSync(localConfig) },
+      },
+      apiKeys: keyEntries.map((k) => ({
+        envVar: k.envVar,
+        isSet: k.isSet,
+        optional: k.optional,
+        maskedValue: k.maskedValue,
+      })),
+      channels: platformChecks.map((pc) => ({
+        platform: pc.platform,
+        status: pc.allSet ? 'configured' : pc.anySet ? 'partial' : 'not_configured',
+      })),
+      connectivity,
+    };
+
+    console.log(JSON.stringify(output, null, 2));
+    return;
+  }
+
+  // ── Table output ─────────────────────────────────────────────────────────
+  fmt.section('Wunderland Doctor');
+  fmt.blank();
 
   // Build step labels
   const stepLabels: string[] = [
@@ -130,6 +164,13 @@ export default async function cmdDoctor(
       progress.skip(stepIdx, 'not set (optional)');
     } else {
       progress.fail(stepIdx, 'not set');
+      // Show signup URL hint
+      const provider = LLM_PROVIDERS.find((p) => p.envVar === k.envVar);
+      const toolProvider = TOOL_KEY_PROVIDERS.find((p) => p.envVar === k.envVar);
+      const signupUrl = provider?.signupUrl || toolProvider?.signupUrl;
+      if (signupUrl) {
+        console.log(`       ${dim('→')} ${muted(signupUrl)}`);
+      }
     }
     stepIdx++;
   }
