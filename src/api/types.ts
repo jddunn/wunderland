@@ -314,6 +314,24 @@ export type WunderlandAgentConfig = {
 
   /** Capability discovery configuration. */
   discovery?: WunderlandAgentDiscoveryConfig;
+  /** Per-agent storage configuration (SQLite or cloud). */
+  storage?: {
+    /** Storage backend: 'local' (SQLite per agent, default) or 'cloud' (Postgres/Supabase). */
+    backend?: 'local' | 'cloud';
+    /** Override default DB path (~/.wunderland/agents/{seedId}/agent.db). */
+    dbPath?: string;
+    /** Connection string for cloud backend (reads DATABASE_URL env if not set). */
+    connectionString?: string;
+    /** Auto-ingest pipeline configuration. */
+    autoIngest?: {
+      /** Enable automatic memory extraction from conversations (default: true). */
+      enabled?: boolean;
+      /** Override personality-derived importance threshold (0.0-1.0). */
+      importanceThreshold?: number;
+      /** Max memories to extract per conversation turn (default: 3). */
+      maxPerTurn?: number;
+    };
+  };
   /** RAG / long-term memory configuration. */
   rag?: WunderlandAgentRagConfig;
   /** AgentOS persona registry configuration. */

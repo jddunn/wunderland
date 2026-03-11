@@ -13,6 +13,7 @@ import { loadExtensions } from './extension-loader.js';
 import { setupSkillsAndDiscovery } from './skills-discovery-setup.js';
 import { initAdaptiveRuntime } from './adaptive-runtime-init.js';
 import { initPairing } from './pairing-init.js';
+import { initializeAgentStorage } from './storage-init.js';
 import { initChannelRuntime, wireDiscordExtensions, subscribeChannelAdapters } from './channel-handler.js';
 import { createAgentHttpServer } from './http-server.js';
 import { startServerAndDisplay } from './startup-display.js';
@@ -58,6 +59,9 @@ export default async function cmdStart(
     // Phase 2: Create agent seed (identity, security, OTEL)
     await phase('seed', () => initializeSeed(ctx));
 
+    // Phase 2.5: Per-agent storage (SQLite or cloud)
+    await phase('storage', () => initializeAgentStorage(ctx));
+
     // Phase 3: Resolve LLM provider, auth, model
     const llmOk = await phase('llm', () => setupLlmProvider(ctx));
     if (!llmOk) return;
@@ -88,10 +92,15 @@ export default async function cmdStart(
       await startServerAndDisplay(ctx, server);
     });
 
-    // Keep the process alive — the HTTP server's 'listening' event should do this,
-    // but as a safety net, prevent Node from exiting if all handles are released.
-    // This never resolves; process exits via SIGINT/SIGTERM handlers in startup-display.
-    await new Promise(() => {});
+    // If TUI mode, launch the interactive dashboard (also keeps process alive).
+    // Otherwise, block forever — process exits via SIGINT/SIGTERM handlers.
+    const shouldTui = globals.tui || (!globals.noTui && !globals.quiet && process.stdout.isTTY);
+    if (shouldTui) {
+      const { launchTui } = await import('../../tui/index.js');
+      await launchTui(globals);
+    } else {
+      await new Promise(() => {});
+    }
   } catch {
     // Error already displayed by phase() wrapper — just exit.
   }

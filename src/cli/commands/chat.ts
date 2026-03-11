@@ -48,6 +48,13 @@ import { loadConfig } from '../config/config-manager.js';
 import { createConfiguredRagTools } from '../../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
 import { createRequestFolderAccessTool } from '../../tools/RequestFolderAccessTool.js';
+import {
+  AgentStorageManager,
+  resolveAgentStorageConfig,
+  MemoryAutoIngestPipeline,
+  derivePersonalityMemoryConfig,
+} from '../../storage/index.js';
+import type { IMemoryAutoIngestPipeline } from '../../storage/types.js';
 
 // ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
 
@@ -874,6 +881,47 @@ export default async function cmdChat(
       ? cfg.selectedPersonaId.trim()
       : seedId;
 
+  // ── Per-agent storage + auto-ingest pipeline ──────────────────────────────
+  let agentStorageManager: AgentStorageManager | undefined;
+  let autoIngestPipeline: IMemoryAutoIngestPipeline | undefined;
+  try {
+    const storageConfig = resolveAgentStorageConfig(seedId, cfg?.storage);
+    agentStorageManager = new AgentStorageManager(storageConfig);
+    await agentStorageManager.initialize();
+
+    // Derive personality-adaptive memory config from HEXACO traits
+    const personalityMemoryConfig = derivePersonalityMemoryConfig(
+      {
+        honesty: personality.honesty,
+        emotionality: personality.emotionality,
+        extraversion: personality.extraversion,
+        agreeableness: personality.agreeableness,
+        conscientiousness: personality.conscientiousness,
+        openness: personality.openness,
+      },
+      cfg?.storage?.autoIngest ? {
+        importanceThreshold: cfg.storage.autoIngest.importanceThreshold,
+        maxMemoriesPerTurn: cfg.storage.autoIngest.maxPerTurn,
+      } : undefined,
+    );
+
+    // Create auto-ingest pipeline (LLM caller is a no-op placeholder until
+    // we have a validated LLM config — replaced below after LLM setup)
+    const pipeline = new MemoryAutoIngestPipeline({
+      vectorStore: agentStorageManager.getVectorStore(),
+      personalityConfig: personalityMemoryConfig,
+      storageConfig,
+      agentId: seedId,
+      llmCaller: async (_sys, _user) => '[]', // placeholder
+    });
+    await pipeline.initialize();
+    agentStorageManager.setAutoIngestPipeline(pipeline);
+    autoIngestPipeline = pipeline;
+  } catch (err) {
+    // Non-fatal — chat works without storage
+    console.warn('[wunderland/chat] Per-agent storage init failed:', err instanceof Error ? err.message : err);
+  }
+
   const systemPrompt = buildAgenticSystemPrompt({
     seed,
     policy,
@@ -1129,6 +1177,11 @@ export default async function cmdChat(
           console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Channel reply failed: ${errMsg}`);
         }
       }
+
+      // Auto-ingest: extract and store memories from this turn (non-blocking)
+      if (autoIngestPipeline) {
+        autoIngestPipeline.processConversationTurn(sessionId, input, reply).catch(() => {});
+      }
     }
   }
 
@@ -1250,6 +1303,7 @@ export default async function cmdChat(
   rl.close();
   await discoveryManager.close();
   await adaptiveRuntime.close();
+  if (agentStorageManager) await agentStorageManager.shutdown().catch(() => {});
   await shutdownWunderlandOtel();
 
   // Session ended banner

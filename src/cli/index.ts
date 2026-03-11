@@ -50,7 +50,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
 
     ${w('Run')}
       ${w('chat')}                  Interactive assistant (REPL)
-      ${w('start')}                 Start server (foreground)
+      ${w('start')}                 Start server + TUI dashboard
       ${w('status')}                Agent & connection status
       ${w('hitl')}                  Watch/resolve approvals & checkpoints
 
@@ -110,8 +110,9 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--ascii')}                Force ASCII-only UI (auto-fallback in limited terminals)
     ${d('--no-color')}             Disable colors (also: NO_COLOR env)
     ${d('--dry-run')}              Preview without writing
+    ${d('--cli')}                  Use traditional CLI output (no TUI)
     ${d('--tui')}                  Force interactive TUI mode
-    ${d('--no-tui')}               Force print-and-exit (skip TUI)
+    ${d('--no-tui')}               Alias for --cli
     ${d('--config <path>')}        Config directory path
 
   ${c('Command Options:')}
@@ -199,9 +200,9 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     examples: ['wunderland chat', 'wunderland chat --oauth'],
   },
   start: {
-    summary: 'Start the local agent server in the foreground.',
-    usage: ['wunderland start [--port <number>] [--oauth] [--lazy-tools]'],
-    examples: ['wunderland start', 'wunderland start --port 3777 --ascii --no-tui'],
+    summary: 'Start the local agent server (launches TUI dashboard by default).',
+    usage: ['wunderland start [--port <number>] [--oauth] [--lazy-tools] [--cli]'],
+    examples: ['wunderland start', 'wunderland start --cli --port 3777'],
   },
   status: {
     summary: 'Show agent, runtime, and connectivity status for the current project.',
