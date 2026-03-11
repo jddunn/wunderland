@@ -68,6 +68,17 @@ const TOOL_FALLBACK_MAP: Record<string, string[]> = {
   'shell_execute': ['request_folder_access'],
 };
 
+/**
+ * Detects when a tool returned success but with an empty results array.
+ * Used to inject `suggestedFallbacks` so the LLM tries alternative tools.
+ */
+function isEmptySearchResult(output: unknown): boolean {
+  if (!output || typeof output !== 'object') return false;
+  const obj = output as Record<string, unknown>;
+  if (Array.isArray(obj.results) && obj.results.length === 0) return true;
+  return false;
+}
+
 // Initialize Safe Guardrails (singleton)
 let _guardrails: SafeGuardrails | undefined;
 /** Access the singleton SafeGuardrails instance (creates one if needed). */
@@ -1307,6 +1318,18 @@ export async function runToolCallingTurn(opts: {
           let payload: unknown;
           if (result?.success) {
             payload = redactToolOutputForLLM(result.output);
+            // When a search tool succeeds but returns zero results, inject
+            // suggestedFallbacks so the LLM tries alternatives (e.g.
+            // browser_navigate) instead of giving up.
+            const emptyFallbacks = TOOL_FALLBACK_MAP[toolName];
+            const availableEmptyFallbacks = emptyFallbacks?.filter(f => opts.toolMap?.has(f));
+            if (availableEmptyFallbacks?.length && isEmptySearchResult(result.output)) {
+              payload = {
+                ...((typeof payload === 'object' && payload) || { output: payload }),
+                suggestedFallbacks: availableEmptyFallbacks,
+                hint: 'Search returned 0 results. Try the suggested fallback tools.',
+              };
+            }
           } else {
             const errorMsg = result?.error || 'Tool failed';
             let apiKeyHint: string | undefined;
