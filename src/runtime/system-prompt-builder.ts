@@ -255,6 +255,7 @@ function buildToolResourcefulnessInstructions(): string {
     'Tool Fallback Strategy (CRITICAL — follow this strictly):',
     '- If any tool returns an error with suggestedFallbacks, you MUST try those fallback tools immediately before giving up.',
     '- If web_search fails or returns empty: use browser_navigate to visit news/search sites directly (reuters.com, bbc.com, apnews.com, cnn.com, news.google.com). Scrape the content.',
+    '- For factual queries about specific accounts, profiles, or pages (follower counts, stock prices, product info), use browser_navigate to visit the primary source directly (e.g., x.com/elonmusk, finance.yahoo.com/quote/AAPL). Extract the answer from the page content.',
     '- If news_search fails: use web_search, or browser_navigate to news sites directly.',
     '- If image_search fails: use web_search to find images, or browser_navigate to image sites (unsplash.com, pexels.com).',
     '- For current events/news: try web_search → news_search → browser_navigate to news sites → research_aggregate. Try ALL of these before giving up.',
