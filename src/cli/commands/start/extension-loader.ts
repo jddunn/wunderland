@@ -122,7 +122,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
       fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`);
     } else {
       // Fall back to hardcoded defaults if no extensions field
-      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'giphy', 'image-search', 'news-search'];
+      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search'];
       voiceExtensions = ['voice-synthesis'];
       productivityExtensions = [];
       fmt.note('No extensions configured, using defaults...');
@@ -175,6 +175,21 @@ export async function loadExtensions(ctx: any): Promise<void> {
         },
         'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
+        'browser-automation': {
+          options: {
+            headless: true,
+            userDataDir: workspaceBaseDir ? `${workspaceBaseDir}/${workspaceAgentId}/browser-data` : undefined,
+          },
+        },
+        'content-extraction': { options: {} },
+        'credential-vault': { options: {} },
+        'email-gmail': {
+          options: {
+            clientId: process.env['GOOGLE_CLIENT_ID'],
+            clientSecret: process.env['GOOGLE_CLIENT_SECRET'],
+            refreshToken: process.env['GOOGLE_REFRESH_TOKEN'],
+          },
+        },
         'wunderbot-feeds': {
           options: {
             feeds: (cfg as any)?.feeds ?? {},

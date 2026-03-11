@@ -104,7 +104,7 @@ export function getPermissionsForSet(name: PermissionSetName): GranularPermissio
 }
 
 function isFilesystemReadTool(toolName: string): boolean {
-  return toolName === 'file_read' || toolName === 'list_directory' || toolName === 'file_search' || toolName === 'read_file';
+  return toolName === 'file_read' || toolName === 'list_directory' || toolName === 'file_search' || toolName === 'read_file' || toolName === 'file_info';
 }
 
 function isFilesystemWriteTool(toolName: string): boolean {
