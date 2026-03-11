@@ -41,24 +41,27 @@ const PROFESSION_LABELS: Record<string, [string, string]> = {
 
 /** Channel suggestions keyed by onboarding role. */
 const CHANNEL_SUGGESTIONS: Record<string, string[]> = {
-  'onboard:ai':            ['#ai-papers — Daily AI research digests', '#us-news — AI and tech headlines'],
-  'onboard:web3':          ['#us-news — Crypto and DeFi headlines', '#token-chat — Token discussion'],
-  'onboard:cybersecurity': ['#threat-intel — Real-time threat feeds', '#us-news — Security headlines'],
-  'onboard:startup':       ['#founders-welcome — Join the build-in-public program', '#daily-standups — Post your daily progress'],
-  'onboard:jobs':          ['#jobs-software — Software engineering roles', '#us-news — Industry headlines'],
-  'onboard:exploring':     ['#general — Chat with the community', '#us-news — AI-curated news feeds'],
+  'onboard:ai':            ['#ai-papers — Daily AI research digests from arXiv', '#tech-news — AI and tech headlines curated by our agents', '#us-news — Broader industry coverage'],
+  'onboard:web3':          ['#crypto-trending — Trending tokens and market data', '#us-news — Crypto and DeFi headlines', '#finance-news — Market analysis and updates'],
+  'onboard:cybersecurity': ['#threat-intel — Real-time feeds from 25+ security sources', '#us-news — Security and tech headlines'],
+  'onboard:startup':       ['#founders-welcome — Join the gamified build-in-public program', '#daily-standups — Post your daily progress for streak XP', '#cofounder-matching — Find your next co-founder'],
+  'onboard:jobs':          ['#jobs-ai-ml — AI/ML engineering roles', '#jobs-software — Software engineering positions', '#jobs-web3 — Blockchain and Web3 roles'],
+  'onboard:exploring':     ['#general — Chat with the community', '#us-news — AI-curated news feeds', '#faq — Browse common questions'],
 };
 
 /** Command suggestions keyed by onboarding role. */
 const COMMAND_SUGGESTIONS: Record<string, string[]> = {
-  'onboard:ai':            ['`/ask` — Ask the AI agent about ML, papers, or code', '`/research` — Deep-dive on any AI topic'],
-  'onboard:web3':          ['`/ask` — Ask about DeFi, tokens, or Web3 dev'],
-  'onboard:cybersecurity': ['`/ask` — Ask about CVEs, threats, or security'],
-  'onboard:startup':       ['`/join_founders` — Join The Founders program', '`/daily` — Post daily updates for streak XP', '`/cofounder_search` — Find cofounders'],
-  'onboard:jobs':          ['`/ask` — Interview prep tips or resume feedback'],
-  'onboard:exploring':     ['`/ask` — Ask the AI agent anything', '`/trivia` — Test your knowledge'],
-  'onboard:founder':       ['`/join_founders` — Join The Founders program', '`/daily` — Daily build updates', '`/profile` — View your XP and level'],
-  'onboard:engineer':      ['`/ask` — Technical questions on AI, Web3, security', '`/research` — Deep research on any topic'],
+  'onboard:ai':            ['`/ask` — Ask the AI agent about ML, papers, or code', '`/deepdive` — Deep research on any AI topic'],
+  'onboard:web3':          ['`/ask` — Ask about DeFi, tokens, or Web3 dev', '`/deepdive` — Research any crypto topic in depth'],
+  'onboard:cybersecurity': ['`/ask` — Ask about CVEs, threats, or security', '`/deepdive` — Deep research on any security topic'],
+  'onboard:startup':       ['`/join_founders` — Join The Founders program and start earning XP', '`/daily` — Post daily updates for streak XP', '`/cofounder_search` — Find cofounders in the community'],
+  'onboard:jobs':          ['`/ask` — Get interview prep tips or resume feedback', '`/faq` — Browse FAQs about the community'],
+  'onboard:exploring':     ['`/ask` — Ask the AI agent anything', '`/faq` — Browse common questions'],
+  'onboard:founder':       ['`/join_founders` — Join The Founders build-in-public program', '`/daily` — Post daily updates to build your streak', '`/profile` — View your Founders profile and XP'],
+  'onboard:engineer':      ['`/ask` — Technical questions on AI, Web3, security, DevOps', '`/deepdive` — Deep research on any engineering topic'],
+  'onboard:investor':      ['`/ask` — Market analysis and investment research', '`/deepdive` — Deep-dive on trends and sectors'],
+  'onboard:student':       ['`/ask` — Get help with any topic', '`/faq` — Learn about the community'],
+  'onboard:creative':      ['`/ask` — Creative projects, design, and content questions'],
 };
 
 export interface WelcomeConfig {
@@ -107,9 +110,6 @@ export function createWelcomeHandler(config: WelcomeConfig) {
 
     const cmdSet = new Set<string>();
     const cmdLines: string[] = [];
-    // Always suggest /verify first
-    cmdLines.push('`/verify` — Link your subscription to unlock premium channels');
-    cmdSet.add('/verify');
     for (const role of [...interests, ...professions]) {
       for (const line of (COMMAND_SUGGESTIONS[role] ?? [])) {
         const cmd = line.split(' — ')[0];
@@ -118,6 +118,13 @@ export function createWelcomeHandler(config: WelcomeConfig) {
           cmdLines.push(line);
         }
       }
+    }
+    // Always include /verify and /faq at the end if not already present
+    if (!cmdSet.has('`/verify`')) {
+      cmdLines.push('`/verify` — Link your RabbitHole account to unlock premium channels');
+    }
+    if (!cmdSet.has('`/faq`')) {
+      cmdLines.push('`/faq` — Search FAQs about the community and platform');
     }
 
     return { channels: channelLines.join('\n'), commands: cmdLines.join('\n') };
@@ -134,12 +141,26 @@ export function createWelcomeHandler(config: WelcomeConfig) {
     const professionLabels = professions.map(r => PROFESSION_LABELS[r]?.[0]).filter(Boolean);
 
     const personalization = interestLabels.length || professionLabels.length
-      ? `\nTheir interests: ${interestLabels.join(', ') || 'exploring'}.\nTheir role: ${professionLabels.join(', ') || 'unknown'}.`
+      ? `\nTheir interests: ${interestLabels.join(', ') || 'exploring'}.\nTheir profession: ${professionLabels.join(', ') || 'unknown'}.`
       : '';
 
-    const systemPrompt = `${config.systemPrompt}\n\nYou are welcoming a new member to the Rabbit Hole Discord. Be warm, witty, and concise (2-3 sentences). The community is Alice in Wonderland themed — curiosity, wonder, discovery. It's AI-powered with autonomous agents that curate news, papers, jobs, and more. Reference their interests naturally if provided. Don't use hashtags. Don't be cringey. Make them want to explore.`;
+    // Build context about what's relevant based on their roles
+    const interestContext: string[] = [];
+    if (interests.includes('onboard:ai')) interestContext.push('our AI paper digests in #ai-papers and tech news feeds');
+    if (interests.includes('onboard:web3')) interestContext.push('crypto trending data and finance news channels');
+    if (interests.includes('onboard:cybersecurity')) interestContext.push('#threat-intel which aggregates 25+ security sources');
+    if (interests.includes('onboard:startup')) interestContext.push('The Founders program — a gamified build-in-public system with XP, levels, and co-founder matching');
+    if (interests.includes('onboard:jobs')) interestContext.push('our curated job boards with AI/ML, Web3, and software roles');
+    if (professions.includes('onboard:engineer')) interestContext.push('the /ask and /deepdive commands for AI-powered research');
+    if (professions.includes('onboard:founder')) interestContext.push('/join_founders to start tracking your startup journey');
 
-    const userPrompt = `New member: ${displayName} (@${username}). Account created ${accountAge}.${personalization}\n\nWrite a personalized welcome (2-3 sentences). Reference their interests naturally.`;
+    const contextStr = interestContext.length > 0
+      ? `\nRelevant features for them: ${interestContext.join('; ')}.`
+      : '';
+
+    const systemPrompt = `${config.systemPrompt}\n\nYou are the Rabbit Hole AI — welcoming a new member to the Rabbit Hole Inc Discord community. The community is subtly Alice in Wonderland themed (curiosity, going deeper, wonder, discovery). It's AI-powered with autonomous agents that curate news, research papers, job listings, threat intel, and more.\n\nWrite a warm, personalized welcome message (3-4 sentences) that:\n1. Greets them by name and acknowledges their interests/profession\n2. Mentions 1-2 specific channels or features that match their interests\n3. Encourages them to introduce themselves in #introductions and say what they're working on or interested in\n4. Invites them to try a bot command like /ask or /faq to see the AI agents in action\n\nBe conversational and genuine — not corporate or cringey. Light Wonderland references are fine but don't overdo puns. Use Discord channel references naturally (e.g., "check out #ai-papers"). Don't use hashtag symbols outside of channel names. The goal is to make them feel welcomed AND give them clear next steps so they actually engage.`;
+
+    const userPrompt = `New member: ${displayName} (@${username}). Account created ${accountAge}.${personalization}${contextStr}\n\nWrite their personalized welcome message.`;
 
     try {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -154,7 +175,7 @@ export function createWelcomeHandler(config: WelcomeConfig) {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
-          max_tokens: 200,
+          max_tokens: 300,
           temperature: 0.8,
         }),
       });
@@ -223,6 +244,12 @@ export function createWelcomeHandler(config: WelcomeConfig) {
     if (tags.length > 0) {
       fields.push({ name: 'Interests & Role', value: tags.join(' | '), inline: false });
     }
+    // Always encourage introductions
+    fields.push({
+      name: 'Say Hello',
+      value: 'Drop by **#introductions** and tell us what you\'re working on or what brought you here. We\'d love to hear from you!',
+      inline: false,
+    });
     if (channelText) {
       fields.push({ name: 'Channels For You', value: channelText, inline: false });
     }
