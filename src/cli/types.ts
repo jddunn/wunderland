@@ -93,6 +93,8 @@ export interface GlobalFlags {
   autoApproveTools: boolean;
   noColor: boolean;
   dryRun: boolean;
+  /** Force traditional CLI output (no TUI). Alias for --no-tui. */
+  cli: boolean;
   tui: boolean;
   noTui: boolean;
   config?: string;

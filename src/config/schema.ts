@@ -93,6 +93,39 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
     }
   }
 
+  if (cfg.storage !== undefined) {
+    if (!isPlainObject(cfg.storage)) {
+      issues.push({ path: 'storage', message: 'Expected object.' });
+    } else {
+      const st = cfg.storage as Record<string, unknown>;
+      if (st.backend !== undefined && st.backend !== 'local' && st.backend !== 'cloud') {
+        issues.push({ path: 'storage.backend', message: 'Expected "local" or "cloud".' });
+      }
+      if (st.dbPath !== undefined && typeof st.dbPath !== 'string') {
+        issues.push({ path: 'storage.dbPath', message: 'Expected string.' });
+      }
+      if (st.connectionString !== undefined && typeof st.connectionString !== 'string') {
+        issues.push({ path: 'storage.connectionString', message: 'Expected string.' });
+      }
+      if (st.autoIngest !== undefined) {
+        if (!isPlainObject(st.autoIngest)) {
+          issues.push({ path: 'storage.autoIngest', message: 'Expected object.' });
+        } else {
+          const ai = st.autoIngest as Record<string, unknown>;
+          if (ai.enabled !== undefined && typeof ai.enabled !== 'boolean') {
+            issues.push({ path: 'storage.autoIngest.enabled', message: 'Expected boolean.' });
+          }
+          if (ai.importanceThreshold !== undefined && typeof ai.importanceThreshold !== 'number') {
+            issues.push({ path: 'storage.autoIngest.importanceThreshold', message: 'Expected number.' });
+          }
+          if (ai.maxPerTurn !== undefined && typeof ai.maxPerTurn !== 'number') {
+            issues.push({ path: 'storage.autoIngest.maxPerTurn', message: 'Expected number.' });
+          }
+        }
+      }
+    }
+  }
+
   if (cfg.discovery !== undefined) {
     if (!isPlainObject(cfg.discovery)) {
       issues.push({ path: 'discovery', message: 'Expected object.' });

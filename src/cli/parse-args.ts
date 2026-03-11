@@ -62,6 +62,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
         'dry-run',
         'force',
         'no-skills',
+        'cli',
         'tui',
         'no-tui',
         'dangerously-skip-permissions',
@@ -99,8 +100,9 @@ export function extractGlobalFlags(flags: Record<string, string | boolean>): Glo
     noColor: flags['no-color'] === true || !!process.env['NO_COLOR'],
     ascii: flags['ascii'] === true,
     dryRun: flags['dry-run'] === true,
+    cli: flags['cli'] === true,
     tui: flags['tui'] === true,
-    noTui: flags['no-tui'] === true,
+    noTui: flags['no-tui'] === true || flags['cli'] === true,
     config: typeof flags['config'] === 'string' ? flags['config'] : undefined,
   };
 }
