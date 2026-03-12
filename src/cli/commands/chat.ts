@@ -1028,13 +1028,21 @@ export default async function cmdChat(
     channelCleanups.push(cleanup);
   }
 
+  // Session-scoped cache to avoid re-prompting for identical tool+args combinations.
+  const permissionCache = new Map<string, boolean>();
+
   const askPermission = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
     if (autoApproveToolCalls) return true;
+    const cacheKey = `${tool.name}:${safeJsonStringify(args, 400)}`;
+    const cached = permissionCache.get(cacheKey);
+    if (cached !== undefined) return cached;
     const preview = safeJsonStringify(args, 800);
     const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
     const q = `  ${wColor(glyphs().warn)} Allow ${tColor(tool.name)} (${effectLabel})?\n${dim(preview)}\n  ${muted('[y/N]')} `;
     const answer = (await rl.question(q)).trim().toLowerCase();
-    return answer === 'y' || answer === 'yes';
+    const result = answer === 'y' || answer === 'yes';
+    permissionCache.set(cacheKey, result);
+    return result;
   };
 
   // ── Runtime folder access request tool ──
@@ -1043,9 +1051,14 @@ export default async function cmdChat(
       guardrails: getGuardrailsInstance(),
       agentId: seedId,
       requestPermission: async (req) => {
+        const cacheKey = `folder_access:${req.path}:${req.operation}`;
+        const cached = permissionCache.get(cacheKey);
+        if (cached !== undefined) return cached;
         const q = `  ${wColor(glyphs().warn)} Grant ${req.operation.toUpperCase()} access to ${tColor(req.path)}${req.recursive ? '/**' : ''}?\n  ${dim(`Reason: ${req.reason}`)}\n  ${muted('[y/N]')} `;
         const answer = (await rl.question(q)).trim().toLowerCase();
-        return answer === 'y' || answer === 'yes';
+        const result = answer === 'y' || answer === 'yes';
+        permissionCache.set(cacheKey, result);
+        return result;
       },
     });
     toolMap.set('request_folder_access', folderAccessTool as any);

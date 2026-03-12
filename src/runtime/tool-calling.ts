@@ -63,7 +63,7 @@ const TOOL_FALLBACK_MAP: Record<string, string[]> = {
   'agent_delegate': ['agent_ping', 'agent_broadcast'],
   'agent_broadcast': ['agent_delegate'],
   'giphy_search': ['web_search'],
-  'file_read': ['request_folder_access'],
+  'file_read': ['list_directory', 'request_folder_access'],
   'file_write': ['request_folder_access'],
   'list_directory': ['request_folder_access'],
   'shell_execute': ['request_folder_access'],
@@ -1145,7 +1145,8 @@ export async function runToolCallingTurn(opts: {
             }
           }
 
-          if (requireApprovalForAllTools) {
+          if (requireApprovalForAllTools && tool.hasSideEffects !== false) {
+            // Skip interactive prompt for read-only tools (no side effects) — guardrails still validate paths
             const ok = await opts.askPermission(tool, args);
             if (!ok) {
               const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
@@ -1221,6 +1222,23 @@ export async function runToolCallingTurn(opts: {
                 authorized: true,
               },
               async () => {
+                // Pre-check: file_read on directories should fail-fast without permission prompts
+                if (tool.name === 'file_read') {
+                  const readPath = (args as any).path || (args as any).file_path || (args as any).filePath;
+                  if (typeof readPath === 'string') {
+                    try {
+                      const fsp = await import('node:fs/promises');
+                      const s = await fsp.stat(path.resolve(readPath));
+                      if (s.isDirectory()) {
+                        return {
+                          success: false,
+                          error: `"${readPath}" is a directory, not a file. Use list_directory to view directory contents.`,
+                        };
+                      }
+                    } catch { /* path doesn't exist — let normal flow handle */ }
+                  }
+                }
+
                 // NEW: Safe Guardrails validation
                 const guardrails = getGuardrails();
                 const agentId = getAgentIdForGuardrails(opts.toolContext);
