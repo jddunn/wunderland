@@ -89,12 +89,13 @@ export class AgentStorageManager implements IAgentStorageManager {
     // SqlVectorStore — pass pre-initialized adapter
     const vectorStore = new SqlVectorStore();
     await vectorStore.initialize({
+      id: 'agent-vector-store',
       type: 'sql',
       adapter: this._adapter,
       tablePrefix: 'rag_',
       defaultEmbeddingDimension: 1536,
       enableFullTextSearch: true,
-    });
+    } as any);
     this._vectorStore = vectorStore;
 
     // GraphRAGEngine — lazy-load to avoid bundling graphology when unused
