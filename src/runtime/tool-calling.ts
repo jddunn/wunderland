@@ -534,7 +534,9 @@ async function chatCompletionsRequest(
   // fire independently of AbortController.  Override via the dispatcher option.
   const controller = new AbortController();
   const fetchTimeout = setTimeout(() => controller.abort(), 10 * 60_000); // 10 minutes
-  console.log(`[tool-calling] POST ${fetchUrl} (model=${provider.model}, tools=${tools.length})`);
+  if (process.env.DEBUG === '1' || process.env.DEBUG === 'true' || process.env.WUNDERLAND_DEBUG === '1') {
+    console.log(`[tool-calling] POST ${fetchUrl} (model=${provider.model}, tools=${tools.length})`);
+  }
 
   const isLocalLLM = /localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\./.test(fetchUrl);
   const fetchOpts: RequestInit & Record<string, unknown> = {
@@ -832,8 +834,11 @@ export async function runToolCallingTurn(opts: {
   toolFailureMode?: 'fail_open' | 'fail_closed';
   /** Enforce strict OpenAI-compatible function names and fail on rewrites/collisions. */
   strictToolNames?: boolean;
+  /** Enable verbose tool-calling logs. Defaults to false; set to true or use DEBUG=1 for diagnostics. */
+  debug?: boolean;
 }): Promise<string> {
   const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
+  const debugMode = opts.debug ?? (process.env.DEBUG === '1' || process.env.DEBUG === 'true' || process.env.WUNDERLAND_DEBUG === '1');
   const strictToolNames = resolveStrictToolNames(
     opts.strictToolNames ?? getBooleanProp(opts.toolContext, 'strictToolNames'),
   );
@@ -1053,12 +1058,14 @@ export async function runToolCallingTurn(opts: {
 
         const toolCalls = message.tool_calls || [];
 
-        // Debug: log LLM response shape
-        const contentPreview = typeof message.content === 'string' ? message.content.slice(0, 200) : '(null)';
-        console.log(`[tool-calling] Round ${round}: toolCalls=${toolCalls.length}, content="${contentPreview}"`);
-        if (toolCalls.length > 0) {
-          for (const tc of toolCalls) {
-            console.log(`[tool-calling]   → ${tc?.function?.name}(${(tc?.function?.arguments || '').slice(0, 100)})`);
+        // Debug: log LLM response shape (only when debug mode is on)
+        if (debugMode) {
+          const contentPreview = typeof message.content === 'string' ? message.content.slice(0, 200) : '(null)';
+          console.log(`[tool-calling] Round ${round}: toolCalls=${toolCalls.length}, content="${contentPreview}"`);
+          if (toolCalls.length > 0) {
+            for (const tc of toolCalls) {
+              console.log(`[tool-calling]   → ${tc?.function?.name}(${(tc?.function?.arguments || '').slice(0, 100)})`);
+            }
           }
         }
 
@@ -1348,7 +1355,9 @@ export async function runToolCallingTurn(opts: {
             };
           }
           const json = safeJsonStringify(payload, 20000);
-          console.log(`[tool-calling] Tool ${toolName} result: success=${result?.success}, output=${json.slice(0, 300)}`);
+          if (debugMode) {
+            console.log(`[tool-calling] Tool ${toolName} result: success=${result?.success}, output=${json.slice(0, 300)}`);
+          }
           const content = shouldWrapToolOutputs
             ? wrapUntrustedToolOutput(json, { toolName, toolCallId: call.id, includeWarning: true })
             : json;
