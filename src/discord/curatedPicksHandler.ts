@@ -54,6 +54,8 @@ export interface CuratedPicksConfig {
   scraperApiUrl: string;
   model?: string;
   intervalMs?: number;
+  /** Separate bot token for posting news (posts as "Wunderland News" bot instead of the agent bot) */
+  newsBotToken?: string;
 }
 
 export function createCuratedPicksHandler(config: CuratedPicksConfig) {
@@ -204,9 +206,24 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
     };
 
     try {
-      await service.sendMessage(config.channelId, pick.hook, {
-        embeds: [embed],
-      });
+      if (config.newsBotToken) {
+        // Post via separate "Wunderland News" bot using Discord REST API
+        const res = await fetch(`https://discord.com/api/v10/channels/${config.channelId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bot ${config.newsBotToken}`,
+          },
+          body: JSON.stringify({ content: pick.hook, embeds: [embed] }),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`Discord API ${res.status}: ${text}`);
+        }
+      } else {
+        // Fallback: post via the agent bot
+        await service.sendMessage(config.channelId, pick.hook, { embeds: [embed] });
+      }
 
       postedUrls.add(pick.article.url);
       picksToday++;
