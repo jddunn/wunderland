@@ -149,7 +149,7 @@ export class MemoryAutoIngestPipeline implements IMemoryAutoIngestPipeline {
       try {
         const documents = accepted.map((fact) => ({
           id: uuidv4(),
-          embedding: [], // SqlVectorStore handles embedding if embedFn not provided
+          embedding: [] as number[], // SqlVectorStore handles embedding if embedFn not provided
           textContent: fact.content,
           metadata: {
             category: fact.category,
