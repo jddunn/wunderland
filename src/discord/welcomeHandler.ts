@@ -312,37 +312,46 @@ export function createWelcomeHandler(config: WelcomeConfig) {
   }
 
   function registerOnService(service: any): void {
-    // Use guildMemberUpdate (pending → not pending) to fire AFTER onboarding
-    if (typeof service.onMemberUpdate === 'function') {
-      service.onMemberUpdate(async (before: any, after: any) => {
-        try {
-          // pending=true means member hasn't completed onboarding/screening
-          const wasPending = before.pending === true;
-          const isNowActive = after.pending === false;
+    // Discord's new Onboarding system doesn't use the `pending` flag, so
+    // guildMemberUpdate (pending → not pending) never fires. Instead, use
+    // guildMemberAdd and poll for onboarding roles to appear.
+    if (typeof service.onMemberJoin === 'function') {
+      const welcomed = new Set<string>();
 
-          if (!wasPending || !isNowActive) return;
-
-          // Member just completed onboarding — post personalized welcome
-          await postWelcome(after, service);
-        } catch (err: any) {
-          console.error('[Welcome] Failed to welcome member (update):', err?.message ?? err);
-        }
-      });
-      console.log('[Welcome] Registered guildMemberUpdate handler (fires after onboarding)');
-    } else if (typeof service.onMemberJoin === 'function') {
-      // Fallback: fire on join if onMemberUpdate not available
       service.onMemberJoin(async (member: any) => {
         try {
-          // Brief delay to let onboarding roles propagate
-          await new Promise(r => setTimeout(r, 3000));
+          const userId = member.user?.id ?? member.id;
+          if (member.user?.bot) return;
+          if (welcomed.has(userId)) return;
+
+          // Poll for onboarding roles — every 3s for up to 30s
+          const guild = member.guild;
+          for (let i = 0; i < 10; i++) {
+            await new Promise(r => setTimeout(r, 3000));
+            try {
+              member = await guild.members.fetch(userId);
+            } catch {
+              return; // member left
+            }
+            const { interests, professions } = detectOnboardingRoles(member);
+            if (interests.length > 0 || professions.length > 0) break;
+          }
+
+          welcomed.add(userId);
+          // Keep set bounded
+          if (welcomed.size > 1000) {
+            const first = welcomed.values().next().value;
+            if (first) welcomed.delete(first);
+          }
+
           await postWelcome(member, service);
         } catch (err: any) {
-          console.error('[Welcome] Failed to welcome member (join):', err?.message ?? err);
+          console.error('[Welcome] Failed to welcome member:', err?.message ?? err);
         }
       });
-      console.log('[Welcome] Registered guildMemberAdd handler (fallback — no onMemberUpdate)');
+      console.log('[Welcome] Registered guildMemberAdd handler (polls for onboarding roles)');
     } else {
-      console.warn('[Welcome] DiscordService has no member event hooks — skipping');
+      console.warn('[Welcome] DiscordService has no onMemberJoin hook — skipping');
     }
   }
 
