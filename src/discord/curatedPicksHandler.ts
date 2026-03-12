@@ -38,7 +38,7 @@ Your bar is: "Would this story still be talked about in a week?" If no, skip it.
 If NOTHING clears this bar, respond with exactly: {}
 
 Otherwise respond with ONLY a JSON object (no markdown, no code fences):
-{ "index": <0-based index of the selected article>, "hook": "<drop it like you're texting a friend something insane you just read — raw, no preamble, no 'Hey everyone'>", "commentary": "<your unfiltered hot take in 1-3 sentences — be provocative, opinionated, even slightly inflammatory. Take a real position. Don't hedge. Don't summarize. Say what everyone's thinking but won't say.>" }`.trim();
+{ "index": <0-based index of the selected article>, "hook": "<drop it like you're texting a friend something insane you just read — raw, no preamble, no 'Hey everyone'. Make it a real reaction, not a summary.>", "commentary": "<your unfiltered hot take in 1-3 sentences. Write like a sharp, opinionated tech journalist who doesn't give a fuck. BANNED PHRASES: 'this changes everything', 'brace yourselves', 'challenges everything we know', 'game-changer', 'paradigm shift', 'buckle up'. Instead: make a SPECIFIC claim, name who wins/loses, predict a consequence no one else is saying, or call out the real story behind the headline. Be the smartest person in the room, not the loudest.>" }`.trim();
 
 interface CandidateArticle {
   title: string;
@@ -110,7 +110,8 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
   async function curateAndComment(
     candidates: CandidateArticle[],
   ): Promise<{ article: CandidateArticle; hook: string; commentary: string } | null> {
-    const systemPrompt = `${config.systemPrompt}\n\n${CURATION_ADDENDUM}`;
+    // Don't prepend the agent's generic system prompt — it dilutes the editorial voice
+    const systemPrompt = CURATION_ADDENDUM;
 
     const articleList = candidates
       .map((a, i) => `${i}. [${a.category.toUpperCase()}] "${a.title}"${a.date ? ` (${a.date})` : ''}`)
