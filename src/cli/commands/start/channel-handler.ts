@@ -738,6 +738,7 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
           systemPrompt: (cfg as any)?.systemPrompt || '',
           scraperApiUrl: scraperUrl,
           model: 'gpt-4o',  // Always use gpt-4o for curated picks — quality matters
+          newsBotToken: process.env.WUNDERBOT_NEWS_TOKEN,  // Post as "Wunderland News" bot
         });
         if (discordAdapterPicks.service) {
           picksHandler.startSchedule(discordAdapterPicks.service);
