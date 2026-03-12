@@ -709,7 +709,7 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
           channelId: welcomeChannelId,
           openaiApiKey,
           systemPrompt: (cfg as any)?.systemPrompt || '',
-          model: (cfg as any)?.llmModel || 'gpt-4o',
+          model: 'gpt-4o',  // Always use gpt-4o for welcome messages — personalization quality matters
         });
         if (discordAdapterWelcome.service) {
           welcomeHandler.registerOnService(discordAdapterWelcome.service);
@@ -737,7 +737,7 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
           openaiApiKey: openaiKeyPicks,
           systemPrompt: (cfg as any)?.systemPrompt || '',
           scraperApiUrl: scraperUrl,
-          model: (cfg as any)?.llmModel || 'gpt-4o',
+          model: 'gpt-4o',  // Always use gpt-4o for curated picks — quality matters
         });
         if (discordAdapterPicks.service) {
           picksHandler.startSchedule(discordAdapterPicks.service);

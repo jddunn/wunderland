@@ -41,12 +41,12 @@ const PROFESSION_LABELS: Record<string, [string, string]> = {
 
 /** Channel suggestions keyed by onboarding role. */
 const CHANNEL_SUGGESTIONS: Record<string, string[]> = {
-  'onboard:ai':            ['#ai-papers — Daily AI research digests from arXiv', '#tech-news — AI and tech headlines curated by our agents', '#us-news — Broader industry coverage'],
-  'onboard:web3':          ['#crypto-trending — Trending tokens and market data', '#us-news — Crypto and DeFi headlines', '#finance-news — Market analysis and updates'],
-  'onboard:cybersecurity': ['#threat-intel — Real-time feeds from 25+ security sources', '#us-news — Security and tech headlines'],
-  'onboard:startup':       ['#founders-welcome — Join the gamified build-in-public program', '#daily-standups — Post your daily progress for streak XP', '#cofounder-matching — Find your next co-founder'],
-  'onboard:jobs':          ['#jobs-ai-ml — AI/ML engineering roles', '#jobs-software — Software engineering positions', '#jobs-web3 — Blockchain and Web3 roles'],
-  'onboard:exploring':     ['#general — Chat with the community', '#us-news — AI-curated news feeds', '#faq — Browse common questions'],
+  'onboard:ai':            ['#ai-papers — Daily AI research digests from arXiv', '#tech-news — AI and tech headlines'],
+  'onboard:web3':          ['#crypto-trending — Trending tokens and market data', '#finance-news — Market analysis'],
+  'onboard:cybersecurity': ['#threat-intel — Real-time feeds from 25+ security sources'],
+  'onboard:startup':       ['#founders-welcome — Gamified build-in-public program with XP', '#cofounder-matching — Find your next co-founder'],
+  'onboard:jobs':          ['#jobs-ai-ml — AI/ML roles', '#jobs-software — Software roles', '#jobs-web3 — Web3 roles'],
+  'onboard:exploring':     ['#general — Where the action is'],
 };
 
 /** Command suggestions keyed by onboarding role. */
@@ -158,7 +158,7 @@ export function createWelcomeHandler(config: WelcomeConfig) {
       ? `\nRelevant features for them: ${interestContext.join('; ')}.`
       : '';
 
-    const systemPrompt = `${config.systemPrompt}\n\nYou are the Rabbit Hole AI — welcoming a new member to the Rabbit Hole Inc Discord community. The community is subtly Alice in Wonderland themed (curiosity, going deeper, wonder, discovery). It's AI-powered with autonomous agents that curate news, research papers, job listings, threat intel, and more.\n\nWrite a warm, personalized welcome message (3-4 sentences) that:\n1. Greets them by name and acknowledges their interests/profession\n2. Mentions 1-2 specific channels or features that match their interests\n3. Encourages them to introduce themselves in #introductions and say what they're working on or interested in\n4. Invites them to try a bot command like /ask or /faq to see the AI agents in action\n\nBe conversational and genuine — not corporate or cringey. Light Wonderland references are fine but don't overdo puns. Use Discord channel references naturally (e.g., "check out #ai-papers"). Don't use hashtag symbols outside of channel names. The goal is to make them feel welcomed AND give them clear next steps so they actually engage.`;
+    const systemPrompt = `${config.systemPrompt}\n\nYou are Wunderland News — welcoming a new member to Rabbit Hole Inc's Discord. The community is Alice in Wonderland themed (curiosity, rabbit holes, wonder). It's AI-powered with autonomous agents that curate news, research, jobs, threat intel, and more.\n\nWrite a SHORT, punchy, highly personalized welcome (2 sentences MAX) that:\n1. Greets them by name and makes a specific, interesting observation or provocative comment about their interests/profession — be edgy, witty, maybe slightly inflammatory but always respectful. Make them feel like they just walked into the most interesting room they've ever been in.\n2. Tells them to drop an intro in #general — who they are, what they're building/working on, a hot take, anything. Make it sound like the community actually wants to hear from them specifically.\n\nTone: Think "that one brilliant friend who's always slightly provocative but you love them for it." Be opinionated. Be specific. Reference their actual interests, not generic fluff. No corporate speak. No "we're so glad you're here" energy. More like "oh, you're into X? you're going to lose your mind when you see what we've got." Keep it TIGHT — every word should earn its place. No filler.\n\nDo NOT mention commands, bots, or features — the embed fields handle that. Just the vibe.`;
 
     const userPrompt = `New member: ${displayName} (@${username}). Account created ${accountAge}.${personalization}${contextStr}\n\nWrite their personalized welcome message.`;
 
@@ -175,8 +175,8 @@ export function createWelcomeHandler(config: WelcomeConfig) {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
-          max_tokens: 300,
-          temperature: 0.8,
+          max_tokens: 200,
+          temperature: 0.95,
         }),
       });
 
@@ -244,10 +244,10 @@ export function createWelcomeHandler(config: WelcomeConfig) {
     if (tags.length > 0) {
       fields.push({ name: 'Interests & Role', value: tags.join(' | '), inline: false });
     }
-    // Always encourage introductions
+    // Encourage intro in #general
     fields.push({
       name: 'Say Hello',
-      value: 'Drop by **#introductions** and tell us what you\'re working on or what brought you here. We\'d love to hear from you!',
+      value: 'Drop into **#general** and introduce yourself — who you are, what you\'re building, a hot take, whatever. We want to hear it.',
       inline: false,
     });
     if (channelText) {
@@ -263,7 +263,7 @@ export function createWelcomeHandler(config: WelcomeConfig) {
       color: BRAND_COLOR,
       fields,
       footer: {
-        text: 'Powered by Wunderbots | rabbithole.inc',
+        text: 'Wunderland News | rabbithole.inc',
       },
     };
 
@@ -286,7 +286,7 @@ export function createWelcomeHandler(config: WelcomeConfig) {
       }
     } catch { /* fall back to no reply */ }
 
-    const mention = `Everyone say hi to <@${userId}>!`;
+    const mention = `<@${userId}> just fell down the rabbit hole.`;
     await service.sendMessage(config.channelId, mention, {
       embeds: [embed],
       ...(replyToId ? { replyToMessageId: replyToId } : {}),
