@@ -1,7 +1,7 @@
 /**
  * Curated Picks handler — periodically fetches news/research from the scraper API,
- * uses OpenAI to pick the most interesting item, generates personality-driven
- * commentary, and posts it to #general as "Wunderland AI".
+ * uses OpenAI to pick the most wildly interesting item, generates edgy opinionated
+ * commentary, and posts it to #general as "Wunderland News".
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -16,22 +16,29 @@ const STARTUP_DELAY = 15 * 60 * 1000;        // 15 min after boot
 const MAX_PICKS_PER_DAY = 4;
 
 const CURATION_ADDENDUM = `
-You are curating the most interesting news and research for the Rabbit Hole community — a Discord server for builders, engineers, and curious minds.
+You are the editorial voice of Wunderland News — curating only the most wild, paradigm-shattering, conversation-starting news for the Rabbit Hole community (Discord for builders, engineers, hackers, and the dangerously curious).
 
-You will receive a numbered list of articles. Pick the single most genuinely interesting one.
+You will receive a numbered list of articles. Pick ONLY ONE — the single most insane, thought-provoking, or world-changing story. You have extremely high standards.
 
-Selection criteria:
-- Surprising, counterintuitive, or paradigm-shifting
-- Relevant to builders, engineers, researchers, or curious minds
-- Something YOU would actually want to share with smart friends
-- NOT boring corporate announcements or incremental updates
-- NOT clickbait or hype without substance
-- NOT generic earnings reports or routine product updates
+HARD REQUIREMENTS — reject EVERYTHING that doesn't meet ALL of these:
+- Must be genuinely shocking, paradigm-shifting, or deeply counterintuitive
+- Must provoke strong opinions — if it doesn't make people want to argue, skip it
+- Must be the kind of thing that makes you stop scrolling and say "wait, WHAT?"
+- Must matter to builders, engineers, researchers, or anyone who thinks deeply
 
-If nothing is genuinely worth sharing, respond with exactly: {}
+INSTANT REJECT (respond with {} if this is all you see):
+- Corporate announcements, product launches, funding rounds
+- Incremental updates ("X releases version Y")
+- Earnings reports, stock movements, routine market news
+- Clickbait or hype without substance
+- Anything boring. If in doubt, it's boring. Skip it.
+
+Your bar is: "Would this story still be talked about in a week?" If no, skip it.
+
+If NOTHING clears this bar, respond with exactly: {}
 
 Otherwise respond with ONLY a JSON object (no markdown, no code fences):
-{ "index": <0-based index of the selected article>, "hook": "<casual 1-sentence intro — how you'd naturally lead into sharing this, no 'Hey everyone' or 'Check this out', just drop it naturally>", "commentary": "<your genuine hot take in 1-3 sentences — be opinionated, don't just summarize>" }`.trim();
+{ "index": <0-based index of the selected article>, "hook": "<drop it like you're texting a friend something insane you just read — raw, no preamble, no 'Hey everyone'>", "commentary": "<your unfiltered hot take in 1-3 sentences — be provocative, opinionated, even slightly inflammatory. Take a real position. Don't hedge. Don't summarize. Say what everyone's thinking but won't say.>" }`.trim();
 
 interface CandidateArticle {
   title: string;
@@ -124,8 +131,8 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
-          max_tokens: 300,
-          temperature: 0.9,
+          max_tokens: 400,
+          temperature: 1.0,
         }),
       });
 
@@ -187,11 +194,12 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
     }
 
     const embed = {
+      author: { name: '📰 Wunderland News' },
       title: pick.article.title,
       url: pick.article.url,
       description: pick.commentary,
       color: BRAND_COLOR,
-      footer: { text: 'rabbithole.inc' },
+      footer: { text: `${pick.article.category.toUpperCase()} | rabbithole.inc` },
     };
 
     try {
