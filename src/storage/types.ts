@@ -118,7 +118,7 @@ export interface IAgentStorageManager {
   initialize(): Promise<void>;
   getMemoryAdapter(): IAgentMemoryAdapter;
   getVectorStore(): IVectorStore;
-  getGraphRAGEngine(): IGraphRAGEngine;
+  getGraphRAGEngine(): IGraphRAGEngine | Promise<IGraphRAGEngine>;
   getStateStore(): IAgentStateStore;
   getAutoIngestPipeline(): IMemoryAutoIngestPipeline;
   shutdown(): Promise<void>;
