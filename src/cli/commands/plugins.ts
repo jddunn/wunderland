@@ -20,24 +20,139 @@ interface ExtensionEntry {
 }
 
 const FALLBACK_EXTENSIONS: ExtensionEntry[] = [
-  { name: 'cli-executor', category: 'tool', available: false, displayName: 'CLI Executor', description: 'Execute shell commands in a sandboxed environment' },
-  { name: 'web-search', category: 'tool', available: false, displayName: 'Web Search', description: 'Web search via Serper.dev or similar providers' },
-  { name: 'web-browser', category: 'tool', available: false, displayName: 'Web Browser', description: 'Headless browser for page fetching and scraping' },
-  { name: 'giphy', category: 'tool', available: false, displayName: 'Giphy', description: 'Search and share GIFs' },
-  { name: 'image-search', category: 'tool', available: false, displayName: 'Image Search', description: 'Search for images via web APIs' },
-  { name: 'voice-synthesis', category: 'tool', available: false, displayName: 'Voice Synthesis', description: 'Text-to-speech synthesis' },
-  { name: 'news-search', category: 'tool', available: false, displayName: 'News Search', description: 'Search recent news articles' },
-  { name: 'skills', category: 'tool', available: false, displayName: 'Skills Registry', description: 'Curated SKILL.md prompt modules' },
-  { name: 'auth', category: 'tool', available: false, displayName: 'Authentication', description: 'User authentication and session management' },
-  { name: 'telegram', category: 'channel', available: false, displayName: 'Telegram', description: 'Telegram bot channel adapter' },
-  { name: 'discord', category: 'channel', available: false, displayName: 'Discord', description: 'Discord bot channel adapter' },
-  { name: 'slack', category: 'channel', available: false, displayName: 'Slack', description: 'Slack bot channel adapter' },
-  { name: 'whatsapp', category: 'channel', available: false, displayName: 'WhatsApp', description: 'WhatsApp Business API adapter' },
-  { name: 'voice-twilio', category: 'voice', available: false, displayName: 'Twilio Voice', description: 'Phone call integration via Twilio' },
-  { name: 'voice-telnyx', category: 'voice', available: false, displayName: 'Telnyx Voice', description: 'Phone call integration via Telnyx' },
-  { name: 'voice-plivo', category: 'voice', available: false, displayName: 'Plivo Voice', description: 'Phone call integration via Plivo' },
-  { name: 'calendar-google', category: 'productivity', available: false, displayName: 'Google Calendar', description: 'Google Calendar API integration' },
-  { name: 'email-gmail', category: 'productivity', available: false, displayName: 'Gmail', description: 'Gmail API integration' },
+  {
+    name: 'cli-executor',
+    category: 'tool',
+    available: false,
+    displayName: 'CLI Executor',
+    description: 'Execute shell commands in a sandboxed environment',
+  },
+  {
+    name: 'web-search',
+    category: 'tool',
+    available: false,
+    displayName: 'Web Search',
+    description: 'Web search via Serper.dev or similar providers',
+  },
+  {
+    name: 'web-browser',
+    category: 'tool',
+    available: false,
+    displayName: 'Web Browser',
+    description: 'Headless browser for page fetching and scraping',
+  },
+  {
+    name: 'giphy',
+    category: 'tool',
+    available: false,
+    displayName: 'Giphy',
+    description: 'Search and share GIFs',
+  },
+  {
+    name: 'image-search',
+    category: 'tool',
+    available: false,
+    displayName: 'Image Search',
+    description: 'Search for images via web APIs',
+  },
+  {
+    name: 'voice-synthesis',
+    category: 'tool',
+    available: false,
+    displayName: 'Voice Synthesis',
+    description: 'Text-to-speech synthesis',
+  },
+  {
+    name: 'news-search',
+    category: 'tool',
+    available: false,
+    displayName: 'News Search',
+    description: 'Search recent news articles',
+  },
+  {
+    name: 'skills',
+    category: 'tool',
+    available: false,
+    displayName: 'Skills Registry',
+    description: 'Curated SKILL.md prompt modules',
+  },
+  {
+    name: 'cognitive-memory',
+    category: 'tool',
+    available: false,
+    displayName: 'Cognitive Memory',
+    description: 'Personality-modulated long-term memory with decay, recall, and reminders',
+  },
+  {
+    name: 'auth',
+    category: 'tool',
+    available: false,
+    displayName: 'Authentication',
+    description: 'User authentication and session management',
+  },
+  {
+    name: 'telegram',
+    category: 'channel',
+    available: false,
+    displayName: 'Telegram',
+    description: 'Telegram bot channel adapter',
+  },
+  {
+    name: 'discord',
+    category: 'channel',
+    available: false,
+    displayName: 'Discord',
+    description: 'Discord bot channel adapter',
+  },
+  {
+    name: 'slack',
+    category: 'channel',
+    available: false,
+    displayName: 'Slack',
+    description: 'Slack bot channel adapter',
+  },
+  {
+    name: 'whatsapp',
+    category: 'channel',
+    available: false,
+    displayName: 'WhatsApp',
+    description: 'WhatsApp Business API adapter',
+  },
+  {
+    name: 'voice-twilio',
+    category: 'voice',
+    available: false,
+    displayName: 'Twilio Voice',
+    description: 'Phone call integration via Twilio',
+  },
+  {
+    name: 'voice-telnyx',
+    category: 'voice',
+    available: false,
+    displayName: 'Telnyx Voice',
+    description: 'Phone call integration via Telnyx',
+  },
+  {
+    name: 'voice-plivo',
+    category: 'voice',
+    available: false,
+    displayName: 'Plivo Voice',
+    description: 'Phone call integration via Plivo',
+  },
+  {
+    name: 'calendar-google',
+    category: 'productivity',
+    available: false,
+    displayName: 'Google Calendar',
+    description: 'Google Calendar API integration',
+  },
+  {
+    name: 'email-gmail',
+    category: 'productivity',
+    available: false,
+    displayName: 'Gmail',
+    description: 'Gmail API integration',
+  },
 ];
 
 // ── Catalog loading ─────────────────────────────────────────────────────────
@@ -76,7 +191,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default async function cmdPlugins(
   _args: string[],
   flags: Record<string, string | boolean>,
-  _globals: GlobalFlags,
+  _globals: GlobalFlags
 ): Promise<void> {
   const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
   const { entries, source } = await loadExtensions();
@@ -88,7 +203,9 @@ export default async function cmdPlugins(
 
   fmt.section('Extension Packs');
   if (source === 'fallback') {
-    fmt.note('Showing fallback catalog (install @framers/agentos-extensions-registry for live detection)');
+    fmt.note(
+      'Showing fallback catalog (install @framers/agentos-extensions-registry for live detection)'
+    );
   }
   fmt.blank();
 
@@ -104,7 +221,10 @@ export default async function cmdPlugins(
   let totalAvailable = 0;
 
   // Collect all categories in order
-  const allCats = [...CATEGORY_ORDER, ...[...grouped.keys()].filter((c) => !CATEGORY_ORDER.includes(c))];
+  const allCats = [
+    ...CATEGORY_ORDER,
+    ...[...grouped.keys()].filter((c) => !CATEGORY_ORDER.includes(c)),
+  ];
   const g = glyphs();
 
   for (const cat of allCats) {

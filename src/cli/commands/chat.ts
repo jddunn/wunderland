@@ -10,7 +10,15 @@ import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import chalk from 'chalk';
-import { HEX, accent, success as sColor, warn as wColor, tool as tColor, muted, dim } from '../ui/theme.js';
+import {
+  HEX,
+  accent,
+  success as sColor,
+  warn as wColor,
+  tool as tColor,
+  muted,
+  dim,
+} from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { visibleLength } from '../ui/ansi-utils.js';
 import { glyphs } from '../ui/glyphs.js';
@@ -18,7 +26,14 @@ import { getUiRuntime } from '../ui/runtime.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
-import { runToolCallingTurn, safeJsonStringify, truncateString, getGuardrailsInstance, type ToolInstance, type LLMProviderConfig } from '../openai/tool-calling.js';
+import {
+  runToolCallingTurn,
+  safeJsonStringify,
+  truncateString,
+  getGuardrailsInstance,
+  type ToolInstance,
+  type LLMProviderConfig,
+} from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
@@ -39,7 +54,10 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../../core/index.js';
-import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig } from '../../discovery/index.js';
+import {
+  WunderlandDiscoveryManager,
+  type WunderlandDiscoveryConfig,
+} from '../../discovery/index.js';
 import {
   buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
@@ -60,10 +78,17 @@ import type { IMemoryAutoIngestPipeline } from '../../storage/types.js';
 
 const C = HEX;
 
-const frameBorder  = chalk.hex(C.cyan);
+const frameBorder = chalk.hex(C.cyan);
 const accentBorder = chalk.hex(C.lavender);
 
-function chatFrameGlyphs(): { tl: string; tr: string; bl: string; br: string; h: string; v: string } {
+function chatFrameGlyphs(): {
+  tl: string;
+  tr: string;
+  bl: string;
+  br: string;
+  h: string;
+  v: string;
+} {
   const ui = getUiRuntime();
   if (ui.ascii) return { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|' };
   return { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' };
@@ -116,7 +141,8 @@ function printChatHeader(info: {
   const divHalfL = Math.max(0, Math.floor((innerWidth - divDecoVis) / 2));
   const divHalfR = Math.max(0, innerWidth - divDecoVis - divHalfL);
   const g = glyphs();
-  const divContent = accentBorder(g.hr.repeat(divHalfL)) + divDeco + accentBorder(g.hr.repeat(divHalfR));
+  const divContent =
+    accentBorder(g.hr.repeat(divHalfL)) + divDeco + accentBorder(g.hr.repeat(divHalfR));
 
   // Key-value pairs
   const kvLine = (label: string, value: string): string => {
@@ -138,11 +164,17 @@ function printChatHeader(info: {
   lines.push(kvLine('Skills', info.skills ? sColor('on') : chalk.hex(C.muted)('off')));
   if (info.fallback) lines.push(kvLine('Fallback', sColor('OpenRouter (auto)')));
   lines.push(kvLine('Lazy Tools', info.lazyTools ? sColor('on') : chalk.hex(C.muted)('off')));
-  lines.push(kvLine('Authorization', info.autoApprove ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)')));
+  lines.push(
+    kvLine(
+      'Authorization',
+      info.autoApprove ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)')
+    )
+  );
   lines.push(kvLine('Security Tier', accent(info.securityTier)));
   lines.push(kvLine('Tool Profile', accent(info.toolProfile)));
   lines.push(kvLine('CLI Execution', info.cliExecution ? wColor('enabled') : dim('disabled')));
-  if (info.turnApproval !== 'off') lines.push(kvLine('Turn Checkpoints', sColor(info.turnApproval)));
+  if (info.turnApproval !== 'off')
+    lines.push(kvLine('Turn Checkpoints', sColor(info.turnApproval)));
   lines.push(empty);
 
   // Help hint
@@ -228,7 +260,8 @@ function toToolInstance(tool: {
     description: tool.description,
     inputSchema: tool.inputSchema as any,
     hasSideEffects: tool.hasSideEffects === true,
-    category: typeof tool.category === 'string' && tool.category.trim() ? tool.category : 'productivity',
+    category:
+      typeof tool.category === 'string' && tool.category.trim() ? tool.category : 'productivity',
     requiredCapabilities: tool.requiredCapabilities,
     execute: tool.execute as any,
   };
@@ -239,8 +272,8 @@ function toToolInstance(tool: {
 export default async function cmdChat(
   _args: string[],
   flags: Record<string, string | boolean>,
-  globals: GlobalFlags,
-  ): Promise<void> {
+  globals: GlobalFlags
+): Promise<void> {
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: globals.config });
 
   const globalConfig = await loadConfig(globals.config);
@@ -259,7 +292,7 @@ export default async function cmdChat(
         if (!verification.ok) {
           fmt.errorBlock(
             'Seal verification failed',
-            `${verification.error || 'Verification failed.'}\nRun: ${chalk.white('wunderland verify-seal')}`,
+            `${verification.error || 'Verification failed.'}\nRun: ${chalk.white('wunderland verify-seal')}`
           );
           process.exitCode = 1;
           return;
@@ -310,12 +343,19 @@ export default async function cmdChat(
   };
 
   // Allow CLI flags to override security tier / tool profile
-  const tierFlag = typeof flags['security-tier'] === 'string' ? String(flags['security-tier']).trim().toLowerCase() : '';
-  const profileFlag = typeof flags['profile'] === 'string' ? String(flags['profile']).trim().toLowerCase() : '';
+  const tierFlag =
+    typeof flags['security-tier'] === 'string'
+      ? String(flags['security-tier']).trim().toLowerCase()
+      : '';
+  const profileFlag =
+    typeof flags['profile'] === 'string' ? String(flags['profile']).trim().toLowerCase() : '';
 
   if (tierFlag) {
     if (!isValidSecurityTier(tierFlag)) {
-      fmt.errorBlock('Invalid security tier', `"${tierFlag}" — valid: dangerous, permissive, balanced, strict, paranoid`);
+      fmt.errorBlock(
+        'Invalid security tier',
+        `"${tierFlag}" — valid: dangerous, permissive, balanced, strict, paranoid`
+      );
       process.exitCode = 1;
       return;
     }
@@ -332,7 +372,7 @@ export default async function cmdChat(
     if (!isValidToolAccessProfile(profileFlag)) {
       fmt.errorBlock(
         'Invalid tool profile',
-        `"${profileFlag}" — valid: social-citizen, social-observer, social-creative, assistant, developer, unrestricted`,
+        `"${profileFlag}" — valid: social-citizen, social-observer, social-creative, assistant, developer, unrestricted`
       );
       process.exitCode = 1;
       return;
@@ -343,9 +383,10 @@ export default async function cmdChat(
   const policy = normalizeRuntimePolicy({ ...cliDefaults, ...(cfg || {}) });
   const permissions = getPermissionsForSet(policy.permissionSet);
   const turnApprovalMode = (() => {
-    const raw = (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl))
-      ? (cfg.hitl as any).turnApprovalMode ?? (cfg.hitl as any).turnApproval
-      : undefined;
+    const raw =
+      cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl)
+        ? ((cfg.hitl as any).turnApprovalMode ?? (cfg.hitl as any).turnApproval)
+        : undefined;
     const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
     if (v === 'after-each-turn') return 'after-each-turn';
     if (v === 'after-each-round') return 'after-each-round';
@@ -353,22 +394,27 @@ export default async function cmdChat(
   })();
   const strictToolNames = resolveStrictToolNames((cfg as any)?.toolCalling?.strictToolNames);
 
-  const providerFlag = typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
-  const providerFromConfig = typeof cfg?.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
-  const providerId = (flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai')).toLowerCase();
+  const providerFlag =
+    typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
+  const providerFromConfig =
+    typeof cfg?.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
+  const providerId = (
+    flags['ollama'] === true ? 'ollama' : providerFlag || providerFromConfig || 'openai'
+  ).toLowerCase();
   if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic']).has(providerId)) {
     fmt.errorBlock(
       'Unsupported LLM provider',
-      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic`,
+      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic`
     );
     process.exitCode = 1;
     return;
   }
 
   const modelFromConfig = typeof cfg?.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
-  const model = typeof flags['model'] === 'string'
-    ? String(flags['model'])
-    : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
+  const model =
+    typeof flags['model'] === 'string'
+      ? String(flags['model'])
+      : modelFromConfig || process.env['OPENAI_MODEL'] || 'gpt-4o';
 
   // OpenRouter fallback (OpenAI provider only)
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
@@ -382,9 +428,11 @@ export default async function cmdChat(
     : undefined;
 
   const llmBaseUrl =
-    providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
-    : providerId === 'ollama' ? 'http://localhost:11434/v1'
-    : undefined;
+    providerId === 'openrouter'
+      ? 'https://openrouter.ai/api/v1'
+      : providerId === 'ollama'
+        ? 'http://localhost:11434/v1'
+        : undefined;
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =
     (cfg?.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
@@ -404,18 +452,22 @@ export default async function cmdChat(
     } catch {
       fmt.errorBlock(
         'OAuth authentication required',
-        `Run ${accent('wunderland login')} to authenticate with your OpenAI subscription.`,
+        `Run ${accent('wunderland login')} to authenticate with your OpenAI subscription.`
       );
       process.exitCode = 1;
       return;
     }
   } else {
     llmApiKey =
-      providerId === 'openrouter' ? openrouterApiKey
-      : providerId === 'ollama' ? 'ollama'
-      : providerId === 'openai' ? (process.env['OPENAI_API_KEY'] || '')
-      : providerId === 'anthropic' ? (process.env['ANTHROPIC_API_KEY'] || '')
-      : (process.env['OPENAI_API_KEY'] || '');
+      providerId === 'openrouter'
+        ? openrouterApiKey
+        : providerId === 'ollama'
+          ? 'ollama'
+          : providerId === 'openai'
+            ? process.env['OPENAI_API_KEY'] || ''
+            : providerId === 'anthropic'
+              ? process.env['ANTHROPIC_API_KEY'] || ''
+              : process.env['OPENAI_API_KEY'] || '';
   }
 
   const canUseLLM =
@@ -432,7 +484,7 @@ export default async function cmdChat(
   if (!canUseLLM) {
     fmt.errorBlock(
       'Missing API key',
-      'Configure an LLM provider in agent.config.json, set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY, use `wunderland login` for OAuth, or use Ollama.',
+      'Configure an LLM provider in agent.config.json, set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY, use `wunderland login` for OAuth, or use Ollama.'
     );
     process.exitCode = 1;
     return;
@@ -500,10 +552,19 @@ export default async function cmdChat(
       toolExtensions = extensionsFromConfig.tools || [];
       voiceExtensions = extensionsFromConfig.voice || [];
       productivityExtensions = extensionsFromConfig.productivity || [];
-      fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`);
+      fmt.note(
+        `Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`
+      );
     } else {
       // Fall back to hardcoded defaults
-      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'giphy', 'image-search', 'news-search'];
+      toolExtensions = [
+        'cli-executor',
+        'web-search',
+        'web-browser',
+        'giphy',
+        'image-search',
+        'news-search',
+      ];
       voiceExtensions = ['voice-synthesis'];
       productivityExtensions = [];
       fmt.note('No extensions configured, using defaults...');
@@ -515,7 +576,9 @@ export default async function cmdChat(
       if (/^\d+:[A-Za-z0-9_-]{35,}$/.test(tgToken)) {
         toolExtensions.push('telegram');
       } else {
-        fmt.warning('TELEGRAM_BOT_TOKEN looks invalid (expected format: 123456:ABC-DEF...) — skipping Telegram extension');
+        fmt.warning(
+          'TELEGRAM_BOT_TOKEN looks invalid (expected format: 123456:ABC-DEF...) — skipping Telegram extension'
+        );
       }
     }
 
@@ -528,18 +591,24 @@ export default async function cmdChat(
         // Check for gh CLI auth as fallback
         try {
           const { execSync } = await import('node:child_process');
-          const cliToken = execSync('gh auth token 2>/dev/null', { encoding: 'utf8', timeout: 3000 }).trim();
+          const cliToken = execSync('gh auth token 2>/dev/null', {
+            encoding: 'utf8',
+            timeout: 3000,
+          }).trim();
           if (cliToken) toolExtensions.push('github');
-        } catch { /* gh not installed or not authenticated — skip */ }
+        } catch {
+          /* gh not installed or not authenticated — skip */
+        }
       }
     }
 
     // Resolve extensions using PresetExtensionResolver
     try {
       const { resolveExtensionsByNames } = await import('../../core/PresetExtensionResolver.js');
-      const configOverrides = (extensionOverrides && typeof extensionOverrides === 'object')
-        ? (extensionOverrides as Record<string, any>)
-        : {};
+      const configOverrides =
+        extensionOverrides && typeof extensionOverrides === 'object'
+          ? (extensionOverrides as Record<string, any>)
+          : {};
 
       // Build filesystem roots: agent workspace + user's home directory + cwd.
       // Without explicit roots, the cli-executor defaults to [workspaceDir] only,
@@ -597,7 +666,7 @@ export default async function cmdChat(
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
         // Telegram extensions: send-only mode in CLI context to avoid
         // 409 Conflict errors from competing getUpdates pollers.
-        'telegram': { options: { sendOnly: true } },
+        telegram: { options: { sendOnly: true } },
         'channel-telegram': { options: { sendOnly: true } },
         'wunderbot-feeds': {
           options: {
@@ -619,9 +688,10 @@ export default async function cmdChat(
         mergedOverrides[name] = mergeOverride(configOverrides[name], override);
       }
 
-      const cfgSecrets = (configSecrets && typeof configSecrets === 'object' && !Array.isArray(configSecrets))
-        ? (configSecrets as Record<string, string>)
-        : undefined;
+      const cfgSecrets =
+        configSecrets && typeof configSecrets === 'object' && !Array.isArray(configSecrets)
+          ? (configSecrets as Record<string, string>)
+          : undefined;
       const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
       const secrets = new Proxy<Record<string, string>>({} as any, {
         get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
@@ -632,11 +702,9 @@ export default async function cmdChat(
         : Array.isArray((cfg as any)?.suggestedChannels)
           ? ((cfg as any).suggestedChannels as unknown[])
           : [];
-      const channelsToLoad = Array.from(new Set(
-        channelsFromConfig
-          .map((v) => String(v ?? '').trim())
-          .filter((v) => v.length > 0),
-      ));
+      const channelsToLoad = Array.from(
+        new Set(channelsFromConfig.map((v) => String(v ?? '').trim()).filter((v) => v.length > 0))
+      );
 
       const resolved = await resolveExtensionsByNames(
         toolExtensions,
@@ -663,11 +731,15 @@ export default async function cmdChat(
 
           let packageName: string | undefined;
           if ('package' in (packEntry as any)) packageName = (packEntry as any).package as string;
-          else if ('module' in (packEntry as any)) packageName = (packEntry as any).module as string;
+          else if ('module' in (packEntry as any))
+            packageName = (packEntry as any).module as string;
           if (!packageName) continue;
 
           const extModule = await import(packageName);
-          const factory = extModule.createExtensionPack ?? extModule.default?.createExtensionPack ?? extModule.default;
+          const factory =
+            extModule.createExtensionPack ??
+            extModule.default?.createExtensionPack ??
+            extModule.default;
           if (typeof factory !== 'function') continue;
 
           const options: any = (packEntry as any).options || {};
@@ -699,17 +771,22 @@ export default async function cmdChat(
               ? p.onActivate({ logger: console, getSecret })
               : null
           )
-          .filter(Boolean),
+          .filter(Boolean)
       );
       for (const result of activationResults) {
         if (result.status === 'rejected') {
-          const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          const msg =
+            result.reason instanceof Error ? result.reason.message : String(result.reason);
           fmt.warning(`Extension activation failed: ${msg}`);
         }
       }
 
       const tools: ToolInstance[] = packs
-        .flatMap((p: any) => (p?.descriptors || []).filter((d: { kind: string }) => d?.kind === 'tool').map((d: { payload: unknown }) => d.payload))
+        .flatMap((p: any) =>
+          (p?.descriptors || [])
+            .filter((d: { kind: string }) => d?.kind === 'tool')
+            .map((d: { payload: unknown }) => d.payload)
+        )
         .filter(Boolean) as ToolInstance[];
 
       for (const tool of tools) {
@@ -719,15 +796,19 @@ export default async function cmdChat(
 
       // Extract messaging-channel adapters for bidirectional channel listening
       const channelPayloads = packs
-        .flatMap((p: any) => (p?.descriptors || [])
-          .filter((d: { kind: string }) => d?.kind === 'messaging-channel')
-          .map((d: { payload: unknown }) => d.payload))
+        .flatMap((p: any) =>
+          (p?.descriptors || [])
+            .filter((d: { kind: string }) => d?.kind === 'messaging-channel')
+            .map((d: { payload: unknown }) => d.payload)
+        )
         .filter(Boolean);
       for (const a of channelPayloads) channelAdapters.push(a as ChannelAdapterInstance);
 
       fmt.ok(`Loaded ${tools.length} tools from ${packs.length} extensions`);
       if (channelAdapters.length > 0) {
-        const chNames = channelAdapters.map(a => (a as any).displayName || (a as any).platform || 'unknown').join(', ');
+        const chNames = channelAdapters
+          .map((a) => (a as any).displayName || (a as any).platform || 'unknown')
+          .join(', ');
         fmt.ok(`Listening on ${channelAdapters.length} channel(s): ${chNames}`);
       }
     } catch (err) {
@@ -798,7 +879,13 @@ export default async function cmdChat(
   const discoveryOpts: WunderlandDiscoveryConfig = buildDiscoveryOptionsFromAgentConfig(cfg ?? {});
   // Skills — load from filesystem dirs + config-declared skills (BEFORE discovery so we can pass entries)
   let skillsPrompt = '';
-  const skillEntries: Array<{ name: string; description: string; content: string; category?: string; tags?: string[] }> = [];
+  const skillEntries: Array<{
+    name: string;
+    description: string;
+    content: string;
+    category?: string;
+    tags?: string[];
+  }> = [];
   if (enableSkills) {
     const parts: string[] = [];
 
@@ -835,14 +922,16 @@ export default async function cmdChat(
         if (Array.isArray(presetSnapshot.skills)) {
           const existing = new Set(skillEntries.map((e) => e.name));
           for (const skill of presetSnapshot.skills as any[]) {
-            const name = typeof skill === 'string' ? skill : skill.name ?? 'unknown';
+            const name = typeof skill === 'string' ? skill : (skill.name ?? 'unknown');
             if (!existing.has(name)) {
               skillEntries.push({ name, description: '', content: '' });
             }
           }
         }
       }
-    } catch { /* non-fatal — no config or registry not installed */ }
+    } catch {
+      /* non-fatal — no config or registry not installed */
+    }
 
     skillsPrompt = parts.filter(Boolean).join('\n\n');
   }
@@ -902,7 +991,9 @@ export default async function cmdChat(
       emotionality: Number.isFinite(personality.emotionality) ? personality.emotionality : 0.5,
       extraversion: Number.isFinite(personality.extraversion) ? personality.extraversion : 0.6,
       agreeableness: Number.isFinite(personality.agreeableness) ? personality.agreeableness : 0.7,
-      conscientiousness: Number.isFinite(personality.conscientiousness) ? personality.conscientiousness : 0.8,
+      conscientiousness: Number.isFinite(personality.conscientiousness)
+        ? personality.conscientiousness
+        : 0.8,
       openness: Number.isFinite(personality.openness) ? personality.openness : 0.7,
     },
     baseSystemPrompt: typeof cfg?.systemPrompt === 'string' ? cfg.systemPrompt : undefined,
@@ -933,10 +1024,12 @@ export default async function cmdChat(
         conscientiousness: personality.conscientiousness,
         openness: personality.openness,
       },
-      cfg?.storage?.autoIngest ? {
-        importanceThreshold: cfg.storage.autoIngest.importanceThreshold,
-        maxMemoriesPerTurn: cfg.storage.autoIngest.maxPerTurn,
-      } : undefined,
+      cfg?.storage?.autoIngest
+        ? {
+            importanceThreshold: cfg.storage.autoIngest.importanceThreshold,
+            maxMemoriesPerTurn: cfg.storage.autoIngest.maxPerTurn,
+          }
+        : undefined
     );
 
     // Create auto-ingest pipeline (LLM caller is a no-op placeholder until
@@ -953,7 +1046,10 @@ export default async function cmdChat(
     autoIngestPipeline = pipeline;
   } catch (err) {
     // Non-fatal — chat works without storage
-    console.warn('[wunderland/chat] Per-agent storage init failed:', err instanceof Error ? err.message : err);
+    console.warn(
+      '[wunderland/chat] Per-agent storage init failed:',
+      err instanceof Error ? err.message : err
+    );
   }
 
   // Detect authenticated integrations to inform the agent
@@ -967,12 +1063,14 @@ export default async function cmdChat(
     mode: 'chat',
     lazyTools,
     autoApproveToolCalls,
-    channelNames: channelAdapters.length > 0
-      ? channelAdapters.map(a => (a as any).displayName || (a as any).platform)
-      : undefined,
+    channelNames:
+      channelAdapters.length > 0
+        ? channelAdapters.map((a) => (a as any).displayName || (a as any).platform)
+        : undefined,
     skillsPrompt: skillsPrompt || undefined,
     turnApprovalMode,
-    authenticatedIntegrations: authenticatedIntegrations.length > 0 ? authenticatedIntegrations : undefined,
+    authenticatedIntegrations:
+      authenticatedIntegrations.length > 0 ? authenticatedIntegrations : undefined,
   });
 
   const sessionId = `wunderland-cli-${Date.now()}`;
@@ -983,20 +1081,23 @@ export default async function cmdChat(
     agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
     interactiveSession: true,
     strictToolNames,
-    ...(cfg ? {
-      permissionSet: policy.permissionSet,
-      securityTier: policy.securityTier,
-      executionMode: policy.executionMode,
-      toolAccessProfile: policy.toolAccessProfile,
-      wrapToolOutputs: policy.wrapToolOutputs,
-      turnApprovalMode,
-    } : null),
+    ...(cfg
+      ? {
+          permissionSet: policy.permissionSet,
+          securityTier: policy.securityTier,
+          executionMode: policy.executionMode,
+          toolAccessProfile: policy.toolAccessProfile,
+          wrapToolOutputs: policy.wrapToolOutputs,
+          turnApprovalMode,
+        }
+      : null),
     ...(cfg && policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
   };
   const localUserId = String((toolContext as any)?.userContext?.userId ?? 'local-user');
-  const tenantId = typeof (cfg as any)?.organizationId === 'string' && String((cfg as any).organizationId).trim()
-    ? String((cfg as any).organizationId).trim()
-    : undefined;
+  const tenantId =
+    typeof (cfg as any)?.organizationId === 'string' && String((cfg as any).organizationId).trim()
+      ? String((cfg as any).organizationId).trim()
+      : undefined;
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
@@ -1008,7 +1109,9 @@ export default async function cmdChat(
   try {
     if (agentStorageManager) {
       memoryAdapter = agentStorageManager.getMemoryAdapter();
-      const previousTurns = await memoryAdapter.retrieveConversationTurns(conversationId, { limit: 100 });
+      const previousTurns = await memoryAdapter.retrieveConversationTurns(conversationId, {
+        limit: 100,
+      });
       if (previousTurns.length > 0) {
         let restoredCount = 0;
         for (const turn of previousTurns) {
@@ -1018,7 +1121,9 @@ export default async function cmdChat(
           }
         }
         if (restoredCount > 0) {
-          console.log(`  ${chalk.hex('#666')(`Restored ${restoredCount} messages from previous session.`)}`);
+          console.log(
+            `  ${chalk.hex('#666')(`Restored ${restoredCount} messages from previous session.`)}`
+          );
         }
       }
     }
@@ -1073,30 +1178,39 @@ export default async function cmdChat(
   }
   function waitForChannelMessage(): Promise<void> {
     if (channelQueue.length > 0) return Promise.resolve();
-    return new Promise<void>((resolve) => { channelQueueResolve = resolve; });
+    return new Promise<void>((resolve) => {
+      channelQueueResolve = resolve;
+    });
   }
 
   // Wire up channel adapter listeners
   const channelCleanups: Array<() => void> = [];
   for (const adapter of channelAdapters) {
-    const cleanup = adapter.on((event: any) => {
-      if (event?.type !== 'message') return;
-      const data = event.data;
-      enqueueChannelMessage({
-        platform: data?.platform ?? (adapter as any).platform ?? 'unknown',
-        conversationId: data?.conversationId ?? '',
-        senderName: data?.sender?.displayName || data?.sender?.username || data?.sender?.id || 'unknown',
-        text: data?.text ?? '',
-        adapter,
-      });
-    }, ['message']);
+    const cleanup = adapter.on(
+      (event: any) => {
+        if (event?.type !== 'message') return;
+        const data = event.data;
+        enqueueChannelMessage({
+          platform: data?.platform ?? (adapter as any).platform ?? 'unknown',
+          conversationId: data?.conversationId ?? '',
+          senderName:
+            data?.sender?.displayName || data?.sender?.username || data?.sender?.id || 'unknown',
+          text: data?.text ?? '',
+          adapter,
+        });
+      },
+      ['message']
+    );
     channelCleanups.push(cleanup);
   }
 
   // Session-scoped cache to avoid re-prompting for identical tool+args combinations.
   const permissionCache = new Map<string, boolean>();
 
-  const askPermission = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
+  const askPermission = async (
+    tool: ToolInstance,
+    args: Record<string, unknown>
+  ): Promise<boolean> => {
     if (autoApproveToolCalls) return true;
     const cacheKey = `${tool.name}:${safeJsonStringify(args, 400)}`;
     const cached = permissionCache.get(cacheKey);
@@ -1129,24 +1243,34 @@ export default async function cmdChat(
     toolMap.set('request_folder_access', folderAccessTool as any);
   }
 
-  const askCheckpoint = turnApprovalMode === 'off'
-    ? undefined
-    : async (info: { round: number; toolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> }): Promise<boolean> => {
-        if (autoApproveToolCalls) return true;
-        const summary = info.toolCalls.map((c) => {
-          const effect = c.hasSideEffects ? 'side effects' : 'read-only';
-          const preview = safeJsonStringify(c.args, 600);
-          return `- ${c.toolName} (${effect}): ${preview}`;
-        }).join('\n');
-        const q = `  ${wColor(glyphs().warn)} Checkpoint after round ${info.round}.\n${dim(summary || '(no tool calls)')}\n  ${muted('Continue? [y/N]')} `;
-        const answer = (await rl.question(q)).trim().toLowerCase();
-        return answer === 'y' || answer === 'yes';
-      };
+  const askCheckpoint =
+    turnApprovalMode === 'off'
+      ? undefined
+      : async (info: {
+          round: number;
+          toolCalls: Array<{
+            toolName: string;
+            hasSideEffects: boolean;
+            args: Record<string, unknown>;
+          }>;
+        }): Promise<boolean> => {
+          if (autoApproveToolCalls) return true;
+          const summary = info.toolCalls
+            .map((c) => {
+              const effect = c.hasSideEffects ? 'side effects' : 'read-only';
+              const preview = safeJsonStringify(c.args, 600);
+              return `- ${c.toolName} (${effect}): ${preview}`;
+            })
+            .join('\n');
+          const q = `  ${wColor(glyphs().warn)} Checkpoint after round ${info.round}.\n${dim(summary || '(no tool calls)')}\n  ${muted('Continue? [y/N]')} `;
+          const answer = (await rl.question(q)).trim().toLowerCase();
+          return answer === 'y' || answer === 'yes';
+        };
 
   // ── Chat turn helper (shared by stdin and channel inputs) ──
   async function runChatTurn(
     input: string,
-    replyTarget?: { adapter: ChannelAdapterInstance; conversationId: string },
+    replyTarget?: { adapter: ChannelAdapterInstance; conversationId: string }
   ): Promise<void> {
     messages.push({ role: 'user', content: input });
 
@@ -1155,16 +1279,26 @@ export default async function cmdChat(
       const discoveryResult = await discoveryManager.discoverForTurn(input);
       if (discoveryResult) {
         for (let i = messages.length - 1; i >= 1; i--) {
-          if (typeof messages[i]?.content === 'string' && String(messages[i]!.content).startsWith('[Capability Context]')) {
+          if (
+            typeof messages[i]?.content === 'string' &&
+            String(messages[i]!.content).startsWith('[Capability Context]')
+          ) {
             messages.splice(i, 1);
           }
         }
         const ctxParts: string[] = ['[Capability Context]', discoveryResult.tier0];
         if (discoveryResult.tier1.length > 0) {
-          ctxParts.push('Relevant capabilities:\n' + discoveryResult.tier1.map((r) => r.summaryText).join('\n'));
+          ctxParts.push(
+            'Relevant capabilities:\n' +
+              discoveryResult.tier1
+                .map((result: { summaryText: string }) => result.summaryText)
+                .join('\n')
+          );
         }
         if (discoveryResult.tier2.length > 0) {
-          ctxParts.push(discoveryResult.tier2.map((r) => r.fullText).join('\n'));
+          ctxParts.push(
+            discoveryResult.tier2.map((result: { fullText: string }) => result.fullText).join('\n')
+          );
         }
         messages.splice(1, 0, { role: 'system', content: ctxParts.join('\n') });
       }
@@ -1211,7 +1345,9 @@ export default async function cmdChat(
         getApiKey: oauthGetApiKey,
         onFallback: (_err, provider) => {
           fallbackTriggered = true;
-          console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`);
+          console.log(
+            `  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`
+          );
         },
         onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
           toolCallCount += 1;
@@ -1252,13 +1388,15 @@ export default async function cmdChat(
           });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
-          console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Channel reply failed: ${errMsg}`);
+          console.log(
+            `  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Channel reply failed: ${errMsg}`
+          );
         }
       }
 
       // Auto-ingest: extract and store memories from this turn (non-blocking)
       if (autoIngestPipeline) {
-        autoIngestPipeline.processConversationTurn(sessionId, input, reply).catch(() => {});
+        autoIngestPipeline.processConversationTurn(conversationId, input, reply).catch(() => {});
       }
 
       // Persist conversation turns to per-agent storage (non-blocking)
@@ -1290,12 +1428,39 @@ export default async function cmdChat(
       const iw = cw - 2;
       const helpLines: string[] = [];
       helpLines.push('');
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/help')}      ${chalk.hex(C.text)('Show this help')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/tools')}     ${chalk.hex(C.text)('List available tools')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/channels')}  ${chalk.hex(C.text)('Show connected channels')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/discover')}  ${chalk.hex(C.text)('Show discovery stats')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/clear')}     ${chalk.hex(C.text)('Clear conversation history')}`, iw));
-      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw));
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.cyan)('/help')}      ${chalk.hex(C.text)('Show this help')}`,
+          iw
+        )
+      );
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.cyan)('/tools')}     ${chalk.hex(C.text)('List available tools')}`,
+          iw
+        )
+      );
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.cyan)('/channels')}  ${chalk.hex(C.text)('Show connected channels')}`,
+          iw
+        )
+      );
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.cyan)('/discover')}  ${chalk.hex(C.text)('Show discovery stats')}`,
+          iw
+        )
+      );
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.cyan)('/clear')}     ${chalk.hex(C.text)('Clear conversation history')}`,
+          iw
+        )
+      );
+      helpLines.push(
+        frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw)
+      );
       helpLines.push('');
       console.log(helpLines.join('\n'));
       return true;
@@ -1323,8 +1488,14 @@ export default async function cmdChat(
       } else {
         for (const adapter of channelAdapters) {
           const info = adapter.getConnectionInfo?.();
-          const status = info?.status === 'connected' ? sColor('connected') : wColor(info?.status ?? 'unknown');
-          chLines.push(frameLine(`   ${chalk.hex(C.brightCyan)((adapter as any).displayName || (adapter as any).platform)} ${status}`, iw));
+          const status =
+            info?.status === 'connected' ? sColor('connected') : wColor(info?.status ?? 'unknown');
+          chLines.push(
+            frameLine(
+              `   ${chalk.hex(C.brightCyan)((adapter as any).displayName || (adapter as any).platform)} ${status}`,
+              iw
+            )
+          );
         }
       }
       chLines.push('');
@@ -1338,8 +1509,12 @@ export default async function cmdChat(
       const iw = cw - 2;
       const dLines: string[] = [''];
       dLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Discovery Stats')}`, iw));
-      dLines.push(frameLine(`   Enabled:       ${dStats.enabled ? sColor('yes') : wColor('no')}`, iw));
-      dLines.push(frameLine(`   Initialized:   ${dStats.initialized ? sColor('yes') : wColor('no')}`, iw));
+      dLines.push(
+        frameLine(`   Enabled:       ${dStats.enabled ? sColor('yes') : wColor('no')}`, iw)
+      );
+      dLines.push(
+        frameLine(`   Initialized:   ${dStats.initialized ? sColor('yes') : wColor('no')}`, iw)
+      );
       dLines.push(frameLine(`   Capabilities:  ${dStats.capabilityCount}`, iw));
       dLines.push(frameLine(`   Graph nodes:   ${dStats.graphNodes}`, iw));
       dLines.push(frameLine(`   Graph edges:   ${dStats.graphEdges}`, iw));
@@ -1371,16 +1546,22 @@ export default async function cmdChat(
   /** Wraps runChatTurn with error handling so network/LLM failures don't crash the REPL */
   async function safeChatTurn(
     input: string,
-    replyTarget?: { adapter: ChannelAdapterInstance; conversationId: string },
+    replyTarget?: { adapter: ChannelAdapterInstance; conversationId: string }
   ): Promise<void> {
     try {
       await runChatTurn(input, replyTarget);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       // Detect network errors and show a concise, user-friendly message
-      const isNetwork = /fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|network.*error|Network error|unable to reach/i.test(errMsg);
+      const isNetwork =
+        /fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|network.*error|Network error|unable to reach/i.test(
+          errMsg
+        );
       if (isNetwork) {
-        fmt.errorBlock('Network error', 'Could not reach the LLM provider. Check your internet connection and try again.');
+        fmt.errorBlock(
+          'Network error',
+          'Could not reach the LLM provider. Check your internet connection and try again.'
+        );
       } else {
         fmt.errorBlock('Error', errMsg.length > 300 ? errMsg.slice(0, 300) + '…' : errMsg);
       }
@@ -1402,7 +1583,9 @@ export default async function cmdChat(
       let stdinLine: string | undefined;
       let channelMsg: IncomingChannelMessage | undefined;
 
-      const stdinPromise = rl.question(chatPrompt()).then((line) => { stdinLine = line; });
+      const stdinPromise = rl.question(chatPrompt()).then((line) => {
+        stdinLine = line;
+      });
       const channelPromise = waitForChannelMessage().then(() => {
         channelMsg = channelQueue.shift();
       });
@@ -1412,11 +1595,13 @@ export default async function cmdChat(
       if (channelMsg) {
         const cm = channelMsg;
         const prefix = `[${cm.platform}/${cm.senderName}]`;
-        console.log(`\n  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.brightCyan)(prefix)} ${cm.text}`);
-        await safeChatTurn(
-          `${prefix} ${cm.text}`,
-          { adapter: cm.adapter, conversationId: cm.conversationId },
+        console.log(
+          `\n  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.brightCyan)(prefix)} ${cm.text}`
         );
+        await safeChatTurn(`${prefix} ${cm.text}`, {
+          adapter: cm.adapter,
+          conversationId: cm.conversationId,
+        });
         // The pending stdinPromise stays live — it will resolve on the next iteration
       } else if (stdinLine !== undefined) {
         const input = (stdinLine || '').trim();
@@ -1443,7 +1628,9 @@ export default async function cmdChat(
   const endDivR = Math.max(0, iw - 18 - endDivL);
   console.log('');
   const g = glyphs();
-  console.log(`  ${frameBorder(g.hr.repeat(endDivL))} ${chalk.hex(C.muted)('Session ended.')} ${frameBorder(g.hr.repeat(endDivR))}`);
+  console.log(
+    `  ${frameBorder(g.hr.repeat(endDivL))} ${chalk.hex(C.muted)('Session ended.')} ${frameBorder(g.hr.repeat(endDivR))}`
+  );
   console.log('');
 
   // Force exit — lingering timers/handles from extensions or LLM clients can
