@@ -170,18 +170,44 @@ async function loadToolMapFromAgentConfig(opts: {
       productivityExtensions = [];
     }
 
+    // Auto-include GitHub extension when a PAT is available
+    if (!toolExtensions.includes('github')) {
+      const ghToken = (process.env['GITHUB_TOKEN'] || process.env['GH_TOKEN'] || '').trim();
+      if (ghToken) toolExtensions.push('github');
+    }
+
+    // Auto-include Telegram extension when a bot token is available
+    if (!toolExtensions.includes('telegram') && process.env['TELEGRAM_BOT_TOKEN']) {
+      const tgToken = process.env['TELEGRAM_BOT_TOKEN'].trim();
+      if (/^\d+:[A-Za-z0-9_-]{35,}$/.test(tgToken)) toolExtensions.push('telegram');
+    }
+
     try {
       const configOverrides =
         cfg?.extensionOverrides && typeof cfg.extensionOverrides === 'object' && !Array.isArray(cfg.extensionOverrides)
           ? cfg.extensionOverrides
           : {};
 
+      // Build filesystem roots: agent workspace + user's home directory + cwd.
+      const homeDir = (await import('node:os')).homedir();
+      const agentWorkspaceId = sanitizeAgentWorkspaceId(workspace.agentId);
+      const workspaceDir = (await import('node:path')).resolve(workspace.baseDir, agentWorkspaceId);
+      const cwd = process.cwd();
+      const readRoots = [workspaceDir, homeDir, cwd, '/tmp'];
+      const writeRoots = [workspaceDir, homeDir, cwd, '/tmp'];
+
       const runtimeOverrides: Record<string, any> = {
         'cli-executor': {
           options: {
-            filesystem: { allowRead: permissions.filesystem.read, allowWrite: permissions.filesystem.write },
+            workingDirectory: cwd,
+            filesystem: {
+              allowRead: permissions.filesystem.read,
+              allowWrite: permissions.filesystem.write,
+              readRoots: permissions.filesystem.read ? readRoots : undefined,
+              writeRoots: permissions.filesystem.write ? writeRoots : undefined,
+            },
             agentWorkspace: {
-              agentId: sanitizeAgentWorkspaceId(workspace.agentId),
+              agentId: agentWorkspaceId,
               baseDir: workspace.baseDir,
               createIfMissing: true,
               subdirs: ['assets', 'exports', 'tmp'],
@@ -215,6 +241,9 @@ async function loadToolMapFromAgentConfig(opts: {
         },
         'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
+        // Telegram: send-only mode in server context to avoid 409 Conflict polling errors
+        'telegram': { options: { sendOnly: true } },
+        'channel-telegram': { options: { sendOnly: true } },
       };
 
       function mergeOverride(base: any, extra: any): any {
@@ -477,6 +506,15 @@ export async function createWunderlandChatRuntime(opts: {
   const sessions = new Map<string, Array<Record<string, unknown>>>();
   const autoApprove =
     opts.autoApproveToolCalls === true || policy.executionMode === 'autonomous';
+  // Detect authenticated integrations
+  const authenticatedIntegrations: string[] = [];
+  if (toolMap.has('github_search') || toolMap.has('github_issue_list') || process.env['GITHUB_TOKEN'] || process.env['GH_TOKEN']) {
+    authenticatedIntegrations.push('github');
+  }
+  if (toolMap.has('telegram_send_message') || process.env['TELEGRAM_BOT_TOKEN']) {
+    authenticatedIntegrations.push('telegram');
+  }
+
   const systemPrompt = buildAgenticSystemPrompt({
     seed,
     policy,
@@ -485,6 +523,7 @@ export async function createWunderlandChatRuntime(opts: {
     autoApproveToolCalls: autoApprove,
     skillsPrompt: skillsPrompt || undefined,
     turnApprovalMode,
+    authenticatedIntegrations: authenticatedIntegrations.length > 0 ? authenticatedIntegrations : undefined,
   });
 
   if (!autoApprove && typeof opts.askPermission !== 'function') {

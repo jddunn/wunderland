@@ -53,6 +53,16 @@ export interface CliConfig {
   /** Timestamp of last setup. */
   lastSetup?: string;
 
+  /** RAG memory configuration. */
+  rag?: {
+    /** Whether RAG is enabled (default true). */
+    enabled?: boolean;
+    /** RAG mode: vector-only, graph-only, or hybrid (default). */
+    mode?: 'vector' | 'graph' | 'hybrid';
+    /** Auto-ingest facts from conversations. */
+    autoIngest?: boolean;
+  };
+
   /** Observability preferences (OTEL). */
   observability?: {
     /** Wizard-selected preset. */
@@ -173,6 +183,12 @@ export interface WizardState {
   personalityEnabled?: boolean;
   /** Whether personality evolves from interactions (default false). */
   personalityEvolution?: boolean;
+  /** RAG memory configuration. */
+  rag?: {
+    enabled: boolean;
+    mode: 'vector' | 'graph' | 'hybrid';
+    autoIngest: boolean;
+  };
 }
 
 // ── Observability ──────────────────────────────────────────────────────────
