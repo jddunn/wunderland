@@ -108,11 +108,20 @@ export class KeybindingManager {
 
   private normalizeKey(key: KeypressEvent): string {
     const parts: string[] = [];
+
+    // Standalone escape: some terminals/Node versions report \x1b directly
+    // instead of name='escape', or set meta=true for a bare ESC press.
+    // Normalize all variants to plain 'escape'.
+    const rawName = key.name || key.sequence;
+    if (rawName === 'escape' || rawName === '\x1b' || rawName === '\u001b') {
+      if (!key.ctrl && !key.shift) return 'escape';
+    }
+
     if (key.ctrl) parts.push('ctrl');
     if (key.meta) parts.push('meta');
     if (key.shift) parts.push('shift');
 
-    const name = key.name || key.sequence;
+    const name = rawName;
     if (name) parts.push(name);
 
     return parts.join('+');

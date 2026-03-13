@@ -65,7 +65,7 @@ const ACTIONS: QuickAction[] = [
   { label: 'Voice providers',     command: 'voice',      hint: 'wunderland voice',      shortcut: 'v' },
   { label: 'View status',         command: 'status',     hint: 'wunderland status',     shortcut: 's' },
   { label: 'List agents',          command: 'agents',     hint: 'wunderland agents',     shortcut: 'a' },
-  { label: 'Help',                command: 'help',       hint: 'wunderland --help',     shortcut: 'h' },
+  { label: 'Help',                command: 'help',       hint: 'press h or ?',          shortcut: 'h' },
   { label: 'Tour / onboarding',   command: 'tour',       hint: 'press t',               shortcut: 't' },
 ];
 
@@ -156,7 +156,7 @@ export class Dashboard {
         'd':       () => { if (this.searchMode) return false; this.onSelect('doctor'); return true; },
         's':       () => { if (this.searchMode) return false; this.onSelect('status'); return true; },
         'v':       () => { if (this.searchMode) return false; this.onSelect('voice'); return true; },
-        'h':       () => { if (this.searchMode) return false; this.onSelect('help'); return true; },
+        'h':       () => { if (this.searchMode) return false; this.openHelp(); return true; },
         'r':       () => { if (this.searchMode) return false; this.refresh(); return true; },
         '1':       () => { if (this.searchMode) return false; this.selectIndex(0); return true; },
         '2':       () => { if (this.searchMode) return false; this.selectIndex(1); return true; },
@@ -901,6 +901,10 @@ export class Dashboard {
       this.openTour();
       return;
     }
+    if (action.command === 'help') {
+      this.openHelp();
+      return;
+    }
     this.onSelect(action.command);
   }
 
@@ -939,6 +943,7 @@ export class Dashboard {
         'ctrl+c':   () => { this.closeHelp(); this.onQuit(); return true; },
         'escape':   () => { this.closeHelp(); return true; },
         'q':        () => { this.closeHelp(); return true; },
+        'h':        () => { this.closeHelp(); return true; },
         '?':        () => { this.closeHelp(); return true; },
         'shift+?':  () => { this.closeHelp(); return true; },
         'shift+/':  () => { this.closeHelp(); return true; },
@@ -981,6 +986,9 @@ export class Dashboard {
           if (this.tourStep > 0) {
             this.tourStep -= 1;
             this.renderDashboard();
+          } else {
+            // On first step, "back" closes the tour
+            this.closeTour('skipped');
           }
           return true;
         },

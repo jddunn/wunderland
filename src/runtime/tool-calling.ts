@@ -63,8 +63,8 @@ const TOOL_FALLBACK_MAP: Record<string, string[]> = {
   'agent_delegate': ['agent_ping', 'agent_broadcast'],
   'agent_broadcast': ['agent_delegate'],
   'giphy_search': ['web_search'],
-  'file_read': ['list_directory', 'request_folder_access'],
-  'file_write': ['request_folder_access'],
+  'file_read': ['read_document', 'list_directory', 'request_folder_access'],
+  'file_write': ['create_pdf', 'request_folder_access'],
   'list_directory': ['request_folder_access'],
   'shell_execute': ['request_folder_access'],
 };
@@ -576,8 +576,12 @@ async function chatCompletionsRequest(
     res = await fetch(fetchUrl, fetchOpts as RequestInit);
   } catch (fetchErr) {
     clearTimeout(fetchTimeout);
+    // Don't dump verbose error for common network failures — the caller handles display
     const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-    console.error(`[tool-calling] Fetch error for ${fetchUrl}: ${errMsg}`);
+    const isNetwork = /fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN/i.test(errMsg);
+    if (!isNetwork) {
+      console.error(`[tool-calling] Fetch error: ${errMsg}`);
+    }
     throw fetchErr;
   } finally {
     clearTimeout(fetchTimeout);

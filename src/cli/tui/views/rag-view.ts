@@ -80,8 +80,13 @@ export class RagView {
           if (this.modal) return;
           if (!this.inputMode) { this.move(1); }
         },
+        'ctrl+c': () => {
+          this.back();
+          return true;
+        },
         'q': () => {
           if (this.modal) { this.modal = null; this.render(); return true; }
+          if (this.inputMode && this.query.length === 0) { this.back(); return true; }
           if (this.inputMode) return false; // allow typing "q" into the query
           this.back();
           return true;
@@ -125,13 +130,17 @@ export class RagView {
     } else if (this.query.length > 0 && !this.inputMode) {
       lines.push(`  ${muted('No results found.')}`);
     } else {
-      lines.push(`  ${dim('Type a query and press Enter to search RAG memory.')}`);
-      lines.push(`  ${dim('Note: Requires a backend exposing /api/agentos/rag (set WUNDERLAND_BACKEND_URL if needed).')}`);
+      lines.push(`  ${dim('Type a query and press Enter to search your agent\'s RAG memory.')}`);
+      lines.push(`  ${dim('Searches across vector embeddings and (optionally) the knowledge graph.')}`);
+      lines.push('');
+      lines.push(`  ${dim('To ingest documents: wunderland rag ingest <file>')}`);
+      lines.push(`  ${dim('Backend URL:')} ${muted(getRagBackendUrl())}`);
+      lines.push(`  ${dim('Press ? for help, esc to go back.')}`);
     }
 
     lines.push('');
     const hints = this.inputMode
-      ? `${dim('type')}  ${dim(enter)} search  ${dim('?')} help  ${dim('esc')} back`
+      ? `${dim('type')}  ${dim(enter)} search  ${dim('?')} help  ${dim('esc/q')} back`
       : `${dim(upDown)} navigate  ${dim(enter)} details  ${dim('?')} help  ${dim('esc')} edit  ${dim('q')} back`;
     lines.push(`  ${hints}`);
 
@@ -224,16 +233,26 @@ export class RagView {
     const upDown = ui.ascii ? 'Up/Down' : '↑/↓';
     const enter = ui.ascii ? 'Enter' : '⏎';
     return [
-      `${bright('Query')}`,
-      `${accent('type')} enter a query  ${accent(enter)} search`,
+      `${bright('Controls')}`,
+      `${accent('type')} enter a query  ${accent(enter)} search  ${accent('esc/q')} back`,
+      `${accent(upDown)} navigate results  ${accent(enter)} view details`,
       '',
-      `${bright('Results')}`,
-      `${accent(upDown)} move  ${accent(enter)} details  ${accent('esc')} edit query`,
+      `${bright('What is RAG?')}`,
+      `${dim('RAG (Retrieval-Augmented Generation) gives your agent long-term')}`,
+      `${dim('memory. Documents are split into chunks, converted to vector')}`,
+      `${dim('embeddings, and stored so the agent can search them later.')}`,
       '',
-      `${bright('Notes')}`,
-      `${dim('-')} Requires a backend exposing ${accent('/api/agentos/rag')}.`,
-      `${dim('-')} Override the default host with ${accent('WUNDERLAND_BACKEND_URL=http://host:3001')}.`,
-      `${dim('-')} Press ${accent('?')} again or ${accent('esc')} to close this overlay.`,
+      `${bright('Two search modes:')}`,
+      `${dim('-')} ${accent('Vector search')}: finds text chunks similar to your query`,
+      `${dim('-')} ${accent('Graph RAG')}: finds related entities/concepts in a knowledge graph`,
+      '',
+      `${bright('Setup')}`,
+      `${dim('-')} ${accent('Local (default)')}: works automatically, stored in agent.db (SQLite)`,
+      `${dim('-')} ${accent('Backend')}: set ${accent('WUNDERLAND_BACKEND_URL')} for shared/cloud RAG`,
+      `${dim('-')} Enable in agent.config.json: ${accent('"rag": { "enabled": true }')}`,
+      `${dim('-')} Ingest files: ${accent('wunderland rag ingest <file>')}`,
+      '',
+      `${dim('Press')} ${accent('?')} ${dim('or')} ${accent('esc')} ${dim('to close this overlay.')}`,
     ];
   }
 

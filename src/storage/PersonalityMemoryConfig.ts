@@ -43,7 +43,11 @@ export interface HexacoTraits {
   openness?: number;
 }
 
-const BASE_CONFIG: PersonalityMemoryConfig = {
+/** Clamp a trait value to [0, 1] with 0.5 as the neutral default. */
+export const clampTrait = (v: number | undefined): number =>
+  v == null ? 0.5 : Math.max(0, Math.min(1, v));
+
+export const BASE_CONFIG: PersonalityMemoryConfig = {
   importanceThreshold: 0.4,
   maxMemoriesPerTurn: 3,
   enabledCategories: ['user_preference', 'episodic', 'goal', 'knowledge', 'correction'],
@@ -67,7 +71,7 @@ export function derivePersonalityMemoryConfig(
   const config = { ...BASE_CONFIG, categoryBoosts: { ...BASE_CONFIG.categoryBoosts } };
   const enabledSet = new Set<FactCategory>(config.enabledCategories);
 
-  const clamp = (v: number | undefined) => v == null ? 0.5 : Math.max(0, Math.min(1, v));
+  const clamp = clampTrait;
   const o = clamp(traits.openness);
   const c = clamp(traits.conscientiousness);
   const a = clamp(traits.agreeableness);
