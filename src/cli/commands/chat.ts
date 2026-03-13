@@ -519,6 +519,21 @@ export default async function cmdChat(
       }
     }
 
+    // Auto-include GitHub extension when a PAT or gh CLI auth is available
+    if (!toolExtensions.includes('github')) {
+      const ghToken = (process.env['GITHUB_TOKEN'] || process.env['GH_TOKEN'] || '').trim();
+      if (ghToken) {
+        toolExtensions.push('github');
+      } else {
+        // Check for gh CLI auth as fallback
+        try {
+          const { execSync } = await import('node:child_process');
+          const cliToken = execSync('gh auth token 2>/dev/null', { encoding: 'utf8', timeout: 3000 }).trim();
+          if (cliToken) toolExtensions.push('github');
+        } catch { /* gh not installed or not authenticated — skip */ }
+      }
+    }
+
     // Resolve extensions using PresetExtensionResolver
     try {
       const { resolveExtensionsByNames } = await import('../../core/PresetExtensionResolver.js');
@@ -526,10 +541,25 @@ export default async function cmdChat(
         ? (extensionOverrides as Record<string, any>)
         : {};
 
+      // Build filesystem roots: agent workspace + user's home directory + cwd.
+      // Without explicit roots, the cli-executor defaults to [workspaceDir] only,
+      // which locks the agent out of the rest of the user's filesystem.
+      const homeDir = (await import('node:os')).homedir();
+      const workspaceDir = path.resolve(workspaceBaseDir, workspaceAgentId);
+      const cwd = process.cwd();
+      const readRoots = [workspaceDir, homeDir, cwd, '/tmp'];
+      const writeRoots = [workspaceDir, homeDir, cwd, '/tmp'];
+
       const runtimeOverrides: Record<string, any> = {
         'cli-executor': {
           options: {
-            filesystem: { allowRead: permissions.filesystem.read, allowWrite: permissions.filesystem.write },
+            workingDirectory: cwd,
+            filesystem: {
+              allowRead: permissions.filesystem.read,
+              allowWrite: permissions.filesystem.write,
+              readRoots: permissions.filesystem.read ? readRoots : undefined,
+              writeRoots: permissions.filesystem.write ? writeRoots : undefined,
+            },
             agentWorkspace: {
               agentId: workspaceAgentId,
               baseDir: workspaceBaseDir,
@@ -565,6 +595,10 @@ export default async function cmdChat(
         },
         'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
+        // Telegram extensions: send-only mode in CLI context to avoid
+        // 409 Conflict errors from competing getUpdates pollers.
+        'telegram': { options: { sendOnly: true } },
+        'channel-telegram': { options: { sendOnly: true } },
         'wunderbot-feeds': {
           options: {
             feeds: (cfg as any)?.feeds ?? {},
@@ -922,6 +956,11 @@ export default async function cmdChat(
     console.warn('[wunderland/chat] Per-agent storage init failed:', err instanceof Error ? err.message : err);
   }
 
+  // Detect authenticated integrations to inform the agent
+  const authenticatedIntegrations: string[] = [];
+  if (toolExtensions.includes('github')) authenticatedIntegrations.push('github');
+  if (toolExtensions.includes('telegram')) authenticatedIntegrations.push('telegram');
+
   const systemPrompt = buildAgenticSystemPrompt({
     seed,
     policy,
@@ -933,6 +972,7 @@ export default async function cmdChat(
       : undefined,
     skillsPrompt: skillsPrompt || undefined,
     turnApprovalMode,
+    authenticatedIntegrations: authenticatedIntegrations.length > 0 ? authenticatedIntegrations : undefined,
   });
 
   const sessionId = `wunderland-cli-${Date.now()}`;
@@ -960,6 +1000,31 @@ export default async function cmdChat(
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
+
+  // ── Restore previous conversation history from per-agent storage ────────
+  // Uses a stable conversationId per agent so history persists across sessions.
+  const conversationId = `cli-${seedId}`;
+  let memoryAdapter: import('../../storage/types.js').IAgentMemoryAdapter | undefined;
+  try {
+    if (agentStorageManager) {
+      memoryAdapter = agentStorageManager.getMemoryAdapter();
+      const previousTurns = await memoryAdapter.retrieveConversationTurns(conversationId, { limit: 100 });
+      if (previousTurns.length > 0) {
+        let restoredCount = 0;
+        for (const turn of previousTurns) {
+          if ((turn.role === 'user' || turn.role === 'assistant') && turn.content) {
+            messages.push({ role: turn.role, content: turn.content });
+            restoredCount++;
+          }
+        }
+        if (restoredCount > 0) {
+          console.log(`  ${chalk.hex('#666')(`Restored ${restoredCount} messages from previous session.`)}`);
+        }
+      }
+    }
+  } catch {
+    // Non-fatal — chat works without history
+  }
 
   // ── Restore console and render captured startup output in a panel ──────
   console.log = origLog;
@@ -1195,6 +1260,26 @@ export default async function cmdChat(
       if (autoIngestPipeline) {
         autoIngestPipeline.processConversationTurn(sessionId, input, reply).catch(() => {});
       }
+
+      // Persist conversation turns to per-agent storage (non-blocking)
+      if (memoryAdapter) {
+        const now = Date.now();
+        Promise.all([
+          memoryAdapter.storeConversationTurn(conversationId, {
+            agentId: seedId,
+            role: 'user',
+            content: input,
+            timestamp: now - 1,
+          }),
+          memoryAdapter.storeConversationTurn(conversationId, {
+            agentId: seedId,
+            role: 'assistant',
+            content: reply,
+            timestamp: now,
+            model,
+          }),
+        ]).catch(() => {});
+      }
     }
   }
 
@@ -1209,6 +1294,7 @@ export default async function cmdChat(
       helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/tools')}     ${chalk.hex(C.text)('List available tools')}`, iw));
       helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/channels')}  ${chalk.hex(C.text)('Show connected channels')}`, iw));
       helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/discover')}  ${chalk.hex(C.text)('Show discovery stats')}`, iw));
+      helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/clear')}     ${chalk.hex(C.text)('Clear conversation history')}`, iw));
       helpLines.push(frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw));
       helpLines.push('');
       console.log(helpLines.join('\n'));
@@ -1266,10 +1352,41 @@ export default async function cmdChat(
       return true;
     }
 
+    if (input === '/clear') {
+      // Clear in-memory messages (keep only the system prompt)
+      messages.splice(1);
+      // Clear persisted history
+      if (memoryAdapter?.deleteConversation) {
+        memoryAdapter.deleteConversation(conversationId).catch(() => {});
+      }
+      console.log(`  ${chalk.hex(C.dim)('Conversation history cleared.')}`);
+      return true;
+    }
+
     return false;
   }
 
   // ── Main REPL loop ──
+
+  /** Wraps runChatTurn with error handling so network/LLM failures don't crash the REPL */
+  async function safeChatTurn(
+    input: string,
+    replyTarget?: { adapter: ChannelAdapterInstance; conversationId: string },
+  ): Promise<void> {
+    try {
+      await runChatTurn(input, replyTarget);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      // Detect network errors and show a concise, user-friendly message
+      const isNetwork = /fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|network.*error|Network error|unable to reach/i.test(errMsg);
+      if (isNetwork) {
+        fmt.errorBlock('Network error', 'Could not reach the LLM provider. Check your internet connection and try again.');
+      } else {
+        fmt.errorBlock('Error', errMsg.length > 300 ? errMsg.slice(0, 300) + '…' : errMsg);
+      }
+    }
+  }
+
   const hasChannels = channelAdapters.length > 0;
   for (;;) {
     if (!hasChannels) {
@@ -1279,7 +1396,7 @@ export default async function cmdChat(
       if (!input) continue;
       if (input === '/exit' || input === 'exit' || input === 'quit') break;
       if (handleSlashCommand(input)) continue;
-      await runChatTurn(input);
+      await safeChatTurn(input);
     } else {
       // Concurrent: race stdin vs channel message queue
       let stdinLine: string | undefined;
@@ -1296,7 +1413,7 @@ export default async function cmdChat(
         const cm = channelMsg;
         const prefix = `[${cm.platform}/${cm.senderName}]`;
         console.log(`\n  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.brightCyan)(prefix)} ${cm.text}`);
-        await runChatTurn(
+        await safeChatTurn(
           `${prefix} ${cm.text}`,
           { adapter: cm.adapter, conversationId: cm.conversationId },
         );
@@ -1306,7 +1423,7 @@ export default async function cmdChat(
         if (!input) continue;
         if (input === '/exit' || input === 'exit' || input === 'quit') break;
         if (handleSlashCommand(input)) continue;
-        await runChatTurn(input);
+        await safeChatTurn(input);
       }
     }
   }
@@ -1328,4 +1445,8 @@ export default async function cmdChat(
   const g = glyphs();
   console.log(`  ${frameBorder(g.hr.repeat(endDivL))} ${chalk.hex(C.muted)('Session ended.')} ${frameBorder(g.hr.repeat(endDivR))}`);
   console.log('');
+
+  // Force exit — lingering timers/handles from extensions or LLM clients can
+  // keep the event loop alive indefinitely after the chat session ends.
+  process.exit(0);
 }

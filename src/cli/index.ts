@@ -522,6 +522,12 @@ export async function main(argv: string[]): Promise<void> {
 
   // No command → TUI dashboard (if TTY) or help text
   if (!command) {
+    // --help with no command = always print help (never re-launch TUI)
+    if (globals.help) {
+      if (!globals.quiet) await printBanner();
+      printHelp();
+      return;
+    }
     // --export-png with no command = export help
     if (typeof flags['export-png'] === 'string') {
       const { withExport } = await import('./export/export-middleware.js');

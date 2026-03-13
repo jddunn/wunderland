@@ -171,7 +171,10 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
     await runSecurityWizard(state);
   }
 
-  // Step 7: Voice (Advanced only)
+  // Step 7: RAG Memory (both modes)
+  await runRagWizard(state);
+
+  // Step 8: Voice (Advanced only)
   if (state.mode === 'advanced') {
     await runVoiceWizard(state);
   }
@@ -199,6 +202,7 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
       ? `Personality: ${wColor('disabled')}`
       : state.personalityPreset ? `Personality: ${accent(state.personalityPreset)}` : null,
     state.personalityEvolution ? `Personality evolution: ${accent('enabled')}` : null,
+    state.rag ? `RAG memory: ${accent(state.rag.mode)}${state.rag.autoIngest ? ` + ${accent('auto-ingest')}` : ''}` : `RAG memory: ${wColor('disabled')}`,
     state.voice ? `Voice: ${accent(state.voice.provider)}` : null,
     `Security: ${state.security.preLlmClassifier ? sColor('full pipeline') : wColor('minimal')}`,
   ].filter(Boolean).join('\n');
@@ -278,6 +282,9 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
       extensions: state.extensions,
       skills: state.skills,
       security: state.security,
+      rag: state.rag
+        ? { enabled: state.rag.enabled, mode: state.rag.mode, autoIngest: state.rag.autoIngest }
+        : { enabled: false },
       voiceProvider: state.voice?.provider,
       voiceModel: state.voice?.model,
       lastSetup: new Date().toISOString(),
@@ -428,6 +435,79 @@ async function runToolKeysWizard(state: WizardState): Promise<void> {
 
     fmt.note(`Get one at: ${fmt.link(tool.docsUrl)}`);
   }
+}
+
+async function runRagWizard(state: WizardState): Promise<void> {
+  if (state.mode === 'quickstart') {
+    // QuickStart: simple on/off toggle
+    const enable = await p.confirm({
+      message: 'Enable RAG memory? (agent remembers conversations & can ingest documents)',
+      initialValue: true,
+    });
+
+    if (p.isCancel(enable)) return;
+
+    if (enable) {
+      state.rag = { enabled: true, mode: 'hybrid', autoIngest: true };
+    }
+    return;
+  }
+
+  // Advanced: full RAG configuration
+  const enable = await p.confirm({
+    message: 'Enable RAG memory system?',
+    initialValue: true,
+  });
+
+  if (p.isCancel(enable) || !enable) return;
+
+  const mode = await p.select<'vector' | 'graph' | 'hybrid'>({
+    message: 'RAG retrieval mode:',
+    options: [
+      {
+        value: 'vector',
+        label: 'Vector search only',
+        hint: 'fast, low cost — finds similar text chunks via embeddings',
+      },
+      {
+        value: 'graph',
+        label: 'Graph RAG only',
+        hint: 'entity/relationship extraction + knowledge graph — best for "who/what/how" questions',
+      },
+      {
+        value: 'hybrid',
+        label: 'Hybrid (vector + graph)',
+        hint: 'most powerful, higher cost — combines both for best recall',
+      },
+    ],
+  });
+
+  if (p.isCancel(mode)) return;
+
+  const autoIngest = await p.confirm({
+    message: 'Enable auto-ingest? (automatically extracts and stores facts from conversations)',
+    initialValue: true,
+  });
+
+  if (p.isCancel(autoIngest)) return;
+
+  state.rag = {
+    enabled: true,
+    mode: mode,
+    autoIngest: autoIngest,
+  };
+
+  // Show explanation
+  const g = glyphs();
+  const modeDescriptions: Record<string, string> = {
+    vector: 'Chunks documents into embeddings, searches by semantic similarity.',
+    graph: 'Extracts entities and relationships, builds a knowledge graph with community detection.',
+    hybrid: 'Combines vector similarity with graph traversal for the best results.',
+  };
+  fmt.note(`${g.bullet} ${modeDescriptions[mode]}`);
+  fmt.note(`${g.bullet} Data stored locally in ~/.wunderland/agents/{seedId}/agent.db (SQLite).`);
+  fmt.note(`${g.bullet} Ingest files later with: wunderland rag ingest <file>`);
+  fmt.blank();
 }
 
 async function runSecurityWizard(state: WizardState): Promise<void> {
