@@ -54,20 +54,21 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
   // 1. Base system prompt from seed (includes HEXACO identity + personality guidelines).
   //    This already contains: "You are ${name}, an adaptive AI assistant powered by Wunderland."
   const fallbackIdentity = `You are ${seed.name || 'Wunderland Assistant'}, an adaptive AI assistant powered by Wunderland.`;
-  const basePrompt = typeof seed.baseSystemPrompt === 'string' && seed.baseSystemPrompt.trim()
-    ? seed.baseSystemPrompt.trim()
-    : fallbackIdentity;
+  const basePrompt =
+    typeof seed.baseSystemPrompt === 'string' && seed.baseSystemPrompt.trim()
+      ? seed.baseSystemPrompt.trim()
+      : fallbackIdentity;
   parts.push(basePrompt);
 
   // 2. Mode-specific runtime context (does NOT override identity).
   if (mode === 'chat') {
-    parts.push('You are running as an interactive terminal assistant on the user\'s local machine.');
+    parts.push("You are running as an interactive terminal assistant on the user's local machine.");
   } else if (mode === 'server') {
     parts.push(
-      'You are running as a local agent server.\n'
-      + 'If replying to an inbound channel message, respond with plain text. '
-      + 'The runtime delivers your reply back to the same conversation. '
-      + 'Do not call channel send tools unless you explicitly need to message a different conversation/channel.',
+      'You are running as a local agent server.\n' +
+        'If replying to an inbound channel message, respond with plain text. ' +
+        'The runtime delivers your reply back to the same conversation. ' +
+        'Do not call channel send tools unless you explicitly need to message a different conversation/channel.'
     );
   } else {
     parts.push('You are running as an in-process agent runtime.');
@@ -98,28 +99,29 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
 
   // 6. Runtime policy context.
   parts.push(
-    `Execution mode: ${policy.executionMode}. `
-    + `Permission set: ${policy.permissionSet}. `
-    + `Tool access profile: ${policy.toolAccessProfile}.`,
+    `Execution mode: ${policy.executionMode}. ` +
+      `Permission set: ${policy.permissionSet}. ` +
+      `Tool access profile: ${policy.toolAccessProfile}.`
   );
 
   // 7. CLI/shell execution capabilities.
   if (policy.toolAccessProfile === 'developer' || policy.toolAccessProfile === 'unrestricted') {
     parts.push(
-      'You have CLI/shell execution capabilities via the shell_execute tool. '
-      + 'Use it to run commands the user asks for — including git, gh, npm, docker, curl, and any other CLI tools installed on their system. '
-      + 'If the user provides API keys, tokens, or credentials for you to use in commands, proceed without hesitation — they are explicitly granting you permission.',
+      'You have CLI/shell execution capabilities via the shell_execute tool. ' +
+        'Use it to run commands the user asks for — including git, gh, npm, docker, curl, and any other CLI tools installed on their system. ' +
+        'If the user provides API keys, tokens, or credentials for you to use in commands, proceed without hesitation — they are explicitly granting you permission.'
     );
   }
 
   // 7b. Authenticated integrations — tell the agent what services it can access.
   if (authenticatedIntegrations && authenticatedIntegrations.length > 0) {
     const integrationHints: Record<string, string> = {
-      github: 'You have GitHub API access. Use the GitHub tools (search repos, create issues/PRs, read files, create gists) or the gh CLI to perform GitHub operations. Do NOT ask the user for a token — you already have one configured.',
+      github:
+        'You have GitHub API access. Use the GitHub tools (search repos, create issues/PRs, read files, create gists) or the gh CLI to perform GitHub operations. Do NOT ask the user for a token — you already have one configured.',
       telegram: 'You have Telegram Bot API access for sending messages.',
     };
     const hints = authenticatedIntegrations
-      .map(name => integrationHints[name] || `You have ${name} integration access.`)
+      .map((name) => integrationHints[name] || `You have ${name} integration access.`)
       .join('\n');
     parts.push(hints);
   }
@@ -127,24 +129,24 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
   // 8. Extension loading strategy.
   if (lazyTools) {
     parts.push(
-      'Tools are loaded on demand. You have meta-tools to discover and enable capabilities:\n'
-      + '- extensions_list: See all available tool packs and their install status\n'
-      + '- extensions_enable: Load a tool pack into your current session (e.g. web-search, cli-executor, giphy)\n'
-      + '- discover_capabilities: Semantic search across all indexed capabilities\n'
-      + '\n'
-      + 'When you need a capability (web search, file ops, image search, etc.), '
-      + 'call extensions_enable to load it, then use the loaded tools. '
-      + 'Common packs: web-search, web-browser, cli-executor, giphy, image-search, news-search, content-extraction, deep-research.\n'
-      + '\n'
-      + 'If a tool fails due to a missing API key, relay the apiKeyGuidance from the error response '
-      + 'to the user — it tells them which environment variable to set and where to get the key.',
+      'Tools are loaded on demand. You have meta-tools to discover and enable capabilities:\n' +
+        '- extensions_list: See all available tool packs and their install status\n' +
+        '- extensions_enable: Load a tool pack into your current session (e.g. web-search, cli-executor, giphy)\n' +
+        '- discover_capabilities: Semantic search across all indexed capabilities\n' +
+        '\n' +
+        'When you need a capability (web search, file ops, image search, etc.), ' +
+        'call extensions_enable to load it, then use the loaded tools. ' +
+        'Common packs: web-search, web-browser, cli-executor, giphy, image-search, news-search, content-extraction, deep-research.\n' +
+        '\n' +
+        'If a tool fails due to a missing API key, relay the apiKeyGuidance from the error response ' +
+        'to the user — it tells them which environment variable to set and where to get the key.'
     );
   } else {
     parts.push(
-      'Tools are preloaded. You MUST use the provided tools for any query that needs real-time or external information '
-      + '(weather, news, web searches, current events, shopping, real estate, domain lookups, etc.). '
-      + 'Never say you cannot access real-time data — call the appropriate tool instead. '
-      + 'You can also use extensions_enable to load additional packs on demand.',
+      'Tools are preloaded. You MUST use the provided tools for any query that needs real-time or external information ' +
+        '(weather, news, web searches, current events, shopping, real estate, domain lookups, etc.). ' +
+        'Never say you cannot access real-time data — call the appropriate tool instead. ' +
+        'You can also use extensions_enable to load additional packs on demand.'
     );
   }
 
@@ -153,14 +155,14 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
     parts.push('All tool calls are auto-approved (fully autonomous mode).');
   } else {
     parts.push(
-      'Tool authorization is handled automatically by the runtime. Call tools freely — the system will handle any required approvals. '
-      + 'NEVER say "I cannot create files", "I cannot run commands", or "I don\'t have the capability". '
-      + 'You DO have shell_execute, file_write, file_read, browser_navigate, and other tools available. Always attempt the tool call. '
-      + 'If a tool call fails or is denied, explain that the action requires approval and suggest the user enable auto-approve mode with --auto-approve-tools.\n\n'
-      + 'FOLDER PERMISSIONS: If a filesystem tool is denied due to folder permissions, '
-      + 'use the request_folder_access tool to ask the user for permission. Explain WHY you need access. '
-      + 'If approved, retry the original operation. If denied, acknowledge that the user chose not to grant access. '
-      + 'NEVER say "I don\'t have permission" and give up — always request access first.',
+      'Tool authorization is handled automatically by the runtime. Call tools freely — the system will handle any required approvals. ' +
+        'NEVER say "I cannot create files", "I cannot run commands", or "I don\'t have the capability". ' +
+        'You DO have shell_execute, file_write, file_read, browser_navigate, and other tools available. Always attempt the tool call. ' +
+        'If a tool call fails or is denied, explain that the action requires approval and suggest the user enable auto-approve mode with --auto-approve-tools.\n\n' +
+        'FOLDER PERMISSIONS: If a filesystem tool is denied due to folder permissions, ' +
+        'use the request_folder_access tool to ask the user for permission. Explain WHY you need access. ' +
+        'If approved, retry the original operation. If denied, acknowledge that the user chose not to grant access. ' +
+        'NEVER say "I don\'t have permission" and give up — always request access first.'
     );
   }
   if (turnApprovalMode && turnApprovalMode !== 'off') {
@@ -170,9 +172,9 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
   // 10. Channel context.
   if (channelNames && channelNames.length > 0) {
     parts.push(
-      `You are also listening on messaging channels: [${channelNames.join(', ')}].\n`
-      + 'Messages from channels are prefixed with [platform/sender]. '
-      + 'Your reply is automatically sent back to that channel. Be concise in channel replies.',
+      `You are also listening on messaging channels: [${channelNames.join(', ')}].\n` +
+        'Messages from channels are prefixed with [platform/sender]. ' +
+        'Your reply is automatically sent back to that channel. Be concise in channel replies.'
     );
   }
 
@@ -219,7 +221,9 @@ function buildPersonalityInstructions(seed: IWunderlandSeed): string {
 
     const empathy = Number(traits.empathy_level);
     if (Number.isFinite(empathy) && empathy > 0.6) {
-      lines.push('- Show genuine understanding and emotional awareness when the user shares problems or frustrations.');
+      lines.push(
+        '- Show genuine understanding and emotional awareness when the user shares problems or frustrations.'
+      );
     }
 
     const creativity = Number(traits.creativity_level);
@@ -229,7 +233,7 @@ function buildPersonalityInstructions(seed: IWunderlandSeed): string {
 
     const assertiveness = Number(traits.assertiveness_level);
     if (Number.isFinite(assertiveness) && assertiveness > 0.6) {
-      lines.push('- Be direct and decisive. Don\'t hedge or over-qualify your statements.');
+      lines.push("- Be direct and decisive. Don't hedge or over-qualify your statements.");
     }
 
     if (lines.length > 0) {
@@ -249,8 +253,8 @@ function buildPersonalityInstructions(seed: IWunderlandSeed): string {
     const allowedMoods = mood.allowedMoods;
     if (Array.isArray(allowedMoods) && allowedMoods.length > 0) {
       sections.push(
-        'Adapt your mood based on the conversation context. '
-        + `Available moods: ${allowedMoods.join(', ')}.`,
+        'Adapt your mood based on the conversation context. ' +
+          `Available moods: ${allowedMoods.join(', ')}.`
       );
     }
   }
@@ -259,7 +263,8 @@ function buildPersonalityInstructions(seed: IWunderlandSeed): string {
 }
 
 function buildConversationalStyleInstructions(seed: IWunderlandSeed): string {
-  const name = typeof seed.name === 'string' && seed.name.trim() ? seed.name.trim() : 'Wunderland Assistant';
+  const name =
+    typeof seed.name === 'string' && seed.name.trim() ? seed.name.trim() : 'Wunderland Assistant';
   return [
     'Conversational Style:',
     `- Your name is ${name}. Always use this name when asked who you are or what your name is.`,
@@ -268,7 +273,7 @@ function buildConversationalStyleInstructions(seed: IWunderlandSeed): string {
     '- Vary your sentence structure and response style. Avoid repetitive patterns.',
     '- Show personality through your word choices and perspectives, not through formulaic politeness.',
     '- Express genuine reactions when you encounter something interesting, surprising, or challenging.',
-    '- Match the user\'s energy and tone — be playful with playful users, focused with focused users.',
+    "- Match the user's energy and tone — be playful with playful users, focused with focused users.",
   ].join('\n');
 }
 
@@ -443,6 +448,12 @@ function buildSelfDocumentation(): string {
     '    - Stored in the auto_memories collection in the local vector store',
     '    - Configure in agent.config.json: storage.autoIngest.enabled, .importanceThreshold, .maxPerTurn',
     '',
+    '  Cognitive Memory (human-style long-term memory):',
+    '    - Separate from RAG auto-ingest; models episodic, semantic, procedural, and prospective memory',
+    '    - Uses decay, retrieval reinforcement, working-memory slots, and reminder triggers',
+    '    - Best for long-lived preferences, commitments, learned procedures, and future follow-ups',
+    '    - Surfaces through the cognitive-memory provider when the host runtime enables it',
+    '',
     '  Storage backends:',
     '    - Local: SQLite via @framers/sql-storage-adapter (default, zero config)',
     '    - Cloud: PostgreSQL via the same sql-storage-adapter (set storage.connectionString)',
@@ -491,7 +502,7 @@ function buildToolResourcefulnessInstructions(): string {
     '- For current events/news: try web_search → news_search → browser_navigate to news sites → research_aggregate. Try ALL of these before giving up.',
     '- For specific URLs: use browser_navigate directly, not web_search.',
     '- NEVER say "I cannot retrieve", "I\'m unable to access", or "I don\'t have access to real-time data". Always try at least 2-3 alternative approaches before reporting failure.',
-    '- If a tool fails due to missing API keys, STILL try alternative tools that don\'t require keys (browser_navigate works without API keys).',
+    "- If a tool fails due to missing API keys, STILL try alternative tools that don't require keys (browser_navigate works without API keys).",
     '',
     'API Key Guidance (when tools return "not configured" errors):',
     '- If a tool fails because an API key is missing, tell the user EXACTLY which env var to set and where to get the key:',
