@@ -475,6 +475,8 @@ export default async function cmdChat(
   console.info = captureLog as typeof console.info;
   console.warn = captureLog as typeof console.warn;
 
+  let toolExtensions: string[] = [];
+
   if (!lazyTools) {
     // Read extensions from agent.config.json if present
     let extensionsFromConfig: any = null;
@@ -491,8 +493,6 @@ export default async function cmdChat(
     } catch {
       // ignore
     }
-
-    let toolExtensions: string[] = [];
     let voiceExtensions: string[] = [];
     let productivityExtensions: string[] = [];
 
