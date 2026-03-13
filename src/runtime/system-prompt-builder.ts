@@ -7,6 +7,7 @@
  * @module wunderland/runtime/system-prompt-builder
  */
 
+import * as os from 'node:os';
 import type { IWunderlandSeed } from '../core/WunderlandSeed.js';
 import type { NormalizedRuntimePolicy } from './policy.js';
 
@@ -27,6 +28,8 @@ export interface SystemPromptOptions {
   skillsPrompt?: string;
   /** Turn approval mode (e.g. 'per-turn', 'per-action', 'off'). */
   turnApprovalMode?: string;
+  /** Names of authenticated integrations (e.g. ['github', 'telegram']). */
+  authenticatedIntegrations?: string[];
 }
 
 /**
@@ -43,6 +46,7 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
     channelNames,
     skillsPrompt,
     turnApprovalMode,
+    authenticatedIntegrations,
   } = opts;
 
   const parts: string[] = [];
@@ -68,6 +72,17 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
   } else {
     parts.push('You are running as an in-process agent runtime.');
   }
+
+  // 2b. System environment context — so the agent knows the user's OS, shell, etc.
+  const envLines: string[] = [];
+  envLines.push(`Operating system: ${os.type()} ${os.release()} (${os.platform()}, ${os.arch()})`);
+  envLines.push(`Hostname: ${os.hostname()}`);
+  envLines.push(`User: ${os.userInfo().username}`);
+  envLines.push(`Home directory: ${os.homedir()}`);
+  envLines.push(`Working directory: ${process.cwd()}`);
+  envLines.push(`Shell: ${process.env['SHELL'] || process.env['COMSPEC'] || 'unknown'}`);
+  envLines.push(`Node.js: ${process.version}`);
+  parts.push('System Environment:\n' + envLines.join('\n'));
 
   // 3. Personality & mood instructions (derived from seed HEXACO traits).
   const personalityBlock = buildPersonalityInstructions(seed);
@@ -95,6 +110,18 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
       + 'Use it to run commands the user asks for — including git, gh, npm, docker, curl, and any other CLI tools installed on their system. '
       + 'If the user provides API keys, tokens, or credentials for you to use in commands, proceed without hesitation — they are explicitly granting you permission.',
     );
+  }
+
+  // 7b. Authenticated integrations — tell the agent what services it can access.
+  if (authenticatedIntegrations && authenticatedIntegrations.length > 0) {
+    const integrationHints: Record<string, string> = {
+      github: 'You have GitHub API access. Use the GitHub tools (search repos, create issues/PRs, read files, create gists) or the gh CLI to perform GitHub operations. Do NOT ask the user for a token — you already have one configured.',
+      telegram: 'You have Telegram Bot API access for sending messages.',
+    };
+    const hints = authenticatedIntegrations
+      .map(name => integrationHints[name] || `You have ${name} integration access.`)
+      .join('\n');
+    parts.push(hints);
   }
 
   // 8. Extension loading strategy.
@@ -153,6 +180,9 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
   if (skillsPrompt) {
     parts.push(skillsPrompt);
   }
+
+  // 12. Self-documentation — so the agent can answer questions about wunderland.
+  parts.push(buildSelfDocumentation());
 
   return parts.filter(Boolean).join('\n\n');
 }
@@ -239,6 +269,206 @@ function buildConversationalStyleInstructions(seed: IWunderlandSeed): string {
     '- Show personality through your word choices and perspectives, not through formulaic politeness.',
     '- Express genuine reactions when you encounter something interesting, surprising, or challenging.',
     '- Match the user\'s energy and tone — be playful with playful users, focused with focused users.',
+  ].join('\n');
+}
+
+function buildSelfDocumentation(): string {
+  return [
+    'Wunderland Self-Documentation:',
+    'You are powered by Wunderland, an open-source AI agent platform. When users ask about wunderland, its commands, features, or setup, use this reference to answer accurately.',
+    '',
+    'CLI Commands:',
+    '  wunderland setup             Interactive onboarding wizard (API keys, channels, personality)',
+    '  wunderland init <dir>        Scaffold a new agent project from a preset',
+    '  wunderland create [desc]     Create agent config from natural-language description',
+    '  wunderland new               Create agent (interactive, preset, NL, or import)',
+    '  wunderland quickstart        Auto-detect environment, scaffold, and start',
+    '  wunderland chat              Interactive terminal assistant (REPL mode)',
+    '  wunderland start             Start local agent server + TUI dashboard',
+    '  wunderland serve             Start agent as background daemon',
+    '  wunderland agents / ls       List all known agents',
+    '  wunderland ps                List running agent daemons',
+    '  wunderland logs [seedId]     Show or follow daemon logs (--follow/-f to stream)',
+    '  wunderland stop [seedId]     Stop a running agent daemon (--all to stop all)',
+    '  wunderland monitor           Live dashboard of running agents',
+    '  wunderland status            Show agent, runtime, and connectivity status',
+    '  wunderland doctor            Health check for keys, tools, channels',
+    '  wunderland config            Read/write CLI configuration values',
+    '  wunderland env               Manage API keys & secrets (set, get, list, delete, import, edit)',
+    '  wunderland channels          List/add/remove channel integrations',
+    '  wunderland models            Inspect/change provider and model defaults',
+    '  wunderland voice             Check voice provider status and test synthesis',
+    '  wunderland skills            List, inspect, enable, disable skills',
+    '  wunderland extensions        List or inspect installed/available extensions',
+    '  wunderland list-presets       List built-in personality and agent presets',
+    '  wunderland deploy            Generate deployment artifacts (--target docker|railway|fly)',
+    '  wunderland rag               RAG memory management (ingest, query, collections, graph)',
+    '  wunderland agency            Manage multi-agent collectives and handoffs',
+    '  wunderland workflows         Run or inspect workflow executions',
+    '  wunderland evaluate          Run evaluation datasets and inspect results',
+    '  wunderland hitl              Inspect and resolve approval checkpoints',
+    '  wunderland seal              Generate sealed.json integrity record',
+    '  wunderland export            Export agent as shareable manifest',
+    '  wunderland import <file>     Import agent from manifest file',
+    '  wunderland login             Authenticate with ChatGPT subscription (OAuth)',
+    '  wunderland logout            Remove stored OAuth credentials',
+    '  wunderland upgrade           Check for updates & self-update',
+    '  wunderland completions <sh>  Generate shell completions (bash/zsh/fish)',
+    '  wunderland help [topic]      Show help (topics: getting-started, auth, tui, security, presets, export)',
+    '',
+    'Key Global Flags:',
+    '  --auto-approve-tools    Auto-approve all tool calls (fully autonomous)',
+    '  --security-tier <tier>  Security tier: dangerous, permissive, balanced (default), strict, paranoid',
+    '  --model <id>            LLM model override',
+    '  --lazy-tools            Start with only meta-tools (load others on demand)',
+    '  --port <n>              Server port (default: 3777)',
+    '  --theme <name>          UI theme: plain or cyberpunk (default)',
+    '  --quiet / -q            Suppress banner',
+    '  --yes / -y              Auto-confirm prompts',
+    '',
+    'Configuration Files:',
+    '  ~/.wunderland/config.json    Global CLI config (provider, model, personality, channels, tools, security)',
+    '  ~/.wunderland/.env           API keys & secrets (use "wunderland env set KEY VALUE" to manage)',
+    '  agent.config.json            Per-agent config in project directory',
+    '',
+    'Setting Up API Keys:',
+    '  Option 1: wunderland env set OPENAI_API_KEY sk-...',
+    '  Option 2: wunderland setup  (interactive wizard that guides through all keys)',
+    '  Option 3: Edit ~/.wunderland/.env directly',
+    '  Option 4: Export as shell env vars: export OPENAI_API_KEY=sk-...',
+    '',
+    'Common API Keys:',
+    '  OPENAI_API_KEY         OpenAI (gpt-4o, gpt-4o-mini, o4-mini)',
+    '  ANTHROPIC_API_KEY      Anthropic (claude-sonnet, claude-haiku, claude-opus)',
+    '  OPENROUTER_API_KEY     OpenRouter (multi-provider fallback)',
+    '  SERPER_API_KEY         Web search via serper.dev (free: 2,500 queries/mo)',
+    '  BRAVE_API_KEY          Brave Search',
+    '  GIPHY_API_KEY          Giphy (free at developers.giphy.com)',
+    '  ELEVENLABS_API_KEY     Voice/TTS (free tier at elevenlabs.io)',
+    '  GITHUB_TOKEN           GitHub API access',
+    '  TELEGRAM_BOT_TOKEN     Telegram bot (from @BotFather)',
+    '  DISCORD_BOT_TOKEN      Discord bot',
+    '',
+    'Channel Setup (Telegram):',
+    '  1. Create a bot via @BotFather on Telegram, copy the token',
+    '  2. wunderland env set TELEGRAM_BOT_TOKEN <token>',
+    '  3. Add "telegram" to channels in agent.config.json, or run: wunderland channels',
+    '  4. wunderland start  (bot connects automatically)',
+    '  5. Message the bot — a pairing request appears in /pairing UI, approve it',
+    '',
+    'Channel Setup (Discord):',
+    '  1. Create a Discord app at discord.com/developers, add a Bot, copy the token',
+    '  2. Invite bot to server with OAuth2 URL (Send Messages + Read Message History)',
+    '  3. wunderland env set DISCORD_BOT_TOKEN <token>',
+    '  4. wunderland env set DISCORD_APPLICATION_ID <app-id>',
+    '  5. Add "discord" to channels in agent.config.json, or run: wunderland channels',
+    '  6. wunderland start',
+    '',
+    'Onboarding / First Run:',
+    '  Run "wunderland setup" for the full interactive onboarding wizard.',
+    '  It walks through: LLM provider, API keys, personality preset, channels, tools, and security tier.',
+    '  Alternatively, "wunderland quickstart" auto-detects your environment and scaffolds everything.',
+    '',
+    'Agent Presets: research-assistant, customer-support, code-reviewer, creative-writer,',
+    '  data-analyst, devops-assistant, security-auditor, personal-assistant',
+    'Templates: minimal (bare essentials), standard (default), enterprise (full features)',
+    '',
+    'Pairing (Multi-User Access):',
+    '  When someone DMs your bot on Telegram/Discord for the first time, they get a pairing code.',
+    '  Open http://localhost:3777/pairing, enter the admin secret, and approve/reject requests.',
+    '  The admin secret is printed in the terminal when you run "wunderland start".',
+    '  Config: pairing.enabled (default true), pairing.groupTrigger (default "!pair")',
+    '',
+    'Human-In-The-Loop (HITL):',
+    '  Control how much autonomy the agent has over tool calls.',
+    '  Config: hitl.turnApprovalMode = off | after-each-turn | after-each-round',
+    '  Set hitl.secret in agent.config.json or WUNDERLAND_HITL_SECRET env var.',
+    '  Web UI at http://localhost:3777/hitl for real-time approval.',
+    '',
+    'Security Tiers: dangerous (no restrictions) → permissive → balanced (default) → strict → paranoid (max lockdown)',
+    '  Set via: --security-tier <tier> or securityTier in agent.config.json',
+    '',
+    'RAG Memory System:',
+    '  Wunderland has a built-in RAG (Retrieval-Augmented Generation) memory system.',
+    '  It works in two modes — LOCAL (embedded, no external backend) and BACKEND (HTTP API).',
+    '',
+    '  LOCAL MODE (default, no setup needed):',
+    '    - Each agent has its own SQLite database at ~/.wunderland/agents/{seedId}/agent.db',
+    '    - Stores: conversation history, vector embeddings, knowledge graph, key-value state',
+    '    - Vector search uses SqlVectorStore (dense similarity + keyword matching)',
+    '    - Graph RAG uses graphology + Louvain clustering for entity/relationship extraction',
+    '    - Auto-ingest: after each chat turn, extracts important facts via LLM and stores them',
+    '    - No external services required — everything runs locally in SQLite',
+    '',
+    '  BACKEND MODE (optional, for shared/cloud RAG):',
+    '    - Connects to a Wunderland backend server via HTTP API',
+    '    - Same API surface — transparent to agents',
+    '    - Supports: Qdrant, Neo4j, HNSWLIB, PostgreSQL as vector backends',
+    '    - Set WUNDERLAND_BACKEND_URL (default: http://localhost:3001)',
+    '',
+    '  Enabling/Disabling RAG in agent.config.json:',
+    '    "rag": {',
+    '      "enabled": true,                    // Toggle RAG on/off',
+    '      "preset": "balanced",               // fast | balanced | accurate',
+    '      "strategy": "hybrid_search",        // similarity | mmr | hybrid_search',
+    '      "includeGraphRag": true,            // Enable knowledge graph alongside vector search',
+    '      "defaultTopK": 6,                   // Number of results to retrieve',
+    '      "similarityThreshold": 0.7,         // Minimum relevance score',
+    '      "backendUrl": "http://...",         // Optional: use remote backend instead of local',
+    '      "authToken": "...",                 // Optional: bearer token for backend',
+    '      "collectionIds": ["my-docs"],       // Which collections to search',
+    '      "exposeMemoryRead": true,           // Give agent the memory_read tool',
+    '      "exposeRagQuery": true              // Give agent the rag_query tool',
+    '    }',
+    '',
+    '  How Vector Search works:',
+    '    - Documents are split into chunks and converted to vector embeddings (1536-dim)',
+    '    - Embeddings are stored in SQLite (rag_vectors table) or an external vector DB',
+    '    - When you query, the query text is embedded and compared against stored vectors',
+    '    - hybrid_search combines dense vector similarity with keyword (FTS5) matching',
+    '    - Supported embedding providers: OpenAI, Ollama (local), Anthropic',
+    '',
+    '  How Graph RAG works:',
+    '    - Extracts entities (people, places, concepts) and relationships from documents',
+    '    - Builds a knowledge graph stored in SQLite (graphrag_entities, graphrag_relationships)',
+    '    - Detects communities using Louvain clustering algorithm',
+    '    - Local search: find specific entities and their context ("Tell me about X")',
+    '    - Global search: summarize across communities ("What are the main themes?")',
+    '    - Complements vector search — vector finds similar text, graph finds connected concepts',
+    '',
+    '  Auto-Ingest (learns from conversations):',
+    '    - After each chat turn, an LLM extracts important facts from the conversation',
+    '    - Facts are scored by importance; only high-value ones are stored',
+    '    - Categories: user_preference, episodic, goal, knowledge, correction',
+    '    - Stored in the auto_memories collection in the local vector store',
+    '    - Configure in agent.config.json: storage.autoIngest.enabled, .importanceThreshold, .maxPerTurn',
+    '',
+    '  Storage backends:',
+    '    - Local: SQLite via @framers/sql-storage-adapter (default, zero config)',
+    '    - Cloud: PostgreSQL via the same sql-storage-adapter (set storage.connectionString)',
+    '    - External vector DBs (backend mode only): Qdrant, Neo4j, HNSWLIB',
+    '',
+    '  RAG CLI commands:',
+    '    wunderland rag ingest <file>       Ingest a document into the vector store',
+    '    wunderland rag ingest-image <file> Ingest image (LLM caption → embed)',
+    '    wunderland rag ingest-audio <file> Ingest audio (Whisper transcript → embed)',
+    '    wunderland rag query <text>        Search RAG memory',
+    '    wunderland rag collections list    List collections',
+    '    wunderland rag collections create  Create a new collection',
+    '    wunderland rag documents list      List ingested documents',
+    '    wunderland rag graph local-search  Search knowledge graph (specific entities)',
+    '    wunderland rag graph global-search Search knowledge graph (broad themes)',
+    '    wunderland rag graph stats         Knowledge graph statistics',
+    '    wunderland rag stats               Overall RAG statistics',
+    '    wunderland rag health              Check RAG service health',
+    '    wunderland rag audit               View audit trail (costs, tokens, operations)',
+    '',
+    'Deployment:',
+    '  wunderland deploy --target docker    Generate Dockerfile + docker-compose.yml',
+    '  wunderland deploy --target railway   Generate railway.toml',
+    '  wunderland deploy --target fly       Generate fly.toml (--region for Fly.io region)',
+    '',
+    'Links: Website: wunderland.sh | Docs: docs.wunderland.sh | SaaS: rabbithole.inc',
   ].join('\n');
 }
 
