@@ -52,7 +52,8 @@ export default async function cmdInit(
     }
   }
 
-  await mkdir(targetDir, { recursive: true });
+  // NOTE: Directory is NOT created here — we defer mkdir until after all
+  // interactive prompts complete so that CTRL+C doesn't leave a partial folder.
 
   // ── Load env vars so existing keys are discoverable ─────────────────────
   await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: _globals.config });
@@ -135,6 +136,13 @@ export default async function cmdInit(
 
   if (!skipKeys) {
     const llmResult = await runInitLlmStep({ nonInteractive });
+    if (!llmResult && !nonInteractive) {
+      // User cancelled the LLM setup (CTRL+C or explicit cancel).
+      // Don't create a partial agent folder.
+      fmt.blank();
+      fmt.warning('Init cancelled — no agent folder was created.');
+      return;
+    }
     if (llmResult) {
       llmProvider = llmResult.llmProvider;
       llmModel = llmResult.llmModel;
@@ -192,6 +200,9 @@ export default async function cmdInit(
       id: agentPreset.id,
     } : undefined,
   });
+
+  // ── Create directory (deferred from earlier to avoid partial state on CTRL+C)
+  await mkdir(targetDir, { recursive: true });
 
   // ── Write scaffold files ──────────────────────────────────────────────
   await writeAgentScaffold({

@@ -502,6 +502,27 @@ export default async function cmdChat(
     return;
   }
 
+  // Warn if using an API key from environment rather than agent config.
+  // This prevents confusion when CTRL+C'd init still creates a working agent.
+  if (
+    authMethod !== 'oauth' &&
+    providerId !== 'ollama' &&
+    llmApiKey &&
+    !providerFromConfig
+  ) {
+    const envVarName =
+      providerId === 'openrouter'
+        ? 'OPENROUTER_API_KEY'
+        : providerId === 'anthropic'
+          ? 'ANTHROPIC_API_KEY'
+          : providerId === 'gemini'
+            ? 'GEMINI_API_KEY'
+            : 'OPENAI_API_KEY';
+    console.log(
+      `  ${wColor('!')} No LLM provider in agent.config.json — using ${accent(envVarName)} from environment`
+    );
+  }
+
   const overdriveMode = flags['overdrive'] === true;
   const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
   const dangerouslySkipCommandSafety =
