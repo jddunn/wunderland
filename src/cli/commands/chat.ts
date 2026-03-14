@@ -1233,9 +1233,21 @@ export default async function cmdChat(
 
   // ── Runtime folder access request tool ──
   if (!dangerouslySkipPermissions) {
+    // Extract ShellService from a CLI executor tool so we can propagate folder grants
+    const cliTool = toolMap.get('list_directory') || toolMap.get('file_read') || toolMap.get('file_write');
+    const cliShellService: any = cliTool ? (cliTool as any).shellService : undefined;
+
     const folderAccessTool = createRequestFolderAccessTool({
       guardrails: getGuardrailsInstance(),
       agentId: seedId,
+      onFolderGranted: (resolvedPath, operation) => {
+        if (cliShellService && typeof cliShellService.addReadRoot === 'function') {
+          cliShellService.addReadRoot(resolvedPath);
+          if (operation === 'write' && typeof cliShellService.addWriteRoot === 'function') {
+            cliShellService.addWriteRoot(resolvedPath);
+          }
+        }
+      },
       requestPermission: async (req) => {
         if (sessionAcceptAll) return true;
         const cacheKey = `folder_access:${req.path}:${req.operation}`;
