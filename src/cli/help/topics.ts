@@ -13,6 +13,7 @@ export type HelpTopicId =
   | 'getting-started'
   | 'auth'
   | 'tui'
+  | 'voice'
   | 'ui'
   | 'presets'
   | 'security'
@@ -33,6 +34,11 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     id: 'tui',
     title: 'TUI Dashboard',
     summary: 'Keyboard-driven dashboard (search, drilldowns, tour).',
+  },
+  {
+    id: 'voice',
+    title: 'Voice & Speech',
+    summary: 'Speech runtime, TTS/STT providers, and voice dashboard usage.',
   },
   {
     id: 'ui',
@@ -81,6 +87,7 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'getting-started' || topic === 'gettingstarted' || topic === 'quickstart') return 'getting-started';
     if (topic === 'auth' || topic === 'login' || topic === 'oauth' || topic === 'subscription') return 'auth';
     if (topic === 'tui' || topic === 'dashboard') return 'tui';
+    if (topic === 'voice' || topic === 'speech' || topic === 'stt' || topic === 'tts') return 'voice';
     if (topic === 'ui' || topic === 'theme' || topic === 'themes' || topic === 'style' || topic === 'ascii') return 'ui';
     if (topic === 'presets' || topic === 'preset') return 'presets';
     if (topic === 'security' || topic === 'approvals' || topic === 'hitl') return 'security';
@@ -91,7 +98,7 @@ export function printHelpTopic(topicRaw: string): void {
   if (!resolved) {
     console.log();
     console.log(`  ${wColor(g.warn)} ${bright('Unknown help topic')} ${muted(topicRaw)}`);
-    console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help auth')}${dim(', ')}${accent('wunderland help tui')}${dim(', ')}${accent('wunderland help presets')}`);
+    console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help auth')}${dim(', ')}${accent('wunderland help tui')}${dim(', ')}${accent('wunderland help voice')}`);
     console.log();
     return;
   }
@@ -175,6 +182,33 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${accent('/')} search lists   ${accent(enter)} details modal   ${accent('?')} help modal`);
     console.log();
     console.log(`  ${dim('Tip:')} Use ${accent('/')} to filter commands like a command palette.`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'voice') {
+    printTitle('Voice & Speech');
+    console.log(`  ${bright('Wunderland uses the unified AgentOS speech runtime for STT, TTS, VAD, and optional wake-word flows.')}`);
+    console.log();
+    console.log(`  ${dim('Inspect providers:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice status')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice tts')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice stt')}`);
+    console.log();
+    console.log(`  ${dim('Test synthesis:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice test "Hello from Wunderland"')}`);
+    console.log(`     ${dim('Uses the best configured runtime-backed TTS provider.')}`);
+    console.log();
+    console.log(`  ${dim('Configure providers:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland setup')}`);
+    console.log(`     ${dim('OpenAI covers both Whisper STT and OpenAI TTS. ElevenLabs is available for higher-quality TTS.')}`);
+    console.log();
+    console.log(`  ${dim('TUI voice dashboard:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland')} ${dim('then press')} ${accent('v')}`);
+    console.log(`     ${dim('Shows telephony, STT, and TTS providers from the shared speech catalog.')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${dim('Key env vars:')} ${accent('OPENAI_API_KEY')}${dim(', ')}${accent('ELEVENLABS_API_KEY')}${dim(', ')}${accent('WHISPER_MODEL_DEFAULT')}${dim(', ')}${accent('OPENAI_TTS_DEFAULT_MODEL')}`);
     console.log();
     return;
   }

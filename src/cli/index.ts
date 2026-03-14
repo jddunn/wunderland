@@ -261,9 +261,14 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     examples: ['wunderland models list', 'wunderland models set-default openai gpt-4o'],
   },
   voice: {
-    summary: 'Inspect configured voice providers and test synthesis.',
-    usage: ['wunderland voice [status|test <text>]'],
-    examples: ['wunderland voice status', 'wunderland voice test "Hello from Wunderland"'],
+    summary: 'Inspect voice providers, list STT/TTS stacks, and test synthesis.',
+    usage: ['wunderland voice [status|tts|stt|test <text>|clone]'],
+    examples: [
+      'wunderland voice status',
+      'wunderland voice tts',
+      'wunderland voice stt',
+      'wunderland voice test "Hello from Wunderland"',
+    ],
   },
   cron: {
     summary: 'Inspect scheduled job support and scheduler status.',

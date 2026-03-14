@@ -17,6 +17,7 @@ import { initializeAgentStorage } from './storage-init.js';
 import { initChannelRuntime, wireDiscordExtensions, subscribeChannelAdapters } from './channel-handler.js';
 import { createAgentHttpServer } from './http-server.js';
 import { startServerAndDisplay } from './startup-display.js';
+import { bootstrapRagKnowledge } from './rag-bootstrap.js';
 
 export default async function cmdStart(
   _args: string[],
@@ -65,6 +66,14 @@ export default async function cmdStart(
     // Phase 3: Resolve LLM provider, auth, model
     const llmOk = await phase('llm', () => setupLlmProvider(ctx));
     if (!llmOk) return;
+
+    // Phase 3.5: Seed RAG knowledge base (first run only, skips if already seeded)
+    // Non-blocking: failures here don't stop startup.
+    try {
+      await bootstrapRagKnowledge(ctx);
+    } catch (err: any) {
+      console.warn('[RAG Bootstrap] Failed (non-critical):', err?.message ?? err);
+    }
 
     // Phase 4: Load extensions, tools, channel adapters
     // Note: console is captured inside loadExtensions — errors restored in phase() wrapper.

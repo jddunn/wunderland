@@ -9,6 +9,7 @@ import { getAvailableExtensions, type ExtensionInfo } from '@framers/agentos-ext
 
 import type { ToolInstance } from './tool-calling.js';
 import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from '../security/runtime-policy.js';
+import { createSpeechExtensionEnvOverrides } from '../../voice/speech-catalog.js';
 
 type ExtensionsListOutput = {
   curated: ExtensionInfo[];
@@ -46,6 +47,8 @@ function buildDefaultPackOptions(
   packageName: string,
   runtime: SchemaOnDemandRuntimeDefaults,
 ): Record<string, unknown> {
+  const speechOverrides = createSpeechExtensionEnvOverrides();
+
   switch (packageName) {
     case '@framers/agentos-ext-cli-executor':
       return runtime.agentWorkspace
@@ -86,7 +89,9 @@ function buildDefaultPackOptions(
         pixabayApiKey: process.env['PIXABAY_API_KEY'],
       };
     case '@framers/agentos-ext-voice-synthesis':
-      return { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] };
+      return speechOverrides['voice-synthesis']?.options ?? {};
+    case '@framers/agentos:speech-runtime':
+      return speechOverrides['speech-runtime']?.options ?? {};
     case '@framers/agentos-ext-news-search':
       return { newsApiKey: process.env['NEWSAPI_API_KEY'] };
     default:

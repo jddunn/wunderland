@@ -18,6 +18,50 @@ vi.mock('../cli/config/secrets.js', () => ({
   checkEnvSecrets: vi.fn().mockReturnValue([]),
 }));
 
+vi.mock('node:fs/promises', () => ({
+  writeFile: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@framers/agentos/speech', () => ({
+  getSpeechProviderCatalog: vi.fn((kind?: string) => {
+    const entries = [
+      { id: 'twilio', kind: 'telephony', label: 'Twilio', envVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'], local: false },
+      { id: 'openai-tts', kind: 'tts', label: 'OpenAI TTS', envVars: ['OPENAI_API_KEY'], local: false, streaming: true },
+      { id: 'elevenlabs', kind: 'tts', label: 'ElevenLabs', envVars: ['ELEVENLABS_API_KEY'], local: false, streaming: true },
+      { id: 'piper', kind: 'tts', label: 'Piper', envVars: [], local: true, streaming: false },
+      { id: 'openai-whisper', kind: 'stt', label: 'OpenAI Whisper', envVars: ['OPENAI_API_KEY'], local: false, streaming: false },
+      { id: 'deepgram', kind: 'stt', label: 'Deepgram', envVars: ['DEEPGRAM_API_KEY'], local: false, streaming: true },
+      { id: 'whisper-local', kind: 'stt', label: 'Whisper.cpp', envVars: [], local: true, streaming: false },
+    ];
+    return kind ? entries.filter((entry) => entry.kind === kind) : entries;
+  }),
+  findSpeechProviderCatalogEntry: vi.fn((id: string) => {
+    const entries = [
+      { id: 'openai-tts', kind: 'tts', label: 'OpenAI TTS', envVars: ['OPENAI_API_KEY'], local: false },
+      { id: 'elevenlabs', kind: 'tts', label: 'ElevenLabs', envVars: ['ELEVENLABS_API_KEY'], local: false },
+      { id: 'piper', kind: 'tts', label: 'Piper', envVars: [], local: true },
+      { id: 'openai-whisper', kind: 'stt', label: 'OpenAI Whisper', envVars: ['OPENAI_API_KEY'], local: false },
+      { id: 'deepgram', kind: 'stt', label: 'Deepgram', envVars: ['DEEPGRAM_API_KEY'], local: false },
+      { id: 'whisper-local', kind: 'stt', label: 'Whisper.cpp', envVars: [], local: true },
+    ];
+    return entries.find((entry) => entry.id === id);
+  }),
+  createSpeechRuntimeFromEnv: vi.fn(() => ({
+    createSession: vi.fn(() => ({
+      speak: vi.fn().mockResolvedValue({
+        audioBuffer: Buffer.from('fake-audio'),
+        mimeType: 'audio/mpeg',
+      }),
+    })),
+    getProvider: vi.fn(() => ({
+      getProviderName: () => 'OpenAI TTS',
+    })),
+  })),
+}));
+
+import { writeFile } from 'node:fs/promises';
+import { createSpeechRuntimeFromEnv } from '@framers/agentos/speech';
+import { loadEnv } from '../cli/config/env-manager.js';
 import cmdVoice from '../cli/commands/voice.js';
 
 // ── Globals ──────────────────────────────────────────────────────────────────
@@ -33,6 +77,9 @@ beforeEach(() => {
   savedExitCode = process.exitCode;
   process.exitCode = undefined;
   consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.mocked(loadEnv).mockResolvedValue({});
+  vi.mocked(writeFile).mockClear();
+  vi.mocked(createSpeechRuntimeFromEnv).mockClear();
 });
 
 afterEach(() => {
@@ -67,6 +114,16 @@ describe('wunderland voice', () => {
   it('test subcommand runs with provided text', async () => {
     await cmdVoice(['test', 'Hello', 'world'], {}, mockGlobals);
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it('test subcommand synthesizes audio when a runtime-backed provider is configured', async () => {
+    vi.mocked(loadEnv).mockResolvedValue({ OPENAI_API_KEY: 'sk-test' });
+
+    await cmdVoice(['test', 'Hello', 'runtime'], {}, mockGlobals);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(createSpeechRuntimeFromEnv).toHaveBeenCalled();
+    expect(writeFile).toHaveBeenCalledTimes(1);
   });
 
   it('test subcommand shows error for missing text and sets exitCode=1', async () => {

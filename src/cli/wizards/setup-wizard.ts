@@ -263,7 +263,11 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
       Object.assign(allEnvKeys, creds);
     }
     if (state.voice?.apiKey) {
-      allEnvKeys['ELEVENLABS_API_KEY'] = state.voice.apiKey;
+      if (state.voice.provider === 'openai' || state.voice.provider === 'openai-tts') {
+        allEnvKeys['OPENAI_API_KEY'] = state.voice.apiKey;
+      } else if (state.voice.provider === 'elevenlabs') {
+        allEnvKeys['ELEVENLABS_API_KEY'] = state.voice.apiKey;
+      }
     }
 
     await mergeEnv(allEnvKeys, globals.config);
