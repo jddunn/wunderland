@@ -123,7 +123,7 @@ await agent.initialize({
 
 | Tier | RAM | GPU Required | Router | Primary | Auditor |
 |------|-----|-------------|--------|---------|---------|
-| **Low** | <8 GB | No | `llama3.2:1b` | `llama3.2:3b` | `llama3.2:1b` |
+| **Low** | &lt;8 GB | No | `llama3.2:1b` | `llama3.2:3b` | `llama3.2:1b` |
 | **Mid** | 8-16 GB | No | `llama3.2:3b` | `dolphin-llama3:8b` | `llama3.2:3b` |
 | **High** | 16+ GB | Yes* | `llama3.2:3b` | `llama3.1:70b` or `dolphin-llama3:8b` | `llama3.2:3b` |
 
@@ -145,7 +145,7 @@ The setup command detects your GPU and configures optimal offloading:
 
 The `num_ctx` (context window) is automatically sized based on available memory:
 
-| Model Size | <8 GB available | 8-16 GB | 16+ GB |
+| Model Size | &lt;8 GB available | 8-16 GB | 16+ GB |
 |-----------|----------------|---------|--------|
 | 1B/3B | 4096 | 8192 | 8192 |
 | 8B | 2048 | 4096 | 8192 |
@@ -333,13 +333,13 @@ ollama list
 ### Pull New Models
 
 ```bash
-ollama pull <model-name>
+ollama pull MODEL_NAME
 ```
 
 ### Remove Models
 
 ```bash
-ollama rm <model-name>
+ollama rm MODEL_NAME
 ```
 
 ### Check Running Status
