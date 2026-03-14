@@ -120,7 +120,7 @@ export async function bootstrapRagKnowledge(ctx: any): Promise<void> {
 
   // Check if already seeded with this hash
   const stateStore = storageManager.getStateStore();
-  const existing = await stateStore.get<BootstrapState>(STATE_KEY);
+  const existing = await stateStore.get(STATE_KEY) as BootstrapState | null;
   if (existing?.contentHash === contentHash) {
     console.log(`[RAG Bootstrap] Already seeded (${existing.documentCount} docs, ${existing.chunkCount} chunks) — skipping`);
     return;
@@ -171,7 +171,7 @@ export async function bootstrapRagKnowledge(ctx: any): Promise<void> {
   await vectorStore.upsert(COLLECTION_NAME, vectorDocs);
 
   // Save state
-  await stateStore.set<BootstrapState>(STATE_KEY, {
+  await stateStore.set(STATE_KEY, {
     contentHash,
     documentCount: fileDocs.length,
     chunkCount: allChunks.length,
