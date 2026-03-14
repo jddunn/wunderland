@@ -250,13 +250,13 @@ export class DualLLMAuditor implements IGuardrailService {
       }
     }
 
-    // Check for potential data leaks
-    if (/system\s+prompt|my\s+instructions|i\s+was\s+told\s+to/i.test(assistantResponse)) {
+    // Check for potential data leaks (expanded to catch more prompt-leak patterns)
+    if (/system\s+prompt|my\s+instructions|i\s+was\s+(told|instructed|programmed)\s+to|my\s+(security\s+)?tier\s+is|my\s+personality\s+traits|my\s+permission\s+set|powered\s+by\s+wunderland.*my\s+(main\s+)?goal/i.test(assistantResponse)) {
       flags.push({
         flagId: `leak_${Date.now()}`,
         type: 'data_leak',
         description: 'Potential system prompt leak',
-        severity: 'medium',
+        severity: 'high',
       });
     }
 
