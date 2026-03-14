@@ -11,6 +11,7 @@ import { createSchemaOnDemandTools } from '../../openai/schema-on-demand.js';
 import { filterToolMapByPolicy } from '../../security/runtime-policy.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
 import { createConfiguredRagTools } from '../../../rag/runtime-tools.js';
+import { createLocalMemoryReadTool } from './local-memory-tool.js';
 import { createRequestFolderAccessTool } from '../../../tools/RequestFolderAccessTool.js';
 import { HumanInteractionManager, type IChannelAdapter } from '@framers/agentos';
 import {
@@ -393,9 +394,29 @@ export async function loadExtensions(ctx: any): Promise<void> {
     toolMap.set(meta.name, meta);
   }
 
-  for (const ragTool of createConfiguredRagTools(cfg ?? {})) {
+  const ragTools = createConfiguredRagTools(cfg ?? {});
+  for (const ragTool of ragTools) {
     if (!ragTool?.name) continue;
     toolMap.set(ragTool.name, toToolInstance(ragTool as any));
+  }
+
+  // Fallback: if no HTTP RAG backend configured, create a local vector store memory_read tool
+  if (ragTools.length === 0 && ctx.agentStorageManager) {
+    const openaiKey = process.env['OPENAI_API_KEY'];
+    if (openaiKey) {
+      try {
+        const vectorStore = ctx.agentStorageManager.getVectorStore();
+        const localMemoryTool = createLocalMemoryReadTool({
+          vectorStore,
+          openaiApiKey: openaiKey,
+          embeddingModel: cfg?.discovery?.embeddingModel || 'text-embedding-3-small',
+        });
+        toolMap.set(localMemoryTool.name, toToolInstance(localMemoryTool as any));
+        fmt.ok('Local memory_read tool enabled (SqlVectorStore)');
+      } catch {
+        // Storage not ready — skip silently
+      }
+    }
   }
 
   // Enforce tool access profile + permission set so the model only sees allowed tools.
