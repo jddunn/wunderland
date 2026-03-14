@@ -148,19 +148,21 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
   }
 
   // Collect keys for each provider
+  const configuredProviders: string[] = [];
+
   for (const provId of providers) {
     const provider = LLM_PROVIDERS.find((p) => p.id === provId);
     if (!provider) continue;
 
     // Ollama doesn't need a key
     if (!provider.envVar) {
-      state.llmProvider = state.llmProvider || provId;
+      configuredProviders.push(provId);
       continue;
     }
 
     // Skip OpenAI key prompt if using OAuth
     if (provId === 'openai' && state.llmAuthMethod === 'oauth') {
-      state.llmProvider = state.llmProvider || 'openai';
+      configuredProviders.push('openai');
       continue;
     }
 
@@ -171,7 +173,7 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
       const source = importedViaPaste ? 'imported from .env paste' : 'already set in environment';
       fmt.ok(`${provider.label}: ${source}`);
       if (existing) state.apiKeys[provider.envVar] = existing;
-      state.llmProvider = state.llmProvider || provId;
+      configuredProviders.push(provId);
       continue;
     }
 
@@ -190,7 +192,7 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
       if (validation.valid) {
         fmt.ok(`${provider.label}: key valid (${validation.detail})`);
         state.apiKeys[provider.envVar] = apiKey as string;
-        state.llmProvider = state.llmProvider || provId;
+        configuredProviders.push(provId);
       } else {
         fmt.fail(`${provider.label}: ${validation.detail}`);
         fmt.note(`Get a key: ${fmt.link(provider.signupUrl)}`);
@@ -203,22 +205,43 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
             if (retryValidation.valid) {
               fmt.ok(`${provider.label}: key valid (${retryValidation.detail})`);
               state.apiKeys[provider.envVar] = retryKey as string;
-              state.llmProvider = state.llmProvider || provId;
+              configuredProviders.push(provId);
             } else {
               fmt.fail(`${provider.label}: still invalid — saving anyway, you can update later.`);
               state.apiKeys[provider.envVar] = retryKey as string;
-              state.llmProvider = state.llmProvider || provId;
+              configuredProviders.push(provId);
             }
           }
         } else {
           // Save anyway — user might fix later
           state.apiKeys[provider.envVar] = apiKey as string;
-          state.llmProvider = state.llmProvider || provId;
+          configuredProviders.push(provId);
         }
       }
     } else {
       fmt.note(`Get one at: ${fmt.link(provider.signupUrl)}`);
     }
+  }
+
+  // Choose default provider when multiple were configured
+  if (configuredProviders.length > 1) {
+    const providerChoices = configuredProviders.map((id) => {
+      const prov = LLM_PROVIDERS.find((p) => p.id === id);
+      return { value: id, label: prov?.label || id };
+    });
+
+    const picked = await p.select({
+      message: 'Default LLM provider:',
+      options: providerChoices,
+    });
+
+    if (!p.isCancel(picked)) {
+      state.llmProvider = picked as string;
+    } else {
+      state.llmProvider = configuredProviders[0];
+    }
+  } else if (configuredProviders.length === 1) {
+    state.llmProvider = configuredProviders[0];
   }
 
   // Select default model

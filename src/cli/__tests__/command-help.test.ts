@@ -30,4 +30,25 @@ describe('CLI subcommand help', () => {
     expect(output).toContain('Command: skills');
     expect(output).toContain('wunderland skills [list|info|enable|disable] [options]');
   });
+
+  it('prints command-specific help for voice', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['voice', '--help', '--quiet']);
+
+    const output = stripAnsi(log.mock.calls.flat().join('\n'));
+    expect(output).toContain('Command: voice');
+    expect(output).toContain('wunderland voice [status|tts|stt|test <text>|clone]');
+  });
+
+  it('prints the voice help topic', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['help', 'voice', '--quiet']);
+
+    const output = stripAnsi(log.mock.calls.flat().join('\n'));
+    expect(output).toContain('Voice & Speech');
+    expect(output).toContain('wunderland voice test "Hello from Wunderland"');
+    expect(output).toContain('OPENAI_API_KEY');
+  });
 });

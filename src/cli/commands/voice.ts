@@ -9,46 +9,21 @@
  *   clone   — Interactive voice cloning wizard
  */
 
+import * as path from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { createSpeechRuntimeFromEnv } from '@framers/agentos/speech';
 import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor, warn as wColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadEnv } from '../config/env-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
-
-// ── Telephony providers ──
-
-const VOICE_PROVIDERS = [
-  { id: 'twilio', label: 'Twilio', envVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'] },
-  { id: 'telnyx', label: 'Telnyx', envVars: ['TELNYX_API_KEY', 'TELNYX_CONNECTION_ID'] },
-  { id: 'plivo', label: 'Plivo', envVars: ['PLIVO_AUTH_ID', 'PLIVO_AUTH_TOKEN'] },
-] as const;
-
-// ── TTS providers ──
-
-const TTS_PROVIDERS = [
-  { id: 'openai', label: 'OpenAI TTS', envVars: ['OPENAI_API_KEY'], local: false, streaming: true },
-  { id: 'elevenlabs', label: 'ElevenLabs', envVars: ['ELEVENLABS_API_KEY'], local: false, streaming: true },
-  { id: 'google-cloud', label: 'Google Cloud TTS', envVars: ['GOOGLE_TTS_CREDENTIALS'], local: false, streaming: false },
-  { id: 'amazon-polly', label: 'Amazon Polly', envVars: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'], local: false, streaming: true },
-  { id: 'azure', label: 'Azure Speech TTS', envVars: ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION'], local: false, streaming: true },
-  { id: 'piper', label: 'Piper (Local)', envVars: [], local: true, streaming: false },
-  { id: 'coqui', label: 'Coqui/XTTS (Local)', envVars: [], local: true, streaming: true },
-  { id: 'bark', label: 'Bark (Local)', envVars: [], local: true, streaming: false },
-  { id: 'styletts2', label: 'StyleTTS2 (Local)', envVars: [], local: true, streaming: false },
-] as const;
-
-// ── STT providers ──
-
-const STT_PROVIDERS = [
-  { id: 'openai-whisper', label: 'OpenAI Whisper', envVars: ['OPENAI_API_KEY'], local: false, streaming: false },
-  { id: 'deepgram', label: 'Deepgram', envVars: ['DEEPGRAM_API_KEY'], local: false, streaming: true },
-  { id: 'assemblyai', label: 'AssemblyAI', envVars: ['ASSEMBLYAI_API_KEY'], local: false, streaming: true },
-  { id: 'google-cloud', label: 'Google Cloud STT', envVars: ['GOOGLE_STT_CREDENTIALS'], local: false, streaming: true },
-  { id: 'azure', label: 'Azure Speech STT', envVars: ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION'], local: false, streaming: true },
-  { id: 'whisper-local', label: 'Whisper.cpp (Local)', envVars: [], local: true, streaming: false },
-  { id: 'vosk', label: 'Vosk (Local)', envVars: [], local: true, streaming: true },
-  { id: 'nvidia-nemo', label: 'NVIDIA NeMo (Local)', envVars: [], local: true, streaming: false },
-] as const;
+import {
+  fileExtensionForSpeechMimeType,
+  getPreferredRuntimeTtsProviderId,
+  getSpeechProviderEntry,
+  getSpeechProviders,
+  isSpeechProviderConfigured,
+} from '../../voice/speech-catalog.js';
 
 // ── Subcommand: status (telephony) ──
 
@@ -59,8 +34,8 @@ async function voiceStatus(globals: GlobalFlags): Promise<void> {
   const env = await loadEnv(globals.config);
   const secretStatus = checkEnvSecrets();
 
-  for (const provider of VOICE_PROVIDERS) {
-    const allSet = provider.envVars.every(v => !!(env[v] || process.env[v]));
+  for (const provider of getSpeechProviders('telephony')) {
+    const allSet = isSpeechProviderConfigured(provider, env);
     const status = allSet ? sColor('configured') : wColor('not configured');
     console.log(`    ${accent(provider.label.padEnd(20))} ${status}`);
 
@@ -84,8 +59,8 @@ async function voiceTts(globals: GlobalFlags): Promise<void> {
 
   const env = await loadEnv(globals.config);
 
-  for (const provider of TTS_PROVIDERS) {
-    const isConfigured = provider.local || provider.envVars.every(v => !!(env[v] || process.env[v]));
+  for (const provider of getSpeechProviders('tts')) {
+    const isConfigured = isSpeechProviderConfigured(provider, env);
     const status = isConfigured
       ? provider.local ? sColor('available (local)') : sColor('configured')
       : wColor('not configured');
@@ -115,8 +90,8 @@ async function voiceStt(globals: GlobalFlags): Promise<void> {
 
   const env = await loadEnv(globals.config);
 
-  for (const provider of STT_PROVIDERS) {
-    const isConfigured = provider.local || provider.envVars.every(v => !!(env[v] || process.env[v]));
+  for (const provider of getSpeechProviders('stt')) {
+    const isConfigured = isSpeechProviderConfigured(provider, env);
     const status = isConfigured
       ? provider.local ? sColor('available (local)') : sColor('configured')
       : wColor('not configured');
@@ -151,29 +126,49 @@ async function voiceTest(args: string[], globals: GlobalFlags): Promise<void> {
   fmt.blank();
 
   const env = await loadEnv(globals.config);
+  const runtimeEnv: Record<string, string | undefined> = {
+    ...env,
+    ...process.env,
+  };
+  const providerId = getPreferredRuntimeTtsProviderId(runtimeEnv);
 
-  // Try providers in priority order: OpenAI → ElevenLabs → Piper
-  let providerLabel: string | null = null;
-
-  if (env['OPENAI_API_KEY'] || process.env['OPENAI_API_KEY']) {
-    providerLabel = 'OpenAI TTS';
-  } else if (env['ELEVENLABS_API_KEY'] || process.env['ELEVENLABS_API_KEY']) {
-    providerLabel = 'ElevenLabs';
-  } else {
-    providerLabel = 'Piper (local)';
+  if (!providerId) {
+    fmt.note(
+      `No runtime-backed TTS provider is configured.\n` +
+      `    Set ${accent('OPENAI_API_KEY')} or ${accent('ELEVENLABS_API_KEY')} and retry.`,
+    );
+    fmt.blank();
+    return;
   }
+
+  const runtime = createSpeechRuntimeFromEnv(runtimeEnv);
+  const session = runtime.createSession({ ttsProviderId: providerId });
+  const providerLabel =
+    getSpeechProviders('tts').find((provider) => provider.id === providerId)?.label ??
+    getSpeechProviderEntry(providerId).label;
 
   console.log(`    Provider:  ${accent(providerLabel)}`);
   console.log(`    Text:      ${dim(text.length > 80 ? text.slice(0, 80) + '...' : text)}`);
   fmt.blank();
 
-  // Note: Actual synthesis requires the extension packs to be loaded at runtime.
-  // This CLI command verifies configuration and provider availability.
-  fmt.note(
-    `To synthesize audio at runtime, ensure the TTS extension pack is installed.\n` +
-    `    Example: ${accent('@framers/agentos-ext-tts-openai')} for OpenAI TTS.\n` +
-    `    The synthesized audio file will be written to ${dim('./tts-output.mp3')} when run via the agent runtime.`,
-  );
+  try {
+    const result = await session.speak(text, { outputFormat: 'mp3' });
+    const extension = fileExtensionForSpeechMimeType(result.mimeType);
+    const outputPath = path.resolve(
+      process.cwd(),
+      `tts-output-${providerId}-${Date.now()}.${extension}`,
+    );
+    await writeFile(outputPath, result.audioBuffer);
+
+    fmt.ok(`Synthesized ${accent(text.length.toString())} characters with ${accent(providerLabel)}.`);
+    fmt.note(`Audio file: ${accent(outputPath)}`);
+  } catch (error) {
+    fmt.errorBlock(
+      'Speech synthesis failed',
+      error instanceof Error ? error.message : String(error),
+    );
+    process.exitCode = 1;
+  }
   fmt.blank();
 }
 

@@ -168,11 +168,11 @@ const EXTRACTION_PROMPT = `You are an AI configuration expert. Extract structure
 - devops-assistant: Infrastructure and deployment specialist
 - personal-assistant: Friendly, organized daily helper
 
-**Available skills (36 curated):**
-1password, account-manager, apple-notes, apple-reminders, blog-publisher, bluesky-bot, coding-agent, content-creator, deep-research, discord-helper, facebook-bot, git, github, healthcheck, image-gen, instagram-bot, linkedin-bot, mastodon-bot, notion, obsidian, pinterest-bot, reddit-bot, seo-campaign, slack-helper, social-broadcast, spotify-player, summarize, threads-bot, tiktok-bot, trello, twitter-bot, weather, web-scraper, web-search, whisper-transcribe, youtube-bot
+**Available skills (40 curated):**
+1password, account-manager, apple-notes, apple-reminders, blog-publisher, bluesky-bot, coding-agent, content-creator, deep-research, discord-helper, facebook-bot, git, github, healthcheck, image-gen, instagram-bot, linkedin-bot, mastodon-bot, memory-manager, notion, obsidian, pinterest-bot, reddit-bot, seo-campaign, slack-helper, social-broadcast, spotify-player, summarize, threads-bot, tiktok-bot, trello, twitter-bot, voice-conversation, weather, web-scraper, web-search, whisper-transcribe, youtube-bot
 
 **Available tools:**
-web-search, web-browser, cli-executor, giphy, image-search, voice-synthesis, news-search
+web-search, web-browser, cli-executor, giphy, image-search, speech-runtime, voice-synthesis, news-search
 
 **Available channels (${SUPPORTED_CHANNELS.length} platforms):**
 ${SUPPORTED_CHANNELS.join(', ')}

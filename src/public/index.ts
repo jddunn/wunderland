@@ -61,6 +61,7 @@ import {
 } from '../core/index.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
+import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
 
 // =============================================================================
 // Public Types
@@ -200,7 +201,7 @@ export type WunderlandOptions = {
   extensions?: {
     /** Tool extension names (e.g. ['web-search', 'web-browser', 'giphy']). */
     tools?: string[];
-    /** Voice provider extension names (e.g. ['voice-synthesis']). */
+    /** Voice provider extension names (e.g. ['speech-runtime', 'voice-synthesis']). */
     voice?: string[];
     /** Productivity extension names (e.g. ['google-calendar']). */
     productivity?: string[];
@@ -539,7 +540,7 @@ async function resolveExtensionsFromOpts(opts: {
           pixabayApiKey: process.env['PIXABAY_API_KEY'],
         },
       },
-      'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] || '' } },
+      ...createSpeechExtensionEnvOverrides(),
       'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] || '' } },
     };
 
@@ -698,7 +699,9 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
             ? 'Set OPENROUTER_API_KEY or pass llm.apiKey.'
             : llm.providerId === 'anthropic'
               ? 'Set ANTHROPIC_API_KEY or pass llm.apiKey.'
-              : 'Configure the provider and retry.',
+              : llm.providerId === 'gemini'
+                ? 'Set GEMINI_API_KEY or pass llm.apiKey.'
+                : 'Configure the provider and retry.',
       },
     ]);
   }
