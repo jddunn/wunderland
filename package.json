@@ -1,7 +1,7 @@
 {
   "name": "wunderland",
-  "version": "0.39.0",
-  "description": "AI-powered personal assistant framework built on AgentOS, forked from OpenClaw channels/integrations/bridges - adaptive agents with HEXACO personality, multi-channel communication, hierarchical inference, and human-in-the-loop security",
+  "version": "0.40.0",
+  "description": "Security-hardened AI agent framework — a fork of OpenClaw with HEXACO personalities, 5-tier prompt-injection defense, 37 channel integrations, and a full CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -57,7 +57,9 @@
     "test:watch": "vitest",
     "test:security": "vitest run --reporter=verbose src/security",
     "lint": "eslint src --ext .ts",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "changelog": "npx conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
+    "release": "npm run build && npm run changelog && npm publish --access public"
   },
   "keywords": [
     "ai",
@@ -83,14 +85,13 @@
     "url": "https://github.com/jddunn"
   },
   "license": "MIT",
-  "homepage": "https://github.com/framersai/voice-chat-assistant/tree/master/packages/wunderland",
+  "homepage": "https://wunderland.sh",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/framersai/voice-chat-assistant.git",
-    "directory": "packages/wunderland"
+    "url": "git+https://github.com/jddunn/wunderland.git"
   },
   "bugs": {
-    "url": "https://github.com/framersai/voice-chat-assistant/issues"
+    "url": "https://github.com/jddunn/wunderland/issues"
   },
   "engines": {
     "node": ">=18.0.0"
