@@ -108,7 +108,9 @@ export class Screen {
   /** Render content string to the full screen. Overwrites in-place to reduce flicker. */
   render(content: string): void {
     process.stdout.write('\x1b[H');   // cursor home (no clear — overwrite in place)
-    process.stdout.write(content);
+    // Clear to end-of-line before each newline to prevent ghosting from
+    // previous views whose content extended beyond the current content.
+    process.stdout.write(content.replace(/\n/g, '\x1b[K\n'));
     process.stdout.write('\x1b[J');   // clear from cursor to end of screen
   }
 
