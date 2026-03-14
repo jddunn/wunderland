@@ -847,7 +847,7 @@ export async function createWunderlandServer(opts?: {
       voiceExtensions = extensionsFromConfig.voice || [];
       productivityExtensions = extensionsFromConfig.productivity || [];
     } else {
-      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'giphy', 'image-search', 'news-search'];
+      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search', 'weather', 'skills', 'deep-research', 'github', 'founders'];
       voiceExtensions = ['voice-synthesis'];
       productivityExtensions = [];
     }

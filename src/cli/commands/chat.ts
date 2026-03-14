@@ -562,9 +562,17 @@ export default async function cmdChat(
         'cli-executor',
         'web-search',
         'web-browser',
+        'browser-automation',
+        'content-extraction',
+        'credential-vault',
         'giphy',
         'image-search',
         'news-search',
+        'weather',
+        'skills',
+        'deep-research',
+        'github',
+        'founders',
       ];
       voiceExtensions = ['voice-synthesis'];
       productivityExtensions = [];
