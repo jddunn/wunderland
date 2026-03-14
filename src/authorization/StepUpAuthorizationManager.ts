@@ -38,6 +38,7 @@ const SAFE_NAVIGATION_TOOLS = new Set([
   'change_directory',
   'file_read',
   'read_file',
+  'read_document',
   'file_search',
   'file_info',
   'memory_read',
