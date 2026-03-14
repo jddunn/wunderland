@@ -123,7 +123,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
       fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`);
     } else {
       // Fall back to hardcoded defaults if no extensions field
-      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search'];
+      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search', 'weather', 'skills', 'deep-research', 'github', 'founders'];
       voiceExtensions = ['voice-synthesis'];
       productivityExtensions = [];
       fmt.note('No extensions configured, using defaults...');
