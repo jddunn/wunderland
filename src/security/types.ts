@@ -299,7 +299,7 @@ export const DEFAULT_INJECTION_PATTERNS: InjectionPattern[] = [
   {
     id: 'system_prompt_extract',
     name: 'System Prompt Extraction',
-    regex: /what\s+(is|are)\s+your\s+(system\s+)?prompts?|show\s+(me\s+)?your\s+(system\s+)?prompts?|repeat\s+(the\s+)?(system\s+)?prompt/i,
+    regex: /tell\s+me\s+(your|the)\s+(system\s+)?prompts?|what\s+(is|are)\s+your\s+(system\s+)?prompts?|show\s+(me\s+)?your\s+(system\s+)?prompts?|repeat\s+(the\s+|your\s+)?(system\s+)?prompt|what\s+(were\s+you|are\s+you)\s+(told|instructed|programmed)\s+to\s+do|what\s+(are\s+)?your\s+instructions|describe\s+your\s+(system\s+)?(prompt|instructions|rules|guidelines)|print\s+(your\s+)?(system\s+)?prompt|output\s+(the\s+)?(text|content)\s+(above|before)|copy\s+everything\s+above/i,
     baseRiskScore: 0.7,
     description: 'Attempts to extract the system prompt',
   },
@@ -323,5 +323,12 @@ export const DEFAULT_INJECTION_PATTERNS: InjectionPattern[] = [
     regex: /'\s*(OR|AND)\s+'?1'?\s*=\s*'?1|UNION\s+SELECT|DROP\s+TABLE|--\s*$/im,
     baseRiskScore: 0.9,
     description: 'SQL injection patterns',
+  },
+  {
+    id: 'indirect_prompt_extract',
+    name: 'Indirect Prompt Extraction',
+    regex: /what\s+can'?t\s+you\s+do|what\s+are\s+your\s+(limits|limitations|restrictions|constraints|guardrails|boundaries)|summarize\s+your\s+(guidelines|rules|constraints)|how\s+were\s+you\s+(configured|set\s+up|programmed)/i,
+    baseRiskScore: 0.5,
+    description: 'Indirect attempts to extract system prompt details via boundary probing',
   },
 ];
