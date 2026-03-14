@@ -333,6 +333,7 @@ export const OVERDRIVE_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
     change_directory: ToolRiskTier.TIER_1_AUTONOMOUS,
     file_read: ToolRiskTier.TIER_1_AUTONOMOUS,
     read_file: ToolRiskTier.TIER_1_AUTONOMOUS,
+    read_document: ToolRiskTier.TIER_1_AUTONOMOUS,
     file_search: ToolRiskTier.TIER_1_AUTONOMOUS,
     file_info: ToolRiskTier.TIER_1_AUTONOMOUS,
     memory_read: ToolRiskTier.TIER_1_AUTONOMOUS,
