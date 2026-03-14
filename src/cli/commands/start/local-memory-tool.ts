@@ -81,20 +81,20 @@ export function createLocalMemoryReadTool(opts: {
       }),
     );
 
-    // Merge and sort by score (descending)
-    const allMatches = results
+    // Merge and sort by similarity score (descending)
+    const allDocs = results
       .filter(Boolean)
-      .flatMap((r) => r!.matches ?? [])
-      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      .flatMap((r) => r!.documents ?? [])
+      .sort((a, b) => (b.similarityScore ?? 0) - (a.similarityScore ?? 0))
       .slice(0, topK);
 
-    const items = allMatches.map((match) => ({
-      text: match.content ?? match.metadata?.content ?? '',
-      score: match.score,
-      source: match.metadata?.source as string | undefined
-        ?? match.metadata?.collection as string | undefined
-        ?? match.id,
-      metadata: match.metadata,
+    const items = allDocs.map((doc) => ({
+      text: doc.textContent ?? '',
+      score: doc.similarityScore,
+      source: (doc.metadata?.source as string | undefined)
+        ?? (doc.metadata?.collection as string | undefined)
+        ?? doc.id,
+      metadata: doc.metadata,
     }));
 
     const context = items.length === 0
