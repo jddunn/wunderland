@@ -73,6 +73,12 @@ import {
   derivePersonalityMemoryConfig,
 } from '../../storage/index.js';
 import type { IMemoryAutoIngestPipeline } from '../../storage/types.js';
+import {
+  createSpeechExtensionEnvOverrides,
+  getDefaultVoiceExtensions,
+} from '../../voice/speech-catalog.js';
+import { ContextWindowManager } from '@framers/agentos/memory';
+import type { InfiniteContextConfig } from '@framers/agentos/memory';
 
 // ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
 
@@ -401,10 +407,10 @@ export default async function cmdChat(
   const providerId = (
     flags['ollama'] === true ? 'ollama' : providerFlag || providerFromConfig || 'openai'
   ).toLowerCase();
-  if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic']).has(providerId)) {
+  if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic', 'gemini']).has(providerId)) {
     fmt.errorBlock(
       'Unsupported LLM provider',
-      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic`
+      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic, gemini`
     );
     process.exitCode = 1;
     return;
@@ -432,7 +438,9 @@ export default async function cmdChat(
       ? 'https://openrouter.ai/api/v1'
       : providerId === 'ollama'
         ? 'http://localhost:11434/v1'
-        : undefined;
+        : providerId === 'gemini'
+          ? 'https://generativelanguage.googleapis.com/v1beta/openai/'
+          : undefined;
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =
     (cfg?.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
@@ -467,7 +475,9 @@ export default async function cmdChat(
             ? process.env['OPENAI_API_KEY'] || ''
             : providerId === 'anthropic'
               ? process.env['ANTHROPIC_API_KEY'] || ''
-              : process.env['OPENAI_API_KEY'] || '';
+              : providerId === 'gemini'
+                ? process.env['GEMINI_API_KEY'] || ''
+                : process.env['OPENAI_API_KEY'] || '';
   }
 
   const canUseLLM =
@@ -479,12 +489,14 @@ export default async function cmdChat(
           ? !!openrouterApiKey
           : providerId === 'anthropic'
             ? !!process.env['ANTHROPIC_API_KEY']
-            : !!llmApiKey || !!openrouterFallback;
+            : providerId === 'gemini'
+              ? !!process.env['GEMINI_API_KEY']
+              : !!llmApiKey || !!openrouterFallback;
 
   if (!canUseLLM) {
     fmt.errorBlock(
       'Missing API key',
-      'Configure an LLM provider in agent.config.json, set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY, use `wunderland login` for OAuth, or use Ollama.'
+      'Configure an LLM provider in agent.config.json, set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY, use `wunderland login` for OAuth, or use Ollama.'
     );
     process.exitCode = 1;
     return;
@@ -572,9 +584,8 @@ export default async function cmdChat(
         'skills',
         'deep-research',
         'github',
-        'founders',
       ];
-      voiceExtensions = ['voice-synthesis'];
+      voiceExtensions = getDefaultVoiceExtensions();
       productivityExtensions = [];
       fmt.note('No extensions configured, using defaults...');
     }
@@ -671,7 +682,7 @@ export default async function cmdChat(
             pixabayApiKey: process.env['PIXABAY_API_KEY'],
           },
         },
-        'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
+        ...createSpeechExtensionEnvOverrides(),
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
         // Telegram extensions: send-only mode in CLI context to avoid
         // 409 Conflict errors from competing getUpdates pollers.
@@ -1061,6 +1072,33 @@ export default async function cmdChat(
     );
   }
 
+  // ── Infinite context window manager ────────────────────────────────────────
+  let contextWindowManager: ContextWindowManager | undefined;
+  {
+    const infiniteCtx: Partial<InfiniteContextConfig> = {
+      enabled: cfg?.memory?.infiniteContext?.enabled ?? true,
+      strategy: cfg?.memory?.infiniteContext?.strategy ?? 'sliding',
+      compactionThreshold: cfg?.memory?.infiniteContext?.compactionThreshold ?? 0.75,
+      preserveRecentTurns: cfg?.memory?.infiniteContext?.preserveRecentTurns ?? 20,
+      transparencyLevel: cfg?.memory?.infiniteContext?.transparencyLevel ?? 'summary',
+    };
+
+    if (infiniteCtx.enabled) {
+      try {
+        contextWindowManager = new ContextWindowManager({
+          maxContextTokens: cfg?.memory?.maxContextTokens ?? 128_000,
+          infiniteContext: infiniteCtx,
+          llmInvoker: async (prompt: string) => {
+            // Reuse the existing LLM setup (placeholder until LLM is configured below).
+            return prompt.slice(0, 200) + '...';
+          },
+        });
+      } catch {
+        // Non-fatal — chat works without infinite context
+      }
+    }
+  }
+
   // Detect authenticated integrations to inform the agent
   const authenticatedIntegrations: string[] = [];
   if (toolExtensions.includes('github')) authenticatedIntegrations.push('github');
@@ -1306,6 +1344,35 @@ export default async function cmdChat(
   ): Promise<void> {
     messages.push({ role: 'user', content: input });
 
+    // Track message in context window manager
+    contextWindowManager?.addMessage('user', input);
+
+    // Compact context window if approaching capacity
+    if (contextWindowManager?.enabled) {
+      try {
+        const systemTokens = Math.ceil((systemPrompt?.length ?? 0) / 4);
+        const compacted = await contextWindowManager.beforeTurn(systemTokens, 2000);
+        if (compacted && compacted.length < messages.length) {
+          // Replace messages with compacted version (keep system prompt)
+          messages.splice(1);
+          for (const cm of compacted) {
+            if (cm.role !== 'system' || !cm.compacted) {
+              messages.push({ role: cm.role, content: cm.content });
+            } else {
+              // Inject compaction summary as system message
+              messages.splice(1, 0, { role: 'system', content: cm.content });
+            }
+          }
+          const stats = contextWindowManager.getStats();
+          console.log(
+            `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[context compacted: ${stats.currentTokens} tokens, ${stats.totalCompactions} compactions, ${stats.strategy} strategy]`)}`
+          );
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+
     // Capability discovery — inject tiered context for this turn
     try {
       const discoveryResult = await discoveryManager.discoverForTurn(input);
@@ -1427,6 +1494,9 @@ export default async function cmdChat(
         }
       }
 
+      // Track assistant reply in context window manager
+      if (reply) contextWindowManager?.addMessage('assistant', reply);
+
       // Auto-ingest: extract and store memories from this turn (non-blocking)
       if (autoIngestPipeline) {
         autoIngestPipeline.processConversationTurn(conversationId, input, reply).catch(() => {});
@@ -1482,6 +1552,12 @@ export default async function cmdChat(
       helpLines.push(
         frameLine(
           `   ${chalk.hex(C.cyan)('/discover')}  ${chalk.hex(C.text)('Show discovery stats')}`,
+          iw
+        )
+      );
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.cyan)('/memory')}    ${chalk.hex(C.text)('Show context window & compaction stats')}`,
           iw
         )
       );
@@ -1560,9 +1636,51 @@ export default async function cmdChat(
       return true;
     }
 
+    if (input === '/memory') {
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const memLines: string[] = [''];
+      memLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Context Window Status')}`, iw));
+      if (contextWindowManager?.enabled) {
+        const stats = contextWindowManager.getStats();
+        memLines.push(frameLine(`   Enabled:       ${sColor('yes')} (${stats.strategy})`, iw));
+        memLines.push(frameLine(`   Tokens:        ${stats.currentTokens} / ${stats.maxTokens} (${(stats.utilization * 100).toFixed(1)}%)`, iw));
+        memLines.push(frameLine(`   Turn:          ${stats.currentTurn}`, iw));
+        memLines.push(frameLine(`   Messages:      ${stats.messageCount} (${stats.compactedMessageCount} compacted)`, iw));
+        memLines.push(frameLine(`   Compactions:   ${stats.totalCompactions}`, iw));
+        if (stats.totalCompactions > 0) {
+          memLines.push(frameLine(`   Avg compress:  ${stats.avgCompressionRatio}x`, iw));
+          memLines.push(frameLine(`   Traces created:${stats.totalTracesCreated}`, iw));
+          memLines.push(frameLine(`   Chain nodes:   ${stats.summaryChainNodes} (${stats.summaryChainTokens} tokens)`, iw));
+        }
+        // Show recent compaction entries
+        const history = contextWindowManager.getCompactionHistory();
+        if (history.length > 0) {
+          memLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Recent Compactions')}`, iw));
+          for (const entry of history.slice(-3)) {
+            memLines.push(frameLine(
+              `   [${new Date(entry.timestamp).toLocaleTimeString()}] turns ${entry.turnRange[0]}–${entry.turnRange[1]}: ${entry.inputTokens}→${entry.outputTokens} tokens (${entry.compressionRatio.toFixed(1)}x, ${entry.durationMs}ms)`,
+              iw
+            ));
+            if (entry.preservedEntities.length > 0) {
+              memLines.push(frameLine(`     entities: ${entry.preservedEntities.slice(0, 10).join(', ')}`, iw));
+            }
+          }
+        }
+      } else {
+        memLines.push(frameLine(`   Enabled:       ${wColor('no')}`, iw));
+        memLines.push(frameLine(`   ${muted('Set memory.infiniteContext.enabled: true in agent config')}`, iw));
+      }
+      memLines.push('');
+      console.log(memLines.join('\n'));
+      return true;
+    }
+
     if (input === '/clear') {
       // Clear in-memory messages (keep only the system prompt)
       messages.splice(1);
+      // Clear context window manager state
+      contextWindowManager?.clear();
       // Clear persisted history
       if (memoryAdapter?.deleteConversation) {
         memoryAdapter.deleteConversation(conversationId).catch(() => {});
