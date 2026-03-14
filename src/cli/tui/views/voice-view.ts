@@ -13,45 +13,7 @@ import { wrapInFrame } from '../layout.js';
 import { loadEnv, loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
-
-// ── Provider Definitions ─────────────────────────────────────────────────
-
-interface ProviderDef {
-  id: string;
-  label: string;
-  envVars: readonly string[];
-  local: boolean;
-  streaming?: boolean;
-}
-
-const TELEPHONY_PROVIDERS: ProviderDef[] = [
-  { id: 'twilio',  label: 'Twilio',  envVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'], local: false },
-  { id: 'telnyx',  label: 'Telnyx',  envVars: ['TELNYX_API_KEY', 'TELNYX_CONNECTION_ID'], local: false },
-  { id: 'plivo',   label: 'Plivo',   envVars: ['PLIVO_AUTH_ID', 'PLIVO_AUTH_TOKEN'], local: false },
-];
-
-const TTS_PROVIDERS: ProviderDef[] = [
-  { id: 'openai',       label: 'OpenAI TTS',        envVars: ['OPENAI_API_KEY'],           local: false, streaming: true },
-  { id: 'elevenlabs',   label: 'ElevenLabs',         envVars: ['ELEVENLABS_API_KEY'],       local: false, streaming: true },
-  { id: 'google-cloud', label: 'Google Cloud TTS',   envVars: ['GOOGLE_TTS_CREDENTIALS'],   local: false, streaming: false },
-  { id: 'amazon-polly', label: 'Amazon Polly',       envVars: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'], local: false, streaming: true },
-  { id: 'azure',        label: 'Azure Speech TTS',   envVars: ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION'],    local: false, streaming: true },
-  { id: 'piper',        label: 'Piper (Local)',       envVars: [],                           local: true,  streaming: false },
-  { id: 'coqui',        label: 'Coqui/XTTS (Local)', envVars: [],                           local: true,  streaming: true },
-  { id: 'bark',         label: 'Bark (Local)',        envVars: [],                           local: true,  streaming: false },
-  { id: 'styletts2',    label: 'StyleTTS2 (Local)',   envVars: [],                           local: true,  streaming: false },
-];
-
-const STT_PROVIDERS: ProviderDef[] = [
-  { id: 'openai-whisper', label: 'OpenAI Whisper',    envVars: ['OPENAI_API_KEY'],            local: false, streaming: false },
-  { id: 'deepgram',       label: 'Deepgram',          envVars: ['DEEPGRAM_API_KEY'],          local: false, streaming: true },
-  { id: 'assemblyai',     label: 'AssemblyAI',        envVars: ['ASSEMBLYAI_API_KEY'],        local: false, streaming: true },
-  { id: 'google-cloud',   label: 'Google Cloud STT',  envVars: ['GOOGLE_STT_CREDENTIALS'],    local: false, streaming: true },
-  { id: 'azure',          label: 'Azure Speech STT',  envVars: ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION'], local: false, streaming: true },
-  { id: 'whisper-local',  label: 'Whisper.cpp (Local)', envVars: [],                          local: true,  streaming: false },
-  { id: 'vosk',           label: 'Vosk (Local)',       envVars: [],                           local: true,  streaming: true },
-  { id: 'nvidia-nemo',    label: 'NeMo (Local)',       envVars: [],                           local: true,  streaming: false },
-];
+import { getSpeechProviders, isSpeechProviderConfigured } from '../../../voice/speech-catalog.js';
 
 // ── View ─────────────────────────────────────────────────────────────────
 
@@ -135,8 +97,8 @@ export class VoiceView {
 
     // ── Telephony ──
     lines.push(`  ${iColor(g.bulletHollow)} ${bright('Telephony')}`);
-    for (const p of TELEPHONY_PROVIDERS) {
-      const ok = p.envVars.every(v => !!(env[v] || process.env[v]));
+    for (const p of getSpeechProviders('telephony')) {
+      const ok = isSpeechProviderConfigured(p, env);
       const icon = ok ? sColor(g.ok) : muted(g.circle);
       const status = ok ? sColor('configured') : muted('not configured');
       lines.push(`    ${icon} ${p.label.padEnd(22)} ${status}`);
@@ -144,14 +106,15 @@ export class VoiceView {
     lines.push('');
 
     // ── TTS ──
-    const ttsCloud = TTS_PROVIDERS.filter(p => !p.local);
-    const ttsLocal = TTS_PROVIDERS.filter(p => p.local);
-    const ttsConfigured = ttsCloud.filter(p => p.envVars.every(v => !!(env[v] || process.env[v]))).length;
+    const ttsProviders = getSpeechProviders('tts');
+    const ttsCloud = ttsProviders.filter((p) => !p.local);
+    const ttsLocal = ttsProviders.filter((p) => p.local);
+    const ttsConfigured = ttsCloud.filter((p) => isSpeechProviderConfigured(p, env)).length;
 
     lines.push(`  ${iColor(g.bulletHollow)} ${bright('TTS (Text-to-Speech)')}  ${dim(`${ttsConfigured} cloud + ${ttsLocal.length} local`)}`);
 
     for (const p of ttsCloud) {
-      const ok = p.envVars.every(v => !!(env[v] || process.env[v]));
+      const ok = isSpeechProviderConfigured(p, env);
       const icon = ok ? sColor(g.ok) : muted(g.circle);
       const status = ok ? sColor('configured') : muted('not configured');
       const stream = p.streaming ? dim(' [stream]') : '';
@@ -164,14 +127,15 @@ export class VoiceView {
     lines.push('');
 
     // ── STT ──
-    const sttCloud = STT_PROVIDERS.filter(p => !p.local);
-    const sttLocal = STT_PROVIDERS.filter(p => p.local);
-    const sttConfigured = sttCloud.filter(p => p.envVars.every(v => !!(env[v] || process.env[v]))).length;
+    const sttProviders = getSpeechProviders('stt');
+    const sttCloud = sttProviders.filter((p) => !p.local);
+    const sttLocal = sttProviders.filter((p) => p.local);
+    const sttConfigured = sttCloud.filter((p) => isSpeechProviderConfigured(p, env)).length;
 
     lines.push(`  ${iColor(g.bulletHollow)} ${bright('STT (Speech-to-Text)')}  ${dim(`${sttConfigured} cloud + ${sttLocal.length} local`)}`);
 
     for (const p of sttCloud) {
-      const ok = p.envVars.every(v => !!(env[v] || process.env[v]));
+      const ok = isSpeechProviderConfigured(p, env);
       const icon = ok ? sColor(g.ok) : muted(g.circle);
       const status = ok ? sColor('configured') : muted('not configured');
       const stream = p.streaming ? dim(' [stream]') : '';

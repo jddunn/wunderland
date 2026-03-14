@@ -38,6 +38,10 @@ import {
 import { resolveExtensionsByNames } from '../core/PresetExtensionResolver.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
+import {
+  createSpeechExtensionEnvOverrides,
+  getDefaultVoiceExtensions,
+} from '../voice/speech-catalog.js';
 import type { WunderlandAgentConfig, WunderlandLLMConfig, WunderlandWorkspace } from './types.js';
 
 type LoggerLike = {
@@ -166,7 +170,7 @@ async function loadToolMapFromAgentConfig(opts: {
       productivityExtensions = extensionsFromConfig.productivity || [];
     } else {
       toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'giphy', 'image-search', 'news-search'];
-      voiceExtensions = ['voice-synthesis'];
+      voiceExtensions = getDefaultVoiceExtensions();
       productivityExtensions = [];
     }
 
@@ -239,7 +243,7 @@ async function loadToolMapFromAgentConfig(opts: {
             pixabayApiKey: process.env['PIXABAY_API_KEY'],
           },
         },
-        'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
+        ...createSpeechExtensionEnvOverrides(),
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
         // Telegram: send-only mode in server context to avoid 409 Conflict polling errors
         'telegram': { options: { sendOnly: true } },

@@ -97,7 +97,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@framers/agentos": "^0.1.46",
+    "@framers/agentos": "workspace:*",
     "@framers/agentos-ext-cli-executor": "^1.1.1",
     "@framers/agentos-ext-giphy": "^1.0.0",
     "@framers/agentos-ext-image-search": "^1.0.0",
@@ -105,7 +105,7 @@
     "@framers/agentos-ext-voice-synthesis": "^1.0.0",
     "@framers/agentos-ext-web-browser": "^1.1.1",
     "@framers/agentos-ext-web-search": "^1.1.1",
-    "@framers/agentos-extensions-registry": "^0.1.4",
+    "@framers/agentos-extensions-registry": "workspace:*",
     "@framers/sql-storage-adapter": "^0.5.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.201.1",
@@ -127,7 +127,7 @@
     "uuid": "^9.0.0"
   },
   "optionalDependencies": {
-    "@framers/agentos-skills-registry": "^0.2.0"
+    "@framers/agentos-skills-registry": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

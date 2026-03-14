@@ -338,7 +338,7 @@ export type WunderlandAgentConfig = {
   personaRegistry?: WunderlandAgentPersonaRegistryConfig;
 };
 
-export type WunderlandProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic';
+export type WunderlandProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic' | 'gemini';
 
 export type WunderlandLLMConfig = {
   providerId: WunderlandProviderId;

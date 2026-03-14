@@ -6,6 +6,14 @@
 import * as p from '@clack/prompts';
 import type { WizardState } from '../types.js';
 import * as fmt from '../ui/format.js';
+import { getSpeechProviderEntry } from '../../voice/speech-catalog.js';
+
+const OPENAI_TTS = getSpeechProviderEntry('openai-tts');
+const ELEVENLABS_TTS = getSpeechProviderEntry('elevenlabs');
+const PIPER_TTS = getSpeechProviderEntry('piper');
+const OPENAI_WHISPER = getSpeechProviderEntry('openai-whisper');
+const DEEPGRAM_STT = getSpeechProviderEntry('deepgram');
+const WHISPER_LOCAL = getSpeechProviderEntry('whisper-local');
 
 // ── TTS Provider Setup ──
 
@@ -13,9 +21,9 @@ async function configureTtsProvider(state: WizardState): Promise<void> {
   const ttsChoice = await p.select({
     message: 'Select a TTS (Text-to-Speech) provider:',
     options: [
-      { value: 'openai', label: 'OpenAI TTS', hint: 'tts-1, streaming, 6 voices' },
-      { value: 'elevenlabs', label: 'ElevenLabs', hint: 'turbo v2.5, voice cloning' },
-      { value: 'piper', label: 'Piper (Local)', hint: 'free, offline, ONNX models' },
+      { value: 'openai', label: OPENAI_TTS.label, hint: 'tts-1, streaming, 6 voices' },
+      { value: 'elevenlabs', label: ELEVENLABS_TTS.label, hint: 'turbo v2.5, voice cloning' },
+      { value: 'piper', label: PIPER_TTS.label, hint: 'free, offline, ONNX models' },
       { value: 'skip', label: 'Skip TTS setup' },
     ],
   });
@@ -140,9 +148,9 @@ async function configureSttProvider(state: WizardState): Promise<void> {
   const sttChoice = await p.select({
     message: 'Select an STT (Speech-to-Text) provider:',
     options: [
-      { value: 'openai', label: 'OpenAI Whisper', hint: 'batch, word timestamps' },
-      { value: 'deepgram', label: 'Deepgram', hint: 'real-time streaming, nova-2' },
-      { value: 'whisper-local', label: 'Whisper.cpp (Local)', hint: 'free, offline' },
+      { value: 'openai', label: OPENAI_WHISPER.label, hint: 'batch, word timestamps' },
+      { value: 'deepgram', label: DEEPGRAM_STT.label, hint: 'real-time streaming, nova-2' },
+      { value: 'whisper-local', label: WHISPER_LOCAL.label, hint: 'free, offline' },
       { value: 'skip', label: 'Skip STT setup' },
     ],
   });

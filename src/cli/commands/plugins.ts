@@ -63,6 +63,13 @@ const FALLBACK_EXTENSIONS: ExtensionEntry[] = [
     description: 'Text-to-speech synthesis',
   },
   {
+    name: 'speech-runtime',
+    category: 'voice',
+    available: false,
+    displayName: 'Speech Runtime',
+    description: 'Built-in provider-agnostic speech runtime with STT, TTS, and VAD adapters',
+  },
+  {
     name: 'news-search',
     category: 'tool',
     available: false,

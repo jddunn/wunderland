@@ -9,7 +9,7 @@ import { LLM_PROVIDERS } from '../constants.js';
 import { accent } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 
-const TOOL_CALLING_PROVIDER_IDS = new Set(['openai', 'anthropic', 'openrouter', 'ollama']);
+const TOOL_CALLING_PROVIDER_IDS = new Set(['openai', 'anthropic', 'openrouter', 'ollama', 'gemini']);
 const SUPPORTED_LLM_PROVIDERS = LLM_PROVIDERS.filter((p) => TOOL_CALLING_PROVIDER_IDS.has(p.id));
 
 export interface InitLlmResult {
@@ -34,7 +34,7 @@ export interface InitLlmStepOptions {
 }
 
 function choosePreferredProviderId(detectedProviderIds: string[]): string {
-  const preferredOrder = ['openai', 'anthropic', 'openrouter', 'ollama'];
+  const preferredOrder = ['openai', 'anthropic', 'gemini', 'openrouter', 'ollama'];
   for (const id of preferredOrder) {
     if (detectedProviderIds.includes(id)) return id;
   }
@@ -92,7 +92,7 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     style: 'info',
     content: detected.length > 0
       ? `Detected ${detected.length} API key${detected.length > 1 ? 's' : ''} in your environment.\nSelect a provider and model to continue.`
-      : 'Select an LLM provider and enter your API key.\nSupported: OpenAI, Anthropic, OpenRouter, Ollama.',
+      : 'Select an LLM provider and enter your API key.\nSupported: OpenAI, Anthropic, Gemini, OpenRouter, Ollama.',
   });
   fmt.blank();
 
