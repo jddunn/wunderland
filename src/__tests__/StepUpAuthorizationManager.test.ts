@@ -336,6 +336,7 @@ describe('StepUpAuthorizationManager', () => {
             expect(overrides['change_directory']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
             expect(overrides['file_read']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
             expect(overrides['read_file']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            expect(overrides['read_document']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
             expect(overrides['file_search']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
             expect(overrides['file_info']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
         });
@@ -464,6 +465,14 @@ describe('StepUpAuthorizationManager', () => {
             const overdriveManager = new StepUpAuthorizationManager(OVERDRIVE_STEP_UP_AUTH_CONFIG);
             const result = await overdriveManager.authorize(
                 createRequest(createTool({ id: 'file_read', hasSideEffects: true }))
+            );
+            expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('should classify read_document with hasSideEffects=true as TIER_1 with OVERDRIVE config', async () => {
+            const overdriveManager = new StepUpAuthorizationManager(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+            const result = await overdriveManager.authorize(
+                createRequest(createTool({ id: 'read_document', hasSideEffects: true }))
             );
             expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
         });
