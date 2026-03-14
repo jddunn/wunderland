@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import * as path from 'node:path';
 import * as fmt from '../../ui/format.js';
 import { type ToolInstance, getGuardrailsInstance } from '../../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../../openai/schema-on-demand.js';
@@ -135,11 +136,25 @@ export async function loadExtensions(ctx: any): Promise<void> {
         ? (cfg.extensionOverrides as Record<string, any>)
         : {};
 
+      // Build filesystem roots: agent workspace + user's home directory + cwd.
+      // Without explicit roots, the cli-executor defaults to [workspaceDir] only,
+      // which locks the agent out of the rest of the user's filesystem.
+      const homeDir = (await import('node:os')).homedir();
+      const workspaceDir = path.resolve(workspaceBaseDir, workspaceAgentId);
+      const cwd = process.cwd();
+      const readRoots = [workspaceDir, homeDir, cwd, '/tmp'];
+      const writeRoots = [workspaceDir, homeDir, cwd, '/tmp'];
+
       const runtimeOverrides: Record<string, any> = {
         'cli-executor': {
           options: {
-            workingDirectory: process.cwd(),
-            filesystem: { allowRead: permissions.filesystem.read, allowWrite: permissions.filesystem.write },
+            workingDirectory: cwd,
+            filesystem: {
+              allowRead: permissions.filesystem.read,
+              allowWrite: permissions.filesystem.write,
+              readRoots: permissions.filesystem.read ? readRoots : undefined,
+              writeRoots: permissions.filesystem.write ? writeRoots : undefined,
+            },
             agentWorkspace: {
               agentId: workspaceAgentId,
               baseDir: workspaceBaseDir,
@@ -415,9 +430,21 @@ export async function loadExtensions(ctx: any): Promise<void> {
 
   // ── Runtime folder access request tool ──
   if (!ctx.dangerouslySkipPermissions) {
+    // Extract ShellService from a CLI executor tool so we can propagate folder grants
+    const cliTool = toolMap.get('list_directory') || toolMap.get('file_read') || toolMap.get('file_write');
+    const cliShellService: any = cliTool ? (cliTool as any).shellService : undefined;
+
     const folderAccessTool = createRequestFolderAccessTool({
       guardrails: getGuardrailsInstance(),
       agentId: ctx.seedId ?? workspaceAgentId,
+      onFolderGranted: (resolvedPath, operation) => {
+        if (cliShellService && typeof cliShellService.addReadRoot === 'function') {
+          cliShellService.addReadRoot(resolvedPath);
+          if (operation === 'write' && typeof cliShellService.addWriteRoot === 'function') {
+            cliShellService.addWriteRoot(resolvedPath);
+          }
+        }
+      },
       requestPermission: async (req) => {
         const actionId = `folder-access-${randomUUID()}`;
         const decision = await hitlManager.requestApproval({

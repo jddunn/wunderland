@@ -1283,6 +1283,16 @@ export async function runToolCallingTurn(opts: {
                           write: isWrite,
                           description: `Granted at runtime for ${tool.name}`,
                         });
+
+                        // Propagate to CLI executor's ShellService so its internal
+                        // assertFilesystemAllowed() also allows the approved path.
+                        const shellSvc = (tool as any).shellService;
+                        if (shellSvc && typeof shellSvc.addReadRoot === 'function') {
+                          shellSvc.addReadRoot(dir);
+                          if (isWrite) {
+                            shellSvc.addWriteRoot(dir);
+                          }
+                        }
                       }
                       // Retry the original tool execution
                       return await tool.execute(args, opts.toolContext);
