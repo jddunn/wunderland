@@ -12,7 +12,13 @@ import type {
     AuthorizableTool,
     HITLRequestCallback,
 } from '../authorization/types.js';
-import { ToolRiskTier, FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG } from '../core/types.js';
+import {
+    ToolRiskTier,
+    FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
+    OVERDRIVE_STEP_UP_AUTH_CONFIG,
+    DEFAULT_STEP_UP_AUTH_CONFIG,
+    createStepUpAuthConfigFromTier,
+} from '../core/types.js';
 
 describe('StepUpAuthorizationManager', () => {
     let manager: StepUpAuthorizationManager;
@@ -315,6 +321,170 @@ describe('StepUpAuthorizationManager', () => {
                 expect(result.authorized).toBe(true);
                 expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
             }
+        });
+    });
+
+    describe('OVERDRIVE_STEP_UP_AUTH_CONFIG', () => {
+        it('should have TIER_2_ASYNC_REVIEW as default tier', () => {
+            expect(OVERDRIVE_STEP_UP_AUTH_CONFIG.defaultTier).toBe(ToolRiskTier.TIER_2_ASYNC_REVIEW);
+        });
+
+        it('should have toolTierOverrides for navigation tools', () => {
+            const overrides = OVERDRIVE_STEP_UP_AUTH_CONFIG.toolTierOverrides!;
+            expect(overrides).toBeDefined();
+            expect(overrides['list_directory']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            expect(overrides['change_directory']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            expect(overrides['file_read']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            expect(overrides['read_file']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            expect(overrides['file_search']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            expect(overrides['file_info']).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('should have financial category as TIER_3_SYNC_HITL', () => {
+            expect(OVERDRIVE_STEP_UP_AUTH_CONFIG.categoryTierOverrides!.financial).toBe(
+                ToolRiskTier.TIER_3_SYNC_HITL
+            );
+        });
+
+        it('should have system category as TIER_3_SYNC_HITL', () => {
+            expect(OVERDRIVE_STEP_UP_AUTH_CONFIG.categoryTierOverrides!.system).toBe(
+                ToolRiskTier.TIER_3_SYNC_HITL
+            );
+        });
+
+        it('should have non-empty escalation triggers', () => {
+            expect(OVERDRIVE_STEP_UP_AUTH_CONFIG.escalationTriggers).toBeDefined();
+            expect(OVERDRIVE_STEP_UP_AUTH_CONFIG.escalationTriggers!.length).toBeGreaterThan(0);
+        });
+
+        it('should authorize navigation tools as Tier 1 autonomous without HITL', async () => {
+            const mockHitl = vi.fn();
+            const overdriveManager = new StepUpAuthorizationManager(
+                OVERDRIVE_STEP_UP_AUTH_CONFIG,
+                mockHitl
+            );
+
+            const navigationTools = ['change_directory', 'list_directory', 'file_read'];
+            for (const toolId of navigationTools) {
+                const result = await overdriveManager.authorize(
+                    createRequest(createTool({ id: toolId, hasSideEffects: true }))
+                );
+                expect(result.authorized).toBe(true);
+                expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            }
+            expect(mockHitl).not.toHaveBeenCalled();
+        });
+
+        it('should classify side-effect tools without category override as Tier 2', async () => {
+            const overdriveManager = new StepUpAuthorizationManager(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+
+            const result = await overdriveManager.authorize(
+                createRequest(createTool({ id: 'some_custom_tool', hasSideEffects: true, category: 'research' }))
+            );
+            expect(result.tier).toBe(ToolRiskTier.TIER_2_ASYNC_REVIEW);
+            expect(result.authorized).toBe(true);
+        });
+
+        it('should classify financial tools as Tier 3', async () => {
+            const mockHitl = vi.fn<[HITLApprovalRequest], Promise<HITLApprovalDecision>>().mockResolvedValue({
+                actionId: 'action-1',
+                approved: true,
+                decidedBy: 'admin',
+                decidedAt: new Date(),
+            });
+            const overdriveManager = new StepUpAuthorizationManager(
+                OVERDRIVE_STEP_UP_AUTH_CONFIG,
+                mockHitl
+            );
+
+            const result = await overdriveManager.authorize(
+                createRequest(createTool({ id: 'transfer_money', hasSideEffects: true, category: 'financial' }))
+            );
+            expect(result.tier).toBe(ToolRiskTier.TIER_3_SYNC_HITL);
+            expect(mockHitl).toHaveBeenCalled();
+        });
+    });
+
+    describe('createStepUpAuthConfigFromTier', () => {
+        it('should return FULLY_AUTONOMOUS config for dangerous tier', () => {
+            const config = createStepUpAuthConfigFromTier('dangerous');
+            expect(config.autoApproveAll).toBe(true);
+            expect(config).toBe(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG);
+        });
+
+        it('should return FULLY_AUTONOMOUS config for permissive tier', () => {
+            const config = createStepUpAuthConfigFromTier('permissive');
+            expect(config.autoApproveAll).toBe(true);
+            expect(config).toBe(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG);
+        });
+
+        it('should return OVERDRIVE config for balanced tier', () => {
+            const config = createStepUpAuthConfigFromTier('balanced');
+            expect(config.defaultTier).toBe(ToolRiskTier.TIER_2_ASYNC_REVIEW);
+            expect(config).toBe(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+        });
+
+        it('should return DEFAULT config for strict tier', () => {
+            const config = createStepUpAuthConfigFromTier('strict');
+            expect(config.defaultTier).toBe(ToolRiskTier.TIER_3_SYNC_HITL);
+            expect(config).toBe(DEFAULT_STEP_UP_AUTH_CONFIG);
+        });
+
+        it('should return DEFAULT config for paranoid tier', () => {
+            const config = createStepUpAuthConfigFromTier('paranoid');
+            expect(config.defaultTier).toBe(ToolRiskTier.TIER_3_SYNC_HITL);
+            expect(config).toBe(DEFAULT_STEP_UP_AUTH_CONFIG);
+        });
+
+        it('should return OVERDRIVE config for unknown tier (default fallback)', () => {
+            const config = createStepUpAuthConfigFromTier('nonexistent');
+            expect(config.defaultTier).toBe(ToolRiskTier.TIER_2_ASYNC_REVIEW);
+            expect(config).toBe(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+        });
+    });
+
+    describe('SAFE_NAVIGATION_TOOLS behavior', () => {
+        it('should classify change_directory with hasSideEffects=true as TIER_1 with OVERDRIVE config', async () => {
+            const overdriveManager = new StepUpAuthorizationManager(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+            const result = await overdriveManager.authorize(
+                createRequest(createTool({ id: 'change_directory', hasSideEffects: true }))
+            );
+            expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('should classify list_directory with hasSideEffects=true as TIER_1 with OVERDRIVE config', async () => {
+            const overdriveManager = new StepUpAuthorizationManager(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+            const result = await overdriveManager.authorize(
+                createRequest(createTool({ id: 'list_directory', hasSideEffects: true }))
+            );
+            expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('should classify file_read with hasSideEffects=true as TIER_1 with OVERDRIVE config', async () => {
+            const overdriveManager = new StepUpAuthorizationManager(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+            const result = await overdriveManager.authorize(
+                createRequest(createTool({ id: 'file_read', hasSideEffects: true }))
+            );
+            expect(result.tier).toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+        });
+
+        it('should NOT classify shell_execute with hasSideEffects=true as TIER_1', async () => {
+            const overdriveManager = new StepUpAuthorizationManager(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+            const result = await overdriveManager.authorize(
+                createRequest(createTool({ id: 'shell_execute', hasSideEffects: true }))
+            );
+            expect(result.tier).not.toBe(ToolRiskTier.TIER_1_AUTONOMOUS);
+            // shell_execute is not in toolTierOverrides, so it falls to default (TIER_2)
+            expect(result.tier).toBe(ToolRiskTier.TIER_2_ASYNC_REVIEW);
+        });
+
+        it('should use default tier for unknown tool with hasSideEffects=true', async () => {
+            const overdriveManager = new StepUpAuthorizationManager(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+            const result = await overdriveManager.authorize(
+                createRequest(createTool({ id: 'totally_unknown_tool', hasSideEffects: true }))
+            );
+            // Not in overrides, no category override, falls to OVERDRIVE default = TIER_2
+            expect(result.tier).toBe(ToolRiskTier.TIER_2_ASYNC_REVIEW);
         });
     });
 });
