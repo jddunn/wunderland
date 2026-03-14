@@ -17,7 +17,9 @@ export type HelpTopicId =
   | 'ui'
   | 'presets'
   | 'security'
-  | 'export';
+  | 'export'
+  | 'faq'
+  | 'llm';
 
 export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: string }> = [
   {
@@ -60,6 +62,16 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     title: 'Export (PNG)',
     summary: 'Export command output as a styled terminal screenshot.',
   },
+  {
+    id: 'llm',
+    title: 'LLM Providers',
+    summary: 'Configure OpenAI, Anthropic, Gemini, Ollama, or OpenRouter.',
+  },
+  {
+    id: 'faq',
+    title: 'FAQ',
+    summary: 'Frequently asked questions about setup, voice, LLMs, and more.',
+  },
 ];
 
 function hr(): string {
@@ -92,13 +104,15 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'presets' || topic === 'preset') return 'presets';
     if (topic === 'security' || topic === 'approvals' || topic === 'hitl') return 'security';
     if (topic === 'export' || topic === 'png' || topic === 'screenshot') return 'export';
+    if (topic === 'llm' || topic === 'llms' || topic === 'providers' || topic === 'provider' || topic === 'models' || topic === 'model' || topic === 'ollama' || topic === 'openai' || topic === 'anthropic' || topic === 'gemini' || topic === 'openrouter') return 'llm';
+    if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
   })();
 
   if (!resolved) {
     console.log();
     console.log(`  ${wColor(g.warn)} ${bright('Unknown help topic')} ${muted(topicRaw)}`);
-    console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help auth')}${dim(', ')}${accent('wunderland help tui')}${dim(', ')}${accent('wunderland help voice')}`);
+    console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help voice')}${dim(', ')}${accent('wunderland help llm')}${dim(', ')}${accent('wunderland help faq')}`);
     console.log();
     return;
   }
@@ -112,7 +126,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log();
     console.log(`  ${iColor('1')} ${bright('Run setup (recommended)')}`);
     console.log(`     ${muted('$')} ${accent('wunderland setup')}`);
-    console.log(`     ${dim('Interactive wizard: LLM provider, keys, channels, personality.')}`);
+    console.log(`     ${dim('Interactive wizard: LLM provider, personality, channels, RAG memory, and voice/TTS/STT.')}`);
     console.log();
     console.log(`     ${dim('Or: Log in with your ChatGPT subscription (no API key needed):')}`);
     console.log(`     ${muted('$')} ${accent('wunderland login')}`);
@@ -188,27 +202,45 @@ export function printHelpTopic(topicRaw: string): void {
 
   if (resolved === 'voice') {
     printTitle('Voice & Speech');
-    console.log(`  ${bright('Wunderland uses the unified AgentOS speech runtime for STT, TTS, VAD, and optional wake-word flows.')}`);
+    console.log(`  ${bright('Wunderland supports TTS (text-to-speech) and STT (speech-to-text) out of the box.')}`);
+    console.log(`  ${dim('Voice is configured during')} ${accent('wunderland setup')} ${dim('(both QuickStart and Advanced modes).')}`);
     console.log();
-    console.log(`  ${dim('Inspect providers:')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland voice status')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland voice tts')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland voice stt')}`);
+    console.log(`  ${bright('Supported TTS Providers:')}`);
+    console.log(`     ${accent('OpenAI TTS')}      ${dim('tts-1 / tts-1-hd / gpt-4o-mini-tts — 6 voices (nova, alloy, echo, onyx, fable, shimmer)')}`);
+    console.log(`     ${accent('ElevenLabs')}      ${dim('turbo v2.5 / multilingual v2 — voice cloning, 29 languages')}`);
+    console.log(`     ${accent('Piper')}           ${dim('free, offline, ONNX models — no API key required')}`);
     console.log();
-    console.log(`  ${dim('Test synthesis:')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland voice test "Hello from Wunderland"')}`);
-    console.log(`     ${dim('Uses the best configured runtime-backed TTS provider.')}`);
-    console.log();
-    console.log(`  ${dim('Configure providers:')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland setup')}`);
-    console.log(`     ${dim('OpenAI covers both Whisper STT and OpenAI TTS. ElevenLabs is available for higher-quality TTS.')}`);
-    console.log();
-    console.log(`  ${dim('TUI voice dashboard:')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland')} ${dim('then press')} ${accent('v')}`);
-    console.log(`     ${dim('Shows telephony, STT, and TTS providers from the shared speech catalog.')}`);
+    console.log(`  ${bright('Supported STT Providers:')}`);
+    console.log(`     ${accent('OpenAI Whisper')}   ${dim('whisper-1 — batch transcription, word timestamps')}`);
+    console.log(`     ${accent('Deepgram')}         ${dim('nova-2 — real-time streaming, punctuation')}`);
+    console.log(`     ${accent('Whisper.cpp')}      ${dim('free, offline — base/small/medium/large-v3 models')}`);
     console.log();
     console.log(`  ${hr()}`);
-    console.log(`  ${dim('Key env vars:')} ${accent('OPENAI_API_KEY')}${dim(', ')}${accent('ELEVENLABS_API_KEY')}${dim(', ')}${accent('WHISPER_MODEL_DEFAULT')}${dim(', ')}${accent('OPENAI_TTS_DEFAULT_MODEL')}`);
+    console.log(`  ${bright('Quick Setup:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland setup')}              ${dim('voice is included in both QuickStart and Advanced')}`);
+    console.log(`     ${dim('If you already set OPENAI_API_KEY for your LLM, voice auto-detects it — zero extra config.')}`);
+    console.log();
+    console.log(`  ${bright('CLI Commands:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice status')}       ${dim('check provider readiness')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice tts')}          ${dim('list TTS providers')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice stt')}          ${dim('list STT providers')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice test "Hello"')} ${dim('synthesize a test phrase')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland voice clone')}        ${dim('voice cloning guidance (ElevenLabs)')}`);
+    console.log();
+    console.log(`  ${bright('TUI Dashboard:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland')} ${dim('then press')} ${accent('v')}  ${dim('shows telephony, STT, and TTS providers')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Environment Variables:')}`);
+    console.log(`     ${accent('OPENAI_API_KEY')}           ${dim('OpenAI TTS + Whisper STT')}`);
+    console.log(`     ${accent('ELEVENLABS_API_KEY')}       ${dim('ElevenLabs TTS')}`);
+    console.log(`     ${accent('DEEPGRAM_API_KEY')}         ${dim('Deepgram STT')}`);
+    console.log(`     ${accent('OPENAI_TTS_DEFAULT_MODEL')} ${dim('override TTS model (tts-1, tts-1-hd, gpt-4o-mini-tts)')}`);
+    console.log(`     ${accent('WHISPER_MODEL_DEFAULT')}    ${dim('override Whisper model size (base, small, medium, large-v3)')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${dim('Config file:')} ${accent('~/.wunderland/config.json')} ${dim('→ voiceProvider, voiceModel, voiceVoice, sttProvider, sttModel')}`);
+    console.log(`  ${dim('Reconfigure:')} ${accent('wunderland setup')} ${dim('or edit config directly with')} ${accent('wunderland config set voiceProvider openai')}`);
     console.log();
     return;
   }
@@ -278,6 +310,98 @@ export function printHelpTopic(topicRaw: string): void {
     return;
   }
 
+  if (resolved === 'llm') {
+    printTitle('LLM Providers');
+    console.log(`  ${bright('Wunderland supports 5 LLM providers out of the box:')}`);
+    console.log();
+    console.log(`     ${accent('openai')}       ${dim('GPT-4o, GPT-4o-mini, o1, o3-mini')}`);
+    console.log(`     ${accent('anthropic')}    ${dim('Claude Opus 4, Sonnet 4, Haiku 3.5')}`);
+    console.log(`     ${accent('gemini')}       ${dim('Gemini 2.0 Flash, 2.5 Pro, 2.5 Flash')}`);
+    console.log(`     ${accent('ollama')}       ${dim('Local models — Llama 3, Dolphin, Mixtral (free, private)')}`);
+    console.log(`     ${accent('openrouter')}   ${dim('200+ models, automatic fallback, single API key')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Setup:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland setup')}                              ${dim('interactive wizard')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland init my-agent --provider openai')}    ${dim('scaffold with a specific provider')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland ollama-setup')}                       ${dim('auto-detect hardware, pull models')}`);
+    console.log();
+    console.log(`  ${bright('Environment Variables:')}`);
+    console.log(`     ${accent('OPENAI_API_KEY')}       ${dim('sk-...')}`);
+    console.log(`     ${accent('ANTHROPIC_API_KEY')}    ${dim('sk-ant-...')}`);
+    console.log(`     ${accent('GEMINI_API_KEY')}       ${dim('AIza...')}`);
+    console.log(`     ${accent('OPENROUTER_API_KEY')}   ${dim('sk-or-... (also used as automatic fallback)')}`);
+    console.log(`     ${accent('OLLAMA_BASE_URL')}      ${dim('http://localhost:11434 (or remote URL)')}`);
+    console.log();
+    console.log(`  ${bright('Switch provider:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland config set llmProvider anthropic')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland config set llmModel claude-sonnet-4-6')}`);
+    console.log();
+    console.log(`  ${bright('OAuth (ChatGPT subscription):')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland login')}   ${dim('use ChatGPT Plus/Pro credits — no API key needed')}`);
+    console.log(`     ${dim('See:')} ${accent('wunderland help auth')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${dim('Config file:')} ${accent('~/.wunderland/config.json')} ${dim('→ llmProvider, llmModel')}`);
+    console.log(`  ${dim('Per-agent:')} ${accent('agent.config.json')} ${dim('→ overrides global config')}`);
+    console.log(`  ${dim('Full docs:')} ${accent(`${URLS.docs}/guides/llm-providers`)}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'faq') {
+    printTitle('Frequently Asked Questions');
+    console.log();
+
+    console.log(`  ${bright('Q: How do I change my LLM provider after setup?')}`);
+    console.log(`  ${dim('A:')} ${accent('wunderland config set llmProvider <provider>')} ${dim('where provider is openai/anthropic/gemini/ollama/openrouter.')}`);
+    console.log(`     ${dim('Or re-run')} ${accent('wunderland setup')} ${dim('to go through the wizard again.')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: Do I need separate API keys for voice/TTS?')}`);
+    console.log(`  ${dim('A: If you use OpenAI as your LLM, the same OPENAI_API_KEY covers TTS and Whisper STT — no extra key needed.')}`);
+    console.log(`     ${dim('ElevenLabs and Deepgram require their own keys. Piper and Whisper.cpp are free and local.')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: Can I run fully offline / without cloud APIs?')}`);
+    console.log(`  ${dim('A: Yes — use')} ${accent('ollama')} ${dim('for LLM +')} ${accent('piper')} ${dim('for TTS +')} ${accent('whisper.cpp')} ${dim('for STT. Run')} ${accent('wunderland ollama-setup')} ${dim('to get started.')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: How do I add voice to an existing agent?')}`);
+    console.log(`  ${dim('A: Re-run')} ${accent('wunderland setup')} ${dim('and configure voice, or set config directly:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland config set voiceProvider openai')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland config set voiceModel tts-1')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland config set sttProvider openai-whisper')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: What\'s the difference between QuickStart and Advanced setup?')}`);
+    console.log(`  ${dim('A: QuickStart covers: LLM provider, personality preset, channels, RAG memory, and voice (5 steps).')}`);
+    console.log(`     ${dim('Advanced adds: custom HEXACO sliders, extensions/skills, security pipeline, and full TTS/STT customization.')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: How do I use OpenRouter as a fallback?')}`);
+    console.log(`  ${dim('A: Set')} ${accent('OPENROUTER_API_KEY')} ${dim('alongside your primary provider key. If the primary fails, OpenRouter retries automatically.')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: Where are my credentials stored?')}`);
+    console.log(`  ${dim('A:')} ${accent('~/.wunderland/.env')} ${dim('(API keys, chmod 600) and')} ${accent('~/.wunderland/config.json')} ${dim('(settings).')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: How do I check if everything is working?')}`);
+    console.log(`  ${dim('A:')} ${accent('wunderland doctor')} ${dim('verifies config, API keys, provider connectivity, and voice readiness.')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: Can I use my ChatGPT subscription instead of an API key?')}`);
+    console.log(`  ${dim('A: Yes — run')} ${accent('wunderland login')} ${dim('to authenticate with OAuth. See')} ${accent('wunderland help auth')} ${dim('for details.')}`);
+    console.log();
+
+    console.log(`  ${hr()}`);
+    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, presets, security, tui, ui, export')}`);
+    console.log(`  ${dim('Full docs:')} ${accent(URLS.docs)}`);
+    console.log();
+    return;
+  }
+
   // export
   printTitle('Export (PNG)');
   console.log(`  Export non-interactive command output as a styled PNG:`);
@@ -300,6 +424,6 @@ export function printHelpTopicsList(): void {
     console.log(`    ${chalk.white(t.id.padEnd(16))} ${dim(t.summary)}`);
   }
   console.log();
-  console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help auth')}${dim(', ')}${accent('wunderland help tui')}${dim(', ')}${accent('wunderland help presets')}`);
+  console.log(`  ${dim('Try:')} ${accent('wunderland help getting-started')}${dim(', ')}${accent('wunderland help voice')}${dim(', ')}${accent('wunderland help llm')}${dim(', ')}${accent('wunderland help faq')}`);
   console.log();
 }

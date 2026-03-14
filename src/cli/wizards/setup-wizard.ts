@@ -174,9 +174,11 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   // Step 7: RAG Memory (both modes)
   await runRagWizard(state);
 
-  // Step 8: Voice (Advanced only)
+  // Step 8: Voice (both modes — QuickStart gets lightweight picker, Advanced gets full wizard)
   if (state.mode === 'advanced') {
     await runVoiceWizard(state);
+  } else {
+    await runQuickVoiceSetup(state);
   }
 
   // Review
@@ -203,7 +205,8 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
       : state.personalityPreset ? `Personality: ${accent(state.personalityPreset)}` : null,
     state.personalityEvolution ? `Personality evolution: ${accent('enabled')}` : null,
     state.rag ? `RAG memory: ${accent(state.rag.mode)}${state.rag.autoIngest ? ` + ${accent('auto-ingest')}` : ''}` : `RAG memory: ${wColor('disabled')}`,
-    state.voice ? `Voice: ${accent(state.voice.provider)}` : null,
+    state.voice ? `Voice TTS: ${accent(state.voice.provider)}${state.voice.voice ? ` (${state.voice.voice})` : ''}` : null,
+    state.stt ? `Voice STT: ${accent(state.stt.provider)}` : null,
     `Security: ${state.security.preLlmClassifier ? sColor('full pipeline') : wColor('minimal')}`,
   ].filter(Boolean).join('\n');
 
@@ -269,6 +272,11 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
         allEnvKeys['ELEVENLABS_API_KEY'] = state.voice.apiKey;
       }
     }
+    if (state.stt?.apiKey) {
+      if (state.stt.provider === 'deepgram') {
+        allEnvKeys['DEEPGRAM_API_KEY'] = state.stt.apiKey;
+      }
+    }
 
     await mergeEnv(allEnvKeys, globals.config);
 
@@ -291,6 +299,9 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
         : { enabled: false },
       voiceProvider: state.voice?.provider,
       voiceModel: state.voice?.model,
+      voiceVoice: state.voice?.voice,
+      sttProvider: state.stt?.provider,
+      sttModel: state.stt?.model,
       lastSetup: new Date().toISOString(),
       observability: { preset: state.observabilityPreset },
     }, globals.config);
@@ -340,6 +351,105 @@ async function runQuickPersonalityPicker(state: WizardState): Promise<void> {
     state.personalityPreset = selected as string;
   }
   // 'balanced' leaves personalityPreset undefined → default HEXACO traits
+}
+
+// ── QuickStart voice setup ───────────────────────────────────────────────────
+
+async function runQuickVoiceSetup(state: WizardState): Promise<void> {
+  // Auto-detect whether the user already has an OpenAI key (from LLM setup)
+  const hasOpenAiKey = !!(state.apiKeys['OPENAI_API_KEY'] || process.env['OPENAI_API_KEY']);
+
+  const voiceChoice = await p.select({
+    message: 'Enable voice capabilities (TTS / STT)?',
+    options: [
+      ...(hasOpenAiKey
+        ? [{ value: 'openai-auto' as const, label: 'Yes — use OpenAI', hint: 'TTS + Whisper STT (uses your existing key)' }]
+        : []),
+      { value: 'elevenlabs' as const, label: 'Yes — use ElevenLabs', hint: 'premium TTS + voice cloning' },
+      { value: 'openai-new' as const, label: 'Yes — use OpenAI', hint: hasOpenAiKey ? 'reconfigure key' : 'enter API key for TTS + Whisper STT' },
+      { value: 'local' as const, label: 'Yes — local only (Piper + Whisper.cpp)', hint: 'free, offline, no API key' },
+      { value: 'skip' as const, label: 'Skip for now', hint: 'configure later with: wunderland setup' },
+    ],
+  });
+
+  if (p.isCancel(voiceChoice) || voiceChoice === 'skip') return;
+
+  if (voiceChoice === 'openai-auto') {
+    // Use the existing OpenAI key — pick a voice quickly
+    const voice = await p.select({
+      message: 'Choose a default voice:',
+      options: [
+        { value: 'nova', label: 'Nova', hint: 'female, clear and friendly' },
+        { value: 'alloy', label: 'Alloy', hint: 'neutral, balanced' },
+        { value: 'echo', label: 'Echo', hint: 'male, warm' },
+        { value: 'shimmer', label: 'Shimmer', hint: 'female, soft and gentle' },
+      ],
+    });
+    if (p.isCancel(voice)) return;
+
+    state.voice = {
+      provider: 'openai',
+      apiKey: state.apiKeys['OPENAI_API_KEY'] || process.env['OPENAI_API_KEY'],
+      model: 'tts-1',
+      voice: voice as string,
+    };
+    state.stt = { provider: 'openai-whisper', model: 'whisper-1' };
+    fmt.ok('Voice configured: OpenAI TTS + Whisper STT');
+  }
+
+  if (voiceChoice === 'openai-new') {
+    const keyInput = await p.password({ message: 'OpenAI API Key:' });
+    if (p.isCancel(keyInput) || !keyInput) return;
+    const apiKey = keyInput as string;
+
+    const voice = await p.select({
+      message: 'Choose a default voice:',
+      options: [
+        { value: 'nova', label: 'Nova', hint: 'female, clear and friendly' },
+        { value: 'alloy', label: 'Alloy', hint: 'neutral, balanced' },
+        { value: 'echo', label: 'Echo', hint: 'male, warm' },
+        { value: 'shimmer', label: 'Shimmer', hint: 'female, soft and gentle' },
+      ],
+    });
+    if (p.isCancel(voice)) return;
+
+    state.voice = { provider: 'openai', apiKey, model: 'tts-1', voice: voice as string };
+    state.stt = { provider: 'openai-whisper', model: 'whisper-1' };
+    state.apiKeys['OPENAI_API_KEY'] = apiKey;
+    fmt.ok('Voice configured: OpenAI TTS + Whisper STT');
+  }
+
+  if (voiceChoice === 'elevenlabs') {
+    const existing = process.env['ELEVENLABS_API_KEY'];
+    let apiKey: string;
+
+    if (existing) {
+      fmt.ok('ElevenLabs API Key: already set in environment');
+      apiKey = existing;
+    } else {
+      const keyInput = await p.password({ message: 'ElevenLabs API Key:' });
+      if (p.isCancel(keyInput) || !keyInput) return;
+      apiKey = keyInput as string;
+      fmt.note('Get one at: https://elevenlabs.io/docs/api-reference/authentication');
+    }
+
+    state.voice = { provider: 'elevenlabs', apiKey, model: 'eleven_turbo_v2_5' };
+
+    // Offer OpenAI Whisper for STT if they have a key, otherwise skip
+    if (hasOpenAiKey) {
+      state.stt = { provider: 'openai-whisper', model: 'whisper-1' };
+      fmt.ok('Voice configured: ElevenLabs TTS + OpenAI Whisper STT');
+    } else {
+      fmt.ok('Voice configured: ElevenLabs TTS (add OPENAI_API_KEY later for Whisper STT)');
+    }
+  }
+
+  if (voiceChoice === 'local') {
+    state.voice = { provider: 'piper', model: 'en_US-lessac-medium' };
+    state.stt = { provider: 'whisper-local', model: 'base' };
+    fmt.ok('Voice configured: Piper TTS + Whisper.cpp STT (local, no API keys)');
+    fmt.note('Ensure piper and whisper binaries are on your PATH');
+  }
 }
 
 // ── Ollama auto-configuration sub-wizard ─────────────────────────────────────
