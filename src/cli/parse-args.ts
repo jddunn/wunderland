@@ -65,6 +65,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
         'cli',
         'tui',
         'no-tui',
+        'overdrive',
         'dangerously-skip-permissions',
         'dangerously-skip-command-safety',
       ]);

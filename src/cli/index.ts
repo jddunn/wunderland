@@ -138,6 +138,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--oauth')}                Use ChatGPT subscription instead of API key (chat/start)
     ${d('--no-skills')}            Disable skill loading
 ${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}
+    ${d('--overdrive')}                Auto-approve all tool calls for this session
     ${d('--dangerously-skip-permissions')}  Skip permission/approval checks (dangerous)
     ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
 

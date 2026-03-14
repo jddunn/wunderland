@@ -317,6 +317,77 @@ export const FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
   contextualOverrides: [],
 };
 
+/**
+ * "Overdrive" step-up authorization config.
+ * Read-only / navigation tools: Tier 1 (autonomous, no prompt).
+ * Data/API/comms tools: Tier 2 (execute, async review — no prompt).
+ * Financial/system/credential tools: Tier 3 (still requires HITL).
+ *
+ * Used as the default for the `balanced` security tier, replacing the
+ * old DEFAULT config which put everything at Tier 3.
+ */
+export const OVERDRIVE_STEP_UP_AUTH_CONFIG: StepUpAuthorizationConfig = {
+  defaultTier: ToolRiskTier.TIER_2_ASYNC_REVIEW,
+  toolTierOverrides: {
+    list_directory: ToolRiskTier.TIER_1_AUTONOMOUS,
+    change_directory: ToolRiskTier.TIER_1_AUTONOMOUS,
+    file_read: ToolRiskTier.TIER_1_AUTONOMOUS,
+    read_file: ToolRiskTier.TIER_1_AUTONOMOUS,
+    file_search: ToolRiskTier.TIER_1_AUTONOMOUS,
+    file_info: ToolRiskTier.TIER_1_AUTONOMOUS,
+    memory_read: ToolRiskTier.TIER_1_AUTONOMOUS,
+    conversation_history: ToolRiskTier.TIER_1_AUTONOMOUS,
+    web_search: ToolRiskTier.TIER_1_AUTONOMOUS,
+    news_search: ToolRiskTier.TIER_1_AUTONOMOUS,
+    discover_capabilities: ToolRiskTier.TIER_1_AUTONOMOUS,
+  },
+  categoryTierOverrides: {
+    data_modification: ToolRiskTier.TIER_2_ASYNC_REVIEW,
+    external_api: ToolRiskTier.TIER_2_ASYNC_REVIEW,
+    communication: ToolRiskTier.TIER_2_ASYNC_REVIEW,
+    financial: ToolRiskTier.TIER_3_SYNC_HITL,
+    system: ToolRiskTier.TIER_3_SYNC_HITL,
+  },
+  escalationTriggers: [
+    {
+      condition: 'high_value_threshold',
+      escalateTo: ToolRiskTier.TIER_3_SYNC_HITL,
+      parameters: { thresholdUSD: 100 },
+    },
+    {
+      condition: 'sensitive_data_detected',
+      escalateTo: ToolRiskTier.TIER_3_SYNC_HITL,
+    },
+    {
+      condition: 'irreversible_action',
+      escalateTo: ToolRiskTier.TIER_3_SYNC_HITL,
+    },
+  ],
+  approvalTimeoutMs: 300000,
+};
+
+/**
+ * Creates a StepUpAuthorizationConfig appropriate for a given security tier.
+ * This wires the tier's intent into the auth config — the old code always used
+ * DEFAULT (Tier 3 for everything) regardless of the selected security tier.
+ */
+export function createStepUpAuthConfigFromTier(
+  tierName: string
+): StepUpAuthorizationConfig {
+  switch (tierName) {
+    case 'dangerous':
+    case 'permissive':
+      return FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG;
+    case 'balanced':
+      return OVERDRIVE_STEP_UP_AUTH_CONFIG;
+    case 'strict':
+    case 'paranoid':
+      return DEFAULT_STEP_UP_AUTH_CONFIG;
+    default:
+      return OVERDRIVE_STEP_UP_AUTH_CONFIG;
+  }
+}
+
 // ============================================================================
 // Wunderland Seed Configuration
 // ============================================================================
