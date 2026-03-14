@@ -12,7 +12,13 @@ import {
   type SecurityTierName,
 } from '../SecurityTiers.js';
 import { WunderlandSecurityPipeline } from '../WunderlandSecurityPipeline.js';
-import { ToolRiskTier } from '../../core/types.js';
+import {
+  ToolRiskTier,
+  createStepUpAuthConfigFromTier,
+  OVERDRIVE_STEP_UP_AUTH_CONFIG,
+  DEFAULT_STEP_UP_AUTH_CONFIG,
+  FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
+} from '../../core/types.js';
 
 // ── Tier name validation ────────────────────────────────────────────────────
 
@@ -220,5 +226,27 @@ describe('Tier immutability', () => {
     for (const name of names) {
       expect(Object.isFrozen(SECURITY_TIERS[name])).toBe(true);
     }
+  });
+});
+
+// ── Tier-to-auth-config mapping ─────────────────────────────────────────────
+
+describe('tier-to-auth-config mapping', () => {
+  it('balanced tier maps to OVERDRIVE config', () => {
+    const config = createStepUpAuthConfigFromTier('balanced');
+    expect(config).toBe(OVERDRIVE_STEP_UP_AUTH_CONFIG);
+    expect(config.defaultTier).toBe(ToolRiskTier.TIER_2_ASYNC_REVIEW);
+  });
+
+  it('strict tier maps to DEFAULT config', () => {
+    const config = createStepUpAuthConfigFromTier('strict');
+    expect(config).toBe(DEFAULT_STEP_UP_AUTH_CONFIG);
+    expect(config.defaultTier).toBe(ToolRiskTier.TIER_3_SYNC_HITL);
+  });
+
+  it('dangerous tier maps to FULLY_AUTONOMOUS config', () => {
+    const config = createStepUpAuthConfigFromTier('dangerous');
+    expect(config).toBe(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG);
+    expect(config.autoApproveAll).toBe(true);
   });
 });
