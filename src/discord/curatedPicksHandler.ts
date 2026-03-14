@@ -6,6 +6,10 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+
 const BRAND_COLOR = 0x8b6914;
 
 const CATEGORIES = ['tech', 'science', 'finance', 'world'] as const;
@@ -14,6 +18,13 @@ const BASE_INTERVAL = 6 * 60 * 60 * 1000;   // 6 hours
 const JITTER_MAX   = 30 * 60 * 1000;         // 0-30 min random
 const STARTUP_DELAY = 15 * 60 * 1000;        // 15 min after boot
 const MAX_PICKS_PER_DAY = 4;
+
+// --- Dedup cache constants ---
+const CACHE_DIR = path.join(os.homedir(), '.wunderland');
+const CACHE_FILE = path.join(CACHE_DIR, 'curated-picks-cache.json');
+const CACHE_MAX_ENTRIES = 50;
+const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SIMILARITY_THRESHOLD = 0.45; // Jaccard word overlap — 0.45 catches "same story, different headline"
 
 const CURATION_ADDENDUM = `
 You are the editorial voice of Wunderland News — curating only the most wild, paradigm-shattering, conversation-starting news for the Rabbit Hole community (Discord for builders, engineers, hackers, and the dangerously curious).
@@ -47,6 +58,12 @@ interface CandidateArticle {
   category: string;
 }
 
+interface CacheEntry {
+  title: string;
+  url: string;
+  timestamp: number;
+}
+
 export interface CuratedPicksConfig {
   channelId: string;
   openaiApiKey: string;
@@ -58,12 +75,99 @@ export interface CuratedPicksConfig {
   newsBotToken?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Dedup cache helpers
+// ---------------------------------------------------------------------------
+
+function loadCache(): CacheEntry[] {
+  try {
+    if (!fs.existsSync(CACHE_FILE)) return [];
+    const raw = fs.readFileSync(CACHE_FILE, 'utf-8');
+    const entries: CacheEntry[] = JSON.parse(raw);
+    // Prune old entries
+    const cutoff = Date.now() - CACHE_MAX_AGE_MS;
+    return entries.filter(e => e.timestamp > cutoff).slice(-CACHE_MAX_ENTRIES);
+  } catch {
+    return [];
+  }
+}
+
+function saveCache(entries: CacheEntry[]): void {
+  try {
+    if (!fs.existsSync(CACHE_DIR)) {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    }
+    const cutoff = Date.now() - CACHE_MAX_AGE_MS;
+    const pruned = entries.filter(e => e.timestamp > cutoff).slice(-CACHE_MAX_ENTRIES);
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(pruned, null, 2));
+  } catch (err: any) {
+    console.warn('[CuratedPicks] Failed to save cache:', err?.message ?? err);
+  }
+}
+
+/** Tokenize a title into a set of meaningful lowercase words. */
+function tokenize(title: string): Set<string> {
+  const stopWords = new Set([
+    'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'can', 'shall', 'to', 'of', 'in', 'for',
+    'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during',
+    'before', 'after', 'above', 'below', 'between', 'and', 'but', 'or',
+    'nor', 'not', 'so', 'yet', 'both', 'either', 'neither', 'each',
+    'every', 'all', 'any', 'few', 'more', 'most', 'other', 'some',
+    'such', 'no', 'only', 'own', 'same', 'than', 'too', 'very',
+    'just', 'about', 'also', 'how', 'what', 'which', 'who', 'whom',
+    'this', 'that', 'these', 'those', 'it', 'its', 'new', 'says',
+    'said', 'says', 'according', 'report', 'reports', 'latest',
+  ]);
+  const words = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+  return new Set(words.filter(w => !stopWords.has(w)));
+}
+
+/** Jaccard similarity between two title word sets. */
+function titleSimilarity(a: string, b: string): number {
+  const setA = tokenize(a);
+  const setB = tokenize(b);
+  if (setA.size === 0 || setB.size === 0) return 0;
+  let intersection = 0;
+  for (const w of setA) {
+    if (setB.has(w)) intersection++;
+  }
+  const union = new Set([...setA, ...setB]).size;
+  return union > 0 ? intersection / union : 0;
+}
+
+/** Check if a title is too similar to any cached entry. */
+function isTooSimilar(title: string, cache: CacheEntry[]): boolean {
+  for (const entry of cache) {
+    const sim = titleSimilarity(title, entry.title);
+    if (sim >= SIMILARITY_THRESHOLD) {
+      console.log(`[CuratedPicks] Skipping similar title (${(sim * 100).toFixed(0)}%): "${title}" ≈ "${entry.title}"`);
+      return true;
+    }
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Main handler
+// ---------------------------------------------------------------------------
+
 export function createCuratedPicksHandler(config: CuratedPicksConfig) {
   const model = config.model || 'gpt-4o';
   const interval = config.intervalMs || BASE_INTERVAL;
   const postedUrls = new Set<string>();
   let picksToday = 0;
   let lastResetDate = new Date().toDateString();
+
+  // Initialize in-memory set from persistent cache
+  const initialCache = loadCache();
+  for (const entry of initialCache) {
+    postedUrls.add(entry.url);
+  }
+  if (initialCache.length > 0) {
+    console.log(`[CuratedPicks] Loaded ${initialCache.length} cached entries from disk`);
+  }
 
   function maybeResetDaily(): void {
     const today = new Date().toDateString();
@@ -183,10 +287,17 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
       return;
     }
 
-    // Filter out already-posted URLs
-    const fresh = candidates.filter(a => !postedUrls.has(a.url));
+    // Load persistent cache for similarity checking
+    const cache = loadCache();
+
+    // Filter out already-posted URLs AND similar titles
+    const fresh = candidates.filter(a => {
+      if (postedUrls.has(a.url)) return false;
+      if (isTooSimilar(a.title, cache)) return false;
+      return true;
+    });
     if (fresh.length === 0) {
-      console.log('[CuratedPicks] All candidates already posted, skipping cycle');
+      console.log('[CuratedPicks] All candidates already posted or too similar, skipping cycle');
       return;
     }
 
@@ -225,7 +336,11 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
         await service.sendMessage(config.channelId, pick.hook, { embeds: [embed] });
       }
 
+      // Update both in-memory and persistent cache
       postedUrls.add(pick.article.url);
+      cache.push({ title: pick.article.title, url: pick.article.url, timestamp: Date.now() });
+      saveCache(cache);
+
       picksToday++;
       console.log(`[CuratedPicks] Posted: "${pick.article.title}" (${pick.article.category})`);
     } catch (err: any) {
