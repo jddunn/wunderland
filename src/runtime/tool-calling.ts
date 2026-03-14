@@ -21,6 +21,7 @@ import {
   FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
   DEFAULT_STEP_UP_AUTH_CONFIG,
   ToolRiskTier,
+  type StepUpAuthorizationConfig,
 } from '../core/types.js';
 import type { AuthorizableTool } from '../authorization/types.js';
 import { SpanStatusCode, context, trace } from '@opentelemetry/api';
@@ -440,11 +441,14 @@ function toAuthorizableTool(tool: ToolInstance): AuthorizableTool {
  */
 export function createAuthorizationManager(opts: {
   dangerouslySkipPermissions: boolean;
+  stepUpAuthConfig?: StepUpAuthorizationConfig;
   askPermission?: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
 }): StepUpAuthorizationManager {
   if (opts.dangerouslySkipPermissions) {
     return new StepUpAuthorizationManager(FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG);
   }
+
+  const config = opts.stepUpAuthConfig ?? DEFAULT_STEP_UP_AUTH_CONFIG;
 
   // Build HITL callback that bridges the interactive askPermission prompt
   const hitlCallback = opts.askPermission
@@ -463,7 +467,7 @@ export function createAuthorizationManager(opts: {
       }
     : undefined;
 
-  return new StepUpAuthorizationManager(DEFAULT_STEP_UP_AUTH_CONFIG, hitlCallback);
+  return new StepUpAuthorizationManager(config, hitlCallback);
 }
 
 /**
@@ -817,6 +821,8 @@ export async function runToolCallingTurn(opts: {
   toolContext: Record<string, unknown>;
   maxRounds: number;
   dangerouslySkipPermissions: boolean;
+  /** Optional step-up auth config — when provided, overrides DEFAULT_STEP_UP_AUTH_CONFIG. */
+  stepUpAuthConfig?: StepUpAuthorizationConfig;
   askPermission: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
   /** Optional checkpoint hook (used for "human after each round" modes). */
   askCheckpoint?: (info: {
@@ -858,8 +864,6 @@ export async function runToolCallingTurn(opts: {
   );
   const failClosedOnToolFailure = toolFailureMode === 'fail_closed';
   const executionMode = (getStringProp(opts.toolContext, 'executionMode') || '').toLowerCase();
-  const requireApprovalForAllTools =
-    !opts.dangerouslySkipPermissions && executionMode === 'human-all';
   const turnApprovalMode = (getStringProp(opts.toolContext, 'turnApprovalMode') || '').toLowerCase();
   const requireCheckpointAfterRound =
     typeof opts.askCheckpoint === 'function'
@@ -877,6 +881,7 @@ export async function runToolCallingTurn(opts: {
   // Use provided manager or create one based on permission mode
   const authManager = opts.authorizationManager ?? createAuthorizationManager({
     dangerouslySkipPermissions: opts.dangerouslySkipPermissions,
+    stepUpAuthConfig: opts.stepUpAuthConfig,
     askPermission: opts.askPermission,
   });
   const providerIdRaw = typeof opts.providerId === 'string' ? opts.providerId.trim() : '';
@@ -1149,24 +1154,13 @@ export async function runToolCallingTurn(opts: {
             }
           }
 
-          if (requireApprovalForAllTools && tool.hasSideEffects !== false) {
-            // Skip interactive prompt for read-only tools (no side effects) — guardrails still validate paths
-            const ok = await opts.askPermission(tool, args);
-            if (!ok) {
-              const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
-              opts.messages.push({
-                role: 'tool',
-                tool_call_id: call.id,
-                content: shouldWrapToolOutputs
-                  ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: call.id, includeWarning: false })
-                  : denial,
-              });
-              const failReply = maybeFailClosed(`Permission denied for tool: ${toolName}.`);
-              if (failReply) return failReply;
-              continue;
-            }
-          } else {
-            // Tiered authorization via StepUpAuthorizationManager.
+          // ── Unified authorization (single prompt path, not three) ──────────
+          // Gate 1 (requireApprovalForAllTools) and Gate 2 (StepUpAuth) are merged.
+          // If the auth manager classifies a tool as TIER_1 or TIER_2, no prompt fires
+          // even when requireApprovalForAllTools is set. This prevents over-prompting
+          // for safe navigation tools like change_directory / list_directory.
+          let hitlApprovedThisCall = false;
+          {
             const authResult = await authManager.authorize({
               tool: toAuthorizableTool(tool),
               args,
@@ -1181,8 +1175,8 @@ export async function runToolCallingTurn(opts: {
             });
 
             if (!authResult.authorized) {
-              // Tier 3 (sync HITL) denial from the manager — fall back to interactive prompt if available.
               if (authResult.tier === ToolRiskTier.TIER_3_SYNC_HITL && !opts.dangerouslySkipPermissions) {
+                // Tier 3: require interactive prompt (exactly one)
                 const ok = await opts.askPermission(tool, args);
                 if (!ok) {
                   const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
@@ -1197,8 +1191,8 @@ export async function runToolCallingTurn(opts: {
                   if (failReply) return failReply;
                   continue;
                 }
-                // User approved interactively — proceed
-              } else {
+                hitlApprovedThisCall = true;
+              } else if (!opts.dangerouslySkipPermissions) {
                 const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
                 opts.messages.push({
                   role: 'tool',
@@ -1212,6 +1206,7 @@ export async function runToolCallingTurn(opts: {
                 continue;
               }
             }
+            // Tier 1 / Tier 2: authorized — no prompt needed
           }
 
           const start = Date.now();
@@ -1264,16 +1259,19 @@ export async function runToolCallingTurn(opts: {
                     .filter((p): p is string => !!p);
                   const allEscalatable = deniedPaths.length > 0 && deniedPaths.every(p => guardrails.isEscalatable(p));
 
-                  if (allEscalatable && opts.askPermission) {
+                  if (allEscalatable) {
                     const operation = deniedPaths.length > 0 ? (guardrailsCheck.violations?.[0]?.operation || tool.name) : tool.name;
                     const isWrite = operation.includes('write') || operation.includes('delete') || operation.includes('append');
-                    // Present as a folder access request to the user
-                    const escalationTool = {
-                      ...tool,
-                      name: `folder_access:${tool.name}`,
-                      description: `Grant ${isWrite ? 'write' : 'read'} access to: ${deniedPaths.join(', ')}`,
-                    } as ToolInstance;
-                    const approved = await opts.askPermission(escalationTool, { paths: deniedPaths, operation: isWrite ? 'write' : 'read', originalTool: tool.name });
+
+                    // If user already approved this tool call at the HITL gate, auto-grant
+                    // folder access instead of prompting again (deduplication).
+                    const autoGrant = hitlApprovedThisCall || opts.dangerouslySkipPermissions;
+                    const approved = autoGrant || (opts.askPermission
+                      ? await opts.askPermission(
+                          { ...tool, name: `folder_access:${tool.name}`, description: `Grant ${isWrite ? 'write' : 'read'} access to: ${deniedPaths.join(', ')}` } as ToolInstance,
+                          { paths: deniedPaths, operation: isWrite ? 'write' : 'read', originalTool: tool.name },
+                        )
+                      : false);
 
                     if (approved) {
                       // Add rules for each denied path
