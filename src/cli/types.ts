@@ -53,6 +53,16 @@ export interface CliConfig {
   /** Timestamp of last setup. */
   lastSetup?: string;
 
+  /** Ollama-specific settings (written by `wunderland ollama-setup`). */
+  ollama?: {
+    /** Custom Ollama server base URL (default: http://localhost:11434). */
+    baseUrl?: string;
+    /** Recommended context window size. */
+    numCtx?: number;
+    /** GPU layer offload count (-1 = all, 0 = CPU only). */
+    numGpu?: number;
+  };
+
   /** RAG memory configuration. */
   rag?: {
     /** Whether RAG is enabled (default true). */
