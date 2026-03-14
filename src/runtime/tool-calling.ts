@@ -485,7 +485,7 @@ export interface LLMProviderConfig {
   getApiKey?: () => string | Promise<string>;
 }
 
-export type LLMProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic';
+export type LLMProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic' | 'gemini';
 
 function parseProviderId(value: unknown): LLMProviderId | undefined {
   const v = typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -494,6 +494,7 @@ function parseProviderId(value: unknown): LLMProviderId | undefined {
   if (v === 'openrouter') return 'openrouter';
   if (v === 'ollama') return 'ollama';
   if (v === 'openai') return 'openai';
+  if (v === 'gemini') return 'gemini';
   return undefined;
 }
 
@@ -887,7 +888,7 @@ export async function runToolCallingTurn(opts: {
   const providerIdRaw = typeof opts.providerId === 'string' ? opts.providerId.trim() : '';
   const providerIdParsed = parseProviderId(providerIdRaw);
   if (providerIdRaw && !providerIdParsed) {
-    throw new Error(`Unsupported providerId "${providerIdRaw}". Supported: openai, openrouter, ollama, anthropic.`);
+    throw new Error(`Unsupported providerId "${providerIdRaw}". Supported: openai, openrouter, ollama, anthropic, gemini.`);
   }
   const providerId = providerIdParsed ?? 'openai';
 
