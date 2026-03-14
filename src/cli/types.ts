@@ -48,6 +48,12 @@ export interface CliConfig {
   voiceProvider?: string;
   /** Voice/TTS model ID. */
   voiceModel?: string;
+  /** Voice/TTS voice ID (e.g. 'nova', 'alloy'). */
+  voiceVoice?: string;
+  /** STT provider key name. */
+  sttProvider?: string;
+  /** STT model ID. */
+  sttModel?: string;
   /** Linked Rabbithole account email (if any). */
   linkedAccount?: string;
   /** Timestamp of last setup. */
