@@ -19,7 +19,21 @@ const execFileAsync = promisify(execFile);
 // ── Constants ──────────────────────────────────────────────────────────────
 
 /** Default Ollama API base URL. */
-const OLLAMA_API_BASE = 'http://localhost:11434';
+const OLLAMA_DEFAULT_BASE = 'http://localhost:11434';
+
+/**
+ * Resolve the Ollama API base URL from environment or config.
+ * Priority: OLLAMA_BASE_URL env var > default (localhost:11434).
+ */
+function resolveOllamaBase(): string {
+  const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
+  if (raw) {
+    const normalized = raw.endsWith('/') ? raw.slice(0, -1) : raw;
+    // Strip /v1 suffix if present — ollama-manager uses /api/* endpoints, not /v1
+    return normalized.replace(/\/v1$/, '');
+  }
+  return OLLAMA_DEFAULT_BASE;
+}
 
 /** Timeout for Ollama API health checks (ms). */
 const HEALTH_CHECK_TIMEOUT_MS = 5_000;
@@ -44,6 +58,10 @@ export interface SystemSpecs {
   arch: string;
   /** Whether a compatible GPU was detected (Metal on macOS, NVIDIA on Linux). */
   hasGpu: boolean;
+  /** Detected VRAM in GB (null if unavailable or unified memory). */
+  vramGB: number | null;
+  /** GPU name/description (e.g. 'Apple M2 Pro', 'NVIDIA RTX 4090'). */
+  gpuName: string | null;
 }
 
 /** Recommended Ollama model configuration for a three-tier inference stack. */
@@ -58,6 +76,10 @@ export interface ModelRecommendation {
   tier: 'low' | 'mid' | 'high';
   /** Explanation of why this configuration was selected. */
   reason: string;
+  /** Recommended context window size based on available memory. */
+  numCtx: number;
+  /** Number of GPU layers to offload (-1 = all, 0 = CPU only). */
+  numGpu: number;
 }
 
 /** Metadata for a locally-installed Ollama model. */
@@ -82,6 +104,8 @@ export interface OllamaAutoConfigResult {
   recommendation: ModelRecommendation;
   /** Models already available locally. */
   localModels: LocalModel[];
+  /** Ollama version string (e.g. '0.5.4'). */
+  version: string | null;
 }
 
 // ── Detection ──────────────────────────────────────────────────────────────
@@ -91,13 +115,102 @@ export interface OllamaAutoConfigResult {
  * @returns The resolved path to the binary, or `null` if not found.
  */
 export async function detectOllamaInstall(): Promise<string | null> {
+  const cmd = os.platform() === 'win32' ? 'where' : 'which';
   try {
-    const { stdout } = await execFileAsync('which', ['ollama']);
-    const resolved = stdout.trim();
+    const { stdout } = await execFileAsync(cmd, ['ollama']);
+    const resolved = stdout.trim().split('\n')[0]?.trim() || '';
     return resolved.length > 0 ? resolved : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Get the installed Ollama version.
+ * @returns Version string (e.g. '0.5.4') or null if unavailable.
+ */
+export async function getOllamaVersion(): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('ollama', ['--version'], { timeout: 5_000 });
+    // Output is typically "ollama version 0.5.4" or just "0.5.4"
+    const match = stdout.trim().match(/(\d+\.\d+\.\d+)/);
+    return match ? match[1] : stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Minimum Ollama version required for OpenAI-compatible /v1 endpoints. */
+const MIN_OLLAMA_VERSION = '0.1.24';
+
+/**
+ * Check if the installed Ollama version meets the minimum requirement.
+ * @returns Object with compatibility info and the detected version.
+ */
+export async function checkOllamaVersion(): Promise<{
+  version: string | null;
+  compatible: boolean;
+  message: string;
+}> {
+  const version = await getOllamaVersion();
+  if (!version) {
+    return { version: null, compatible: true, message: 'Could not detect Ollama version' };
+  }
+  const parts = version.split('.').map(Number);
+  const minParts = MIN_OLLAMA_VERSION.split('.').map(Number);
+  let compatible = true;
+  for (let i = 0; i < 3; i++) {
+    if ((parts[i] || 0) > (minParts[i] || 0)) break;
+    if ((parts[i] || 0) < (minParts[i] || 0)) { compatible = false; break; }
+  }
+  return {
+    version,
+    compatible,
+    message: compatible
+      ? `Ollama ${version} (compatible)`
+      : `Ollama ${version} is outdated. Minimum required: ${MIN_OLLAMA_VERSION}. Run: ollama update`,
+  };
+}
+
+/**
+ * Validate that a model exists in the Ollama library before pulling.
+ * Uses the Ollama API show endpoint for locally installed models,
+ * or tries a HEAD request to the library for remote models.
+ */
+export async function validateModelExists(modelId: string): Promise<{
+  exists: boolean;
+  local: boolean;
+  message: string;
+}> {
+  // Check if already installed locally
+  const localModels = await listLocalModels();
+  const localMatch = localModels.find((m) =>
+    m.name === modelId || m.name === `${modelId}:latest` || m.name.startsWith(`${modelId}:`),
+  );
+  if (localMatch) {
+    return { exists: true, local: true, message: `${modelId} is already installed locally` };
+  }
+
+  // Try the Ollama show API (works for models in library even if not pulled)
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(`${resolveOllamaBase()}/api/show`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: modelId }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      return { exists: true, local: true, message: `${modelId} found` };
+    }
+  } catch {
+    // Server might not be running or model not local — that's fine
+  }
+
+  // If server isn't running we can't validate remotely — assume valid
+  return { exists: true, local: false, message: `${modelId} will be pulled from Ollama library` };
 }
 
 /**
@@ -108,7 +221,7 @@ export async function isOllamaRunning(): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-    const res = await fetch(`${OLLAMA_API_BASE}/api/tags`, {
+    const res = await fetch(`${resolveOllamaBase()}/api/tags`, {
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -170,9 +283,11 @@ export async function detectSystemSpecs(): Promise<SystemSpecs> {
   const arch = os.arch();
 
   let hasGpu = false;
+  let vramGB: number | null = null;
+  let gpuName: string | null = null;
 
   if (platform === 'darwin') {
-    // macOS — Apple Silicon / discrete GPU with Metal support
+    // macOS — Apple Silicon uses unified memory (VRAM = total RAM)
     try {
       const { stdout } = await execFileAsync(
         'system_profiler',
@@ -180,20 +295,75 @@ export async function detectSystemSpecs(): Promise<SystemSpecs> {
         { timeout: 5_000 },
       );
       hasGpu = /metal/i.test(stdout);
+      if (hasGpu) {
+        // Extract GPU name (e.g. "Apple M2 Pro")
+        const chipMatch = stdout.match(/Chipset Model:\s*(.+)/i);
+        gpuName = chipMatch ? chipMatch[1].trim() : null;
+        // Apple Silicon uses unified memory — all RAM is available to GPU
+        if (arch === 'arm64') {
+          vramGB = totalMemoryGB;
+        } else {
+          // Discrete GPU on Intel Mac — try to extract VRAM
+          const vramMatch = stdout.match(/VRAM.*?(\d+)\s*(MB|GB)/i);
+          if (vramMatch) {
+            const val = parseInt(vramMatch[1], 10);
+            vramGB = vramMatch[2].toUpperCase() === 'GB' ? val : val / 1024;
+          }
+        }
+      }
     } catch {
-      // system_profiler unavailable or timed out — assume no GPU
+      // system_profiler unavailable or timed out
     }
   } else if (platform === 'linux') {
-    // Linux — check for NVIDIA GPU via nvidia-smi
+    // Linux — check for NVIDIA GPU via nvidia-smi with VRAM query
     try {
-      await execFileAsync('which', ['nvidia-smi']);
+      const { stdout } = await execFileAsync(
+        'nvidia-smi',
+        ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
+        { timeout: 5_000 },
+      );
       hasGpu = true;
+      const line = stdout.trim().split('\n')[0];
+      if (line) {
+        const parts = line.split(',').map((s) => s.trim());
+        gpuName = parts[0] || null;
+        const memMB = parseInt(parts[1] || '', 10);
+        if (!isNaN(memMB)) vramGB = Math.round((memMB / 1024) * 10) / 10;
+      }
     } catch {
-      // nvidia-smi not found — no NVIDIA GPU
+      // nvidia-smi not found or failed — check for AMD ROCm
+      try {
+        const { stdout } = await execFileAsync('rocm-smi', ['--showmeminfo', 'vram'], { timeout: 5_000 });
+        hasGpu = true;
+        gpuName = 'AMD GPU (ROCm)';
+        const vramMatch = stdout.match(/(\d+)\s*bytes/i);
+        if (vramMatch) vramGB = Math.round(parseInt(vramMatch[1], 10) / (1024 ** 3) * 10) / 10;
+      } catch {
+        // No NVIDIA or AMD GPU
+      }
+    }
+  } else if (platform === 'win32') {
+    // Windows — check for GPU via PowerShell
+    try {
+      const { stdout } = await execFileAsync(
+        'powershell',
+        ['-Command', 'Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM | ConvertTo-Json'],
+        { timeout: 10_000 },
+      );
+      const data = JSON.parse(stdout);
+      const gpus = Array.isArray(data) ? data : [data];
+      const dedicated = gpus.find((g: any) => g.AdapterRAM > 0 && !/microsoft basic/i.test(g.Name || ''));
+      if (dedicated) {
+        hasGpu = true;
+        gpuName = dedicated.Name || null;
+        if (dedicated.AdapterRAM) vramGB = Math.round(dedicated.AdapterRAM / (1024 ** 3) * 10) / 10;
+      }
+    } catch {
+      // PowerShell not available
     }
   }
 
-  return { totalMemoryGB, freeMemoryGB, platform, arch, hasGpu };
+  return { totalMemoryGB, freeMemoryGB, platform, arch, hasGpu, vramGB, gpuName };
 }
 
 // ── Model recommendation ───────────────────────────────────────────────────
@@ -209,6 +379,61 @@ export async function detectSystemSpecs(): Promise<SystemSpecs> {
  * @param specs - System hardware snapshot from {@link detectSystemSpecs}.
  * @returns A {@link ModelRecommendation} with model IDs and explanation.
  */
+/**
+ * Determine optimal context window size based on available memory and model size.
+ * Larger context windows consume more memory — this prevents OOM.
+ */
+function recommendNumCtx(specs: SystemSpecs, modelSize: '1b' | '3b' | '8b' | '70b'): number {
+  const availableGB = specs.vramGB ?? specs.freeMemoryGB;
+
+  // Base context sizes per model size tier
+  const contextMap: Record<string, { min: number; mid: number; max: number }> = {
+    '1b':  { min: 2048, mid: 4096,  max: 8192 },
+    '3b':  { min: 2048, mid: 4096,  max: 8192 },
+    '8b':  { min: 2048, mid: 4096,  max: 8192 },
+    '70b': { min: 2048, mid: 4096,  max: 8192 },
+  };
+
+  const ctx = contextMap[modelSize] || contextMap['8b'];
+
+  // Conservative: leave headroom for the model weights + KV cache
+  if (modelSize === '70b') {
+    // 70B needs ~40GB for weights alone (Q4), so context must be conservative
+    return availableGB >= 64 ? ctx.max : ctx.min;
+  }
+  if (modelSize === '8b') {
+    return availableGB >= 16 ? ctx.max : availableGB >= 8 ? ctx.mid : ctx.min;
+  }
+  // 1b/3b models are small — can afford larger context
+  return availableGB >= 8 ? ctx.max : ctx.mid;
+}
+
+/**
+ * Determine number of GPU layers to offload.
+ * -1 = offload all layers (full GPU), 0 = CPU only.
+ */
+function recommendNumGpu(specs: SystemSpecs, modelSize: '1b' | '3b' | '8b' | '70b'): number {
+  if (!specs.hasGpu) return 0;
+
+  const vram = specs.vramGB ?? 0;
+
+  // Apple Silicon uses unified memory — always offload everything
+  if (specs.platform === 'darwin' && specs.arch === 'arm64') return -1;
+
+  // Discrete GPU: check if VRAM can hold the model
+  const minVramForFullOffload: Record<string, number> = {
+    '1b': 1,
+    '3b': 2,
+    '8b': 5,
+    '70b': 40,
+  };
+
+  const needed = minVramForFullOffload[modelSize] || 5;
+  if (vram >= needed) return -1; // Full offload
+  if (vram >= needed * 0.5) return Math.floor(vram / needed * 35); // Partial offload
+  return 0; // CPU only
+}
+
 export function recommendModels(specs: SystemSpecs): ModelRecommendation {
   const { totalMemoryGB, hasGpu } = specs;
 
@@ -221,6 +446,8 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
       reason:
         `${totalMemoryGB} GB RAM detected - using lightweight 1B/3B models ` +
         'to stay within memory limits.',
+      numCtx: recommendNumCtx(specs, '3b'),
+      numGpu: recommendNumGpu(specs, '3b'),
     };
   }
 
@@ -233,14 +460,21 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
       reason:
         `${totalMemoryGB} GB RAM detected - 8B primary model with 3B ` +
         'router/auditor for a balanced local setup.',
+      numCtx: recommendNumCtx(specs, '8b'),
+      numGpu: recommendNumGpu(specs, '8b'),
     };
   }
 
   // 16 GB+
-  const primary = hasGpu ? 'llama3.1:70b' : 'dolphin-llama3:8b';
-  const gpuNote = hasGpu
-    ? 'GPU detected - using 70B primary for maximum quality.'
-    : 'No dedicated GPU - capping at 8B primary to avoid swap pressure.';
+  const vram = specs.vramGB ?? 0;
+  const canRun70B = hasGpu && (specs.platform === 'darwin' ? totalMemoryGB >= 48 : vram >= 40);
+  const primary = canRun70B ? 'llama3.1:70b' : 'dolphin-llama3:8b';
+  const primarySize = canRun70B ? '70b' : '8b';
+  const gpuNote = canRun70B
+    ? `GPU detected (${specs.gpuName || 'unknown'}) - using 70B primary for maximum quality.`
+    : hasGpu
+      ? `GPU detected but insufficient VRAM (${vram || '?'} GB) for 70B - using 8B primary.`
+      : 'No dedicated GPU - capping at 8B primary to avoid swap pressure.';
 
   return {
     router: 'llama3.2:3b',
@@ -248,6 +482,8 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
     auditor: 'llama3.2:3b',
     tier: 'high',
     reason: `${totalMemoryGB} GB RAM detected. ${gpuNote}`,
+    numCtx: recommendNumCtx(specs, primarySize),
+    numGpu: recommendNumGpu(specs, primarySize),
   };
 }
 
@@ -306,7 +542,7 @@ export async function listLocalModels(): Promise<LocalModel[]> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-    const res = await fetch(`${OLLAMA_API_BASE}/api/tags`, {
+    const res = await fetch(`${resolveOllamaBase()}/api/tags`, {
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -358,6 +594,16 @@ export async function autoConfigureOllama(): Promise<OllamaAutoConfigResult> {
   }
   ok(`Ollama found at ${accent(binaryPath)}`);
 
+  // Step 1b: Version check
+  const versionInfo = await checkOllamaVersion();
+  if (versionInfo.version) {
+    if (versionInfo.compatible) {
+      ok(`${versionInfo.message}`);
+    } else {
+      warning(versionInfo.message);
+    }
+  }
+
   // Step 2: Check / start server
   let running = await isOllamaRunning();
   if (running) {
@@ -371,11 +617,14 @@ export async function autoConfigureOllama(): Promise<OllamaAutoConfigResult> {
   // Step 3: Detect system specs
   note('Detecting system specifications...');
   const specs = await detectSystemSpecs();
+  const gpuDetail = specs.hasGpu
+    ? `${sColor('yes')}${specs.gpuName ? ` (${specs.gpuName})` : ''}${specs.vramGB ? ` ${specs.vramGB} GB` : ''}`
+    : dim('no');
   ok(
     `${specs.platform}/${specs.arch}  ` +
       `${chalk.bold(String(specs.totalMemoryGB))} GB RAM  ` +
       `(${chalk.bold(String(specs.freeMemoryGB))} GB free)  ` +
-      `GPU: ${specs.hasGpu ? sColor('yes') : dim('no')}`,
+      `GPU: ${gpuDetail}`,
   );
 
   // Step 4: Recommend models
@@ -386,6 +635,10 @@ export async function autoConfigureOllama(): Promise<OllamaAutoConfigResult> {
       `router=${accent(recommendation.router)}  ` +
       `primary=${accent(recommendation.primary)}  ` +
       `auditor=${accent(recommendation.auditor)}`,
+  );
+  note(
+    `Context window: ${accent(String(recommendation.numCtx))}  ` +
+      `GPU layers: ${accent(recommendation.numGpu === -1 ? 'all' : String(recommendation.numGpu))}`,
   );
 
   // Step 5: List local models
@@ -406,6 +659,7 @@ export async function autoConfigureOllama(): Promise<OllamaAutoConfigResult> {
     specs,
     recommendation,
     localModels,
+    version: versionInfo.version,
   };
 }
 

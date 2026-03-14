@@ -155,7 +155,7 @@ const app = await createWunderland({
   llm: { providerId: 'openai' },
   extensions: {
     tools: ['web-search', 'web-browser', 'giphy'],
-    voice: ['voice-synthesis'],
+    voice: ['speech-runtime'],
   },
 });
 ```
