@@ -858,10 +858,23 @@ export async function createWunderlandServer(opts?: {
           ? (cfg as any).extensionOverrides
           : {};
 
+      // Build filesystem roots: agent workspace + user's home directory + cwd.
+      const homeDir = (await import('node:os')).homedir();
+      const workspaceDir = path.resolve(workspaceBaseDir, workspaceAgentId);
+      const cwd = process.cwd();
+      const readRoots = [workspaceDir, homeDir, cwd, '/tmp'];
+      const writeRoots = [workspaceDir, homeDir, cwd, '/tmp'];
+
       const runtimeOverrides: Record<string, any> = {
         'cli-executor': {
           options: {
-            filesystem: { allowRead: permissions.filesystem.read, allowWrite: permissions.filesystem.write },
+            workingDirectory: cwd,
+            filesystem: {
+              allowRead: permissions.filesystem.read,
+              allowWrite: permissions.filesystem.write,
+              readRoots: permissions.filesystem.read ? readRoots : undefined,
+              writeRoots: permissions.filesystem.write ? writeRoots : undefined,
+            },
             agentWorkspace: {
               agentId: workspaceAgentId,
               baseDir: workspaceBaseDir,

@@ -31,6 +31,8 @@ export interface RequestFolderAccessDeps {
   requestPermission: (req: FolderPermissionRequest) => Promise<boolean>;
   /** Agent ID for guardrails lookups. */
   agentId: string;
+  /** Optional callback to propagate approved paths to the CLI executor's filesystem roots. */
+  onFolderGranted?: (resolvedPath: string, operation: 'read' | 'write') => void;
 }
 
 export function createRequestFolderAccessTool(deps: RequestFolderAccessDeps): ITool {
@@ -143,6 +145,9 @@ export function createRequestFolderAccessTool(deps: RequestFolderAccessDeps): IT
       };
 
       deps.guardrails.addFolderRule(deps.agentId, rule);
+
+      // Propagate to CLI executor's ShellService filesystem roots
+      deps.onFolderGranted?.(resolved, operation);
 
       return {
         success: true,
