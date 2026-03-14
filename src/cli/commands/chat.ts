@@ -52,7 +52,7 @@ import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
-  DEFAULT_STEP_UP_AUTH_CONFIG,
+  createStepUpAuthConfigFromTier,
 } from '../../core/index.js';
 import {
   WunderlandDiscoveryManager,
@@ -490,11 +490,12 @@ export default async function cmdChat(
     return;
   }
 
+  const overdriveMode = flags['overdrive'] === true;
   const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
   const dangerouslySkipCommandSafety =
     flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
   const autoApproveToolCalls =
-    globals.autoApproveTools || dangerouslySkipPermissions || policy.executionMode === 'autonomous';
+    globals.autoApproveTools || dangerouslySkipPermissions || overdriveMode || policy.executionMode === 'autonomous';
   const enableSkills = flags['no-skills'] !== true;
   const lazyTools = flags['lazy-tools'] === true;
   const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
@@ -999,7 +1000,7 @@ export default async function cmdChat(
     baseSystemPrompt: typeof cfg?.systemPrompt === 'string' ? cfg.systemPrompt : undefined,
     securityProfile: DEFAULT_SECURITY_PROFILE,
     inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
-    stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
+    stepUpAuthConfig: createStepUpAuthConfigFromTier(policy.securityTier ?? 'balanced'),
   });
   const activePersonaId =
     typeof cfg?.selectedPersonaId === 'string' && cfg.selectedPersonaId.trim()
@@ -1206,19 +1207,25 @@ export default async function cmdChat(
 
   // Session-scoped cache to avoid re-prompting for identical tool+args combinations.
   const permissionCache = new Map<string, boolean>();
+  // When the user presses 'a' (accept all), all subsequent prompts auto-approve for this session.
+  let sessionAcceptAll = false;
 
   const askPermission = async (
     tool: ToolInstance,
     args: Record<string, unknown>
   ): Promise<boolean> => {
-    if (autoApproveToolCalls) return true;
+    if (autoApproveToolCalls || sessionAcceptAll) return true;
     const cacheKey = `${tool.name}:${safeJsonStringify(args, 400)}`;
     const cached = permissionCache.get(cacheKey);
     if (cached !== undefined) return cached;
     const preview = safeJsonStringify(args, 800);
     const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
-    const q = `  ${wColor(glyphs().warn)} Allow ${tColor(tool.name)} (${effectLabel})?\n${dim(preview)}\n  ${muted('[y/N]')} `;
+    const q = `  ${wColor(glyphs().warn)} Allow ${tColor(tool.name)} (${effectLabel})?\n${dim(preview)}\n  ${muted('[y/a(ccept all)/N]')} `;
     const answer = (await rl.question(q)).trim().toLowerCase();
+    if (answer === 'a' || answer === 'all' || answer === 'accept all') {
+      sessionAcceptAll = true;
+      return true;
+    }
     const result = answer === 'y' || answer === 'yes';
     permissionCache.set(cacheKey, result);
     return result;
@@ -1230,11 +1237,16 @@ export default async function cmdChat(
       guardrails: getGuardrailsInstance(),
       agentId: seedId,
       requestPermission: async (req) => {
+        if (sessionAcceptAll) return true;
         const cacheKey = `folder_access:${req.path}:${req.operation}`;
         const cached = permissionCache.get(cacheKey);
         if (cached !== undefined) return cached;
-        const q = `  ${wColor(glyphs().warn)} Grant ${req.operation.toUpperCase()} access to ${tColor(req.path)}${req.recursive ? '/**' : ''}?\n  ${dim(`Reason: ${req.reason}`)}\n  ${muted('[y/N]')} `;
+        const q = `  ${wColor(glyphs().warn)} Grant ${req.operation.toUpperCase()} access to ${tColor(req.path)}${req.recursive ? '/**' : ''}?\n  ${dim(`Reason: ${req.reason}`)}\n  ${muted('[y/a(ccept all)/N]')} `;
         const answer = (await rl.question(q)).trim().toLowerCase();
+        if (answer === 'a' || answer === 'all' || answer === 'accept all') {
+          sessionAcceptAll = true;
+          return true;
+        }
         const result = answer === 'y' || answer === 'yes';
         permissionCache.set(cacheKey, result);
         return result;
@@ -1336,6 +1348,7 @@ export default async function cmdChat(
         toolContext,
         maxRounds: 8,
         dangerouslySkipPermissions,
+        stepUpAuthConfig: createStepUpAuthConfigFromTier(policy.securityTier ?? 'balanced'),
         strictToolNames,
         askPermission,
         askCheckpoint,

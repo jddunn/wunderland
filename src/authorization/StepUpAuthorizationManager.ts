@@ -29,6 +29,25 @@ import type {
 } from './types.js';
 
 /**
+ * Well-known safe navigation/read tools that should always be Tier 1 (autonomous),
+ * even if their `hasSideEffects` flag is true (e.g. `change_directory` mutates
+ * process state but poses no security risk).
+ */
+const SAFE_NAVIGATION_TOOLS = new Set([
+  'list_directory',
+  'change_directory',
+  'file_read',
+  'read_file',
+  'file_search',
+  'file_info',
+  'memory_read',
+  'conversation_history',
+  'discover_capabilities',
+  'web_search',
+  'news_search',
+]);
+
+/**
  * Step-Up Authorization Manager.
  *
  * Provides tiered authorization for tool execution with:
@@ -218,6 +237,13 @@ export class StepUpAuthorizationManager {
 
     // Classify based on tool properties
     if (!tool.hasSideEffects) {
+      return ToolRiskTier.TIER_1_AUTONOMOUS;
+    }
+
+    // Well-known safe navigation/read tools — Tier 1 regardless of hasSideEffects flag.
+    // change_directory reports hasSideEffects=true (it mutates process state) but is
+    // functionally read-only from a security standpoint. Same for search/discovery tools.
+    if (SAFE_NAVIGATION_TOOLS.has(tool.id)) {
       return ToolRiskTier.TIER_1_AUTONOMOUS;
     }
 
