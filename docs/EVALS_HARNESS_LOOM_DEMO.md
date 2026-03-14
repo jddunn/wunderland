@@ -202,7 +202,7 @@ Before recording:
 
 **Narration:**
 
-> "Finally, Settings lets you configure which LLM provider to use — OpenAI, Anthropic, or Ollama for local models. All graders that need an LLM use this configuration."
+> "Finally, Settings lets you configure which LLM provider to use — OpenAI, Anthropic, Google Gemini, Ollama for local models, or OpenRouter for unified access to 200+ models. All graders that need an LLM use this configuration."
 
 **UI Steps:**
 
@@ -239,7 +239,7 @@ Before recording:
 | "No graders available"           | Go to Graders tab > Load Preset > seed graders                 |
 | Experiment fails with FK error   | Delete `backend/data/evals.sqlite` and restart backend         |
 | LLM calls fail                   | Check Settings > Test Connection, verify API key               |
-| Slow responses                   | Ollama local models are slower; use OpenAI/Anthropic for demos |
+| Slow responses                   | Ollama local models are slower; use OpenAI/Anthropic/Gemini for demos |
 
 ---
 
@@ -368,7 +368,7 @@ There are **two ways** to add graders, depending on what you need:
 - `BaseGrader` (in `backend/src/eval-engine/base.grader.ts`) — abstract class every grader extends. Defines the `evaluate(evalInput)` interface where `evalInput` includes `{ input, output, expected, context }`.
 - `createGrader()` factory (in `backend/src/eval-engine/index.ts`) — switch statement that maps grader types to implementations. Add your custom type here.
 - `GraderType` union (in `backend/src/graders/grader-loader.service.ts`) — the type enum: `exact-match | llm-judge | semantic-similarity | contains | regex | json-schema | promptfoo`. Extend this for new types.
-- `LlmService` (in `backend/src/llm/llm.service.ts`) — injected into graders that need LLM calls or embeddings. Supports OpenAI, Anthropic, Ollama.
+- `LlmService` (in `backend/src/llm/llm.service.ts`) — injected into graders that need LLM calls or embeddings. Supports OpenAI, Anthropic, Google Gemini, Ollama, and OpenRouter.
 
 **Example: writing a custom retrieval quality grader:**
 

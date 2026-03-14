@@ -13,6 +13,10 @@ import { createEnvSecretResolver } from '../../security/env-secrets.js';
 import { createConfiguredRagTools } from '../../../rag/runtime-tools.js';
 import { createRequestFolderAccessTool } from '../../../tools/RequestFolderAccessTool.js';
 import { HumanInteractionManager, type IChannelAdapter } from '@framers/agentos';
+import {
+  createSpeechExtensionEnvOverrides,
+  getDefaultVoiceExtensions,
+} from '../../../voice/speech-catalog.js';
 
 type ExtensionHttpHandler = (
   req: import('node:http').IncomingMessage,
@@ -123,8 +127,8 @@ export async function loadExtensions(ctx: any): Promise<void> {
       fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`);
     } else {
       // Fall back to hardcoded defaults if no extensions field
-      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search', 'weather', 'skills', 'deep-research', 'github', 'founders'];
-      voiceExtensions = ['voice-synthesis'];
+      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search', 'weather', 'skills', 'deep-research', 'github'];
+      voiceExtensions = getDefaultVoiceExtensions();
       productivityExtensions = [];
       fmt.note('No extensions configured, using defaults...');
     }
@@ -188,7 +192,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
             pixabayApiKey: process.env['PIXABAY_API_KEY'],
           },
         },
-        'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
+        ...createSpeechExtensionEnvOverrides(),
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
         'browser-automation': {
           options: {

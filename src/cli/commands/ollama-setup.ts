@@ -21,6 +21,7 @@ import {
   autoConfigureOllama,
   pullModel,
   detectOllamaInstall,
+  validateModelExists,
   type ModelRecommendation,
   type OllamaAutoConfigResult,
 } from '../ollama/ollama-manager.js';
@@ -88,6 +89,38 @@ async function installOllamaLinux(): Promise<boolean> {
   }
 }
 
+async function installOllamaWindows(): Promise<boolean> {
+  // Try winget first, then fall back to manual download instructions
+  const spinner = createSpinner('Installing Ollama via winget...').start();
+  try {
+    await execFileAsync('where', ['winget']);
+    const child = spawn('winget', ['install', '--id', 'Ollama.Ollama', '--accept-source-agreements', '--accept-package-agreements'], {
+      stdio: 'inherit',
+    });
+    return new Promise((resolve) => {
+      child.on('close', (code) => {
+        if (code === 0) {
+          spinner.success({ text: 'Ollama installed via winget' });
+          resolve(true);
+        } else {
+          spinner.error({ text: 'winget install failed' });
+          note(`Download Ollama manually from ${accent('https://ollama.ai/download/windows')}`);
+          resolve(false);
+        }
+      });
+      child.on('error', () => {
+        spinner.error({ text: 'Could not run winget' });
+        note(`Download Ollama manually from ${accent('https://ollama.ai/download/windows')}`);
+        resolve(false);
+      });
+    });
+  } catch {
+    spinner.error({ text: 'winget not found' });
+    note(`Download Ollama manually from ${accent('https://ollama.ai/download/windows')}`);
+    return false;
+  }
+}
+
 // ── Simple readline prompt (no external dep) ────────────────────────────
 
 async function prompt(question: string): Promise<string> {
@@ -141,15 +174,18 @@ export default async function ollamaSetup(
     warning('Ollama is not installed on this system.');
     const platform = os.platform();
 
-    if (platform === 'darwin' || platform === 'linux') {
+    if (platform === 'darwin' || platform === 'linux' || platform === 'win32') {
+      const methodHint = platform === 'darwin' ? 'via Homebrew' : platform === 'win32' ? 'via winget' : 'via curl';
       const shouldInstall = autoYes || (await prompt(
-        `  Install Ollama automatically? (${platform === 'darwin' ? 'via Homebrew' : 'via curl'}) [Y/n] `
+        `  Install Ollama automatically? (${methodHint}) [Y/n] `
       )).toLowerCase() !== 'n';
 
       if (shouldInstall) {
         const success = platform === 'darwin'
           ? await installOllamaMac()
-          : await installOllamaLinux();
+          : platform === 'win32'
+            ? await installOllamaWindows()
+            : await installOllamaLinux();
 
         if (!success) {
           fail('Could not install Ollama automatically.');
@@ -216,30 +252,44 @@ export default async function ollamaSetup(
   if (missingModels.length > 0 && !skipPull) {
     blank();
     section('Model Download');
-    note(`Need to pull ${missingModels.length} model(s): ${missingModels.map((m) => accent(m)).join(', ')}`);
 
-    const shouldPull = autoYes || (await prompt(
-      '  Download recommended models now? [Y/n] '
-    )).toLowerCase() !== 'n';
-
-    if (shouldPull) {
-      for (const model of missingModels) {
-        blank();
-        const spinner = createSpinner(`Pulling ${accent(model)}...`).start();
-        try {
-          spinner.stop(); // stop spinner before streaming progress
-          note(`Downloading ${accent(model)}...`);
-          await pullModel(model);
-          ok(`${model} ready`);
-        } catch (err) {
-          fail(`Failed to pull ${model}: ${err instanceof Error ? err.message : String(err)}`);
-          note('You can pull it manually later with: ollama pull ' + model);
-        }
+    // Validate models exist in Ollama library before pulling
+    const validatedModels: string[] = [];
+    for (const model of missingModels) {
+      const validation = await validateModelExists(model);
+      if (validation.exists) {
+        validatedModels.push(model);
+      } else {
+        warning(`${model}: ${validation.message} — skipping`);
       }
-    } else {
-      note('Skipping model download. Pull them later with:');
-      for (const m of missingModels) {
-        note(`  ollama pull ${m}`);
+    }
+
+    if (validatedModels.length > 0) {
+      note(`Need to pull ${validatedModels.length} model(s): ${validatedModels.map((m) => accent(m)).join(', ')}`);
+
+      const shouldPull = autoYes || (await prompt(
+        '  Download recommended models now? [Y/n] '
+      )).toLowerCase() !== 'n';
+
+      if (shouldPull) {
+        for (const model of validatedModels) {
+          blank();
+          const spinner = createSpinner(`Pulling ${accent(model)}...`).start();
+          try {
+            spinner.stop(); // stop spinner before streaming progress
+            note(`Downloading ${accent(model)}...`);
+            await pullModel(model);
+            ok(`${model} ready`);
+          } catch (err) {
+            fail(`Failed to pull ${model}: ${err instanceof Error ? err.message : String(err)}`);
+            note('You can pull it manually later with: ollama pull ' + model);
+          }
+        }
+      } else {
+        note('Skipping model download. Pull them later with:');
+        for (const m of validatedModels) {
+          note(`  ollama pull ${m}`);
+        }
       }
     }
   } else if (missingModels.length === 0) {
@@ -251,20 +301,41 @@ export default async function ollamaSetup(
     }
   }
 
-  // Step 5: Update wunderland config to use Ollama
+  // Step 5: Custom base URL
   blank();
   section('Configuration');
 
+  let customBaseUrl: string | undefined;
+  if (!autoYes) {
+    const wantsCustomUrl = (await prompt(
+      '  Use a custom Ollama server URL? (default: http://localhost:11434) [y/N] '
+    )).toLowerCase() === 'y';
+
+    if (wantsCustomUrl) {
+      const url = await prompt('  Ollama server URL: ');
+      if (url) customBaseUrl = url;
+    }
+  }
+
+  // Step 6: Write config
   try {
     await updateConfig(
       {
         llmProvider: 'ollama',
         llmModel: recommendation.primary,
+        ollama: {
+          ...(customBaseUrl ? { baseUrl: customBaseUrl } : {}),
+          numCtx: recommendation.numCtx,
+          numGpu: recommendation.numGpu,
+        },
       },
       globals.config,
     );
     ok(`Default provider set to ${accent('ollama')}`);
     ok(`Default model set to ${accent(recommendation.primary)}`);
+    ok(`Context window: ${accent(String(recommendation.numCtx))}`);
+    ok(`GPU layers: ${accent(recommendation.numGpu === -1 ? 'all' : String(recommendation.numGpu))}`);
+    if (customBaseUrl) ok(`Base URL: ${accent(customBaseUrl)}`);
   } catch (err) {
     warning(`Could not update config: ${err instanceof Error ? err.message : String(err)}`);
     note('You can set it manually: wunderland config set llmProvider ollama');
@@ -279,6 +350,8 @@ export default async function ollamaSetup(
   ok(`Router:  ${accent(recommendation.router)}`);
   ok(`Primary: ${accent(recommendation.primary)}`);
   ok(`Auditor: ${accent(recommendation.auditor)}`);
+  ok(`Context: ${accent(String(recommendation.numCtx))} tokens`);
+  ok(`GPU:     ${accent(recommendation.numGpu === -1 ? 'full offload' : recommendation.numGpu === 0 ? 'CPU only' : `${recommendation.numGpu} layers`)}`);
   ok('Provider configured: ' + sColor('ollama'));
   blank();
   note('Next steps:');
