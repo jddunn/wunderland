@@ -17,6 +17,7 @@ const VIEW_MAP: Record<string, () => Promise<any>> = {
   extensions: () => import('./views/extensions-view.js'),
   status:     () => import('./views/status-view.js'),
   voice:      () => import('./views/voice-view.js'),
+  agents:     () => import('./views/agents-view.js'),
 };
 
 /**
@@ -71,7 +72,7 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
         const ViewClass = viewModule.DoctorView || viewModule.ModelsView
           || viewModule.SkillsView || viewModule.RagView
           || viewModule.ExtensionsView || viewModule.StatusView
-          || viewModule.VoiceView;
+          || viewModule.VoiceView || viewModule.AgentsView;
 
         if (ViewClass) {
           activeView = new ViewClass({
