@@ -63,6 +63,10 @@ import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import { maybeProxyAgentosRagRequest } from '../rag/http-proxy.js';
+import {
+  createSpeechExtensionEnvOverrides,
+  getDefaultVoiceExtensions,
+} from '../voice/speech-catalog.js';
 
 import type {
   WunderlandAdaptiveExecutionConfig,
@@ -740,12 +744,23 @@ export async function createWunderlandServer(opts?: {
   const workspaceBaseDir = opts?.workspace?.baseDir ?? resolveAgentWorkspaceBaseDir();
   const workspaceAgentId = sanitizeAgentWorkspaceId(opts?.workspace?.agentId ?? seedId);
 
+  const ollamaBaseUrl = (() => {
+    if (opts?.llm?.baseUrl) return opts.llm.baseUrl;
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
+    const base = raw || 'http://localhost:11434';
+    const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
+    if (normalized.endsWith('/v1')) return normalized;
+    return `${normalized}/v1`;
+  })();
+
   const llmBaseUrl =
     providerId === 'openrouter'
       ? (opts?.llm?.baseUrl ?? 'https://openrouter.ai/api/v1')
       : providerId === 'ollama'
-        ? (opts?.llm?.baseUrl ?? 'http://localhost:11434/v1')
-        : opts?.llm?.baseUrl;
+        ? ollamaBaseUrl
+        : providerId === 'gemini'
+          ? (opts?.llm?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai/')
+          : opts?.llm?.baseUrl;
 
   const llmApiKey =
     typeof opts?.llm?.apiKey === 'string'
@@ -758,7 +773,9 @@ export async function createWunderlandServer(opts?: {
             ? (process.env['OPENAI_API_KEY'] || '')
             : providerId === 'anthropic'
               ? (process.env['ANTHROPIC_API_KEY'] || '')
-              : (process.env['OPENAI_API_KEY'] || '');
+              : providerId === 'gemini'
+                ? (process.env['GEMINI_API_KEY'] || '')
+                : (process.env['OPENAI_API_KEY'] || '');
 
   const canUseLLM =
     providerId === 'ollama'
@@ -767,7 +784,9 @@ export async function createWunderlandServer(opts?: {
         ? !!openrouterApiKey
         : providerId === 'anthropic'
           ? !!process.env['ANTHROPIC_API_KEY']
-          : !!llmApiKey || !!openrouterFallback;
+          : providerId === 'gemini'
+            ? !!process.env['GEMINI_API_KEY']
+            : !!llmApiKey || !!openrouterFallback;
 
   const openaiFallbackEnabled = providerId === 'openai' && !!openrouterFallback;
   const telemetryConfig: WunderlandTaskOutcomeTelemetryConfig = {
@@ -847,8 +866,8 @@ export async function createWunderlandServer(opts?: {
       voiceExtensions = extensionsFromConfig.voice || [];
       productivityExtensions = extensionsFromConfig.productivity || [];
     } else {
-      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search', 'weather', 'skills', 'deep-research', 'github', 'founders'];
-      voiceExtensions = ['voice-synthesis'];
+      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search', 'weather', 'skills', 'deep-research', 'github'];
+      voiceExtensions = getDefaultVoiceExtensions();
       productivityExtensions = [];
     }
 
@@ -908,7 +927,7 @@ export async function createWunderlandServer(opts?: {
             pixabayApiKey: process.env['PIXABAY_API_KEY'],
           },
         },
-        'voice-synthesis': { options: { elevenLabsApiKey: process.env['ELEVENLABS_API_KEY'] } },
+        ...createSpeechExtensionEnvOverrides(),
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
         'wunderbot-feeds': {
           options: {

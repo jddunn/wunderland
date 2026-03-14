@@ -433,11 +433,20 @@ export default async function cmdChat(
       }
     : undefined;
 
+  const ollamaBaseUrl = (() => {
+    const configBaseUrl = typeof globalConfig?.ollama?.baseUrl === 'string' ? globalConfig.ollama.baseUrl.trim() : '';
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim() || configBaseUrl;
+    const base = raw || 'http://localhost:11434';
+    const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
+    if (normalized.endsWith('/v1')) return normalized;
+    return `${normalized}/v1`;
+  })();
+
   const llmBaseUrl =
     providerId === 'openrouter'
       ? 'https://openrouter.ai/api/v1'
       : providerId === 'ollama'
-        ? 'http://localhost:11434/v1'
+        ? ollamaBaseUrl
         : providerId === 'gemini'
           ? 'https://generativelanguage.googleapis.com/v1beta/openai/'
           : undefined;

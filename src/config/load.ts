@@ -59,9 +59,9 @@ export async function loadAgentConfig(opts: {
 
 export function resolveProviderId(raw: unknown): WunderlandProviderId {
   const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  if (v === 'openai' || v === 'openrouter' || v === 'ollama' || v === 'anthropic') return v;
+  if (v === 'openai' || v === 'openrouter' || v === 'ollama' || v === 'anthropic' || v === 'gemini') return v;
   throw new WunderlandConfigError('Unsupported LLM provider.', [
-    { path: 'llm.providerId', message: `Unsupported providerId "${String(raw)}".`, hint: 'Supported: openai, openrouter, ollama, anthropic.' },
+    { path: 'llm.providerId', message: `Unsupported providerId "${String(raw)}".`, hint: 'Supported: openai, openrouter, ollama, anthropic, gemini.' },
   ]);
 }
 
@@ -91,7 +91,7 @@ export async function resolveLlmConfig(opts: {
 }): Promise<ResolvedLlmConfig> {
   const providerFromConfig = typeof (opts.agentConfig as any).llmProvider === 'string' ? String((opts.agentConfig as any).llmProvider).trim() : '';
   const providerIdRaw = opts.llm?.providerId ?? providerFromConfig ?? 'openai';
-  const providerId = providerIdRaw === 'openai' || providerIdRaw === 'openrouter' || providerIdRaw === 'ollama' || providerIdRaw === 'anthropic'
+  const providerId = providerIdRaw === 'openai' || providerIdRaw === 'openrouter' || providerIdRaw === 'ollama' || providerIdRaw === 'anthropic' || providerIdRaw === 'gemini'
     ? (providerIdRaw as WunderlandProviderId)
     : resolveProviderId(providerIdRaw);
 
@@ -101,12 +101,23 @@ export async function resolveLlmConfig(opts: {
       ? opts.llm.model.trim()
       : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
 
+  const ollamaBaseUrl = (() => {
+    if (opts.llm?.baseUrl) return opts.llm.baseUrl;
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
+    const base = raw || 'http://localhost:11434';
+    const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
+    if (normalized.endsWith('/v1')) return normalized;
+    return `${normalized}/v1`;
+  })();
+
   const baseUrl =
     providerId === 'openrouter'
       ? (opts.llm?.baseUrl ?? 'https://openrouter.ai/api/v1')
       : providerId === 'ollama'
-        ? (opts.llm?.baseUrl ?? 'http://localhost:11434/v1')
-        : opts.llm?.baseUrl;
+        ? ollamaBaseUrl
+        : providerId === 'gemini'
+          ? (opts.llm?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai/')
+          : opts.llm?.baseUrl;
 
   const openrouterApiKey = String(process.env['OPENROUTER_API_KEY'] || '').trim();
 
@@ -136,7 +147,9 @@ export async function resolveLlmConfig(opts: {
           ? 'ollama'
           : providerId === 'anthropic'
             ? String(process.env['ANTHROPIC_API_KEY'] || '')
-            : String(process.env['OPENAI_API_KEY'] || '');
+            : providerId === 'gemini'
+              ? String(process.env['GEMINI_API_KEY'] || '')
+              : String(process.env['OPENAI_API_KEY'] || '');
 
   // For OAuth, we don't require an API key — tokens are resolved dynamically
   let getApiKey: (() => Promise<string>) | undefined;
@@ -161,7 +174,9 @@ export async function resolveLlmConfig(opts: {
           ? !!openrouterApiKey
           : providerId === 'anthropic'
             ? !!process.env['ANTHROPIC_API_KEY']
-            : !!apiKey || !!fallback;
+            : providerId === 'gemini'
+              ? !!process.env['GEMINI_API_KEY']
+              : !!apiKey || !!fallback;
 
   const openaiFallbackEnabled = providerId === 'openai' && !!fallback;
 

@@ -17,10 +17,10 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   const providerFlag = typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
   const providerFromConfig = typeof cfg.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
   const providerId = (flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai')).toLowerCase();
-  if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic']).has(providerId)) {
+  if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic', 'gemini']).has(providerId)) {
     fmt.errorBlock(
       'Unsupported LLM provider',
-      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic`,
+      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic, gemini`,
     );
     process.exitCode = 1;
     return false;
@@ -84,7 +84,9 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   }
 
   const ollamaBaseUrl = (() => {
-    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
+    // Priority: env var > config > default
+    const configBaseUrl = typeof cfg?.ollama?.baseUrl === 'string' ? cfg.ollama.baseUrl.trim() : '';
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim() || configBaseUrl;
     const base = raw || 'http://localhost:11434';
     const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
     if (normalized.endsWith('/v1')) return normalized;
@@ -94,6 +96,7 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   const llmBaseUrl =
     providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
     : providerId === 'ollama' ? ollamaBaseUrl
+    : providerId === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta/openai/'
     : undefined;
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =
@@ -126,6 +129,7 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
       : providerId === 'ollama' ? 'ollama'
       : providerId === 'openai' ? (process.env['OPENAI_API_KEY'] || '')
       : providerId === 'anthropic' ? (process.env['ANTHROPIC_API_KEY'] || '')
+      : providerId === 'gemini' ? (process.env['GEMINI_API_KEY'] || '')
       : (process.env['OPENAI_API_KEY'] || '');
   }
 
@@ -138,7 +142,9 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
           ? !!openrouterApiKey
           : providerId === 'anthropic'
             ? !!process.env['ANTHROPIC_API_KEY']
-            : !!llmApiKey || !!openrouterFallback;
+            : providerId === 'gemini'
+              ? !!process.env['GEMINI_API_KEY']
+              : !!llmApiKey || !!openrouterFallback;
 
   ctx.providerId = providerId;
   ctx.model = model;
