@@ -156,6 +156,7 @@ export class Dashboard {
         'd':       () => { if (this.searchMode) return false; this.onSelect('doctor'); return true; },
         's':       () => { if (this.searchMode) return false; this.onSelect('status'); return true; },
         'v':       () => { if (this.searchMode) return false; this.onSelect('voice'); return true; },
+        'a':       () => { if (this.searchMode) return false; this.onSelect('agents'); return true; },
         'h':       () => { if (this.searchMode) return false; this.openHelp(); return true; },
         'r':       () => { if (this.searchMode) return false; this.refresh(); return true; },
         '1':       () => { if (this.searchMode) return false; this.selectIndex(0); return true; },
