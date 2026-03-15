@@ -613,6 +613,7 @@ export default async function cmdChat(
         'credential-vault',
         'giphy',
         'image-search',
+        'image-generation',
         'news-search',
         'weather',
         'skills',
