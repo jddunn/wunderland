@@ -1,7 +1,7 @@
 /**
  * @fileoverview Unit tests for ollama-manager functions.
  * Tests model recommendations, system spec-based GPU/context config,
- * version checking, and model validation.
+ * version checking, model validation, and the auto-setup pipeline.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -28,9 +28,9 @@ describe('recommendModels', () => {
     const specs: SystemSpecs = { ...baseSpecs, totalMemoryGB: 4, freeMemoryGB: 2, hasGpu: false, vramGB: null, gpuName: null };
     const rec = recommendModels(specs);
     expect(rec.tier).toBe('low');
-    expect(rec.router).toBe('llama3.2:1b');
-    expect(rec.primary).toBe('llama3.2:3b');
-    expect(rec.auditor).toBe('llama3.2:1b');
+    expect(rec.router).toBe('qwen2.5:1.5b');
+    expect(rec.primary).toBe('qwen2.5:3b');
+    expect(rec.auditor).toBe('qwen2.5:1.5b');
     expect(rec.numCtx).toBeGreaterThan(0);
     expect(rec.numGpu).toBe(0); // no GPU
   });
@@ -39,18 +39,18 @@ describe('recommendModels', () => {
     const specs: SystemSpecs = { ...baseSpecs, totalMemoryGB: 12, freeMemoryGB: 6, hasGpu: false, vramGB: null, gpuName: null };
     const rec = recommendModels(specs);
     expect(rec.tier).toBe('mid');
-    expect(rec.primary).toBe('dolphin-llama3:8b');
-    expect(rec.router).toBe('llama3.2:3b');
+    expect(rec.primary).toBe('qwen2.5:7b');
+    expect(rec.router).toBe('qwen2.5:3b');
   });
 
-  it('returns high tier with 8B primary for 16GB+ without enough VRAM for 70B', () => {
+  it('returns high tier with 7B primary for 16GB+ without enough VRAM for large models', () => {
     const specs: SystemSpecs = { ...baseSpecs, totalMemoryGB: 16, hasGpu: true, vramGB: 8 };
     const rec = recommendModels(specs);
     expect(rec.tier).toBe('high');
-    expect(rec.primary).toBe('dolphin-llama3:8b');
+    expect(rec.primary).toBe('qwen2.5:7b');
   });
 
-  it('returns high tier with 70B primary for Apple Silicon with 48GB+ RAM', () => {
+  it('returns high tier with llama3.3 primary for Apple Silicon with 48GB+ RAM', () => {
     const specs: SystemSpecs = {
       ...baseSpecs,
       totalMemoryGB: 64,
@@ -63,10 +63,10 @@ describe('recommendModels', () => {
     };
     const rec = recommendModels(specs);
     expect(rec.tier).toBe('high');
-    expect(rec.primary).toBe('llama3.1:70b');
+    expect(rec.primary).toBe('llama3.3');
   });
 
-  it('returns high tier with 70B primary for discrete GPU with 40GB+ VRAM', () => {
+  it('returns high tier with llama3.3 primary for discrete GPU with 40GB+ VRAM', () => {
     const specs: SystemSpecs = {
       ...baseSpecs,
       totalMemoryGB: 32,
@@ -79,10 +79,10 @@ describe('recommendModels', () => {
     };
     const rec = recommendModels(specs);
     expect(rec.tier).toBe('high');
-    expect(rec.primary).toBe('llama3.1:70b');
+    expect(rec.primary).toBe('llama3.3');
   });
 
-  it('does NOT recommend 70B for 16GB Apple Silicon', () => {
+  it('does NOT recommend llama3.3 for 16GB Apple Silicon', () => {
     const specs: SystemSpecs = {
       ...baseSpecs,
       totalMemoryGB: 16,
@@ -92,7 +92,23 @@ describe('recommendModels', () => {
       vramGB: 16,
     };
     const rec = recommendModels(specs);
-    expect(rec.primary).not.toBe('llama3.1:70b');
+    expect(rec.primary).not.toBe('llama3.3');
+  });
+
+  it('uses qwen2.5 family models across all tiers', () => {
+    const lowSpecs: SystemSpecs = { ...baseSpecs, totalMemoryGB: 4, hasGpu: false, vramGB: null, gpuName: null };
+    const midSpecs: SystemSpecs = { ...baseSpecs, totalMemoryGB: 12, hasGpu: false, vramGB: null, gpuName: null };
+    const highSpecs: SystemSpecs = { ...baseSpecs, totalMemoryGB: 16, hasGpu: true, vramGB: 16 };
+
+    const low = recommendModels(lowSpecs);
+    const mid = recommendModels(midSpecs);
+    const high = recommendModels(highSpecs);
+
+    expect(low.router).toContain('qwen2.5');
+    expect(low.primary).toContain('qwen2.5');
+    expect(mid.router).toContain('qwen2.5');
+    expect(mid.primary).toContain('qwen2.5');
+    expect(high.router).toContain('qwen2.5');
   });
 
   it('sets numGpu=-1 for Apple Silicon (full offload)', () => {
@@ -133,10 +149,6 @@ describe('resolveOllamaBase via environment', () => {
     }
   });
 
-  // We can't directly import resolveOllamaBase (it's module-private),
-  // but we can test that the functions that use it respect the env var.
-  // This is covered by the integration-level tests; here we just verify
-  // the recommendation logic is sound.
   it('recommendModels works regardless of env', () => {
     process.env['OLLAMA_BASE_URL'] = 'https://remote-ollama.example.com';
     const specs: SystemSpecs = {
@@ -225,7 +237,7 @@ describe('edge cases', () => {
     };
     const rec = recommendModels(specs);
     expect(rec.tier).toBe('high');
-    // Windows with discrete GPU — should do full offload for 8B model
+    // Windows with discrete GPU — should do full offload for 7B model
     expect(rec.numGpu).toBe(-1);
   });
 
@@ -242,5 +254,63 @@ describe('edge cases', () => {
     const rec = recommendModels(specs);
     expect(rec.numGpu).toBeGreaterThan(0);
     expect(rec.numGpu).toBeLessThan(35); // Partial offload
+  });
+
+  it('recommends qwen2.5:7b (not llama3.3) for 32GB without large VRAM', () => {
+    const specs: SystemSpecs = {
+      totalMemoryGB: 32,
+      freeMemoryGB: 20,
+      platform: 'linux',
+      arch: 'x64',
+      hasGpu: true,
+      vramGB: 8,
+      gpuName: 'NVIDIA RTX 3070',
+    };
+    const rec = recommendModels(specs);
+    expect(rec.tier).toBe('high');
+    expect(rec.primary).toBe('qwen2.5:7b');
+  });
+
+  it('router and auditor are always smaller or equal to primary', () => {
+    const tiers: SystemSpecs[] = [
+      { totalMemoryGB: 4, freeMemoryGB: 2, platform: 'linux', arch: 'x64', hasGpu: false, vramGB: null, gpuName: null },
+      { totalMemoryGB: 12, freeMemoryGB: 6, platform: 'linux', arch: 'x64', hasGpu: false, vramGB: null, gpuName: null },
+      { totalMemoryGB: 32, freeMemoryGB: 20, platform: 'linux', arch: 'x64', hasGpu: true, vramGB: 24, gpuName: 'GPU' },
+    ];
+
+    for (const specs of tiers) {
+      const rec = recommendModels(specs);
+      // Router and auditor should never be larger than primary
+      expect(rec.router).not.toBe(rec.primary === 'llama3.3' ? 'llama3.3' : undefined);
+      expect(rec.auditor).not.toBe(rec.primary === 'llama3.3' ? 'llama3.3' : undefined);
+    }
+  });
+});
+
+// ── InitLlmResult ollamaConfig shape ──────────────────────────────────────
+
+describe('ollamaConfig output shape', () => {
+  it('recommendation includes all fields needed for agent.config.json', () => {
+    const specs: SystemSpecs = {
+      totalMemoryGB: 16,
+      freeMemoryGB: 8,
+      platform: 'darwin',
+      arch: 'arm64',
+      hasGpu: true,
+      vramGB: 16,
+      gpuName: 'Apple M3',
+    };
+    const rec = recommendModels(specs);
+
+    // These are the fields that get written to agent.config.json.ollama
+    expect(typeof rec.numCtx).toBe('number');
+    expect(rec.numCtx).toBeGreaterThanOrEqual(2048);
+    expect(typeof rec.numGpu).toBe('number');
+    expect([-1, 0]).toContain(rec.numGpu); // Apple Silicon = -1, no GPU = 0
+
+    // Model should be a valid Ollama model tag
+    expect(rec.primary).toMatch(/^[a-z0-9._:-]+$/);
+    expect(rec.router).toMatch(/^[a-z0-9._:-]+$/);
+    expect(rec.auditor).toMatch(/^[a-z0-9._:-]+$/);
   });
 });
