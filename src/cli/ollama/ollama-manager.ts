@@ -439,12 +439,12 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
 
   if (totalMemoryGB < 8) {
     return {
-      router: 'llama3.2:1b',
-      primary: 'llama3.2:3b',
-      auditor: 'llama3.2:1b',
+      router: 'qwen2.5:1.5b',
+      primary: 'qwen2.5:3b',
+      auditor: 'qwen2.5:1.5b',
       tier: 'low',
       reason:
-        `${totalMemoryGB} GB RAM detected - using lightweight 1B/3B models ` +
+        `${totalMemoryGB} GB RAM detected — using lightweight 1.5B/3B models ` +
         'to stay within memory limits.',
       numCtx: recommendNumCtx(specs, '3b'),
       numGpu: recommendNumGpu(specs, '3b'),
@@ -453,12 +453,12 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
 
   if (totalMemoryGB < 16) {
     return {
-      router: 'llama3.2:3b',
-      primary: 'dolphin-llama3:8b',
-      auditor: 'llama3.2:3b',
+      router: 'qwen2.5:3b',
+      primary: 'qwen2.5:7b',
+      auditor: 'qwen2.5:3b',
       tier: 'mid',
       reason:
-        `${totalMemoryGB} GB RAM detected - 8B primary model with 3B ` +
+        `${totalMemoryGB} GB RAM detected — 7B primary model with 3B ` +
         'router/auditor for a balanced local setup.',
       numCtx: recommendNumCtx(specs, '8b'),
       numGpu: recommendNumGpu(specs, '8b'),
@@ -467,19 +467,19 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
 
   // 16 GB+
   const vram = specs.vramGB ?? 0;
-  const canRun70B = hasGpu && (specs.platform === 'darwin' ? totalMemoryGB >= 48 : vram >= 40);
-  const primary = canRun70B ? 'llama3.1:70b' : 'dolphin-llama3:8b';
-  const primarySize = canRun70B ? '70b' : '8b';
-  const gpuNote = canRun70B
-    ? `GPU detected (${specs.gpuName || 'unknown'}) - using 70B primary for maximum quality.`
+  const canRunLarge = hasGpu && (specs.platform === 'darwin' ? totalMemoryGB >= 48 : vram >= 40);
+  const primary = canRunLarge ? 'llama3.3' : 'qwen2.5:7b';
+  const primarySize = canRunLarge ? '70b' : '8b';
+  const gpuNote = canRunLarge
+    ? `GPU detected (${specs.gpuName || 'unknown'}) — using 70B primary for maximum quality.`
     : hasGpu
-      ? `GPU detected but insufficient VRAM (${vram || '?'} GB) for 70B - using 8B primary.`
-      : 'No dedicated GPU - capping at 8B primary to avoid swap pressure.';
+      ? `GPU detected (${specs.gpuName || 'unknown'}, ${vram || '?'} GB VRAM) — using 7B primary.`
+      : 'No dedicated GPU — capping at 7B primary to avoid swap pressure.';
 
   return {
-    router: 'llama3.2:3b',
+    router: 'qwen2.5:3b',
     primary,
-    auditor: 'llama3.2:3b',
+    auditor: 'qwen2.5:3b',
     tier: 'high',
     reason: `${totalMemoryGB} GB RAM detected. ${gpuNote}`,
     numCtx: recommendNumCtx(specs, primarySize),
@@ -660,6 +660,156 @@ export async function autoConfigureOllama(): Promise<OllamaAutoConfigResult> {
     recommendation,
     localModels,
     version: versionInfo.version,
+  };
+}
+
+// ── Zero-friction auto-setup ────────────────────────────────────────────
+
+/**
+ * Run an install command with a spinner. Returns true on success.
+ * @internal
+ */
+async function installWithProgress(cmd: string, cmdArgs: string[], label: string): Promise<boolean> {
+  const spinner = createSpinner(label).start();
+  return new Promise<boolean>((resolve) => {
+    const child = spawn(cmd, cmdArgs, { stdio: 'ignore' });
+    child.on('close', (code) => {
+      if (code === 0) {
+        spinner.success({ text: label.replace('...', ' — done') });
+        resolve(true);
+      } else {
+        spinner.error({ text: label.replace('...', ' — failed') });
+        resolve(false);
+      }
+    });
+    child.on('error', () => {
+      spinner.error({ text: `Could not run ${cmd}` });
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Zero-friction Ollama setup: detects, installs, starts, recommends, and pulls
+ * the best model for this hardware. Returns the provider config ready to write
+ * into agent.config.json. No user interaction required.
+ */
+export async function runOllamaAutoSetup(opts?: {
+  /** Skip model pull (for testing). */
+  skipPull?: boolean;
+  /** Override base URL. */
+  baseUrl?: string;
+}): Promise<{
+  provider: 'ollama';
+  model: string;
+  baseUrl: string;
+  numCtx: number;
+  numGpu: number;
+  recommendation: ModelRecommendation;
+  specs: SystemSpecs;
+  localModels: LocalModel[];
+}> {
+  // Step 1: Detect or install
+  let binaryPath = await detectOllamaInstall();
+
+  if (!binaryPath) {
+    note('Ollama not found — installing automatically...');
+    const platform = os.platform();
+    let installed = false;
+
+    if (platform === 'darwin') {
+      installed = await installWithProgress('brew', ['install', 'ollama'], 'Installing Ollama via Homebrew...');
+    } else if (platform === 'linux') {
+      installed = await installWithProgress('sh', ['-c', 'curl -fsSL https://ollama.ai/install.sh | sh'], 'Installing Ollama...');
+    } else if (platform === 'win32') {
+      installed = await installWithProgress(
+        'winget',
+        ['install', '--id', 'Ollama.Ollama', '--accept-source-agreements', '--accept-package-agreements'],
+        'Installing Ollama via winget...',
+      );
+    }
+
+    if (!installed) {
+      throw new Error('Could not install Ollama automatically. Install from https://ollama.ai/ and retry.');
+    }
+
+    binaryPath = await detectOllamaInstall();
+    if (!binaryPath) {
+      throw new Error('Ollama binary not found after installation. Check your PATH.');
+    }
+    ok('Ollama installed');
+  } else {
+    ok(`Ollama found at ${accent(binaryPath)}`);
+  }
+
+  // Step 2: Version check
+  const versionInfo = await checkOllamaVersion();
+  if (versionInfo.version && !versionInfo.compatible) {
+    warning(versionInfo.message);
+  }
+
+  // Step 3: Start server if needed
+  const running = await isOllamaRunning();
+  if (!running) {
+    await startOllama();
+  } else {
+    ok('Ollama server running');
+  }
+
+  // Step 4: Detect hardware + recommend
+  note('Detecting system specifications...');
+  const specs = await detectSystemSpecs();
+  const recommendation = recommendModels(specs);
+
+  const gpuLabel = specs.hasGpu
+    ? `${specs.gpuName || 'GPU'}${specs.vramGB ? ` (${specs.vramGB} GB)` : ''}`
+    : 'CPU only';
+  ok(`${specs.platform}/${specs.arch} — ${specs.totalMemoryGB} GB RAM — ${gpuLabel}`);
+  ok(`Tier: ${recommendation.tier} — model: ${accent(recommendation.primary)}`);
+
+  // Step 5: Check what's already installed
+  let localModels = await listLocalModels();
+  const installedNames = new Set(localModels.map((m) => m.name));
+
+  // Step 6: Pull missing models (primary is required, router/auditor only if different)
+  const needed = [...new Set([recommendation.primary, recommendation.router, recommendation.auditor])];
+  const missing = needed.filter(
+    (m) => !installedNames.has(m) && !installedNames.has(`${m}:latest`),
+  );
+
+  if (missing.length > 0 && !opts?.skipPull) {
+    for (const model of missing) {
+      note(`Pulling ${accent(model)}...`);
+      try {
+        await pullModel(model);
+        ok(`${model} ready`);
+      } catch (err) {
+        // If pull fails for a non-primary model, warn but continue
+        if (model === recommendation.primary) {
+          throw new Error(
+            `Failed to pull primary model ${model}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        warning(`Could not pull ${model} — continuing without it`);
+      }
+    }
+    // Refresh local models list after pulling
+    localModels = await listLocalModels();
+  } else if (missing.length === 0) {
+    ok('All recommended models already installed');
+  }
+
+  const baseUrl = opts?.baseUrl || resolveOllamaBase();
+
+  return {
+    provider: 'ollama',
+    model: recommendation.primary,
+    baseUrl,
+    numCtx: recommendation.numCtx,
+    numGpu: recommendation.numGpu,
+    recommendation,
+    specs,
+    localModels,
   };
 }
 
