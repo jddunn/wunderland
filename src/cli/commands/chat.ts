@@ -63,6 +63,7 @@ import {
   resolveEffectiveAgentConfig,
 } from '../../config/effective-agent-config.js';
 import { loadConfig } from '../config/config-manager.js';
+import { normalizeExtensionList } from '../extensions/aliases.js';
 import { createConfiguredRagTools } from '../../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
 import { createRequestFolderAccessTool } from '../../tools/RequestFolderAccessTool.js';
@@ -434,7 +435,12 @@ export default async function cmdChat(
     : undefined;
 
   const ollamaBaseUrl = (() => {
-    const configBaseUrl = typeof globalConfig?.ollama?.baseUrl === 'string' ? globalConfig.ollama.baseUrl.trim() : '';
+    const configBaseUrl =
+      typeof cfg?.ollama?.baseUrl === 'string'
+        ? cfg.ollama.baseUrl.trim()
+        : typeof globalConfig?.ollama?.baseUrl === 'string'
+          ? globalConfig.ollama.baseUrl.trim()
+          : '';
     const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim() || configBaseUrl;
     const base = raw || 'http://localhost:11434';
     const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
@@ -546,6 +552,10 @@ export default async function cmdChat(
 
   const toolMap = new Map<string, ToolInstance>();
   const preloadedPackages: string[] = [];
+  let discoveryManager: WunderlandDiscoveryManager | null = null;
+  let schemaOnDemandSecrets: Record<string, string> | undefined;
+  let schemaOnDemandGetSecret: ((secretId: string) => string | undefined) | undefined;
+  let schemaOnDemandOptions: Record<string, Record<string, unknown>> = {};
 
   // Channel adapter instances (populated during extension loading)
   interface ChannelAdapterInstance {
@@ -578,20 +588,9 @@ export default async function cmdChat(
 
   if (!lazyTools) {
     // Read extensions from agent.config.json if present
-    let extensionsFromConfig: any = null;
-    let extensionOverrides: any = null;
-    let configSecrets: any = null;
-    try {
-      const configPath = path.resolve(process.cwd(), 'agent.config.json');
-      if (existsSync(configPath)) {
-        const cfg = JSON.parse(await readFile(configPath, 'utf8'));
-        extensionsFromConfig = cfg.extensions;
-        extensionOverrides = cfg.extensionOverrides;
-        configSecrets = cfg.secrets;
-      }
-    } catch {
-      // ignore
-    }
+    const extensionsFromConfig = cfg?.extensions;
+    const extensionOverrides = cfg?.extensionOverrides;
+    const configSecrets = cfg?.secrets;
     let voiceExtensions: string[] = [];
     let productivityExtensions: string[] = [];
 
@@ -608,9 +607,15 @@ export default async function cmdChat(
     };
     const globalExts = globalConfig?.extensions;
 
-    toolExtensions = extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedDefaults.tools;
-    voiceExtensions = extensionsFromConfig?.voice ?? globalExts?.voice ?? hardcodedDefaults.voice;
-    productivityExtensions = extensionsFromConfig?.productivity ?? globalExts?.productivity ?? hardcodedDefaults.productivity;
+    toolExtensions = normalizeExtensionList(
+      extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedDefaults.tools,
+    );
+    voiceExtensions = normalizeExtensionList(
+      extensionsFromConfig?.voice ?? globalExts?.voice ?? hardcodedDefaults.voice,
+    );
+    productivityExtensions = normalizeExtensionList(
+      extensionsFromConfig?.productivity ?? globalExts?.productivity ?? hardcodedDefaults.productivity,
+    );
 
     if (extensionsFromConfig) {
       fmt.note(
@@ -649,14 +654,14 @@ export default async function cmdChat(
 
     // Auto-include Google Calendar when credentials are available
     if (
-      !productivityExtensions.includes('google-calendar') &&
-      !toolExtensions.includes('google-calendar')
+      !productivityExtensions.includes('calendar-google') &&
+      !toolExtensions.includes('calendar-google')
     ) {
       const gClientId = (process.env['GOOGLE_CLIENT_ID'] || '').trim();
       const gClientSecret = (process.env['GOOGLE_CLIENT_SECRET'] || '').trim();
       const gRefreshToken = (process.env['GOOGLE_REFRESH_TOKEN'] || process.env['GOOGLE_CALENDAR_REFRESH_TOKEN'] || '').trim();
       if (gClientId && gClientSecret && gRefreshToken) {
-        productivityExtensions.push('google-calendar');
+        productivityExtensions.push('calendar-google');
       }
     }
 
@@ -767,6 +772,15 @@ export default async function cmdChat(
         // 409 Conflict errors from competing getUpdates pollers.
         telegram: { options: { sendOnly: true } },
         'channel-telegram': { options: { sendOnly: true } },
+        'calendar-google': {
+          options: {
+            clientId: process.env['GOOGLE_CLIENT_ID'],
+            clientSecret: process.env['GOOGLE_CLIENT_SECRET'],
+            refreshToken:
+              process.env['GOOGLE_REFRESH_TOKEN'] ||
+              process.env['GOOGLE_CALENDAR_REFRESH_TOKEN'],
+          },
+        },
         'wunderbot-feeds': {
           options: {
             feeds: (cfg as any)?.feeds ?? {},
@@ -792,6 +806,16 @@ export default async function cmdChat(
           ? (configSecrets as Record<string, string>)
           : undefined;
       const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
+      schemaOnDemandSecrets = cfgSecrets;
+      schemaOnDemandGetSecret = getSecret;
+      schemaOnDemandOptions = Object.fromEntries(
+        Object.entries(mergedOverrides).map(([name, value]) => [
+          name,
+          value && typeof value === 'object' && !Array.isArray(value) && (value as any).options && typeof (value as any).options === 'object' && !Array.isArray((value as any).options)
+            ? ((value as any).options as Record<string, unknown>)
+            : {},
+        ]),
+      );
       const secrets = new Proxy<Record<string, string>>({} as any, {
         get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
       });
@@ -926,7 +950,13 @@ export default async function cmdChat(
       agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
     },
     initialEnabledPackages: preloadedPackages,
+    secrets: schemaOnDemandSecrets,
+    getSecret: schemaOnDemandGetSecret,
+    defaultExtensionOptions: schemaOnDemandOptions,
     logger: console,
+    onToolsChanged: () => {
+      discoveryManager?.reindex?.({ toolMap }).catch(() => {});
+    },
   })) {
     toolMap.set(tool.name, tool);
   }
@@ -1036,7 +1066,7 @@ export default async function cmdChat(
   }
 
   // Discovery — initialized after skills so skillEntries can be indexed
-  const discoveryManager = new WunderlandDiscoveryManager(discoveryOpts);
+  discoveryManager = new WunderlandDiscoveryManager(discoveryOpts);
   try {
     await discoveryManager.initialize({
       toolMap,
@@ -1457,7 +1487,7 @@ export default async function cmdChat(
 
     // Capability discovery — inject tiered context for this turn
     try {
-      const discoveryResult = await discoveryManager.discoverForTurn(input);
+      const discoveryResult = await discoveryManager?.discoverForTurn(input);
       if (discoveryResult) {
         for (let i = messages.length - 1; i >= 1; i--) {
           if (
@@ -1695,7 +1725,7 @@ export default async function cmdChat(
     }
 
     if (input === '/discover') {
-      const dStats = discoveryManager.getStats();
+      const dStats = discoveryManager?.getStats() ?? { enabled: false, initialized: false, capabilityCount: 0, graphNodes: 0, graphEdges: 0, presetCoOccurrences: 0, manifestDirs: [], recallProfile: 'balanced' };
       const cw = getChatWidth();
       const iw = cw - 2;
       const dLines: string[] = [''];
