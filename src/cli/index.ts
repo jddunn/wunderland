@@ -166,8 +166,9 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
   },
   init: {
     summary: 'Scaffold a new agent project from a preset.',
-    usage: ['wunderland init <dir> [--preset <name>] [--security-tier <tier>] [--provider <id>]'],
-    examples: ['wunderland init my-agent --preset research-assistant', 'wunderland init ops-bot --preset operations-assistant --security-tier strict'],
+    usage: ['wunderland init <dir> [--preset <name>] [--security-tier <tier>] [--local]'],
+    examples: ['wunderland init my-agent --local', 'wunderland init my-agent --preset research-assistant', 'wunderland init ops-bot --preset operations-assistant --security-tier strict'],
+    notes: ['--local: auto-detect hardware, install Ollama, pull best model, scaffold — zero prompts.'],
   },
   create: {
     summary: 'Create an agent config from a natural-language description.',
@@ -197,8 +198,9 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
   },
   chat: {
     summary: 'Run the interactive terminal assistant.',
-    usage: ['wunderland chat [--oauth] [--model <id>] [--auto-approve-tools]'],
-    examples: ['wunderland chat', 'wunderland chat --oauth'],
+    usage: ['wunderland chat [--oauth] [--model <id>] [--auto-approve-tools] [--verbose]'],
+    examples: ['wunderland chat', 'wunderland chat --ollama', 'wunderland chat --verbose'],
+    notes: ['--verbose, -v: show extension activation, discovery debug, and context compaction logs.'],
   },
   start: {
     summary: 'Start the local agent server (launches TUI dashboard by default).',
@@ -281,9 +283,22 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     examples: ['wunderland skills', 'wunderland skills info web-search'],
   },
   extensions: {
-    summary: 'List or inspect installed and available extensions.',
-    usage: ['wunderland extensions [list|info] [options]'],
-    examples: ['wunderland extensions', 'wunderland extensions info web-browser'],
+    summary: 'Manage extensions — list, enable, configure, set provider defaults.',
+    usage: ['wunderland extensions <list|info|enable|disable|configure|set-default> [options]'],
+    examples: [
+      'wunderland extensions list',
+      'wunderland extensions info image-generation',
+      'wunderland extensions enable email-gmail',
+      'wunderland extensions configure',
+      'wunderland extensions configure image-generation',
+      'wunderland extensions set-default image-generation email-gmail',
+    ],
+    notes: [
+      'configure: set global provider defaults (image gen, TTS, STT, web search).',
+      'configure <name>: configure a specific extension (priority, scope).',
+      'set-default: add extensions to global defaults (~/.wunderland/config.json).',
+      'info <name>: shows required API keys with set/not-set status.',
+    ],
   },
   cloud: {
     summary: 'Inspect cloud hosting provider integrations.',
