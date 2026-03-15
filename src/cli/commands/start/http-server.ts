@@ -19,6 +19,7 @@ import {
   extractRequestedPersonaId,
   resolveRequestScopedPersonaRuntime,
 } from '../../../runtime/request-persona.js';
+import { buildOllamaRuntimeOptions } from '../../../runtime/ollama-options.js';
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
@@ -1215,6 +1216,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
               dangerouslySkipPermissions,
               strictToolNames,
               toolFailureMode: adaptiveDecision.toolFailureMode,
+              ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
               onToolCall: () => {
                 toolCallCount += 1;
               },

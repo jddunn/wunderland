@@ -236,6 +236,12 @@ export type WunderlandAgentConfig = {
   llmModel?: string;
   /** Auth method for the LLM provider. 'api-key' (default) or 'oauth' for subscription-based tokens. */
   llmAuthMethod?: 'api-key' | 'oauth';
+  /** Ollama-specific runtime settings. */
+  ollama?: Partial<{
+    baseUrl: string;
+    numCtx: number;
+    numGpu: number;
+  }>;
   /**
    * Tool-call failure behavior:
    * - fail_open: continue after tool failures (default)

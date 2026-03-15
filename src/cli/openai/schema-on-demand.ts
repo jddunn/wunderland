@@ -9,6 +9,7 @@ import { getAvailableExtensions, type ExtensionInfo } from '@framers/agentos-ext
 
 import type { ToolInstance } from './tool-calling.js';
 import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from '../security/runtime-policy.js';
+import { normalizeExtensionName } from '../extensions/aliases.js';
 import { createSpeechExtensionEnvOverrides } from '../../voice/speech-catalog.js';
 
 type ExtensionsListOutput = {
@@ -108,6 +109,9 @@ export function createSchemaOnDemandTools(opts: {
   toolMap: Map<string, ToolInstance>;
   runtimeDefaults: SchemaOnDemandRuntimeDefaults;
   initialEnabledPackages?: string[];
+  secrets?: Record<string, string>;
+  getSecret?: (secretId: string) => string | undefined;
+  defaultExtensionOptions?: Record<string, Record<string, unknown>>;
   /**
    * Allow enabling packs by explicit npm package name (source='package' or refs
    * starting with '@').
@@ -199,7 +203,7 @@ export function createSchemaOnDemandTools(opts: {
     execute: async (args, toolContext): Promise<{ success: boolean; output?: unknown; error?: string }> => {
       const input = (args ?? {}) as Partial<ExtensionsEnableInput>;
 
-      const ref = typeof input.extension === 'string' ? input.extension.trim() : '';
+      const ref = typeof input.extension === 'string' ? normalizeExtensionName(input.extension) : '';
       if (!ref) return { success: false, error: 'Missing required field: extension' };
 
       const source: 'curated' | 'package' = input.source === 'package' ? 'package' : 'curated';
@@ -265,33 +269,80 @@ export function createSchemaOnDemandTools(opts: {
         return { success: true, output: out };
       }
 
-      if (entry && entry.available === false) {
-        return { success: false, error: `Extension package is not installed/available: ${packageName}` };
-      }
-
-      let mod: any;
-      try {
-        mod = await import(packageName);
-      } catch (err: any) {
-        return { success: false, error: `Failed to import ${packageName}: ${err?.message ?? String(err)}` };
-      }
-
-      const factory = getFactory(mod);
-      if (!factory) {
-        return { success: false, error: `Extension ${packageName} does not export createExtensionPack()` };
-      }
-
       const defaults = buildDefaultPackOptions(packageName, opts.runtimeDefaults);
-      const packOptions = { ...defaults, ...(userOptions ?? {}) };
-      const pack = factory({ options: packOptions, logger: log });
+      const extensionDefaults =
+        entry?.name && opts.defaultExtensionOptions?.[entry.name]
+          ? opts.defaultExtensionOptions[entry.name]
+          : undefined;
+      const extensionDefaultOptions =
+        extensionDefaults
+        && typeof extensionDefaults === 'object'
+        && !Array.isArray(extensionDefaults)
+        && extensionDefaults['options']
+        && typeof extensionDefaults['options'] === 'object'
+        && !Array.isArray(extensionDefaults['options'])
+          ? (extensionDefaults['options'] as Record<string, unknown>)
+          : extensionDefaults;
+      const extensionDefaultPriority =
+        extensionDefaults
+        && typeof extensionDefaults === 'object'
+        && !Array.isArray(extensionDefaults)
+        && typeof extensionDefaults['priority'] === 'number'
+          ? (extensionDefaults['priority'] as number)
+          : undefined;
+      const resolvedSecrets = Object.fromEntries(
+        (entry?.requiredSecrets ?? [])
+          .map((secretId) => {
+            const value = opts.getSecret?.(secretId);
+            return value ? [secretId, value] : null;
+          })
+          .filter((pair): pair is [string, string] => Array.isArray(pair)),
+      );
+      const packOptions = {
+        ...((opts.secrets || Object.keys(resolvedSecrets).length > 0)
+          ? { secrets: { ...(opts.secrets ?? {}), ...resolvedSecrets } }
+          : {}),
+        ...defaults,
+        ...(extensionDefaultOptions ?? {}),
+        ...(typeof extensionDefaultPriority === 'number' ? { priority: extensionDefaultPriority } : {}),
+        ...(userOptions ?? {}),
+      };
+
+      let pack: any;
+      if (typeof entry?.createPack === 'function') {
+        pack = await entry.createPack({
+          options: packOptions,
+          logger: log,
+          getSecret: opts.getSecret,
+        });
+      } else {
+        let mod: any;
+        try {
+          mod = await import(packageName);
+        } catch (err: any) {
+          return { success: false, error: `Failed to import ${packageName}: ${err?.message ?? String(err)}` };
+        }
+
+        const factory = getFactory(mod);
+        if (!factory) {
+          return { success: false, error: `Extension ${packageName} does not export createExtensionPack()` };
+        }
+
+        pack = await factory({ options: packOptions, logger: log, getSecret: opts.getSecret });
+      }
 
       try {
-        const packSecrets = buildDefaultPackOptions(packageName, opts.runtimeDefaults);
         await pack?.onActivate?.({
           logger: log,
           getSecret: (key: string) => {
-            const val = packSecrets[key];
-            return typeof val === 'string' ? val : undefined;
+            const fromResolver = opts.getSecret?.(key);
+            if (typeof fromResolver === 'string' && fromResolver.length > 0) return fromResolver;
+            const fromPackSecrets = (packOptions as Record<string, unknown>)?.secrets;
+            if (fromPackSecrets && typeof fromPackSecrets === 'object') {
+              const val = (fromPackSecrets as Record<string, unknown>)[key];
+              return typeof val === 'string' ? val : undefined;
+            }
+            return undefined;
           },
         });
       } catch (err: any) {

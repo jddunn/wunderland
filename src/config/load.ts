@@ -103,7 +103,11 @@ export async function resolveLlmConfig(opts: {
 
   const ollamaBaseUrl = (() => {
     if (opts.llm?.baseUrl) return opts.llm.baseUrl;
-    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
+    const configBaseUrl =
+      typeof (opts.agentConfig as any)?.ollama?.baseUrl === 'string'
+        ? String((opts.agentConfig as any).ollama.baseUrl).trim()
+        : '';
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim() || configBaseUrl;
     const base = raw || 'http://localhost:11434';
     const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
     if (normalized.endsWith('/v1')) return normalized;

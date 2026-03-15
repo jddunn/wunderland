@@ -27,6 +27,7 @@ import {
 } from '../runtime/tool-calling.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
 import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
+import { buildOllamaRuntimeOptions } from '../runtime/ollama-options.js';
 import { planTurnToolDefinitions, type TurnToolSelectionMode } from './turn-tool-selection.js';
 import {
   filterToolMapByPolicy,
@@ -36,6 +37,8 @@ import {
 } from '../runtime/policy.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
+import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
+import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 
 import type {
   WunderlandAdaptiveExecutionConfig,
@@ -203,7 +206,7 @@ export type WunderlandOptions = {
     tools?: string[];
     /** Voice provider extension names (e.g. ['speech-runtime', 'voice-synthesis']). */
     voice?: string[];
-    /** Productivity extension names (e.g. ['google-calendar']). */
+    /** Productivity extension names (e.g. ['calendar-google', 'email-gmail']). */
     productivity?: string[];
     /** Per-extension overrides (enabled, priority, options). */
     overrides?: Record<string, { enabled?: boolean; priority?: number; options?: unknown }>;
@@ -481,8 +484,19 @@ async function resolveExtensionsFromOpts(opts: {
 }): Promise<{
   extensionTools: ITool[];
   extensionNames: string[];
+  mergedOverrides: Record<string, { enabled?: boolean; priority?: number; options?: unknown }>;
+  cfgSecrets?: Record<string, string>;
+  getSecret: (secretId: string) => string | undefined;
+  secrets: Record<string, string>;
 }> {
-  const empty = { extensionTools: [], extensionNames: [] as string[] };
+  const cfgSecrets =
+    opts.agentConfig?.secrets && typeof opts.agentConfig.secrets === 'object' && !Array.isArray(opts.agentConfig.secrets)
+      ? (opts.agentConfig.secrets as Record<string, string>)
+      : undefined;
+  const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
+  const secrets = new Proxy<Record<string, string>>({} as any, {
+    get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
+  });
   const extOpt = opts.extensions;
   const configExt = opts.agentConfig?.extensions;
 
@@ -490,9 +504,17 @@ async function resolveExtensionsFromOpts(opts: {
   let toolExts = [...(configExt?.tools ?? [])];
   let voiceExts = [...(configExt?.voice ?? [])];
   let prodExts = [...(configExt?.productivity ?? [])];
-  const overrides = {
-    ...(opts.agentConfig?.extensionOverrides ?? {}),
-    ...(extOpt?.overrides ?? {}),
+  const overrides = mergeExtensionOverrides(
+    (opts.agentConfig?.extensionOverrides as Record<string, any> | undefined) ?? {},
+    (extOpt?.overrides as Record<string, any> | undefined) ?? {},
+  );
+  const empty = {
+    extensionTools: [],
+    extensionNames: [] as string[],
+    mergedOverrides: {} as Record<string, { enabled?: boolean; priority?: number; options?: unknown }>,
+    cfgSecrets,
+    getSecret,
+    secrets: secrets as Record<string, string>,
   };
 
   const mergeDedup = (target: string[], source: string[] | undefined) => {
@@ -505,67 +527,52 @@ async function resolveExtensionsFromOpts(opts: {
   mergeDedup(voiceExts, extOpt?.voice);
   mergeDedup(prodExts, extOpt?.productivity);
 
+  const envOverrides: Record<string, { options: Record<string, string | undefined> }> = {
+    'web-search': {
+      options: {
+        serperApiKey: process.env['SERPER_API_KEY'],
+        serpApiKey: process.env['SERPAPI_API_KEY'],
+        braveApiKey: process.env['BRAVE_API_KEY'],
+      },
+    },
+    'web-browser': {
+      options: {
+        headless: 'true',
+        executablePath:
+          process.env['PUPPETEER_EXECUTABLE_PATH'] ||
+          process.env['CHROME_EXECUTABLE_PATH'] ||
+          process.env['CHROME_PATH'] || '',
+      },
+    },
+    giphy: { options: { giphyApiKey: process.env['GIPHY_API_KEY'] || '' } },
+    'image-search': {
+      options: {
+        pexelsApiKey: process.env['PEXELS_API_KEY'],
+        unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
+        pixabayApiKey: process.env['PIXABAY_API_KEY'],
+      },
+    },
+    ...createSpeechExtensionEnvOverrides(),
+    'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] || '' } },
+  };
+  const mergedOverrides: Record<string, any> = mergeExtensionOverrides(
+    envOverrides as Record<string, any>,
+    overrides as Record<string, any>,
+  );
+
   if (toolExts.length === 0 && voiceExts.length === 0 && prodExts.length === 0) {
-    return empty;
+    return {
+      ...empty,
+      mergedOverrides,
+    };
   }
 
   try {
     const { resolveExtensionsByNames } = await import('../core/PresetExtensionResolver.js');
 
-    // Auto-map env vars to extension options so library users get the same behavior as the CLI.
-    // Extension factories read from options first, then getSecret(), then process.env as last resort.
-    // Passing them explicitly via overrides ensures they're available at factory creation time.
-    const envOverrides: Record<string, { options: Record<string, string | undefined> }> = {
-      'web-search': {
-        options: {
-          serperApiKey: process.env['SERPER_API_KEY'],
-          serpApiKey: process.env['SERPAPI_API_KEY'],
-          braveApiKey: process.env['BRAVE_API_KEY'],
-        },
-      },
-      'web-browser': {
-        options: {
-          headless: 'true',
-          executablePath:
-            process.env['PUPPETEER_EXECUTABLE_PATH'] ||
-            process.env['CHROME_EXECUTABLE_PATH'] ||
-            process.env['CHROME_PATH'] || '',
-        },
-      },
-      giphy: { options: { giphyApiKey: process.env['GIPHY_API_KEY'] || '' } },
-      'image-search': {
-        options: {
-          pexelsApiKey: process.env['PEXELS_API_KEY'],
-          unsplashApiKey: process.env['UNSPLASH_ACCESS_KEY'],
-          pixabayApiKey: process.env['PIXABAY_API_KEY'],
-        },
-      },
-      ...createSpeechExtensionEnvOverrides(),
-      'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] || '' } },
-    };
-
-    // Merge env overrides with user-provided overrides (user takes precedence)
-    const mergedOverrides: Record<string, any> = {};
-    for (const [name, envOvr] of Object.entries(envOverrides)) {
-      const userOvr = overrides?.[name];
-      if (userOvr) {
-        mergedOverrides[name] = {
-          ...envOvr,
-          ...userOvr,
-          options: { ...(envOvr as any).options, ...((userOvr as any).options ?? {}) },
-        };
-      } else {
-        mergedOverrides[name] = envOvr;
-      }
-    }
-    // Include any user overrides for extensions not in envOverrides
-    if (overrides) {
-      for (const [name, ovr] of Object.entries(overrides)) {
-        if (!mergedOverrides[name]) mergedOverrides[name] = ovr;
-      }
-    }
-
-    const result = await resolveExtensionsByNames(toolExts, voiceExts, prodExts, mergedOverrides);
+    const result = await resolveExtensionsByNames(toolExts, voiceExts, prodExts, mergedOverrides, {
+      secrets: secrets as any,
+    });
 
     if (result.missing.length > 0) {
       opts.logger.warn?.(`[wunderland] Some extensions not available: ${result.missing.join(', ')}`);
@@ -607,12 +614,22 @@ async function resolveExtensionsFromOpts(opts: {
       }
     }
 
-    return { extensionTools: tools, extensionNames: names };
+    return {
+      extensionTools: tools,
+      extensionNames: names,
+      mergedOverrides,
+      cfgSecrets,
+      getSecret,
+      secrets: secrets as Record<string, string>,
+    };
   } catch (err) {
     opts.logger.warn?.('[wunderland] Failed to resolve extensions (continuing without)', {
       error: err instanceof Error ? err.message : String(err),
     });
-    return empty;
+    return {
+      ...empty,
+      mergedOverrides,
+    };
   }
 }
 
@@ -722,7 +739,12 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   });
 
   // Resolve named extensions → add their tools to toolMap
-  const { extensionTools } = await resolveExtensionsFromOpts({
+  const {
+    extensionTools,
+    mergedOverrides: extensionOverrides,
+    getSecret: extensionGetSecret,
+    secrets: extensionSecrets,
+  } = await resolveExtensionsFromOpts({
     extensions: opts.extensions,
     agentConfig,
     logger,
@@ -786,6 +808,9 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
           agentWorkspace: { agentId: workspace.agentId, baseDir: workspace.baseDir },
         },
         logger,
+        secrets: extensionSecrets as any,
+        getSecret: extensionGetSecret,
+        defaultExtensionOptions: extensionOverrides as Record<string, Record<string, unknown>>,
         onToolsChanged: () => {
           // Best-effort re-index discovery with newly-loaded tools
           discoveryManager.reindex?.({ toolMap }).catch(() => {});
@@ -1048,6 +1073,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
           toolFailureMode: adaptiveDecision.toolFailureMode,
           getToolDefs: getTurnToolDefs,
           baseUrl: llm.baseUrl,
+          ollamaOptions: buildOllamaRuntimeOptions(agentConfig.ollama),
           fallback: llm.fallback,
           getApiKey: llm.getApiKey,
           onFallback: () => {
