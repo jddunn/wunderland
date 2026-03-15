@@ -192,6 +192,23 @@ export interface WunderlandAgentRagConfig {
   exposeMemoryRead?: boolean;
   /** Expose the explicit rag_query tool. Default: true when rag.enabled=true. */
   exposeRagQuery?: boolean;
+  /**
+   * HyDE (Hypothetical Document Embedding) configuration.
+   * Generates a hypothetical answer before embedding for improved retrieval.
+   * Adds one LLM call per retrieval but significantly improves match quality.
+   */
+  hyde?: {
+    /** Enable HyDE. Default: true (can be disabled per-agent). */
+    enabled?: boolean;
+    /** Initial similarity threshold for adaptive search. Default: 0.7. */
+    initialThreshold?: number;
+    /** Minimum threshold to step down to. Default: 0.3. */
+    minThreshold?: number;
+    /** Step size for adaptive thresholding. Default: 0.1. */
+    thresholdStep?: number;
+    /** Use adaptive thresholding (auto-lower when no results). Default: true. */
+    adaptiveThreshold?: boolean;
+  };
 }
 
 export interface WunderlandAgentPersonaRegistryConfig {
