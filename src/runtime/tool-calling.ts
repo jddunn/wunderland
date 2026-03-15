@@ -831,6 +831,14 @@ export async function runToolCallingTurn(opts: {
     toolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }>;
   }) => Promise<boolean>;
   onToolCall?: (tool: ToolInstance, args: Record<string, unknown>) => void;
+  /** Called after each tool execution with the result. Use for logging, learning, metrics. */
+  onToolResult?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    success: boolean;
+    error?: string;
+    durationMs: number;
+  }) => void;
   /** Optional pre-configured authorization manager. Created automatically if not provided. */
   authorizationManager?: StepUpAuthorizationManager;
   /** Override the API base URL for the primary provider. */
@@ -841,6 +849,8 @@ export async function runToolCallingTurn(opts: {
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
   /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
   getApiKey?: () => string | Promise<string>;
+  /** Native Ollama request options such as num_ctx / num_gpu. */
+  ollamaOptions?: Record<string, unknown>;
   /** Tool-call failure behavior. Default: fail_open. */
   toolFailureMode?: 'fail_open' | 'fail_closed';
   /** Enforce strict OpenAI-compatible function names and fail on rewrites/collisions. */
@@ -891,6 +901,18 @@ export async function runToolCallingTurn(opts: {
     throw new Error(`Unsupported providerId "${providerIdRaw}". Supported: openai, openrouter, ollama, anthropic, gemini.`);
   }
   const providerId = providerIdParsed ?? 'openai';
+  const ollamaProviderPromise =
+    providerId === 'ollama'
+      ? (async () => {
+          const { OllamaProvider } = await import('@framers/agentos/core/llm/providers/implementations/OllamaProvider');
+          const provider = new OllamaProvider();
+          await provider.initialize({
+            baseUrl: opts.baseUrl || 'http://localhost:11434',
+            defaultModelId: opts.model,
+          });
+          return provider;
+        })()
+      : null;
 
   for (let round = 0; round < rounds; round += 1) {
     const roundToolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> = [];
@@ -976,6 +998,35 @@ export async function runToolCallingTurn(opts: {
         let fallbackProvider = '';
 
         const invoke = async () => {
+          if (providerId === 'ollama') {
+            const provider = await ollamaProviderPromise!;
+            const result = await provider.generateCompletion(
+              opts.model,
+              opts.messages as any,
+              {
+                temperature: 0.2,
+                maxTokens: 1400,
+                tools: toolDefs,
+                customModelParams: opts.ollamaOptions,
+              },
+            );
+            const message = result.choices?.[0]?.message;
+            if (!message) {
+              throw new Error('Ollama returned an empty response.');
+            }
+            return {
+              message,
+              model: result.modelId || opts.model,
+              usage: {
+                prompt_tokens: result.usage?.promptTokens,
+                completion_tokens: result.usage?.completionTokens,
+                total_tokens: result.usage?.totalTokens,
+                costUSD: result.usage?.costUSD,
+              },
+              provider: 'Ollama',
+            };
+          }
+
           if (providerId === 'anthropic') {
             const anthropicApiKey = await resolveApiKeyInput(
               opts.getApiKey ? opts.getApiKey : opts.apiKey,
@@ -1323,6 +1374,12 @@ export async function runToolCallingTurn(opts: {
               attributes: { tool_name: toolName, duration_ms: durationMs, round },
             });
             const errMsg = err instanceof Error ? err.message : String(err);
+            // Fire onToolResult for thrown errors
+            if (opts.onToolResult) {
+              try {
+                opts.onToolResult({ toolName, args, success: false, error: errMsg, durationMs });
+              } catch { /* ignore */ }
+            }
             // Enrich with API key guidance when available
             let apiKeyGuidance: string | undefined;
             try {
@@ -1353,6 +1410,19 @@ export async function runToolCallingTurn(opts: {
             severity: SeverityNumber.INFO,
             attributes: { tool_name: toolName, success: result?.success === true, duration_ms: durationMs, round },
           });
+
+          // Fire onToolResult callback
+          if (opts.onToolResult) {
+            try {
+              opts.onToolResult({
+                toolName,
+                args,
+                success: result?.success === true,
+                error: result?.success ? undefined : (result?.error || 'Tool failed'),
+                durationMs,
+              });
+            } catch { /* ignore callback errors */ }
+          }
 
           let payload: unknown;
           if (result?.success) {
