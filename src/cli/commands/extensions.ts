@@ -10,6 +10,7 @@ import type { GlobalFlags } from '../types.js';
 import { accent, dim, muted, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
+import { normalizeExtensionName } from '../extensions/aliases.js';
 
 // ── Extension search scoring ────────────────────────────────────────────────
 
@@ -117,7 +118,8 @@ async function getRegistryExtensionByName(name: string): Promise<any | null> {
   try {
     const { getAvailableExtensions } = await import('@framers/agentos-extensions-registry');
     const available = await getAvailableExtensions();
-    const ext = available.find((e) => e.name === name);
+    const canonical = normalizeExtensionName(name);
+    const ext = available.find((e) => e.name === canonical);
     return ext || null;
   } catch {
     return null;
@@ -125,7 +127,8 @@ async function getRegistryExtensionByName(name: string): Promise<any | null> {
 }
 
 async function enableExtension(name: string): Promise<void> {
-  const ext = await getRegistryExtensionByName(name);
+  const canonicalName = normalizeExtensionName(name);
+  const ext = await getRegistryExtensionByName(canonicalName);
   if (!ext) {
     fmt.errorBlock('Extension not found', `No extension named "${name}" in the registry.\nRun ${accent('wunderland extensions list')} to see available extensions.`);
     process.exitCode = 1;
@@ -169,20 +172,21 @@ async function enableExtension(name: string): Promise<void> {
   }
 
   const current = ensureStringArray(extensions[bucket]);
-  if (current.includes(name)) {
-    fmt.warning(`Extension "${name}" is already enabled.`);
+  if (current.includes(canonicalName)) {
+    fmt.warning(`Extension "${canonicalName}" is already enabled.`);
     return;
   }
 
-  extensions[bucket] = [...current, name];
+  extensions[bucket] = [...current, canonicalName];
   config.extensions = extensions;
   await saveAgentConfig(configPath, config);
 
-  fmt.ok(`Enabled extension ${accent(ext.displayName || name)} (${name})`);
+  fmt.ok(`Enabled extension ${accent(ext.displayName || canonicalName)} (${canonicalName})`);
   fmt.blank();
 }
 
 async function disableExtension(name: string): Promise<void> {
+  const canonicalName = normalizeExtensionName(name);
   const sealedPath = path.join(process.cwd(), 'sealed.json');
   if (existsSync(sealedPath)) {
     fmt.errorBlock(
@@ -206,7 +210,7 @@ async function disableExtension(name: string): Promise<void> {
   let changed = false;
   for (const bucket of ['tools', 'voice', 'productivity'] as const) {
     const arr = ensureStringArray(extensions[bucket]);
-    const next = arr.filter((x) => x !== name);
+    const next = arr.filter((x) => x !== canonicalName);
     if (next.length !== arr.length) {
       extensions[bucket] = next;
       changed = true;
@@ -214,14 +218,14 @@ async function disableExtension(name: string): Promise<void> {
   }
 
   if (!changed) {
-    fmt.warning(`Extension "${name}" is not enabled in this agent.`);
+    fmt.warning(`Extension "${canonicalName}" is not enabled in this agent.`);
     return;
   }
 
   config.extensions = extensions;
   await saveAgentConfig(configPath, config);
 
-  fmt.ok(`Disabled extension ${accent(name)}`);
+  fmt.ok(`Disabled extension ${accent(canonicalName)}`);
   fmt.blank();
 }
 
@@ -388,10 +392,11 @@ async function showExtensionInfo(
   try {
     const { getAvailableExtensions } = await import('@framers/agentos-extensions-registry');
     const available = await getAvailableExtensions();
-    const ext = available.find((e) => e.name === name);
+    const canonicalName = normalizeExtensionName(name);
+    const ext = available.find((e) => e.name === canonicalName);
 
     if (!ext) {
-      fmt.errorBlock('Extension not found', `No extension named "${name}" in the registry.`);
+      fmt.errorBlock('Extension not found', `No extension named "${canonicalName}" in the registry.`);
       process.exitCode = 1;
       return;
     }
@@ -495,9 +500,10 @@ async function configureProviderDefaults(globals: GlobalFlags): Promise<void> {
 }
 
 async function configureExtension(name: string, globals: GlobalFlags): Promise<void> {
-  const ext = await getRegistryExtensionByName(name);
+  const canonicalName = normalizeExtensionName(name);
+  const ext = await getRegistryExtensionByName(canonicalName);
   if (!ext) {
-    fmt.errorBlock('Extension not found', `No extension named "${name}".`);
+    fmt.errorBlock('Extension not found', `No extension named "${canonicalName}".`);
     process.exitCode = 1;
     return;
   }
@@ -546,9 +552,9 @@ async function configureExtension(name: string, globals: GlobalFlags): Promise<v
     const { loadConfig, updateConfig } = await import('../config/config-manager.js');
     const config = await loadConfig(globals.config);
     const overrides = ((config as any).extensionOverrides ?? {}) as Record<string, any>;
-    overrides[name] = { ...overrides[name], ...override };
+    overrides[canonicalName] = { ...overrides[canonicalName], ...override };
     await updateConfig({ extensionOverrides: overrides } as any, globals.config);
-    fmt.ok(`Saved ${name} config to global settings.`);
+    fmt.ok(`Saved ${canonicalName} config to global settings.`);
   } else {
     const result = await loadAgentConfig(process.cwd());
     if (!result) {
@@ -556,10 +562,10 @@ async function configureExtension(name: string, globals: GlobalFlags): Promise<v
       return;
     }
     const overrides = (result.config.extensionOverrides ?? {}) as Record<string, any>;
-    overrides[name] = { ...overrides[name], ...override };
+    overrides[canonicalName] = { ...overrides[canonicalName], ...override };
     result.config.extensionOverrides = overrides;
     await saveAgentConfig(result.configPath, result.config);
-    fmt.ok(`Saved ${name} config to agent settings.`);
+    fmt.ok(`Saved ${canonicalName} config to agent settings.`);
   }
 }
 
@@ -575,20 +581,21 @@ async function setDefaultExtensions(names: string[], globals: GlobalFlags): Prom
   const existing = (config.extensions ?? { tools: [], voice: [], productivity: [] }) as Record<string, string[]>;
 
   for (const name of names) {
-    const ext = await getRegistryExtensionByName(name);
+    const canonicalName = normalizeExtensionName(name);
+    const ext = await getRegistryExtensionByName(canonicalName);
     if (!ext) {
-      fmt.warning(`Extension "${name}" not found in registry — skipping.`);
+      fmt.warning(`Extension "${canonicalName}" not found in registry — skipping.`);
       continue;
     }
     const bucket = resolveConfigBucketForCategory(String(ext.category || 'tool'));
     if (!bucket) continue;
     const arr = existing[bucket] ?? [];
-    if (!arr.includes(name)) {
-      arr.push(name);
+    if (!arr.includes(canonicalName)) {
+      arr.push(canonicalName);
       existing[bucket] = arr;
-      fmt.ok(`Added ${accent(name)} to global default ${bucket}`);
+      fmt.ok(`Added ${accent(canonicalName)} to global default ${bucket}`);
     } else {
-      fmt.note(`${name} already in global defaults.`);
+      fmt.note(`${canonicalName} already in global defaults.`);
     }
   }
 
