@@ -13,6 +13,7 @@ import {
   safeJsonStringify,
   type ToolInstance,
 } from '../../openai/tool-calling.js';
+import { buildOllamaRuntimeOptions } from '../../../runtime/ollama-options.js';
 import * as fmt from '../../ui/format.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -416,6 +417,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
         dangerouslySkipPermissions,
         strictToolNames,
         toolFailureMode: adaptiveDecision.toolFailureMode,
+        ollamaOptions: buildOllamaRuntimeOptions(ctx.cfg?.ollama),
         onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
           toolCallCount += 1;
           if (!explain) return;
