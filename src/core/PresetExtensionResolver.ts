@@ -125,7 +125,7 @@ export async function resolveExtensionsByNames(
     // Filter to only available extensions
     const validTools = tools.filter((name) => {
       if (!availableNames.has(name)) {
-        console.warn(
+        console.debug(
           `[extensions] Extension "${name}" not available in registry, skipping`,
         );
         return false;
@@ -135,7 +135,7 @@ export async function resolveExtensionsByNames(
 
     const validVoice = voice.filter((name) => {
       if (!availableNames.has(name)) {
-        console.warn(
+        console.debug(
           `[extensions] Extension "${name}" not available in registry, skipping`,
         );
         return false;
@@ -145,7 +145,7 @@ export async function resolveExtensionsByNames(
 
     const validProd = productivity.filter((name) => {
       if (!availableNames.has(name)) {
-        console.warn(
+        console.debug(
           `[extensions] Extension "${name}" not available in registry, skipping`,
         );
         return false;
