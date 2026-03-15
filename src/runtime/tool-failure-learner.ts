@@ -23,12 +23,12 @@ interface FailurePattern {
 const FAILURE_PATTERNS: FailurePattern[] = [
   {
     match: /captcha|bot.detect|access.denied|403|cloudflare|blocked/i,
-    lesson: 'blocks headless browsers (anti-bot). Use web_search with site: filter instead of browser_navigate.',
+    lesson: 'blocks headless browsers (anti-bot). Use web_search with site: filter, or load stealth-browser and use stealth_navigate instead of browser_navigate.',
     tags: ['browser', 'anti-bot'],
   },
   {
     match: /empty.*(content|page|result)|no.*results?.*found|returned.*empty/i,
-    lesson: 'returned empty content — may block headless browsers. Use web_search as fallback.',
+    lesson: 'returned empty content — may block headless browsers. Use web_search as fallback, or try stealth_navigate if stealth-browser is available.',
     tags: ['browser', 'empty-result'],
   },
   {
@@ -78,7 +78,8 @@ export class ToolFailureLearner {
   private conversationId: string;
   private verbose: boolean;
   private savedLessons = new Set<string>();
-  private pendingLessons: string[] = [];
+  private queuedLessons = new Set<string>();
+  private pendingLessons: Array<{ dedupKey: string; lesson: string }> = [];
 
   constructor(config: ToolFailureLearnerConfig) {
     this.pipeline = config.autoIngestPipeline;
@@ -100,9 +101,9 @@ export class ToolFailureLearner {
     if (!pattern) return; // Unknown error — skip
 
     // Dedup: don't save the same lesson for the same tool twice per session
-    const dedupKey = `${record.toolName}:${pattern.tags[0]}`;
-    if (this.savedLessons.has(dedupKey)) return;
-    this.savedLessons.add(dedupKey);
+    const dedupKey = `${record.toolName}:${pattern.match.source}`;
+    if (this.savedLessons.has(dedupKey) || this.queuedLessons.has(dedupKey)) return;
+    this.queuedLessons.add(dedupKey);
 
     // Extract site/URL from args for context
     const url = (record.args as any)?.url || (record.args as any)?.query || '';
@@ -110,7 +111,7 @@ export class ToolFailureLearner {
     const siteContext = site ? ` (${site})` : '';
 
     const lesson = `[Tool Lesson] "${record.toolName}"${siteContext} ${pattern.lesson}`;
-    this.pendingLessons.push(lesson);
+    this.pendingLessons.push({ dedupKey, lesson });
 
     if (this.verbose) {
       console.debug(`[ToolFailureLearner] Queued: ${lesson}`);
@@ -126,7 +127,7 @@ export class ToolFailureLearner {
     if (!this.pipeline || this.pendingLessons.length === 0) return 0;
 
     const lessons = this.pendingLessons.splice(0);
-    const combined = lessons.join('\n');
+    const combined = lessons.map((entry) => entry.lesson).join('\n');
 
     try {
       await this.pipeline.processConversationTurn(
@@ -134,12 +135,17 @@ export class ToolFailureLearner {
         '[System: Recording tool usage lessons for future reference]',
         combined,
       );
+      for (const entry of lessons) {
+        this.queuedLessons.delete(entry.dedupKey);
+        this.savedLessons.add(entry.dedupKey);
+      }
       if (this.verbose) {
         console.debug(`[ToolFailureLearner] Flushed ${lessons.length} lesson(s) to RAG`);
       }
       return lessons.length;
     } catch {
       // Non-fatal — learning is best-effort
+      this.pendingLessons.unshift(...lessons);
       return 0;
     }
   }
