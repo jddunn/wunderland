@@ -35,6 +35,23 @@ export interface CliConfig {
     voice?: string[];
     productivity?: string[];
   };
+  /** Default provider preferences per capability category (global). */
+  providerDefaults?: {
+    /** Image generation provider: 'openai' (DALL-E) | 'stability'. */
+    imageGeneration?: string;
+    /** Text-to-speech provider: 'openai' | 'elevenlabs'. */
+    tts?: string;
+    /** Speech-to-text provider: 'openai' | 'deepgram'. */
+    stt?: string;
+    /** Web search provider: 'serper' | 'brave' | 'duckduckgo'. */
+    webSearch?: string;
+  };
+  /** Global extension overrides (merged under agent-level overrides). */
+  extensionOverrides?: Record<string, {
+    enabled?: boolean;
+    priority?: number;
+    options?: Record<string, unknown>;
+  }>;
   /** Selected skills (from extensions wizard). */
   skills?: string[];
   /** Security settings. */

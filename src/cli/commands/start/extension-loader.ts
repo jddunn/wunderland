@@ -120,26 +120,52 @@ export async function loadExtensions(ctx: any): Promise<void> {
     let voiceExtensions: string[] = [];
     let productivityExtensions: string[] = [];
 
+    // Merge: agent config > global config > hardcoded defaults
+    const { loadConfig } = await import('../../config/config-manager.js');
+    const globalConfig = await loadConfig();
+    const globalExts = globalConfig?.extensions;
+    const hardcodedTools = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'image-generation', 'news-search', 'weather', 'skills', 'deep-research', 'github'];
+
+    toolExtensions = extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedTools;
+    voiceExtensions = extensionsFromConfig?.voice ?? globalExts?.voice ?? getDefaultVoiceExtensions();
+    productivityExtensions = extensionsFromConfig?.productivity ?? globalExts?.productivity ?? [];
+
     if (extensionsFromConfig) {
-      // Load from config if present
-      toolExtensions = extensionsFromConfig.tools || [];
-      voiceExtensions = extensionsFromConfig.voice || [];
-      productivityExtensions = extensionsFromConfig.productivity || [];
-      fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`);
+      fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from agent config...`);
+    } else if (globalExts) {
+      fmt.note('Loading extensions from global config...');
     } else {
-      // Fall back to hardcoded defaults if no extensions field
-      toolExtensions = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'news-search', 'weather', 'skills', 'deep-research', 'github'];
-      voiceExtensions = getDefaultVoiceExtensions();
-      productivityExtensions = [];
       fmt.note('No extensions configured, using defaults...');
     }
 
     // Resolve extensions to manifests using PresetExtensionResolver
     try {
       const { resolveExtensionsByNames } = await import('../../../core/PresetExtensionResolver.js');
-      const configOverrides = (cfg?.extensionOverrides && typeof cfg.extensionOverrides === 'object')
+      // Merge overrides: global < agent (agent wins)
+      const globalOverrides = (globalConfig?.extensionOverrides && typeof globalConfig.extensionOverrides === 'object')
+        ? (globalConfig.extensionOverrides as Record<string, any>)
+        : {};
+      const agentOverrides = (cfg?.extensionOverrides && typeof cfg.extensionOverrides === 'object')
         ? (cfg.extensionOverrides as Record<string, any>)
         : {};
+      const configOverrides: Record<string, any> = { ...globalOverrides, ...agentOverrides };
+
+      // Apply global provider defaults
+      const providerDefaults = globalConfig?.providerDefaults;
+      if (providerDefaults) {
+        if (providerDefaults.imageGeneration && !configOverrides['image-generation']?.options?.defaultProvider) {
+          configOverrides['image-generation'] = {
+            ...configOverrides['image-generation'],
+            options: { ...configOverrides['image-generation']?.options, defaultProvider: providerDefaults.imageGeneration },
+          };
+        }
+        if (providerDefaults.webSearch && !configOverrides['web-search']?.options?.defaultProvider) {
+          configOverrides['web-search'] = {
+            ...configOverrides['web-search'],
+            options: { ...configOverrides['web-search']?.options, defaultProvider: providerDefaults.webSearch },
+          };
+        }
+      }
 
       // Build filesystem roots: agent workspace + user's home directory + cwd.
       // Without explicit roots, the cli-executor defaults to [workspaceDir] only,

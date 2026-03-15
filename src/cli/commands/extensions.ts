@@ -70,6 +70,18 @@ export default async function cmdExtensions(
     return showExtensionInfo(args[1], flags);
   }
 
+  if (subcommand === 'configure') {
+    const name = args[1];
+    if (!name) {
+      return configureProviderDefaults(_globals);
+    }
+    return configureExtension(name, _globals);
+  }
+
+  if (subcommand === 'set-default') {
+    return setDefaultExtensions(args.slice(1), _globals);
+  }
+
   if (subcommand === 'enable' || subcommand === 'disable') {
     const name = args[1];
     if (!name) {
@@ -396,9 +408,190 @@ async function showExtensionInfo(
       fmt.kvPair('Required Secrets', ext.requiredSecrets.join(', '));
     }
 
+    const envVars = (ext as any).envVars as string[] | undefined;
+    const docsUrl = (ext as any).docsUrl as string | undefined;
+    if (envVars && envVars.length > 0) {
+      fmt.blank();
+      fmt.note(accent('API Keys / Environment Variables:'));
+      for (const envVar of envVars) {
+        const value = process.env[envVar];
+        const status = value ? sColor(`${g.ok} set`) : wColor(`${g.fail} not set`);
+        fmt.kvPair(`  ${envVar}`, status);
+      }
+      if (docsUrl) {
+        fmt.note(`  Get keys: ${accent(docsUrl)}`);
+      }
+    }
+
     fmt.blank();
   } catch (err) {
     fmt.errorBlock('Extensions registry not available', 'Install @framers/agentos-extensions-registry to use this command.');
     process.exitCode = 1;
   }
+}
+
+// ── Provider defaults configuration ────────────────────────────────────
+
+async function configureProviderDefaults(globals: GlobalFlags): Promise<void> {
+  const p = await import('@clack/prompts');
+  const { loadConfig, updateConfig } = await import('../config/config-manager.js');
+  const config = await loadConfig(globals.config);
+  const current = config.providerDefaults ?? {};
+
+  fmt.section('Provider Defaults (Global)');
+  fmt.note('These preferences apply to all agents unless overridden per-agent.');
+  fmt.blank();
+
+  const imageGen = await p.select({
+    message: 'Image generation provider:',
+    options: [
+      { value: 'openai', label: 'OpenAI (DALL-E 3)', hint: current.imageGeneration === 'openai' ? 'current' : undefined },
+      { value: 'stability', label: 'Stability AI (SDXL)', hint: current.imageGeneration === 'stability' ? 'current' : undefined },
+      { value: '_none', label: 'No preference (auto-detect)' },
+    ],
+  });
+  if (p.isCancel(imageGen)) return;
+
+  const tts = await p.select({
+    message: 'Text-to-speech provider:',
+    options: [
+      { value: 'openai', label: 'OpenAI TTS', hint: current.tts === 'openai' ? 'current' : undefined },
+      { value: 'elevenlabs', label: 'ElevenLabs', hint: current.tts === 'elevenlabs' ? 'current' : undefined },
+      { value: '_none', label: 'No preference' },
+    ],
+  });
+  if (p.isCancel(tts)) return;
+
+  const stt = await p.select({
+    message: 'Speech-to-text provider:',
+    options: [
+      { value: 'openai', label: 'OpenAI Whisper', hint: current.stt === 'openai' ? 'current' : undefined },
+      { value: 'deepgram', label: 'Deepgram', hint: current.stt === 'deepgram' ? 'current' : undefined },
+      { value: '_none', label: 'No preference' },
+    ],
+  });
+  if (p.isCancel(stt)) return;
+
+  const webSearch = await p.select({
+    message: 'Web search provider:',
+    options: [
+      { value: 'serper', label: 'Serper (Google)', hint: current.webSearch === 'serper' ? 'current' : undefined },
+      { value: 'brave', label: 'Brave Search', hint: current.webSearch === 'brave' ? 'current' : undefined },
+      { value: 'duckduckgo', label: 'DuckDuckGo', hint: current.webSearch === 'duckduckgo' ? 'current' : undefined },
+      { value: '_none', label: 'No preference' },
+    ],
+  });
+  if (p.isCancel(webSearch)) return;
+
+  const providerDefaults: Record<string, string> = {};
+  if (imageGen && imageGen !== '_none') providerDefaults.imageGeneration = imageGen as string;
+  if (tts && tts !== '_none') providerDefaults.tts = tts as string;
+  if (stt && stt !== '_none') providerDefaults.stt = stt as string;
+  if (webSearch && webSearch !== '_none') providerDefaults.webSearch = webSearch as string;
+
+  await updateConfig({ providerDefaults } as any, globals.config);
+  fmt.blank();
+  fmt.ok('Provider defaults saved to global config (~/.wunderland/config.json).');
+}
+
+async function configureExtension(name: string, globals: GlobalFlags): Promise<void> {
+  const ext = await getRegistryExtensionByName(name);
+  if (!ext) {
+    fmt.errorBlock('Extension not found', `No extension named "${name}".`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const g = glyphs();
+  fmt.section(`Configure: ${ext.displayName}`);
+  fmt.kvPair('Description', ext.description);
+
+  const extEnvVars = (ext as any).envVars as string[] | undefined;
+  const extDocsUrl = (ext as any).docsUrl as string | undefined;
+  if (extEnvVars && extEnvVars.length > 0) {
+    fmt.blank();
+    fmt.note(accent('Required API Keys:'));
+    for (const envVar of extEnvVars) {
+      const value = process.env[envVar];
+      const status = value ? sColor(`${g.ok} set`) : wColor(`${g.fail} not set`);
+      fmt.kvPair(`  ${envVar}`, status);
+    }
+    if (extDocsUrl) {
+      fmt.note(`  Get keys: ${accent(extDocsUrl)}`);
+    }
+  }
+
+  fmt.blank();
+  const p = await import('@clack/prompts');
+  const scope = await p.select({
+    message: 'Save configuration to:',
+    options: [
+      { value: 'global', label: 'Global (~/.wunderland/config.json)', hint: 'applies to all agents' },
+      { value: 'agent', label: 'This agent (agent.config.json)', hint: 'this agent only' },
+    ],
+  });
+  if (p.isCancel(scope)) return;
+
+  const priority = await p.text({
+    message: `Priority (default: ${ext.defaultPriority}):`,
+    placeholder: String(ext.defaultPriority),
+    validate: (v: string) => (v && isNaN(Number(v)) ? 'Must be a number' : undefined),
+  });
+  if (p.isCancel(priority)) return;
+
+  const override: Record<string, unknown> = {};
+  if (priority && String(priority).trim()) override.priority = Number(priority);
+
+  if (scope === 'global') {
+    const { loadConfig, updateConfig } = await import('../config/config-manager.js');
+    const config = await loadConfig(globals.config);
+    const overrides = ((config as any).extensionOverrides ?? {}) as Record<string, any>;
+    overrides[name] = { ...overrides[name], ...override };
+    await updateConfig({ extensionOverrides: overrides } as any, globals.config);
+    fmt.ok(`Saved ${name} config to global settings.`);
+  } else {
+    const result = await loadAgentConfig(process.cwd());
+    if (!result) {
+      fmt.errorBlock('No agent config', `Run from an agent directory or use ${accent('wunderland init')}.`);
+      return;
+    }
+    const overrides = (result.config.extensionOverrides ?? {}) as Record<string, any>;
+    overrides[name] = { ...overrides[name], ...override };
+    result.config.extensionOverrides = overrides;
+    await saveAgentConfig(result.configPath, result.config);
+    fmt.ok(`Saved ${name} config to agent settings.`);
+  }
+}
+
+async function setDefaultExtensions(names: string[], globals: GlobalFlags): Promise<void> {
+  if (names.length === 0) {
+    fmt.errorBlock('Missing extension names', 'Usage: wunderland extensions set-default <name1> <name2> ...');
+    process.exitCode = 1;
+    return;
+  }
+
+  const { loadConfig, updateConfig } = await import('../config/config-manager.js');
+  const config = await loadConfig(globals.config);
+  const existing = (config.extensions ?? { tools: [], voice: [], productivity: [] }) as Record<string, string[]>;
+
+  for (const name of names) {
+    const ext = await getRegistryExtensionByName(name);
+    if (!ext) {
+      fmt.warning(`Extension "${name}" not found in registry — skipping.`);
+      continue;
+    }
+    const bucket = resolveConfigBucketForCategory(String(ext.category || 'tool'));
+    if (!bucket) continue;
+    const arr = existing[bucket] ?? [];
+    if (!arr.includes(name)) {
+      arr.push(name);
+      existing[bucket] = arr;
+      fmt.ok(`Added ${accent(name)} to global default ${bucket}`);
+    } else {
+      fmt.note(`${name} already in global defaults.`);
+    }
+  }
+
+  await updateConfig({ extensions: existing } as any, globals.config);
+  fmt.ok('Global default extensions updated.');
 }
