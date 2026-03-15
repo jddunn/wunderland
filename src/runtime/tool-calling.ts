@@ -56,6 +56,9 @@ const tracer = trace.getTracer('wunderland.runtime');
  */
 const TOOL_FALLBACK_MAP: Record<string, string[]> = {
   'web_search': ['browser_navigate', 'news_search', 'research_aggregate'],
+  'browser_navigate': ['stealth_navigate', 'web_search', 'research_aggregate'],
+  'browser_scrape': ['stealth_scrape', 'web_search'],
+  'stealth_navigate': ['web_search', 'research_aggregate'],
   'news_search': ['web_search', 'browser_navigate'],
   'research_aggregate': ['web_search', 'browser_navigate', 'deep_research'],
   'deep_research': ['research_aggregate', 'researchInvestigate', 'web_search'],
