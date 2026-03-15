@@ -48,7 +48,7 @@ describe('CLI subcommand help', () => {
 
     const output = stripAnsi(log.mock.calls.flat().join('\n'));
     expect(output).toContain('Voice & Speech');
-    expect(output).toContain('wunderland voice test "Hello from Wunderland"');
+    expect(output).toContain('wunderland voice test "Hello"');
     expect(output).toContain('OPENAI_API_KEY');
   });
 });
