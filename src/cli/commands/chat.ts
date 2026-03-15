@@ -35,6 +35,7 @@ import {
   type LLMProviderConfig,
 } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
+import { ToolFailureLearner } from '../../runtime/tool-failure-learner.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
 import { resolveStrictToolNames } from '../../runtime/tool-function-names.js';
@@ -64,8 +65,10 @@ import {
 } from '../../config/effective-agent-config.js';
 import { loadConfig } from '../config/config-manager.js';
 import { normalizeExtensionList } from '../extensions/aliases.js';
+import { mergeExtensionOverrides } from '../extensions/settings.js';
 import { createConfiguredRagTools } from '../../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
+import { buildOllamaRuntimeOptions } from '../../runtime/ollama-options.js';
 import { createRequestFolderAccessTool } from '../../tools/RequestFolderAccessTool.js';
 import {
   AgentStorageManager,
@@ -591,6 +594,11 @@ export default async function cmdChat(
     const extensionsFromConfig = cfg?.extensions;
     const extensionOverrides = cfg?.extensionOverrides;
     const configSecrets = cfg?.secrets;
+    const cfgSecrets =
+      configSecrets && typeof configSecrets === 'object' && !Array.isArray(configSecrets)
+        ? (configSecrets as Record<string, string>)
+        : undefined;
+    const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
     let voiceExtensions: string[] = [];
     let productivityExtensions: string[] = [];
 
@@ -644,9 +652,9 @@ export default async function cmdChat(
       !productivityExtensions.includes('email-gmail') &&
       !toolExtensions.includes('email-gmail')
     ) {
-      const gClientId = (process.env['GOOGLE_CLIENT_ID'] || process.env['GMAIL_CLIENT_ID'] || '').trim();
-      const gClientSecret = (process.env['GOOGLE_CLIENT_SECRET'] || process.env['GMAIL_CLIENT_SECRET'] || '').trim();
-      const gRefreshToken = (process.env['GOOGLE_REFRESH_TOKEN'] || process.env['GMAIL_REFRESH_TOKEN'] || '').trim();
+      const gClientId = (getSecret('google.clientId') || '').trim();
+      const gClientSecret = (getSecret('google.clientSecret') || '').trim();
+      const gRefreshToken = (getSecret('google.refreshToken') || '').trim();
       if (gClientId && gClientSecret && gRefreshToken) {
         productivityExtensions.push('email-gmail');
       }
@@ -657,9 +665,9 @@ export default async function cmdChat(
       !productivityExtensions.includes('calendar-google') &&
       !toolExtensions.includes('calendar-google')
     ) {
-      const gClientId = (process.env['GOOGLE_CLIENT_ID'] || '').trim();
-      const gClientSecret = (process.env['GOOGLE_CLIENT_SECRET'] || '').trim();
-      const gRefreshToken = (process.env['GOOGLE_REFRESH_TOKEN'] || process.env['GOOGLE_CALENDAR_REFRESH_TOKEN'] || '').trim();
+      const gClientId = (getSecret('google.clientId') || '').trim();
+      const gClientSecret = (getSecret('google.clientSecret') || '').trim();
+      const gRefreshToken = (getSecret('google.refreshToken') || '').trim();
       if (gClientId && gClientSecret && gRefreshToken) {
         productivityExtensions.push('calendar-google');
       }
@@ -695,7 +703,7 @@ export default async function cmdChat(
       const agentOverrides = (extensionOverrides && typeof extensionOverrides === 'object')
         ? (extensionOverrides as Record<string, any>)
         : {};
-      const configOverrides: Record<string, any> = { ...globalOverrides, ...agentOverrides };
+      const configOverrides: Record<string, any> = mergeExtensionOverrides(globalOverrides, agentOverrides);
 
       // Apply global provider defaults into extension options
       const providerDefaults = globalConfig?.providerDefaults;
@@ -801,18 +809,13 @@ export default async function cmdChat(
         mergedOverrides[name] = mergeOverride(configOverrides[name], override);
       }
 
-      const cfgSecrets =
-        configSecrets && typeof configSecrets === 'object' && !Array.isArray(configSecrets)
-          ? (configSecrets as Record<string, string>)
-          : undefined;
-      const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
       schemaOnDemandSecrets = cfgSecrets;
       schemaOnDemandGetSecret = getSecret;
       schemaOnDemandOptions = Object.fromEntries(
         Object.entries(mergedOverrides).map(([name, value]) => [
           name,
-          value && typeof value === 'object' && !Array.isArray(value) && (value as any).options && typeof (value as any).options === 'object' && !Array.isArray((value as any).options)
-            ? ((value as any).options as Record<string, unknown>)
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
             : {},
         ]),
       );
@@ -1175,11 +1178,18 @@ export default async function cmdChat(
     autoIngestPipeline = pipeline;
   } catch (err) {
     // Non-fatal — chat works without storage
-    console.warn(
+    console.debug(
       '[wunderland/chat] Per-agent storage init failed:',
       err instanceof Error ? err.message : err
     );
   }
+
+  // ── Tool failure learner (saves lessons to RAG from tool errors) ─────────
+  const toolFailureLearner = new ToolFailureLearner({
+    autoIngestPipeline: autoIngestPipeline ?? undefined,
+    conversationId: `cli-${seedId}`,
+    verbose,
+  });
 
   // ── Infinite context window manager ────────────────────────────────────────
   let contextWindowManager: ContextWindowManager | undefined;
@@ -1553,6 +1563,7 @@ export default async function cmdChat(
         askCheckpoint,
         toolFailureMode: adaptiveDecision.toolFailureMode,
         baseUrl: llmBaseUrl,
+        ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
         fallback: providerId === 'openai' ? openrouterFallback : undefined,
         getApiKey: oauthGetApiKey,
         onFallback: (_err, provider) => {
@@ -1566,6 +1577,16 @@ export default async function cmdChat(
           console.log(
             `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)('>')} ${chalk.hex(C.magenta)(tool.name)} ${chalk.hex(C.dim)(truncateString(JSON.stringify(args), 120))}`
           );
+        },
+        onToolResult: (info) => {
+          if (!info.success && info.error) {
+            toolFailureLearner.recordFailure({
+              toolName: info.toolName,
+              args: info.args,
+              error: info.error,
+              timestamp: new Date().toISOString(),
+            });
+          }
         },
       });
     } catch (error) {
@@ -1613,6 +1634,9 @@ export default async function cmdChat(
       if (autoIngestPipeline) {
         autoIngestPipeline.processConversationTurn(conversationId, input, reply).catch(() => {});
       }
+
+      // Flush tool failure lessons to RAG (non-blocking)
+      toolFailureLearner.flush().catch(() => {});
 
       // Persist conversation turns to per-agent storage (non-blocking)
       if (memoryAdapter) {
