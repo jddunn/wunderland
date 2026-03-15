@@ -595,33 +595,30 @@ export default async function cmdChat(
     let voiceExtensions: string[] = [];
     let productivityExtensions: string[] = [];
 
+    // Merge extension lists: agent config > global config > hardcoded defaults
+    const hardcodedDefaults = {
+      tools: [
+        'cli-executor', 'web-search', 'web-browser', 'browser-automation',
+        'content-extraction', 'credential-vault', 'giphy', 'image-search',
+        'image-generation', 'news-search', 'weather', 'skills',
+        'deep-research', 'github',
+      ],
+      voice: getDefaultVoiceExtensions(),
+      productivity: [] as string[],
+    };
+    const globalExts = globalConfig?.extensions;
+
+    toolExtensions = extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedDefaults.tools;
+    voiceExtensions = extensionsFromConfig?.voice ?? globalExts?.voice ?? hardcodedDefaults.voice;
+    productivityExtensions = extensionsFromConfig?.productivity ?? globalExts?.productivity ?? hardcodedDefaults.productivity;
+
     if (extensionsFromConfig) {
-      toolExtensions = extensionsFromConfig.tools || [];
-      voiceExtensions = extensionsFromConfig.voice || [];
-      productivityExtensions = extensionsFromConfig.productivity || [];
       fmt.note(
-        `Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from config...`
+        `Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from agent config...`
       );
+    } else if (globalExts) {
+      fmt.note('Loading extensions from global config...');
     } else {
-      // Fall back to hardcoded defaults
-      toolExtensions = [
-        'cli-executor',
-        'web-search',
-        'web-browser',
-        'browser-automation',
-        'content-extraction',
-        'credential-vault',
-        'giphy',
-        'image-search',
-        'image-generation',
-        'news-search',
-        'weather',
-        'skills',
-        'deep-research',
-        'github',
-      ];
-      voiceExtensions = getDefaultVoiceExtensions();
-      productivityExtensions = [];
       fmt.note('No extensions configured, using defaults...');
     }
 
@@ -686,10 +683,31 @@ export default async function cmdChat(
     // Resolve extensions using PresetExtensionResolver
     try {
       const { resolveExtensionsByNames } = await import('../../core/PresetExtensionResolver.js');
-      const configOverrides =
-        extensionOverrides && typeof extensionOverrides === 'object'
-          ? (extensionOverrides as Record<string, any>)
-          : {};
+      // Merge overrides: global config < agent config (agent wins)
+      const globalOverrides = (globalConfig?.extensionOverrides && typeof globalConfig.extensionOverrides === 'object')
+        ? (globalConfig.extensionOverrides as Record<string, any>)
+        : {};
+      const agentOverrides = (extensionOverrides && typeof extensionOverrides === 'object')
+        ? (extensionOverrides as Record<string, any>)
+        : {};
+      const configOverrides: Record<string, any> = { ...globalOverrides, ...agentOverrides };
+
+      // Apply global provider defaults into extension options
+      const providerDefaults = globalConfig?.providerDefaults;
+      if (providerDefaults) {
+        if (providerDefaults.imageGeneration && !configOverrides['image-generation']?.options?.defaultProvider) {
+          configOverrides['image-generation'] = {
+            ...configOverrides['image-generation'],
+            options: { ...configOverrides['image-generation']?.options, defaultProvider: providerDefaults.imageGeneration },
+          };
+        }
+        if (providerDefaults.webSearch && !configOverrides['web-search']?.options?.defaultProvider) {
+          configOverrides['web-search'] = {
+            ...configOverrides['web-search'],
+            options: { ...configOverrides['web-search']?.options, defaultProvider: providerDefaults.webSearch },
+          };
+        }
+      }
 
       // Build filesystem roots: agent workspace + user's home directory + cwd.
       // Without explicit roots, the cli-executor defaults to [workspaceDir] only,
