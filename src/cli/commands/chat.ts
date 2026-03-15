@@ -564,12 +564,15 @@ export default async function cmdChat(
   const origLog = console.log;
   const origInfo = console.info;
   const origWarn = console.warn;
+  const origDebug = console.debug;
   const captureLog = (...args: unknown[]) => {
     startupLines.push(args.map(String).join(' '));
   };
+  const suppressLog = () => {}; // swallow debug during startup
   console.log = captureLog as typeof console.log;
   console.info = captureLog as typeof console.info;
   console.warn = captureLog as typeof console.warn;
+  console.debug = suppressLog as typeof console.debug;
 
   let toolExtensions: string[] = [];
 
@@ -630,6 +633,32 @@ export default async function cmdChat(
         fmt.warning(
           'TELEGRAM_BOT_TOKEN looks invalid (expected format: 123456:ABC-DEF...) — skipping Telegram extension'
         );
+      }
+    }
+
+    // Auto-include Gmail extension when Google OAuth credentials are available
+    if (
+      !productivityExtensions.includes('email-gmail') &&
+      !toolExtensions.includes('email-gmail')
+    ) {
+      const gClientId = (process.env['GOOGLE_CLIENT_ID'] || process.env['GMAIL_CLIENT_ID'] || '').trim();
+      const gClientSecret = (process.env['GOOGLE_CLIENT_SECRET'] || process.env['GMAIL_CLIENT_SECRET'] || '').trim();
+      const gRefreshToken = (process.env['GOOGLE_REFRESH_TOKEN'] || process.env['GMAIL_REFRESH_TOKEN'] || '').trim();
+      if (gClientId && gClientSecret && gRefreshToken) {
+        productivityExtensions.push('email-gmail');
+      }
+    }
+
+    // Auto-include Google Calendar when credentials are available
+    if (
+      !productivityExtensions.includes('google-calendar') &&
+      !toolExtensions.includes('google-calendar')
+    ) {
+      const gClientId = (process.env['GOOGLE_CLIENT_ID'] || '').trim();
+      const gClientSecret = (process.env['GOOGLE_CLIENT_SECRET'] || '').trim();
+      const gRefreshToken = (process.env['GOOGLE_REFRESH_TOKEN'] || process.env['GOOGLE_CALENDAR_REFRESH_TOKEN'] || '').trim();
+      if (gClientId && gClientSecret && gRefreshToken) {
+        productivityExtensions.push('google-calendar');
       }
     }
 
@@ -1213,7 +1242,8 @@ export default async function cmdChat(
   console.log = origLog;
   console.info = origInfo;
   console.warn = origWarn;
-  if (startupLines.length > 0) {
+  console.debug = origDebug;
+  if (verbose && startupLines.length > 0) {
     const { stripAnsi } = await import('../ui/ansi-utils.js');
     const filtered = startupLines.filter((l) => stripAnsi(l).trim().length > 0);
     if (filtered.length > 0) {
