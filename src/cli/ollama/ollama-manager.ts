@@ -20,19 +20,34 @@ const execFileAsync = promisify(execFile);
 
 /** Default Ollama API base URL. */
 const OLLAMA_DEFAULT_BASE = 'http://localhost:11434';
+const OLLAMA_DEFAULT_EMBEDDING_MODEL = 'nomic-embed-text';
 
 /**
  * Resolve the Ollama API base URL from environment or config.
  * Priority: OLLAMA_BASE_URL env var > default (localhost:11434).
  */
-function resolveOllamaBase(): string {
-  const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
-  if (raw) {
-    const normalized = raw.endsWith('/') ? raw.slice(0, -1) : raw;
-    // Strip /v1 suffix if present — ollama-manager uses /api/* endpoints, not /v1
-    return normalized.replace(/\/v1$/, '');
+export function normalizeOllamaBaseUrl(baseUrl?: string): string {
+  const raw = String(baseUrl ?? process.env['OLLAMA_BASE_URL'] ?? '').trim();
+  const normalized = (raw || OLLAMA_DEFAULT_BASE).replace(/\/+$/, '');
+  return normalized.replace(/\/v1$/, '');
+}
+
+function resolveOllamaBase(baseUrl?: string): string {
+  return normalizeOllamaBaseUrl(baseUrl);
+}
+
+export function isLocalOllamaBaseUrl(baseUrl?: string): boolean {
+  try {
+    const url = new URL(resolveOllamaBase(baseUrl));
+    return (
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname === '0.0.0.0' ||
+      url.hostname === '::1'
+    );
+  } catch {
+    return true;
   }
-  return OLLAMA_DEFAULT_BASE;
 }
 
 /** Timeout for Ollama API health checks (ms). */
@@ -177,13 +192,13 @@ export async function checkOllamaVersion(): Promise<{
  * Uses the Ollama API show endpoint for locally installed models,
  * or tries a HEAD request to the library for remote models.
  */
-export async function validateModelExists(modelId: string): Promise<{
+export async function validateModelExists(modelId: string, baseUrl?: string): Promise<{
   exists: boolean;
   local: boolean;
   message: string;
 }> {
   // Check if already installed locally
-  const localModels = await listLocalModels();
+  const localModels = await listLocalModels(baseUrl);
   const localMatch = localModels.find((m) =>
     m.name === modelId || m.name === `${modelId}:latest` || m.name.startsWith(`${modelId}:`),
   );
@@ -195,7 +210,7 @@ export async function validateModelExists(modelId: string): Promise<{
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10_000);
-    const res = await fetch(`${resolveOllamaBase()}/api/show`, {
+    const res = await fetch(`${resolveOllamaBase(baseUrl)}/api/show`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: modelId }),
@@ -217,11 +232,11 @@ export async function validateModelExists(modelId: string): Promise<{
  * Ping the local Ollama server to determine if it is running and responsive.
  * @returns `true` if the server responds successfully.
  */
-export async function isOllamaRunning(): Promise<boolean> {
+export async function isOllamaRunning(baseUrl?: string): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-    const res = await fetch(`${resolveOllamaBase()}/api/tags`, {
+    const res = await fetch(`${resolveOllamaBase(baseUrl)}/api/tags`, {
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -239,7 +254,12 @@ export async function isOllamaRunning(): Promise<boolean> {
  * responsive before resolving.
  * @throws If the server does not become reachable within the timeout.
  */
-export async function startOllama(): Promise<void> {
+export async function startOllama(baseUrl?: string): Promise<void> {
+  const targetBaseUrl = resolveOllamaBase(baseUrl);
+  if (!isLocalOllamaBaseUrl(targetBaseUrl)) {
+    throw new Error(`Refusing to auto-start a non-local Ollama target: ${targetBaseUrl}`);
+  }
+
   const spinner = createSpinner('Starting Ollama server...').start();
 
   const child = spawn('ollama', ['serve'], {
@@ -253,7 +273,7 @@ export async function startOllama(): Promise<void> {
   // Poll until the server is ready or we time out.
   const deadline = Date.now() + SERVER_STARTUP_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const ready = await isOllamaRunning();
+    const ready = await isOllamaRunning(targetBaseUrl);
     if (ready) {
       spinner.success({ text: 'Ollama server is running' });
       return;
@@ -487,6 +507,23 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
   };
 }
 
+/**
+ * Compute the full set of Ollama models required for a recommended local stack.
+ * Includes the small embedding model used by discovery/RAG in the CLI runtime.
+ */
+export function getRequiredOllamaModels(
+  recommendation: Pick<ModelRecommendation, 'primary' | 'router' | 'auditor'>,
+): string[] {
+  return [
+    ...new Set([
+      recommendation.primary,
+      recommendation.router,
+      recommendation.auditor,
+      OLLAMA_DEFAULT_EMBEDDING_MODEL,
+    ]),
+  ];
+}
+
 // ── Model management ───────────────────────────────────────────────────────
 
 /**
@@ -495,7 +532,27 @@ export function recommendModels(specs: SystemSpecs): ModelRecommendation {
  * @returns Resolves when the pull completes successfully.
  * @throws If the pull process exits with a non-zero code.
  */
-export async function pullModel(modelId: string): Promise<void> {
+async function pullModelViaApi(modelId: string, baseUrl?: string): Promise<void> {
+  const res = await fetch(`${resolveOllamaBase(baseUrl)}/api/pull`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: modelId, stream: false }),
+  });
+  if (!res.ok) {
+    throw new Error(`Remote Ollama pull failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+  }
+  const body = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (body?.error) {
+    throw new Error(body.error);
+  }
+}
+
+export async function pullModel(modelId: string, baseUrl?: string): Promise<void> {
+  if (!isLocalOllamaBaseUrl(baseUrl)) {
+    await pullModelViaApi(modelId, baseUrl);
+    return;
+  }
+
   return new Promise<void>((resolve, reject) => {
     const child = spawn('ollama', ['pull', modelId], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -538,11 +595,11 @@ export async function pullModel(modelId: string): Promise<void> {
  * @returns Array of {@link LocalModel} entries, or an empty array if the
  * server is unreachable.
  */
-export async function listLocalModels(): Promise<LocalModel[]> {
+export async function listLocalModels(baseUrl?: string): Promise<LocalModel[]> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-    const res = await fetch(`${resolveOllamaBase()}/api/tags`, {
+    const res = await fetch(`${resolveOllamaBase(baseUrl)}/api/tags`, {
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -709,51 +766,71 @@ export async function runOllamaAutoSetup(opts?: {
   specs: SystemSpecs;
   localModels: LocalModel[];
 }> {
+  const baseUrl = resolveOllamaBase(opts?.baseUrl);
+  const localTarget = isLocalOllamaBaseUrl(baseUrl);
+
   // Step 1: Detect or install
-  let binaryPath = await detectOllamaInstall();
-
-  if (!binaryPath) {
-    note('Ollama not found — installing automatically...');
-    const platform = os.platform();
-    let installed = false;
-
-    if (platform === 'darwin') {
-      installed = await installWithProgress('brew', ['install', 'ollama'], 'Installing Ollama via Homebrew...');
-    } else if (platform === 'linux') {
-      installed = await installWithProgress('sh', ['-c', 'curl -fsSL https://ollama.ai/install.sh | sh'], 'Installing Ollama...');
-    } else if (platform === 'win32') {
-      installed = await installWithProgress(
-        'winget',
-        ['install', '--id', 'Ollama.Ollama', '--accept-source-agreements', '--accept-package-agreements'],
-        'Installing Ollama via winget...',
-      );
-    }
-
-    if (!installed) {
-      throw new Error('Could not install Ollama automatically. Install from https://ollama.ai/ and retry.');
-    }
-
+  let binaryPath: string | null = null;
+  if (localTarget) {
     binaryPath = await detectOllamaInstall();
+
     if (!binaryPath) {
-      throw new Error('Ollama binary not found after installation. Check your PATH.');
+      note('Ollama not found — installing automatically...');
+      const platform = os.platform();
+      let installed = false;
+
+      if (platform === 'darwin') {
+        installed = await installWithProgress('brew', ['install', 'ollama'], 'Installing Ollama via Homebrew...');
+        if (!installed) {
+          installed = await installWithProgress(
+            'sh',
+            ['-c', 'curl -fsSL https://ollama.ai/install.sh | sh'],
+            'Installing Ollama via installer...',
+          );
+        }
+      } else if (platform === 'linux') {
+        installed = await installWithProgress('sh', ['-c', 'curl -fsSL https://ollama.ai/install.sh | sh'], 'Installing Ollama...');
+      } else if (platform === 'win32') {
+        installed = await installWithProgress(
+          'winget',
+          ['install', '--id', 'Ollama.Ollama', '--accept-source-agreements', '--accept-package-agreements'],
+          'Installing Ollama via winget...',
+        );
+      }
+
+      if (!installed) {
+        throw new Error('Could not install Ollama automatically. Install from https://ollama.ai/ and retry.');
+      }
+
+      binaryPath = await detectOllamaInstall();
+      if (!binaryPath) {
+        throw new Error('Ollama binary not found after installation. Check your PATH.');
+      }
+      ok('Ollama installed');
+    } else {
+      ok(`Ollama found at ${accent(binaryPath)}`);
     }
-    ok('Ollama installed');
   } else {
-    ok(`Ollama found at ${accent(binaryPath)}`);
+    note(`Using remote Ollama target: ${accent(baseUrl)}`);
   }
 
   // Step 2: Version check
-  const versionInfo = await checkOllamaVersion();
-  if (versionInfo.version && !versionInfo.compatible) {
-    warning(versionInfo.message);
+  if (localTarget) {
+    const versionInfo = await checkOllamaVersion();
+    if (versionInfo.version && !versionInfo.compatible) {
+      warning(versionInfo.message);
+    }
   }
 
   // Step 3: Start server if needed
-  const running = await isOllamaRunning();
+  const running = await isOllamaRunning(baseUrl);
   if (!running) {
-    await startOllama();
+    if (!localTarget) {
+      throw new Error(`Ollama is not reachable at ${baseUrl}. Check OLLAMA_BASE_URL and retry.`);
+    }
+    await startOllama(baseUrl);
   } else {
-    ok('Ollama server running');
+    ok(`Ollama server running at ${accent(baseUrl)}`);
   }
 
   // Step 4: Detect hardware + recommend
@@ -768,11 +845,11 @@ export async function runOllamaAutoSetup(opts?: {
   ok(`Tier: ${recommendation.tier} — model: ${accent(recommendation.primary)}`);
 
   // Step 5: Check what's already installed
-  let localModels = await listLocalModels();
+  let localModels = await listLocalModels(baseUrl);
   const installedNames = new Set(localModels.map((m) => m.name));
 
   // Step 6: Pull missing models (primary is required, router/auditor only if different)
-  const needed = [...new Set([recommendation.primary, recommendation.router, recommendation.auditor])];
+  const needed = getRequiredOllamaModels(recommendation);
   const missing = needed.filter(
     (m) => !installedNames.has(m) && !installedNames.has(`${m}:latest`),
   );
@@ -781,25 +858,27 @@ export async function runOllamaAutoSetup(opts?: {
     for (const model of missing) {
       note(`Pulling ${accent(model)}...`);
       try {
-        await pullModel(model);
+        await pullModel(model, baseUrl);
         ok(`${model} ready`);
       } catch (err) {
-        // If pull fails for a non-primary model, warn but continue
+        // If pull fails for a non-primary model, warn but continue.
         if (model === recommendation.primary) {
           throw new Error(
             `Failed to pull primary model ${model}: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
+        if (model === OLLAMA_DEFAULT_EMBEDDING_MODEL) {
+          warning(`Could not pull ${model} — local RAG/discovery embeddings may stay degraded`);
+          continue;
+        }
         warning(`Could not pull ${model} — continuing without it`);
       }
     }
     // Refresh local models list after pulling
-    localModels = await listLocalModels();
+    localModels = await listLocalModels(baseUrl);
   } else if (missing.length === 0) {
     ok('All recommended models already installed');
   }
-
-  const baseUrl = opts?.baseUrl || resolveOllamaBase();
 
   return {
     provider: 'ollama',
