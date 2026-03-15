@@ -723,6 +723,40 @@ describe('runToolCallingTurn (integration)', () => {
     }
   }, 20000);
 
+  it('loads local curated packs when enabling via curated extension name', async () => {
+    const toolMap = new Map<string, ToolInstance>();
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wunderland-workspace-'));
+    const agentId = 'agent-curated-pack-test';
+
+    try {
+      const metaTools = createSchemaOnDemandTools({
+        toolMap,
+        runtimeDefaults: {
+          workingDirectory: process.cwd(),
+          headlessBrowser: true,
+          dangerouslySkipCommandSafety: false,
+          agentWorkspace: { agentId, baseDir },
+        },
+        logger: console,
+      });
+
+      for (const tool of metaTools) toolMap.set(tool.name, tool);
+
+      const enable = toolMap.get('extensions_enable');
+      expect(enable).toBeTruthy();
+
+      const result = await enable!.execute({
+        extension: 'image-generation',
+        source: 'curated',
+      }, {});
+
+      expect(result.success).toBe(true);
+      expect(toolMap.has('generate_image')).toBe(true);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  }, 20000);
+
   it('disallows package refs in production by default (curated names still work)', async () => {
     const prevNodeEnv = process.env['NODE_ENV'];
     process.env['NODE_ENV'] = 'production';

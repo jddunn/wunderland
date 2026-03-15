@@ -70,12 +70,18 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
   if (nonInteractive) {
     if (detected.length === 0) {
       // No cloud API keys — try Ollama as automatic fallback
-      const { detectOllamaInstall, runOllamaAutoSetup } = await import('../ollama/ollama-manager.js');
+      const {
+        detectOllamaInstall,
+        isLocalOllamaBaseUrl,
+        normalizeOllamaBaseUrl,
+        runOllamaAutoSetup,
+      } = await import('../ollama/ollama-manager.js');
+      const configuredBaseUrl = normalizeOllamaBaseUrl(process.env['OLLAMA_BASE_URL']);
       const ollamaPath = await detectOllamaInstall();
-      if (ollamaPath) {
-        fmt.note('No API keys detected. Ollama found — configuring local provider...');
+      if (ollamaPath || !isLocalOllamaBaseUrl(configuredBaseUrl)) {
+        fmt.note('No API keys detected. Ollama found/configured — configuring Ollama provider...');
         try {
-          const result = await runOllamaAutoSetup();
+          const result = await runOllamaAutoSetup({ baseUrl: configuredBaseUrl });
           return {
             apiKeys: {},
             llmProvider: 'ollama',
