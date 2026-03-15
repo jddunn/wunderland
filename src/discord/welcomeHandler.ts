@@ -220,11 +220,13 @@ export function createWelcomeHandler(config: WelcomeConfig) {
 
     const { interests, professions } = detectOnboardingRoles(member);
 
+    console.log(`[Welcome] Generating welcome for ${displayName} (@${username}), account age: ${accountAge}`);
     const message = await generateWelcome(displayName, username, accountAge, interests, professions);
     if (!message) {
       console.warn('[Welcome] No message generated, skipping welcome for', username);
       return;
     }
+    console.log(`[Welcome] Generated message for ${displayName}, posting to channel ${config.channelId}`);
 
     // Build interest/profession tags
     const tags: string[] = [];
@@ -319,6 +321,8 @@ export function createWelcomeHandler(config: WelcomeConfig) {
       const welcomed = new Set<string>();
 
       service.onMemberJoin(async (member: any) => {
+        const username = member.user?.username ?? member.displayName ?? 'unknown';
+        console.log(`[Welcome] guildMemberAdd fired for ${username} (bot=${member.user?.bot})`);
         try {
           const userId = member.user?.id ?? member.id;
           if (member.user?.bot) return;
@@ -326,15 +330,24 @@ export function createWelcomeHandler(config: WelcomeConfig) {
 
           // Poll for onboarding roles — every 3s for up to 30s
           const guild = member.guild;
+          let foundRoles = false;
           for (let i = 0; i < 10; i++) {
             await new Promise(r => setTimeout(r, 3000));
             try {
               member = await guild.members.fetch(userId);
-            } catch {
+            } catch (fetchErr: any) {
+              console.warn(`[Welcome] guild.members.fetch failed for ${username}: ${fetchErr?.message}`);
               return; // member left
             }
             const { interests, professions } = detectOnboardingRoles(member);
-            if (interests.length > 0 || professions.length > 0) break;
+            if (interests.length > 0 || professions.length > 0) {
+              console.log(`[Welcome] Found roles for ${username} after ${(i + 1) * 3}s: interests=[${interests}], professions=[${professions}]`);
+              foundRoles = true;
+              break;
+            }
+          }
+          if (!foundRoles) {
+            console.log(`[Welcome] No onboarding roles found for ${username} after 30s — posting generic welcome`);
           }
 
           welcomed.add(userId);
@@ -347,6 +360,7 @@ export function createWelcomeHandler(config: WelcomeConfig) {
           await postWelcome(member, service);
         } catch (err: any) {
           console.error('[Welcome] Failed to welcome member:', err?.message ?? err);
+          if (err?.stack) console.error('[Welcome] Stack:', err.stack.split('\n').slice(0, 3).join('\n'));
         }
       });
       console.log('[Welcome] Registered guildMemberAdd handler (polls for onboarding roles)');
