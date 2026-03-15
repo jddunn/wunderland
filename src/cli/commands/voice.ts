@@ -16,6 +16,7 @@ import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor, warn as wColor, muted, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadEnv } from '../config/env-manager.js';
+import { loadConfig } from '../config/config-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
 import {
   fileExtensionForSpeechMimeType,
@@ -126,11 +127,12 @@ async function voiceTest(args: string[], globals: GlobalFlags): Promise<void> {
   fmt.blank();
 
   const env = await loadEnv(globals.config);
+  const config = await loadConfig(globals.config);
   const runtimeEnv: Record<string, string | undefined> = {
     ...env,
     ...process.env,
   };
-  const providerId = getPreferredRuntimeTtsProviderId(runtimeEnv);
+  const providerId = getPreferredRuntimeTtsProviderId(runtimeEnv, config.providerDefaults?.tts);
 
   if (!providerId) {
     fmt.note(
