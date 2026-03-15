@@ -21,6 +21,12 @@ export interface InitLlmResult {
   llmModel: string;
   /** Auth method: 'api-key' (default) or 'oauth' for subscription-based tokens. */
   llmAuthMethod?: 'api-key' | 'oauth';
+  /** Ollama-specific config (numCtx, numGpu, baseUrl). */
+  ollamaConfig?: {
+    numCtx?: number;
+    numGpu?: number;
+    baseUrl?: string;
+  };
 }
 
 export interface InitLlmStepOptions {
@@ -63,6 +69,29 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
 
   if (nonInteractive) {
     if (detected.length === 0) {
+      // No cloud API keys — try Ollama as automatic fallback
+      const { detectOllamaInstall, runOllamaAutoSetup } = await import('../ollama/ollama-manager.js');
+      const ollamaPath = await detectOllamaInstall();
+      if (ollamaPath) {
+        fmt.note('No API keys detected. Ollama found — configuring local provider...');
+        try {
+          const result = await runOllamaAutoSetup();
+          return {
+            apiKeys: {},
+            llmProvider: 'ollama',
+            llmModel: result.model,
+            ollamaConfig: {
+              numCtx: result.numCtx,
+              numGpu: result.numGpu,
+              baseUrl: result.baseUrl !== 'http://localhost:11434' ? result.baseUrl : undefined,
+            },
+          };
+        } catch {
+          fmt.note('Ollama auto-setup failed. Skipping LLM setup.');
+          return null;
+        }
+      }
+
       fmt.note('No API keys detected in environment. Skipping LLM setup (non-interactive).');
       return null;
     }
@@ -193,11 +222,40 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     }
   }
 
-  // ── Select model ──────────────────────────────────────────────────────────
+  // ── Select model (or auto-setup for Ollama) ──────────────────────────────
   let selectedModel = '';
+  let ollamaConfig: { numCtx?: number; numGpu?: number; baseUrl?: string } | undefined;
   const provDef = SUPPORTED_LLM_PROVIDERS.find((p) => p.id === selectedProvider);
 
-  if (provDef && provDef.models.length > 0) {
+  if (selectedProvider === 'ollama') {
+    // Zero-friction Ollama pipeline: detect, install, start, recommend, pull
+    try {
+      fmt.blank();
+      fmt.section('Ollama Auto-Setup');
+      const { runOllamaAutoSetup, listLocalModels } = await import('../ollama/ollama-manager.js');
+      const result = await runOllamaAutoSetup();
+      selectedModel = result.model;
+      ollamaConfig = {
+        numCtx: result.numCtx,
+        numGpu: result.numGpu,
+        baseUrl: result.baseUrl !== 'http://localhost:11434' ? result.baseUrl : undefined,
+      };
+
+      // Show installed models summary
+      const installed = result.localModels.length > 0 ? result.localModels : await listLocalModels();
+      if (installed.length > 0) {
+        fmt.blank();
+        fmt.note('Installed models:');
+        for (const m of installed) {
+          const sizeGB = (m.size / (1024 ** 3)).toFixed(1);
+          fmt.ok(`  ${m.name} (${sizeGB} GB)`);
+        }
+      }
+    } catch (err) {
+      fmt.fail(err instanceof Error ? err.message : 'Ollama auto-setup failed');
+      return null;
+    }
+  } else if (provDef && provDef.models.length > 0) {
     const modelOptions = provDef.models.map((m, i) => ({
       value: m as string,
       label: m as string,
@@ -226,5 +284,6 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     llmProvider: selectedProvider,
     llmModel: selectedModel,
     ...(useOAuth ? { llmAuthMethod: 'oauth' as const } : {}),
+    ...(ollamaConfig ? { ollamaConfig } : {}),
   };
 }
