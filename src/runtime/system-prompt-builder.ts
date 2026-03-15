@@ -153,7 +153,7 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
         'and where to get it — do NOT just say "I cannot do that".\n' +
         '\n' +
         'Available extension categories: tools (web-search, image-search, deep-research, etc.), ' +
-        'productivity (email-gmail, google-calendar), voice (speech-runtime, twilio), ' +
+        'productivity (email-gmail, calendar-google), voice (speech-runtime, twilio), ' +
         'cloud (vercel, cloudflare, aws), domain (porkbun, namecheap).'
     );
   }
@@ -519,6 +519,13 @@ function buildToolResourcefulnessInstructions(): string {
     '- After navigating to a page, use the returned links array to find specific links the user asks about. If you need more detail about a specific section, use browser_scrape with a CSS selector.',
     '- Chain multiple tool calls when needed: search → navigate → scrape → present findings.',
     '- Present data you find in a structured, readable format — tables, bullet points, or key-value pairs.',
+    '',
+    'Browser Anti-Bot Handling:',
+    '- Sites like Amazon, eBay, LinkedIn, and most e-commerce sites block headless browsers (CAPTCHAs, empty responses, 403 errors).',
+    '- For product searches, price comparisons, and shopping queries: ALWAYS use web_search FIRST (e.g., "best 3D printers ebay site:ebay.com"). web_search returns actual results without getting blocked.',
+    '- Only use browser_navigate for sites you KNOW work (documentation sites, public APIs, GitHub, news sites, your own sites).',
+    '- If browser_navigate returns empty content, a CAPTCHA page, or an error: switch to web_search immediately. Do NOT retry browser_navigate on the same site.',
+    '- When a tool fails, explain the specific error to the user (e.g., "eBay blocked the headless browser — using web search instead").',
     '',
     'Tool Fallback Strategy (CRITICAL — follow this strictly):',
     '- If any tool returns an error with suggestedFallbacks, you MUST try those fallback tools immediately before giving up.',
