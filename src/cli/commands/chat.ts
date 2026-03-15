@@ -540,6 +540,7 @@ export default async function cmdChat(
     globals.autoApproveTools || dangerouslySkipPermissions || overdriveMode || policy.executionMode === 'autonomous';
   const enableSkills = flags['no-skills'] !== true;
   const lazyTools = flags['lazy-tools'] === true;
+  const verbose = flags['verbose'] === true || flags['v'] === true;
   const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
   const workspaceAgentId = sanitizeAgentWorkspaceId(`chat-${path.basename(process.cwd())}`);
 
@@ -824,7 +825,7 @@ export default async function cmdChat(
           .filter(Boolean)
       );
       for (const result of activationResults) {
-        if (result.status === 'rejected') {
+        if (result.status === 'rejected' && verbose) {
           const msg =
             result.reason instanceof Error ? result.reason.message : String(result.reason);
           fmt.warning(`Extension activation failed: ${msg}`);
@@ -926,7 +927,7 @@ export default async function cmdChat(
   }
 
   // Capability discovery — semantic search + graph re-ranking
-  const discoveryOpts: WunderlandDiscoveryConfig = buildDiscoveryOptionsFromAgentConfig(cfg ?? {});
+  const discoveryOpts: WunderlandDiscoveryConfig = { ...buildDiscoveryOptionsFromAgentConfig(cfg ?? {}), verbose };
   // Skills — load from filesystem dirs + config-declared skills (BEFORE discovery so we can pass entries)
   let skillsPrompt = '';
   const skillEntries: Array<{
@@ -1393,10 +1394,12 @@ export default async function cmdChat(
               messages.splice(1, 0, { role: 'system', content: cm.content });
             }
           }
-          const stats = contextWindowManager.getStats();
-          console.log(
-            `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[context compacted: ${stats.currentTokens} tokens, ${stats.totalCompactions} compactions, ${stats.strategy} strategy]`)}`
-          );
+          if (verbose) {
+            const stats = contextWindowManager.getStats();
+            console.log(
+              `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[context compacted: ${stats.currentTokens} tokens, ${stats.totalCompactions} compactions, ${stats.strategy} strategy]`)}`
+            );
+          }
         }
       } catch {
         // Non-fatal
