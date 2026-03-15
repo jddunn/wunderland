@@ -145,8 +145,16 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
     parts.push(
       'Tools are preloaded. You MUST use the provided tools for any query that needs real-time or external information ' +
         '(weather, news, web searches, current events, shopping, real estate, domain lookups, etc.). ' +
-        'Never say you cannot access real-time data — call the appropriate tool instead. ' +
-        'You can also use extensions_enable to load additional packs on demand.'
+        'Never say you cannot access real-time data — call the appropriate tool instead.\n' +
+        '\n' +
+        'If a user asks for something you lack a tool for (e.g. image generation, email, calendar), ' +
+        'call extensions_list to check if an extension exists for it. If one exists, use extensions_enable to load it. ' +
+        'If it requires API keys, tell the user exactly which environment variable to set (e.g. OPENAI_API_KEY, GOOGLE_CLIENT_ID) ' +
+        'and where to get it — do NOT just say "I cannot do that".\n' +
+        '\n' +
+        'Available extension categories: tools (web-search, image-search, deep-research, etc.), ' +
+        'productivity (email-gmail, google-calendar), voice (speech-runtime, twilio), ' +
+        'cloud (vercel, cloudflare, aws), domain (porkbun, namecheap).'
     );
   }
 
