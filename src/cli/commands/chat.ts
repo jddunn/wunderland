@@ -774,7 +774,7 @@ export default async function cmdChat(
             pixabayApiKey: process.env['PIXABAY_API_KEY'],
           },
         },
-        ...createSpeechExtensionEnvOverrides(),
+        ...createSpeechExtensionEnvOverrides({ providerDefaults }),
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
         // Telegram extensions: send-only mode in CLI context to avoid
         // 409 Conflict errors from competing getUpdates pollers.
@@ -1609,6 +1609,10 @@ export default async function cmdChat(
       } catch (error) {
         console.warn('[wunderland/chat] Failed to record adaptive outcome', error);
       }
+
+      // Flush tool failure lessons to RAG even if the turn produced no reply
+      // or the tool-calling loop threw after recording failures.
+      toolFailureLearner.flush().catch(() => {});
     }
 
     if (reply) {
@@ -1634,9 +1638,6 @@ export default async function cmdChat(
       if (autoIngestPipeline) {
         autoIngestPipeline.processConversationTurn(conversationId, input, reply).catch(() => {});
       }
-
-      // Flush tool failure lessons to RAG (non-blocking)
-      toolFailureLearner.flush().catch(() => {});
 
       // Persist conversation turns to per-agent storage (non-blocking)
       if (memoryAdapter) {
