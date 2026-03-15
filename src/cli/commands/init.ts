@@ -128,25 +128,54 @@ export default async function cmdInit(
   // ── Interactive LLM setup ──────────────────────────────────────────────
   const nonInteractive = _globals.yes || _globals.quiet || !process.stdin.isTTY || !process.stdout.isTTY;
   const skipKeys = flags['skip-keys'] === true || _globals.quiet;
+  const forceLocal = flags['local'] === true;
   let llmProvider: string | undefined;
   let llmModel: string | undefined;
   let llmAuthMethod: 'api-key' | 'oauth' | undefined;
+  let ollamaConfig: { numCtx?: number; numGpu?: number; baseUrl?: string } | undefined;
   let wroteEnv = false;
   const envData: Record<string, string> = {};
 
   if (!skipKeys) {
-    const llmResult = await runInitLlmStep({ nonInteractive });
-    if (!llmResult && !nonInteractive) {
-      // User cancelled the LLM setup (CTRL+C or explicit cancel).
-      // Don't create a partial agent folder.
+    let llmResult: Awaited<ReturnType<typeof runInitLlmStep>> | null = null;
+
+    if (forceLocal) {
+      // --local flag: skip all prompts, auto-setup Ollama end-to-end
       fmt.blank();
-      fmt.warning('Init cancelled — no agent folder was created.');
-      return;
+      fmt.section('Local Agent Setup (Ollama)');
+      const { runOllamaAutoSetup } = await import('../ollama/ollama-manager.js');
+      try {
+        const result = await runOllamaAutoSetup();
+        llmResult = {
+          apiKeys: {},
+          llmProvider: 'ollama',
+          llmModel: result.model,
+          ollamaConfig: {
+            numCtx: result.numCtx,
+            numGpu: result.numGpu,
+            baseUrl: result.baseUrl !== 'http://localhost:11434' ? result.baseUrl : undefined,
+          },
+        };
+      } catch (err) {
+        fmt.fail(err instanceof Error ? err.message : 'Ollama auto-setup failed');
+        return;
+      }
+    } else {
+      llmResult = await runInitLlmStep({ nonInteractive });
+      if (!llmResult && !nonInteractive) {
+        // User cancelled the LLM setup (CTRL+C or explicit cancel).
+        // Don't create a partial agent folder.
+        fmt.blank();
+        fmt.warning('Init cancelled — no agent folder was created.');
+        return;
+      }
     }
+
     if (llmResult) {
       llmProvider = llmResult.llmProvider;
       llmModel = llmResult.llmModel;
       llmAuthMethod = llmResult.llmAuthMethod;
+      ollamaConfig = llmResult.ollamaConfig;
 
       Object.assign(envData, llmResult.apiKeys);
       if (llmResult.llmModel) envData['OPENAI_MODEL'] = llmResult.llmModel;
@@ -156,8 +185,18 @@ export default async function cmdInit(
       // Also save to global ~/.wunderland/.env
       await mergeEnv(llmResult.apiKeys, _globals.config);
 
+      // Persist Ollama config to global config too
+      if (llmResult.llmProvider === 'ollama' && llmResult.ollamaConfig) {
+        const { updateConfig } = await import('../config/config-manager.js');
+        await updateConfig({
+          llmProvider: 'ollama',
+          llmModel: llmResult.llmModel,
+          ollama: llmResult.ollamaConfig,
+        }, _globals.config);
+      }
+
       // ── Optional GitHub PAT ──────────────────────────────────────────────
-      if (!nonInteractive) {
+      if (!nonInteractive && !forceLocal) {
         const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
         if (!ghToken) {
           const clack = await import('@clack/prompts');
@@ -184,6 +223,7 @@ export default async function cmdInit(
     llmAuthMethod,
     personalityTraits,
     securityTierName,
+    ollamaConfig,
     agentPreset: agentPreset ? {
       name: agentPreset.name,
       description: agentPreset.description,

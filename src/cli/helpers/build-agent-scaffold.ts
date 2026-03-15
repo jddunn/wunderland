@@ -74,6 +74,12 @@ export interface BuildAgentConfigOptions {
   /** Explicit personality trait values (overrides preset). */
   personalityTraits?: Record<string, number>;
   securityTierName?: SecurityTierName;
+  /** Ollama-specific config (context window, GPU layers, base URL). */
+  ollamaConfig?: {
+    numCtx?: number;
+    numGpu?: number;
+    baseUrl?: string;
+  };
   /** Agent preset overrides (from PresetLoader). */
   agentPreset?: Pick<
     AgentPreset,
@@ -192,6 +198,13 @@ export function buildAgentConfig(opts: BuildAgentConfigOptions): AgentConfigResu
   if (opts.llmProvider) config.llmProvider = opts.llmProvider;
   if (opts.llmModel) config.llmModel = opts.llmModel;
   if (opts.llmAuthMethod === 'oauth') config.llmAuthMethod = 'oauth';
+  if (opts.ollamaConfig) {
+    config.ollama = {
+      ...(opts.ollamaConfig.baseUrl ? { baseUrl: opts.ollamaConfig.baseUrl } : {}),
+      numCtx: opts.ollamaConfig.numCtx,
+      numGpu: opts.ollamaConfig.numGpu,
+    };
+  }
 
   return { config };
 }
