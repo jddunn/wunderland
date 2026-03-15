@@ -7,7 +7,13 @@ import * as path from 'node:path';
 import type { LLMProviderConfig } from '../../openai/tool-calling.js';
 import * as fmt from '../../ui/format.js';
 import { accent } from '../../ui/theme.js';
-import { isOllamaRunning, startOllama, detectOllamaInstall } from '../../ollama/ollama-manager.js';
+import {
+  isLocalOllamaBaseUrl,
+  isOllamaRunning,
+  normalizeOllamaBaseUrl,
+  startOllama,
+  detectOllamaInstall,
+} from '../../ollama/ollama-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../config/workspace.js';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
@@ -31,23 +37,43 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
     ? String(flags['model'])
     : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
 
+  const ollamaBaseUrl = (() => {
+    const configBaseUrl = typeof cfg?.ollama?.baseUrl === 'string' ? cfg.ollama.baseUrl.trim() : '';
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim() || configBaseUrl;
+    const normalized = normalizeOllamaBaseUrl(raw);
+    return normalized.endsWith('/v1') ? normalized : `${normalized}/v1`;
+  })();
+
   // Auto-start Ollama if configured as provider
   const isOllamaProvider = providerId === 'ollama';
   if (isOllamaProvider) {
-    const ollamaBin = await detectOllamaInstall();
-    if (ollamaBin) {
-      const running = await isOllamaRunning();
-      if (!running) {
-        fmt.note('Ollama is configured but not running - starting...');
-        try {
-          await startOllama();
-          fmt.ok('Ollama server started at http://localhost:11434');
-        } catch {
-          fmt.warning('Failed to start Ollama. Start it manually: ollama serve');
+    const ollamaApiBase = normalizeOllamaBaseUrl(ollamaBaseUrl);
+    if (isLocalOllamaBaseUrl(ollamaApiBase)) {
+      const ollamaBin = await detectOllamaInstall();
+      if (ollamaBin) {
+        const running = await isOllamaRunning(ollamaApiBase);
+        if (!running) {
+          fmt.note('Ollama is configured but not running - starting...');
+          try {
+            await startOllama(ollamaApiBase);
+            fmt.ok(`Ollama server started at ${ollamaApiBase}`);
+          } catch {
+            fmt.warning('Failed to start Ollama. Start it manually: ollama serve');
+          }
+        } else {
+          fmt.ok(`Ollama server is running at ${ollamaApiBase}`);
         }
       } else {
-        fmt.ok('Ollama server is running');
+        fmt.warning('Ollama is configured but no local binary was found. Install Ollama or point OLLAMA_BASE_URL to a remote instance.');
       }
+    } else {
+      const running = await isOllamaRunning(ollamaApiBase);
+      if (!running) {
+        fmt.errorBlock('Remote Ollama unavailable', `Could not reach Ollama at ${ollamaApiBase}.`);
+        process.exitCode = 1;
+        return false;
+      }
+      fmt.ok(`Remote Ollama is reachable at ${ollamaApiBase}`);
     }
   }
 
@@ -82,16 +108,6 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   } catch {
     // ignore
   }
-
-  const ollamaBaseUrl = (() => {
-    // Priority: env var > config > default
-    const configBaseUrl = typeof cfg?.ollama?.baseUrl === 'string' ? cfg.ollama.baseUrl.trim() : '';
-    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim() || configBaseUrl;
-    const base = raw || 'http://localhost:11434';
-    const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
-    if (normalized.endsWith('/v1')) return normalized;
-    return `${normalized}/v1`;
-  })();
 
   const llmBaseUrl =
     providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'

@@ -6,24 +6,25 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  getRequiredOllamaModels,
   recommendModels,
   type SystemSpecs,
   type ModelRecommendation,
 } from '../cli/ollama/ollama-manager.js';
 
+const baseSpecs: SystemSpecs = {
+  totalMemoryGB: 16,
+  freeMemoryGB: 8,
+  platform: 'darwin',
+  arch: 'arm64',
+  hasGpu: true,
+  vramGB: 16,
+  gpuName: 'Apple M2 Pro',
+};
+
 // ── recommendModels ─────────────────────────────────────────────────────────
 
 describe('recommendModels', () => {
-  const baseSpecs: SystemSpecs = {
-    totalMemoryGB: 16,
-    freeMemoryGB: 8,
-    platform: 'darwin',
-    arch: 'arm64',
-    hasGpu: true,
-    vramGB: 16,
-    gpuName: 'Apple M2 Pro',
-  };
-
   it('returns low tier for systems with <8GB RAM', () => {
     const specs: SystemSpecs = { ...baseSpecs, totalMemoryGB: 4, freeMemoryGB: 2, hasGpu: false, vramGB: null, gpuName: null };
     const rec = recommendModels(specs);
@@ -284,6 +285,11 @@ describe('edge cases', () => {
       expect(rec.router).not.toBe(rec.primary === 'llama3.3' ? 'llama3.3' : undefined);
       expect(rec.auditor).not.toBe(rec.primary === 'llama3.3' ? 'llama3.3' : undefined);
     }
+  });
+
+  it('includes the embedding model in the Ollama pull set', () => {
+    const rec = recommendModels(baseSpecs);
+    expect(getRequiredOllamaModels(rec)).toContain('nomic-embed-text');
   });
 });
 

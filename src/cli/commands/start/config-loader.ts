@@ -12,7 +12,7 @@ import { accent, dim } from '../../ui/theme.js';
 import * as fmt from '../../ui/format.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward, mergeEnv } from '../../config/env-manager.js';
-import { loadConfig } from '../../config/config-manager.js';
+import { loadConfig, updateConfig } from '../../config/config-manager.js';
 import { resolveEffectiveAgentConfig } from '../../../config/effective-agent-config.js';
 import { buildAgentConfig, writeAgentScaffold, toDisplayName } from '../../helpers/build-agent-scaffold.js';
 import { runInitLlmStep } from '../../wizards/init-llm-step.js';
@@ -172,6 +172,7 @@ export async function loadAndValidateConfig(
       llmProvider: llmResult.llmProvider,
       llmModel: llmResult.llmModel,
       llmAuthMethod: llmResult.llmAuthMethod,
+      ollamaConfig: llmResult.ollamaConfig,
       personalityPresetKey,
       personalityTraits,
     });
@@ -201,6 +202,16 @@ export async function loadAndValidateConfig(
     // Save keys to global ~/.wunderland/.env
     if (Object.keys(llmResult.apiKeys).length > 0) {
       await mergeEnv(llmResult.apiKeys, globals.config);
+    }
+    if (llmResult.llmProvider === 'ollama' && llmResult.ollamaConfig) {
+      await updateConfig(
+        {
+          llmProvider: 'ollama',
+          llmModel: llmResult.llmModel,
+          ollama: llmResult.ollamaConfig,
+        },
+        globals.config,
+      );
     }
 
     // If we created a subdirectory, chdir into it
