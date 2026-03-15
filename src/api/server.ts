@@ -60,9 +60,11 @@ import {
   resolveRequestScopedPersonaRuntime,
 } from '../runtime/request-persona.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
+import { buildOllamaRuntimeOptions } from '../runtime/ollama-options.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import { maybeProxyAgentosRagRequest } from '../rag/http-proxy.js';
+import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
@@ -746,7 +748,11 @@ export async function createWunderlandServer(opts?: {
 
   const ollamaBaseUrl = (() => {
     if (opts?.llm?.baseUrl) return opts.llm.baseUrl;
-    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim();
+    const configBaseUrl =
+      typeof (cfg as any)?.ollama?.baseUrl === 'string'
+        ? String((cfg as any).ollama.baseUrl).trim()
+        : '';
+    const raw = String(process.env['OLLAMA_BASE_URL'] || '').trim() || configBaseUrl;
     const base = raw || 'http://localhost:11434';
     const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
     if (normalized.endsWith('/v1')) return normalized;
@@ -820,6 +826,9 @@ export async function createWunderlandServer(opts?: {
   const loadedHttpHandlers: Array<
     (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => Promise<boolean> | boolean
   > = [];
+  let schemaOnDemandSecrets: Record<string, string> | undefined;
+  let schemaOnDemandGetSecret: ((secretId: string) => string | undefined) | undefined;
+  let schemaOnDemandOptions: Record<string, Record<string, unknown>> | undefined;
 
   const hitlSecret =
     typeof opts?.hitlSecret === 'string' && opts.hitlSecret.trim()
@@ -944,9 +953,12 @@ export async function createWunderlandServer(opts?: {
         return out;
       }
 
-      const mergedOverrides: Record<string, any> = { ...configOverrides };
+      const mergedOverrides: Record<string, any> = mergeExtensionOverrides(
+        configOverrides as Record<string, any>,
+        {},
+      );
       for (const [name, override] of Object.entries(runtimeOverrides)) {
-        mergedOverrides[name] = mergeOverride(configOverrides[name], override);
+        mergedOverrides[name] = mergeOverride(mergedOverrides[name], override);
       }
 
       const cfgSecrets =
@@ -958,6 +970,16 @@ export async function createWunderlandServer(opts?: {
       const secrets = new Proxy<Record<string, string>>({} as any, {
         get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
       });
+      schemaOnDemandSecrets = cfgSecrets;
+      schemaOnDemandGetSecret = getSecret;
+      schemaOnDemandOptions = Object.fromEntries(
+        Object.entries(mergedOverrides).map(([name, value]) => [
+          name,
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
+            : {},
+        ]),
+      );
 
       const channelsFromConfig = Array.isArray((cfg as any)?.channels)
         ? ((cfg as any).channels as unknown[])
@@ -1083,6 +1105,7 @@ export async function createWunderlandServer(opts?: {
     toolMap.set(tool.name, tool);
   }
 
+  let discoveryManager: WunderlandDiscoveryManager | undefined;
   for (const meta of createSchemaOnDemandTools({
     toolMap,
     runtimeDefaults: {
@@ -1092,8 +1115,15 @@ export async function createWunderlandServer(opts?: {
       agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
     },
     initialEnabledPackages: preloadedPackages,
+    secrets: schemaOnDemandSecrets as any,
+    getSecret: schemaOnDemandGetSecret,
+    defaultExtensionOptions: schemaOnDemandOptions,
     allowPackages: true,
     logger: console,
+    onToolsChanged: () => {
+      if (!discoveryManager) return;
+      discoveryManager.reindex?.({ toolMap }).catch(() => {});
+    },
   })) {
     toolMap.set((meta as any).name, meta as any);
   }
@@ -1156,7 +1186,7 @@ export async function createWunderlandServer(opts?: {
     skillsPrompt = parts.filter(Boolean).join('\n\n');
   }
 
-  const discoveryManager = new WunderlandDiscoveryManager(buildDiscoveryOptionsFromAgentConfig(cfg));
+  discoveryManager = new WunderlandDiscoveryManager(buildDiscoveryOptionsFromAgentConfig(cfg));
   try {
     await discoveryManager.initialize({
       toolMap,
@@ -1430,6 +1460,7 @@ export async function createWunderlandServer(opts?: {
           dangerouslySkipPermissions: autoApproveToolCalls,
           strictToolNames,
           toolFailureMode: adaptiveDecision.toolFailureMode,
+          ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
           onToolCall: () => {
             toolCallCount += 1;
           },
@@ -1926,6 +1957,7 @@ export async function createWunderlandServer(opts?: {
               dangerouslySkipPermissions: autoApproveToolCalls,
               strictToolNames,
               toolFailureMode: adaptiveDecision.toolFailureMode,
+              ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
               onToolCall: () => {
                 toolCallCount += 1;
               },

@@ -122,8 +122,8 @@ export const VOICE_PROVIDERS = [
 // ── Productivity Integrations ────────────────────────────────────────────────
 
 export const PRODUCTIVITY_INTEGRATIONS = [
-  { id: 'google-calendar', label: 'Google Calendar', icon: '\u{1F4C5}', providers: ['google-calendar'] },
-  { id: 'gmail', label: 'Gmail', icon: '\u{2709}\u{FE0F}', providers: ['gmail'] },
+  { id: 'calendar-google', label: 'Google Calendar', icon: '\u{1F4C5}', providers: ['calendar-google'] },
+  { id: 'email-gmail', label: 'Gmail', icon: '\u{2709}\u{FE0F}', providers: ['email-gmail'] },
 ] as const;
 
 // ── Cloud Hosting Providers ─────────────────────────────────────────────────

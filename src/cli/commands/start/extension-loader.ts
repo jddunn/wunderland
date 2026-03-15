@@ -10,6 +10,8 @@ import { type ToolInstance, getGuardrailsInstance } from '../../openai/tool-call
 import { createSchemaOnDemandTools } from '../../openai/schema-on-demand.js';
 import { filterToolMapByPolicy } from '../../security/runtime-policy.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
+import { normalizeExtensionList } from '../../extensions/aliases.js';
+import { mergeExtensionOverrides } from '../../extensions/settings.js';
 import { createConfiguredRagTools } from '../../../rag/runtime-tools.js';
 import { createLocalMemoryReadTool } from './local-memory-tool.js';
 import { createRequestFolderAccessTool } from '../../../tools/RequestFolderAccessTool.js';
@@ -60,6 +62,10 @@ export async function loadExtensions(ctx: any): Promise<void> {
   const preloadedPackages: string[] = [];
   let activePacks: any[] = [];
   let allTools: ToolInstance[] = [];
+  const globalConfig = ctx.globalConfig ?? {};
+  let schemaOnDemandSecrets: Record<string, string> | undefined;
+  let schemaOnDemandGetSecret: ((secretId: string) => string | undefined) | undefined;
+  let schemaOnDemandOptions: Record<string, Record<string, unknown>> = {};
   const loadedChannelAdapters: IChannelAdapter[] = [];
   const loadedHttpHandlers: ExtensionHttpHandler[] = [];
   const hitlSecret = (() => {
@@ -116,19 +122,52 @@ export async function loadExtensions(ctx: any): Promise<void> {
   if (!lazyTools) {
     // Load extensions dynamically from agent.config.json or use defaults
     const extensionsFromConfig = cfg.extensions;
+    const cfgSecrets =
+      cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets)
+        ? (cfg.secrets as Record<string, string>)
+        : undefined;
+    const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
     let toolExtensions: string[] = [];
     let voiceExtensions: string[] = [];
     let productivityExtensions: string[] = [];
 
     // Merge: agent config > global config > hardcoded defaults
-    const { loadConfig } = await import('../../config/config-manager.js');
-    const globalConfig = await loadConfig();
     const globalExts = globalConfig?.extensions;
     const hardcodedTools = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'image-generation', 'news-search', 'weather', 'skills', 'deep-research', 'github'];
 
-    toolExtensions = extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedTools;
-    voiceExtensions = extensionsFromConfig?.voice ?? globalExts?.voice ?? getDefaultVoiceExtensions();
-    productivityExtensions = extensionsFromConfig?.productivity ?? globalExts?.productivity ?? [];
+    toolExtensions = normalizeExtensionList(
+      extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedTools,
+    );
+    voiceExtensions = normalizeExtensionList(
+      extensionsFromConfig?.voice ?? globalExts?.voice ?? getDefaultVoiceExtensions(),
+    );
+    productivityExtensions = normalizeExtensionList(
+      extensionsFromConfig?.productivity ?? globalExts?.productivity ?? [],
+    );
+
+    if (
+      !productivityExtensions.includes('email-gmail') &&
+      !toolExtensions.includes('email-gmail')
+    ) {
+      const gClientId = (getSecret('google.clientId') || '').trim();
+      const gClientSecret = (getSecret('google.clientSecret') || '').trim();
+      const gRefreshToken = (getSecret('google.refreshToken') || '').trim();
+      if (gClientId && gClientSecret && gRefreshToken) {
+        productivityExtensions.push('email-gmail');
+      }
+    }
+
+    if (
+      !productivityExtensions.includes('calendar-google') &&
+      !toolExtensions.includes('calendar-google')
+    ) {
+      const gClientId = (getSecret('google.clientId') || '').trim();
+      const gClientSecret = (getSecret('google.clientSecret') || '').trim();
+      const gRefreshToken = (getSecret('google.refreshToken') || '').trim();
+      if (gClientId && gClientSecret && gRefreshToken) {
+        productivityExtensions.push('calendar-google');
+      }
+    }
 
     if (extensionsFromConfig) {
       fmt.note(`Loading ${toolExtensions.length + voiceExtensions.length + productivityExtensions.length} extensions from agent config...`);
@@ -148,7 +187,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
       const agentOverrides = (cfg?.extensionOverrides && typeof cfg.extensionOverrides === 'object')
         ? (cfg.extensionOverrides as Record<string, any>)
         : {};
-      const configOverrides: Record<string, any> = { ...globalOverrides, ...agentOverrides };
+      const configOverrides: Record<string, any> = mergeExtensionOverrides(globalOverrides, agentOverrides);
 
       // Apply global provider defaults
       const providerDefaults = globalConfig?.providerDefaults;
@@ -219,7 +258,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
             pixabayApiKey: process.env['PIXABAY_API_KEY'],
           },
         },
-        ...createSpeechExtensionEnvOverrides(),
+        ...createSpeechExtensionEnvOverrides({ providerDefaults }),
         'news-search': { options: { newsApiKey: process.env['NEWSAPI_API_KEY'] } },
         'browser-automation': {
           options: {
@@ -234,6 +273,15 @@ export async function loadExtensions(ctx: any): Promise<void> {
             clientId: process.env['GOOGLE_CLIENT_ID'],
             clientSecret: process.env['GOOGLE_CLIENT_SECRET'],
             refreshToken: process.env['GOOGLE_REFRESH_TOKEN'],
+          },
+        },
+        'calendar-google': {
+          options: {
+            clientId: process.env['GOOGLE_CLIENT_ID'],
+            clientSecret: process.env['GOOGLE_CLIENT_SECRET'],
+            refreshToken:
+              process.env['GOOGLE_REFRESH_TOKEN'] ||
+              process.env['GOOGLE_CALENDAR_REFRESH_TOKEN'],
           },
         },
         'wunderbot-feeds': {
@@ -256,10 +304,16 @@ export async function loadExtensions(ctx: any): Promise<void> {
         mergedOverrides[name] = mergeOverride(configOverrides[name], override);
       }
 
-      const cfgSecrets = (cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets))
-        ? (cfg.secrets as Record<string, string>)
-        : undefined;
-      const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
+      schemaOnDemandSecrets = cfgSecrets;
+      schemaOnDemandGetSecret = getSecret;
+      schemaOnDemandOptions = Object.fromEntries(
+        Object.entries(mergedOverrides).map(([name, value]) => [
+          name,
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
+            : {},
+        ]),
+      );
       const secrets = new Proxy<Record<string, string>>({} as any, {
         get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
       });
@@ -414,8 +468,14 @@ export async function loadExtensions(ctx: any): Promise<void> {
       agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
     },
     initialEnabledPackages: preloadedPackages,
+    secrets: schemaOnDemandSecrets,
+    getSecret: schemaOnDemandGetSecret,
+    defaultExtensionOptions: schemaOnDemandOptions,
     allowPackages: true,
     logger: console,
+    onToolsChanged: () => {
+      ctx.discoveryManager?.reindex?.({ toolMap }).catch(() => {});
+    },
   })) {
     toolMap.set(meta.name, meta);
   }

@@ -25,6 +25,7 @@ import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
+import { buildOllamaRuntimeOptions } from '../runtime/ollama-options.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
@@ -38,6 +39,7 @@ import {
 import { resolveExtensionsByNames } from '../core/PresetExtensionResolver.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
+import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
@@ -149,6 +151,7 @@ async function loadToolMapFromAgentConfig(opts: {
   workingDirectory: string;
   dangerouslySkipCommandSafety: boolean;
   logger: Required<LoggerLike>;
+  onSchemaToolsChanged?: (toolsAdded: string[]) => void;
 }): Promise<{ toolMap: Map<string, ToolInstance>; preloadedPackages: string[] }> {
   const { agentConfig: cfg, policy, workspace, workingDirectory, dangerouslySkipCommandSafety, logger } = opts;
 
@@ -157,6 +160,9 @@ async function loadToolMapFromAgentConfig(opts: {
 
   const toolMap = new Map<string, ToolInstance>();
   const preloadedPackages: string[] = [];
+  let schemaOnDemandSecrets: Record<string, string> | undefined;
+  let schemaOnDemandGetSecret: ((secretId: string) => string | undefined) | undefined;
+  let schemaOnDemandOptions: Record<string, Record<string, unknown>> | undefined;
 
   if (!lazyTools) {
     const extensionsFromConfig = cfg.extensions;
@@ -258,9 +264,12 @@ async function loadToolMapFromAgentConfig(opts: {
         return out;
       }
 
-      const mergedOverrides: Record<string, any> = { ...configOverrides };
+      const mergedOverrides: Record<string, any> = mergeExtensionOverrides(
+        configOverrides as Record<string, any>,
+        {},
+      );
       for (const [name, override] of Object.entries(runtimeOverrides)) {
-        mergedOverrides[name] = mergeOverride(configOverrides[name], override);
+        mergedOverrides[name] = mergeOverride(mergedOverrides[name], override);
       }
 
       const cfgSecrets =
@@ -271,6 +280,16 @@ async function loadToolMapFromAgentConfig(opts: {
       const secrets = new Proxy<Record<string, string>>({} as any, {
         get: (_target, prop) => (typeof prop === 'string' ? getSecret(prop) : undefined),
       });
+      schemaOnDemandSecrets = cfgSecrets;
+      schemaOnDemandGetSecret = getSecret;
+      schemaOnDemandOptions = Object.fromEntries(
+        Object.entries(mergedOverrides).map(([name, value]) => [
+          name,
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
+            : {},
+        ]),
+      );
 
       const channelsFromConfig = Array.isArray((cfg as any)?.channels)
         ? ((cfg as any).channels as unknown[])
@@ -362,8 +381,12 @@ async function loadToolMapFromAgentConfig(opts: {
       agentWorkspace: { agentId: sanitizeAgentWorkspaceId(workspace.agentId), baseDir: workspace.baseDir },
     },
     initialEnabledPackages: preloadedPackages,
+    secrets: schemaOnDemandSecrets as any,
+    getSecret: schemaOnDemandGetSecret,
+    defaultExtensionOptions: schemaOnDemandOptions,
     allowPackages: true,
     logger: console,
+    onToolsChanged: opts.onSchemaToolsChanged,
   })) {
     toolMap.set(metaTool.name, metaTool);
   }
@@ -430,6 +453,8 @@ export async function createWunderlandChatRuntime(opts: {
       ? agentConfig.selectedPersonaId.trim()
       : seed.seedId;
   const dangerouslySkipCommandSafety = false;
+  let discoveryManager: WunderlandDiscoveryManager | null = null;
+  let liveToolMap: Map<string, ToolInstance> | null = null;
 
   const { toolMap } = await loadToolMapFromAgentConfig({
     agentConfig,
@@ -438,7 +463,12 @@ export async function createWunderlandChatRuntime(opts: {
     workingDirectory,
     dangerouslySkipCommandSafety,
     logger,
+    onSchemaToolsChanged: () => {
+      if (!discoveryManager || !liveToolMap) return;
+      discoveryManager.reindex?.({ toolMap: liveToolMap }).catch(() => {});
+    },
   });
+  liveToolMap = toolMap;
 
   let skillsPrompt = '';
   const skillEntries: Array<{ name: string; description: string; content: string }> = [];
@@ -490,7 +520,7 @@ export async function createWunderlandChatRuntime(opts: {
     }
   }
 
-  const discoveryManager = new WunderlandDiscoveryManager(buildDiscoveryOptionsFromAgentConfig(agentConfig));
+  discoveryManager = new WunderlandDiscoveryManager(buildDiscoveryOptionsFromAgentConfig(agentConfig));
   try {
     await discoveryManager.initialize({
       toolMap,
@@ -585,6 +615,7 @@ export async function createWunderlandChatRuntime(opts: {
         askPermission,
         onToolCall: runOpts?.onToolCall,
         baseUrl: opts.llm.baseUrl,
+        ollamaOptions: buildOllamaRuntimeOptions(agentConfig.ollama),
         fallback: opts.llm.fallback,
       });
 

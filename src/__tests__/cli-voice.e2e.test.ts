@@ -14,6 +14,10 @@ vi.mock('../cli/config/env-manager.js', () => ({
   loadEnv: vi.fn().mockResolvedValue({}),
 }));
 
+vi.mock('../cli/config/config-manager.js', () => ({
+  loadConfig: vi.fn().mockResolvedValue({}),
+}));
+
 vi.mock('../cli/config/secrets.js', () => ({
   checkEnvSecrets: vi.fn().mockReturnValue([]),
 }));
@@ -62,6 +66,7 @@ vi.mock('@framers/agentos/speech', () => ({
 import { writeFile } from 'node:fs/promises';
 import { createSpeechRuntimeFromEnv } from '@framers/agentos/speech';
 import { loadEnv } from '../cli/config/env-manager.js';
+import { loadConfig } from '../cli/config/config-manager.js';
 import cmdVoice from '../cli/commands/voice.js';
 
 // ── Globals ──────────────────────────────────────────────────────────────────
@@ -78,6 +83,7 @@ beforeEach(() => {
   process.exitCode = undefined;
   consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.mocked(loadEnv).mockResolvedValue({});
+  vi.mocked(loadConfig).mockResolvedValue({});
   vi.mocked(writeFile).mockClear();
   vi.mocked(createSpeechRuntimeFromEnv).mockClear();
 });
@@ -124,6 +130,29 @@ describe('wunderland voice', () => {
     expect(process.exitCode).toBeUndefined();
     expect(createSpeechRuntimeFromEnv).toHaveBeenCalled();
     expect(writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('test subcommand honors configured TTS provider defaults over env fallback order', async () => {
+    vi.mocked(loadEnv).mockResolvedValue({
+      OPENAI_API_KEY: 'sk-openai',
+      ELEVENLABS_API_KEY: 'sk-elevenlabs',
+    });
+    vi.mocked(loadConfig).mockResolvedValue({
+      providerDefaults: { tts: 'elevenlabs' },
+    });
+
+    await cmdVoice(['test', 'Prefer', 'ElevenLabs'], {}, mockGlobals);
+
+    expect(createSpeechRuntimeFromEnv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        OPENAI_API_KEY: 'sk-openai',
+        ELEVENLABS_API_KEY: 'sk-elevenlabs',
+      }),
+    );
+    const runtime = vi.mocked(createSpeechRuntimeFromEnv).mock.results[0]?.value as
+      | { createSession?: ReturnType<typeof vi.fn> }
+      | undefined;
+    expect(runtime?.createSession).toHaveBeenCalledWith({ ttsProviderId: 'elevenlabs' });
   });
 
   it('test subcommand shows error for missing text and sets exitCode=1', async () => {
