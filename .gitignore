@@ -84,6 +84,9 @@ apps/frame.dev/prompts-originals/
 *.sqlite3-shm
 *.sqlite3-wal
 
+# Runtime database (created by wunderland start/chat)
+db_data/
+
 # Generated HTML (CLI reference, brand pages, etc.)
 cli-reference.html
 docs/brand.html
