@@ -81,6 +81,22 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
     }
   }
 
+  if (cfg.ollama !== undefined) {
+    if (!isPlainObject(cfg.ollama)) {
+      issues.push({ path: 'ollama', message: 'Expected object.' });
+    } else {
+      const ollama = cfg.ollama as Record<string, unknown>;
+      if (ollama.baseUrl !== undefined && typeof ollama.baseUrl !== 'string') {
+        issues.push({ path: 'ollama.baseUrl', message: 'Expected string.' });
+      }
+      for (const numField of ['numCtx', 'numGpu']) {
+        if (ollama[numField] !== undefined && typeof ollama[numField] !== 'number') {
+          issues.push({ path: `ollama.${numField}`, message: 'Expected number.' });
+        }
+      }
+    }
+  }
+
   if (cfg.secrets !== undefined) {
     if (!isPlainObject(cfg.secrets)) {
       issues.push({ path: 'secrets', message: 'Expected object mapping string -> string.' });

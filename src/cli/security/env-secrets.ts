@@ -74,6 +74,11 @@ export function createEnvSecretResolver(opts?: {
     if (id === 'discord.botToken') candidates.push('DISCORD_TOKEN');
     if (id === 'telegram.botToken') candidates.push('TELEGRAM_TOKEN');
     if (id === 'github.token') candidates.push('GH_TOKEN');
+    if (id === 'google.clientId') candidates.push('GMAIL_CLIENT_ID');
+    if (id === 'google.clientSecret') candidates.push('GMAIL_CLIENT_SECRET');
+    if (id === 'google.refreshToken') {
+      candidates.push('GMAIL_REFRESH_TOKEN', 'GOOGLE_CALENDAR_REFRESH_TOKEN');
+    }
 
     for (const envVar of candidates) {
       const v = env[envVar];

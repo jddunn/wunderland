@@ -134,85 +134,116 @@ export default async function cmdInit(
   let llmAuthMethod: 'api-key' | 'oauth' | undefined;
   let ollamaConfig: { numCtx?: number; numGpu?: number; baseUrl?: string } | undefined;
   let wroteEnv = false;
+  let initCancelled = false;
   const envData: Record<string, string> = {};
 
-  if (!skipKeys) {
-    let llmResult: Awaited<ReturnType<typeof runInitLlmStep>> | null = null;
+  const handleSigint = () => {
+    initCancelled = true;
+  };
+  process.on('SIGINT', handleSigint);
 
-    if (forceLocal) {
-      // --local flag: skip all prompts, auto-setup Ollama end-to-end
-      fmt.blank();
-      fmt.section('Local Agent Setup (Ollama)');
-      const { runOllamaAutoSetup } = await import('../ollama/ollama-manager.js');
-      try {
-        const result = await runOllamaAutoSetup();
-        llmResult = {
-          apiKeys: {},
-          llmProvider: 'ollama',
-          llmModel: result.model,
-          ollamaConfig: {
-            numCtx: result.numCtx,
-            numGpu: result.numGpu,
-            baseUrl: result.baseUrl !== 'http://localhost:11434' ? result.baseUrl : undefined,
-          },
-        };
-      } catch (err) {
-        fmt.fail(err instanceof Error ? err.message : 'Ollama auto-setup failed');
-        return;
+  try {
+    if (!skipKeys) {
+      let llmResult: Awaited<ReturnType<typeof runInitLlmStep>> | null = null;
+
+      if (forceLocal) {
+        // --local flag: skip all prompts, auto-setup Ollama end-to-end
+        fmt.blank();
+        fmt.section('Local Agent Setup (Ollama)');
+        const { runOllamaAutoSetup } = await import('../ollama/ollama-manager.js');
+        try {
+          const result = await runOllamaAutoSetup();
+          llmResult = {
+            apiKeys: {},
+            llmProvider: 'ollama',
+            llmModel: result.model,
+            ollamaConfig: {
+              numCtx: result.numCtx,
+              numGpu: result.numGpu,
+              baseUrl: result.baseUrl !== 'http://localhost:11434' ? result.baseUrl : undefined,
+            },
+          };
+        } catch (err) {
+          fmt.fail(err instanceof Error ? err.message : 'Ollama auto-setup failed');
+          return;
+        }
+      } else {
+        llmResult = await runInitLlmStep({ nonInteractive });
+        if (!llmResult && !nonInteractive) {
+          // User cancelled the LLM setup (CTRL+C or explicit cancel).
+          // Don't create a partial agent folder.
+          fmt.blank();
+          fmt.warning('Init cancelled — no agent folder was created.');
+          return;
+        }
       }
-    } else {
-      llmResult = await runInitLlmStep({ nonInteractive });
-      if (!llmResult && !nonInteractive) {
-        // User cancelled the LLM setup (CTRL+C or explicit cancel).
-        // Don't create a partial agent folder.
+
+      if (initCancelled) {
         fmt.blank();
         fmt.warning('Init cancelled — no agent folder was created.');
         return;
       }
-    }
 
-    if (llmResult) {
-      llmProvider = llmResult.llmProvider;
-      llmModel = llmResult.llmModel;
-      llmAuthMethod = llmResult.llmAuthMethod;
-      ollamaConfig = llmResult.ollamaConfig;
+      if (llmResult) {
+        llmProvider = llmResult.llmProvider;
+        llmModel = llmResult.llmModel;
+        llmAuthMethod = llmResult.llmAuthMethod;
+        ollamaConfig = llmResult.ollamaConfig;
 
-      Object.assign(envData, llmResult.apiKeys);
-      if (llmResult.llmModel) envData['OPENAI_MODEL'] = llmResult.llmModel;
-      envData['PORT'] = '3777';
-      wroteEnv = Object.keys(llmResult.apiKeys).length > 0;
+        Object.assign(envData, llmResult.apiKeys);
+        if (llmResult.llmModel) envData['OPENAI_MODEL'] = llmResult.llmModel;
+        envData['PORT'] = '3777';
+        wroteEnv = Object.keys(llmResult.apiKeys).length > 0;
 
-      // Also save to global ~/.wunderland/.env
-      await mergeEnv(llmResult.apiKeys, _globals.config);
-
-      // Persist Ollama config to global config too
-      if (llmResult.llmProvider === 'ollama' && llmResult.ollamaConfig) {
-        const { updateConfig } = await import('../config/config-manager.js');
-        await updateConfig({
-          llmProvider: 'ollama',
-          llmModel: llmResult.llmModel,
-          ollama: llmResult.ollamaConfig,
-        }, _globals.config);
-      }
-
-      // ── Optional GitHub PAT ──────────────────────────────────────────────
-      if (!nonInteractive && !forceLocal) {
-        const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-        if (!ghToken) {
-          const clack = await import('@clack/prompts');
-          const wantGithub = await clack.confirm({
-            message: 'Add a GitHub Personal Access Token? (enables repo search, issues, PRs)',
-            initialValue: false,
-          });
-          if (!clack.isCancel(wantGithub) && wantGithub) {
-            const token = await clack.password({ message: 'GitHub PAT:' });
-            if (!clack.isCancel(token) && token) {
-              envData['GITHUB_TOKEN'] = String(token);
+        // ── Optional GitHub PAT ──────────────────────────────────────────────
+        if (!nonInteractive && !forceLocal) {
+          const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+          if (!ghToken) {
+            const clack = await import('@clack/prompts');
+            const wantGithub = await clack.confirm({
+              message: 'Add a GitHub Personal Access Token? (enables repo search, issues, PRs)',
+              initialValue: false,
+            });
+            if (clack.isCancel(wantGithub) || initCancelled) {
+              fmt.blank();
+              fmt.warning('Init cancelled — no agent folder was created.');
+              return;
+            }
+            if (wantGithub) {
+              const token = await clack.password({ message: 'GitHub PAT:' });
+              if (clack.isCancel(token) || initCancelled) {
+                fmt.blank();
+                fmt.warning('Init cancelled — no agent folder was created.');
+                return;
+              }
+              if (token) {
+                envData['GITHUB_TOKEN'] = String(token);
+              }
             }
           }
         }
+
+        if (initCancelled) {
+          fmt.blank();
+          fmt.warning('Init cancelled — no agent folder was created.');
+          return;
+        }
+
+        // Persist provider credentials only after the prompt flow completes.
+        await mergeEnv(llmResult.apiKeys, _globals.config);
+
+        if (llmResult.llmProvider === 'ollama' && llmResult.ollamaConfig) {
+          const { updateConfig } = await import('../config/config-manager.js');
+          await updateConfig({
+            llmProvider: 'ollama',
+            llmModel: llmResult.llmModel,
+            ollama: llmResult.ollamaConfig,
+          }, _globals.config);
+        }
       }
     }
+  } finally {
+    process.removeListener('SIGINT', handleSigint);
   }
 
   // ── Build config ───────────────────────────────────────────────────────
