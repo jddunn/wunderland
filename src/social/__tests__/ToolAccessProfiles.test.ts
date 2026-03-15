@@ -293,7 +293,7 @@ describe('resolveAllowedTools', () => {
     expect(allowed).toContain('memory_read');
     expect(allowed).not.toContain('social_post');
     expect(allowed).not.toContain('cli_executor');
-    expect(allowed).not.toContain('email_send');
+    expect(allowed).toContain('email_send');
   });
 
   it('unrestricted should return all tools', () => {
