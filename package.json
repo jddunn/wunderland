@@ -1,6 +1,6 @@
 {
   "name": "wunderland",
-  "version": "0.40.0",
+  "version": "0.40.1",
   "description": "Security-hardened AI agent framework \u2014 a fork of OpenClaw with HEXACO personalities, 5-tier prompt-injection defense, 37 channel integrations, and a full CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -99,12 +99,12 @@
   "dependencies": {
     "@clack/prompts": "^0.9.1",
     "@framers/agentos": "workspace:*",
-    "@framers/agentos-ext-cli-executor": "^1.1.1",
+    "@framers/agentos-ext-cli-executor": "^1.2.0",
     "@framers/agentos-ext-giphy": "^1.0.0",
     "@framers/agentos-ext-image-search": "^1.0.0",
     "@framers/agentos-ext-news-search": "^1.0.0",
     "@framers/agentos-ext-voice-synthesis": "^1.0.0",
-    "@framers/agentos-ext-web-browser": "^1.1.1",
+    "@framers/agentos-ext-web-browser": "^1.2.1",
     "@framers/agentos-ext-web-search": "^1.1.1",
     "@framers/agentos-extensions-registry": "workspace:*",
     "@framers/sql-storage-adapter": "^0.5.3",
