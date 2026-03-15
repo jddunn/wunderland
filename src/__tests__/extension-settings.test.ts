@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 
 // Inline the merge logic (same as chat.ts / extension-loader.ts)
 function mergeExtensionLists(
@@ -15,13 +16,6 @@ function mergeExtensionLists(
     voice: agent?.voice ?? global?.voice ?? defaults.voice,
     productivity: agent?.productivity ?? global?.productivity ?? defaults.productivity,
   };
-}
-
-function mergeOverrides(
-  global: Record<string, any> | undefined,
-  agent: Record<string, any> | undefined,
-): Record<string, any> {
-  return { ...(global ?? {}), ...(agent ?? {}) };
 }
 
 describe('mergeExtensionLists', () => {
@@ -72,18 +66,18 @@ describe('mergeExtensionLists', () => {
 
 describe('mergeOverrides', () => {
   it('returns empty object when both undefined', () => {
-    expect(mergeOverrides(undefined, undefined)).toEqual({});
+    expect(mergeExtensionOverrides(undefined, undefined)).toEqual({});
   });
 
   it('returns global when no agent overrides', () => {
     const global = { 'web-search': { priority: 10 } };
-    expect(mergeOverrides(global, undefined)).toEqual(global);
+    expect(mergeExtensionOverrides(global, undefined)).toEqual(global);
   });
 
   it('agent overrides win over global for same key', () => {
     const global = { 'web-search': { priority: 10 }, 'giphy': { priority: 50 } };
     const agent = { 'web-search': { priority: 5 } };
-    const result = mergeOverrides(global, agent);
+    const result = mergeExtensionOverrides(global, agent);
     expect(result['web-search']).toEqual({ priority: 5 });
     expect(result['giphy']).toEqual({ priority: 50 });
   });
@@ -91,8 +85,28 @@ describe('mergeOverrides', () => {
   it('agent adds new keys not in global', () => {
     const global = { 'web-search': { priority: 10 } };
     const agent = { 'image-generation': { options: { defaultProvider: 'stability' } } };
-    const result = mergeOverrides(global, agent);
+    const result = mergeExtensionOverrides(global, agent);
     expect(result['web-search']).toEqual({ priority: 10 });
     expect(result['image-generation']).toEqual({ options: { defaultProvider: 'stability' } });
+  });
+
+  it('deep merges nested options for the same extension', () => {
+    const global = { 'web-search': { priority: 10, options: { defaultProvider: 'serper', timeoutMs: 5000 } } };
+    const agent = { 'web-search': { options: { defaultProvider: 'brave' } } };
+    const result = mergeExtensionOverrides(global, agent);
+    expect(result['web-search']).toEqual({
+      priority: 10,
+      options: { defaultProvider: 'brave', timeoutMs: 5000 },
+    });
+  });
+
+  it('normalizes aliased override keys before merging', () => {
+    const global = { 'google-calendar': { priority: 40 } };
+    const agent = { 'calendar-google': { options: { refreshWindowDays: 7 } } };
+    const result = mergeExtensionOverrides(global, agent);
+    expect(result['calendar-google']).toEqual({
+      priority: 40,
+      options: { refreshWindowDays: 7 },
+    });
   });
 });

@@ -148,6 +148,20 @@ describe('PresetExtensionResolver', () => {
       expect(result.manifest.packs).toHaveLength(1);
     });
 
+    it('should disable cloud and domain packs by default', async () => {
+      await resolveExtensionsByNames(['web-search'], [], []);
+
+      const registry = await import('@framers/agentos-extensions-registry');
+      expect(vi.mocked(registry.createCuratedManifest).mock.lastCall?.[0]).toMatchObject({
+        tools: ['web-search'],
+        voice: 'none',
+        productivity: 'none',
+        cloud: 'none',
+        domains: 'none',
+        channels: 'none',
+      });
+    });
+
     it('should handle registry errors gracefully', async () => {
       // Mock registry to throw error
       vi.mocked(await import('@framers/agentos-extensions-registry')).getAvailableExtensions.mockRejectedValueOnce(
