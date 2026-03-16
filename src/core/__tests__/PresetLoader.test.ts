@@ -70,9 +70,9 @@ const SAMPLE_PERSONA = '# Research Assistant\n\nYou are a meticulous researcher.
 // ── getPresetIds (static) ───────────────────────────────────────────────────
 
 describe('PresetLoader.getPresetIds (static)', () => {
-  it('should return 8 known preset IDs', () => {
+  it('should return 9 known preset IDs', () => {
     const ids = PresetLoader.getPresetIds();
-    expect(ids).toHaveLength(8);
+    expect(ids).toHaveLength(9);
   });
 
   it('should include research-assistant', () => {
@@ -83,6 +83,11 @@ describe('PresetLoader.getPresetIds (static)', () => {
   it('should include personal-assistant', () => {
     const ids = PresetLoader.getPresetIds();
     expect(ids).toContain('personal-assistant');
+  });
+
+  it('should include ai-receptionist', () => {
+    const ids = PresetLoader.getPresetIds();
+    expect(ids).toContain('ai-receptionist');
   });
 });
 
