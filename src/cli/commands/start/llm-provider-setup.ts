@@ -112,7 +112,7 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   const llmBaseUrl =
     providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
     : providerId === 'ollama' ? ollamaBaseUrl
-    : providerId === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta/openai/'
+    : providerId === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta/openai'
     : undefined;
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =
