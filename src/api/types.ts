@@ -208,6 +208,12 @@ export interface WunderlandAgentRagConfig {
     thresholdStep?: number;
     /** Use adaptive thresholding (auto-lower when no results). Default: true. */
     adaptiveThreshold?: boolean;
+    /** Max tokens to request for the hypothetical answer prompt. */
+    maxHypothesisTokens?: number;
+    /** Optional custom system prompt for hypothesis generation. */
+    hypothesisSystemPrompt?: string;
+    /** Prefer full-answer prose rather than terse keyword expansions. Default: true. */
+    fullAnswerGranularity?: boolean;
   };
 }
 
