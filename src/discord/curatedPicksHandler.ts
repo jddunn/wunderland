@@ -14,10 +14,10 @@ const BRAND_COLOR = 0x8b6914;
 
 const CATEGORIES = ['tech', 'science', 'finance', 'world'] as const;
 
-const BASE_INTERVAL = 6 * 60 * 60 * 1000;   // 6 hours
-const JITTER_MAX   = 30 * 60 * 1000;         // 0-30 min random
-const STARTUP_DELAY = 15 * 60 * 1000;        // 15 min after boot
-const MAX_PICKS_PER_DAY = 4;
+const BASE_INTERVAL = 18 * 60 * 60 * 1000;   // 18 hours — ~1 pick per day
+const JITTER_MAX   = 2 * 60 * 60 * 1000;     // 0-2h random jitter
+const STARTUP_DELAY = 30 * 60 * 1000;        // 30 min after boot
+const MAX_PICKS_PER_DAY = 2;                 // absolute max 2 per day, usually 1
 
 // --- Dedup cache constants ---
 const CACHE_DIR = path.join(os.homedir(), '.wunderland');
