@@ -162,6 +162,9 @@ export class RAGTool implements ITool {
         results: chunks,
         totalResults: result.totalResults,
       };
+      if (typeof result.hydeUsed === 'boolean') {
+        output.hydeUsed = result.hydeUsed;
+      }
       if (auditTrail) {
         output.audit = {
           operations: auditTrail.summary.totalOperations,
