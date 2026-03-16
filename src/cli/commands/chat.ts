@@ -289,20 +289,14 @@ export default async function cmdChat(
   let oauthGetApiKey: (() => Promise<string>) | undefined;
 
   if (authMethod === 'oauth') {
-    try {
-      const { OpenAIOAuthFlow, FileTokenStore } = await import('@framers/agentos/auth');
-      const flow = new OpenAIOAuthFlow({ tokenStore: new FileTokenStore() });
-      const initialKey = await flow.getAccessToken();
-      llmApiKey = initialKey;
-      oauthGetApiKey = () => flow.getAccessToken();
-    } catch {
-      fmt.errorBlock(
-        'OAuth authentication required',
-        `Run ${accent('wunderland login')} to authenticate with your OpenAI subscription.`
-      );
-      process.exitCode = 1;
-      return;
-    }
+    fmt.errorBlock(
+      'Not yet supported',
+      'OAuth subscription-based usage (ChatGPT Plus/Pro) is not yet available.\n' +
+      'OpenAI subscription token usage requires a registered OAuth application.\n' +
+      'Please use an OpenAI API key instead — get one at https://platform.openai.com/api-keys',
+    );
+    process.exitCode = 1;
+    return;
   } else {
     llmApiKey =
       providerId === 'openrouter'
@@ -319,9 +313,7 @@ export default async function cmdChat(
   }
 
   const canUseLLM =
-    authMethod === 'oauth'
-      ? true
-      : providerId === 'ollama'
+    providerId === 'ollama'
         ? true
         : providerId === 'openrouter'
           ? !!openrouterApiKey
@@ -343,7 +335,6 @@ export default async function cmdChat(
   // Warn if using an API key from environment rather than agent config.
   // This prevents confusion when CTRL+C'd init still creates a working agent.
   if (
-    authMethod !== 'oauth' &&
     providerId !== 'ollama' &&
     llmApiKey &&
     !providerFromConfig
