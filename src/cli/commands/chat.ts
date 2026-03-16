@@ -277,7 +277,7 @@ export default async function cmdChat(
       : providerId === 'ollama'
         ? ollamaBaseUrl
         : providerId === 'gemini'
-          ? 'https://generativelanguage.googleapis.com/v1beta/openai/'
+          ? 'https://generativelanguage.googleapis.com/v1beta/openai'
           : undefined;
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =

@@ -534,7 +534,10 @@ export async function chatCompletionsRequest(
   maxTokens: number,
 ): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
   const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
-  const providerName = baseUrl.includes('openrouter') ? 'OpenRouter' : 'OpenAI';
+  const providerName = baseUrl.includes('openrouter') ? 'OpenRouter'
+    : baseUrl.includes('generativelanguage.googleapis.com') ? 'Gemini'
+    : baseUrl.includes('anthropic') ? 'Anthropic'
+    : 'OpenAI';
   const apiKey = await resolveApiKeyInput(
     provider.getApiKey ? provider.getApiKey : provider.apiKey,
     { source: `${providerName} chat completions` },
