@@ -134,6 +134,10 @@ function mergeRagConfig(
       ...(preset?.strategyParams ?? {}),
       ...(config?.strategyParams ?? {}),
     },
+    hyde: {
+      ...(preset?.hyde ?? {}),
+      ...(config?.hyde ?? {}),
+    },
   };
 
   if (!merged.collectionIds) delete merged.collectionIds;
@@ -141,6 +145,7 @@ function mergeRagConfig(
   if (!merged.filters || Object.keys(merged.filters).length === 0) delete merged.filters;
   if (!merged.rewrite || Object.keys(merged.rewrite).length === 0) delete merged.rewrite;
   if (!merged.strategyParams || Object.keys(merged.strategyParams).length === 0) delete merged.strategyParams;
+  if (!merged.hyde || Object.keys(merged.hyde).length === 0) delete merged.hyde;
 
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
