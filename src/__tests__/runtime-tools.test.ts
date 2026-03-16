@@ -63,6 +63,23 @@ describe('createConfiguredRagTools', () => {
   });
 
   it('forwards explicit HyDE settings to the HTTP-backed rag_query tool', async () => {
+    mockClientQuery.mockResolvedValueOnce({
+      success: true,
+      query: 'find deployment runbooks',
+      hydeUsed: true,
+      chunks: [
+        {
+          chunkId: 'chunk-2',
+          documentId: 'doc-2',
+          content: 'Runbook result',
+          score: 0.88,
+          metadata: { source: 'ops' },
+        },
+      ],
+      totalResults: 1,
+      processingTimeMs: 3,
+    });
+
     const tools = createConfiguredRagTools({
       seedId: 'seed-2',
       rag: {
@@ -80,6 +97,13 @@ describe('createConfiguredRagTools', () => {
 
     const result = await ragQuery!.execute({ query: 'find deployment runbooks' }, {} as any);
     expect(result.success).toBe(true);
+    expect(JSON.parse(String(result.output))).toEqual(
+      expect.objectContaining({
+        query: 'find deployment runbooks',
+        hydeUsed: true,
+        totalResults: 1,
+      }),
+    );
     expect(mockClientQuery).toHaveBeenCalledWith(
       expect.objectContaining({
         query: 'find deployment runbooks',
