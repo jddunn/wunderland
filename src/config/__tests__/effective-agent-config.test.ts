@@ -2,13 +2,15 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveEffectiveAgentConfig } from '../effective-agent-config.js';
+import { PresetLoader } from '../../core/PresetLoader.js';
 
 const tempDirs: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) rmSync(dir, { recursive: true, force: true });
@@ -80,5 +82,57 @@ describe('resolveEffectiveAgentConfig — AgentOS persona registry', () => {
     expect(agentConfig.rag?.defaultTopK).toBe(8);
     expect(agentConfig.rag?.collectionIds).toEqual(['architecture_docs']);
     expect(availablePersonas?.some((persona) => persona.id === 'custom_architect')).toBe(true);
+  });
+});
+
+describe('resolveEffectiveAgentConfig — rag hyde merge', () => {
+  it('deep merges rag.hyde between preset config and agent overrides', async () => {
+    vi.spyOn(PresetLoader.prototype, 'loadPreset').mockReturnValue({
+      id: 'test-preset',
+      name: 'Test Preset',
+      description: 'Preset used for HyDE merge testing',
+      hexacoTraits: {
+        honesty: 0.5,
+        emotionality: 0.5,
+        extraversion: 0.5,
+        agreeableness: 0.5,
+        conscientiousness: 0.5,
+        openness: 0.5,
+      },
+      securityTier: 'trusted',
+      suggestedSkills: [],
+      suggestedChannels: [],
+      rag: {
+        enabled: true,
+        hyde: {
+          enabled: true,
+          initialThreshold: 0.8,
+          adaptiveThreshold: true,
+        },
+      },
+      persona: 'Preset persona',
+    });
+
+    const { agentConfig } = await resolveEffectiveAgentConfig({
+      agentConfig: {
+        presetId: 'test-preset',
+        rag: {
+          enabled: true,
+          hyde: {
+            minThreshold: 0.4,
+            fullAnswerGranularity: false,
+          },
+        },
+      },
+      workingDirectory: process.cwd(),
+    });
+
+    expect(agentConfig.rag?.hyde).toEqual({
+      enabled: true,
+      initialThreshold: 0.8,
+      minThreshold: 0.4,
+      adaptiveThreshold: true,
+      fullAnswerGranularity: false,
+    });
   });
 });

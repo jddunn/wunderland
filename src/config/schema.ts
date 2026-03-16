@@ -263,6 +263,37 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
           }
         }
       }
+      if (rag.hyde !== undefined) {
+        if (!isPlainObject(rag.hyde)) {
+          issues.push({ path: 'rag.hyde', message: 'Expected object.' });
+        } else {
+          const hyde = rag.hyde as Record<string, unknown>;
+          for (const boolField of ['enabled', 'adaptiveThreshold', 'fullAnswerGranularity']) {
+            if (hyde[boolField] !== undefined && typeof hyde[boolField] !== 'boolean') {
+              issues.push({ path: `rag.hyde.${boolField}`, message: 'Expected boolean.' });
+            }
+          }
+          for (const numField of [
+            'initialThreshold',
+            'minThreshold',
+            'thresholdStep',
+            'maxHypothesisTokens',
+          ]) {
+            if (hyde[numField] !== undefined && typeof hyde[numField] !== 'number') {
+              issues.push({ path: `rag.hyde.${numField}`, message: 'Expected number.' });
+            }
+          }
+          if (
+            hyde.hypothesisSystemPrompt !== undefined &&
+            typeof hyde.hypothesisSystemPrompt !== 'string'
+          ) {
+            issues.push({
+              path: 'rag.hyde.hypothesisSystemPrompt',
+              message: 'Expected string.',
+            });
+          }
+        }
+      }
     }
   }
 
