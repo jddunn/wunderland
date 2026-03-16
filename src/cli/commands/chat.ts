@@ -326,7 +326,7 @@ export default async function cmdChat(
   if (!canUseLLM) {
     fmt.errorBlock(
       'Missing API key',
-      'Configure an LLM provider in agent.config.json, set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY, use `wunderland login` for OAuth, or use Ollama.'
+      'Configure an LLM provider in agent.config.json, set OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY, or use Ollama.'
     );
     process.exitCode = 1;
     return;
@@ -1519,6 +1519,26 @@ export default async function cmdChat(
   }
 
   // ── Slash command handler (returns true if the input was a slash command) ──
+  /**
+   * Handle /research and /deep prefixes — wraps the query with explicit
+   * instructions to use deep_research tool at the specified depth.
+   */
+  function applyResearchPrefix(input: string): string {
+    const researchMatch = input.match(/^\/(research|deep)\s+(.+)/is);
+    if (!researchMatch) return input;
+
+    const depth = researchMatch[1].toLowerCase() === 'deep' ? 'deep' : 'moderate';
+    const query = researchMatch[2].trim();
+    console.log(
+      `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)(`[research:${depth}]`)} ${query}`
+    );
+    return (
+      `[RESEARCH MODE: Use the deep_research tool with depth="${depth}" to answer this query. ` +
+      `Decompose it into sub-questions, search multiple sources, analyze gaps, and synthesize a thorough ` +
+      `report with citations. Do NOT answer from your training data alone.]\n\n${query}`
+    );
+  }
+
   function handleSlashCommand(input: string): boolean {
     if (input === '/help') {
       const cw = getChatWidth();
@@ -1558,6 +1578,12 @@ export default async function cmdChat(
       helpLines.push(
         frameLine(
           `   ${chalk.hex(C.cyan)('/clear')}     ${chalk.hex(C.text)('Clear conversation history')}`,
+          iw
+        )
+      );
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.cyan)('/research')}  ${chalk.hex(C.text)('Deep research mode (prefix: /research <query>)')}`,
           iw
         )
       );
@@ -1722,7 +1748,7 @@ export default async function cmdChat(
       if (!input) continue;
       if (input === '/exit' || input === 'exit' || input === 'quit') break;
       if (handleSlashCommand(input)) continue;
-      await safeChatTurn(input);
+      await safeChatTurn(applyResearchPrefix(input));
     } else {
       // Concurrent: race stdin vs channel message queue
       let stdinLine: string | undefined;
@@ -1753,7 +1779,7 @@ export default async function cmdChat(
         if (!input) continue;
         if (input === '/exit' || input === 'exit' || input === 'quit') break;
         if (handleSlashCommand(input)) continue;
-        await safeChatTurn(input);
+        await safeChatTurn(applyResearchPrefix(input));
       }
     }
   }
