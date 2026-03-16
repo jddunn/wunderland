@@ -1,7 +1,7 @@
 {
   "name": "wunderland",
   "version": "0.42.0",
-  "description": "Security-hardened AI agent framework — a fork of OpenClaw with HEXACO personalities, 5-tier prompt-injection defense, 37 channel integrations, and a full CLI",
+  "description": "Autonomous AI agent framework with cognitive memory, infinite-context graph-based RAG, and HEXACO personality modeling — built on OpenClaw with 5-tier prompt-injection defense, adaptive HyDE retrieval, observational memory with Ebbinghaus decay, 37 channel integrations, and a zero-config CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
