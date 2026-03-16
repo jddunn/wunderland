@@ -34,6 +34,16 @@ export interface RAGToolConfig {
     enabled?: boolean;
     maxVariants?: number;
   };
+  hyde?: {
+    enabled?: boolean;
+    initialThreshold?: number;
+    minThreshold?: number;
+    thresholdStep?: number;
+    adaptiveThreshold?: boolean;
+    maxHypothesisTokens?: number;
+    hypothesisSystemPrompt?: string;
+    fullAnswerGranularity?: boolean;
+  };
   strategy?: 'similarity' | 'mmr' | 'hybrid_search';
   strategyParams?: {
     mmrLambda?: number;
@@ -108,6 +118,7 @@ export class RAGTool implements ITool {
           : (this.config.includeDebug ?? false),
       queryVariants: this.config.queryVariants,
       rewrite: this.config.rewrite,
+      hyde: this.config.hyde,
       strategy: this.config.strategy,
       strategyParams: this.config.strategyParams,
       similarityThreshold: this.config.similarityThreshold,
