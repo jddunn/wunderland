@@ -6,7 +6,6 @@
 import * as path from 'node:path';
 import type { LLMProviderConfig } from '../../openai/tool-calling.js';
 import * as fmt from '../../ui/format.js';
-import { accent } from '../../ui/theme.js';
 import {
   isLocalOllamaBaseUrl,
   isOllamaRunning,
@@ -124,21 +123,14 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   let oauthGetApiKey: (() => Promise<string>) | undefined;
 
   if (authMethod === 'oauth') {
-    try {
-      const { OpenAIOAuthFlow, FileTokenStore } = await import('@framers/agentos/auth');
-      const flow = new OpenAIOAuthFlow({ tokenStore: new FileTokenStore() });
-      // Verify we have stored tokens
-      const initialKey = await flow.getAccessToken();
-      llmApiKey = initialKey;
-      oauthGetApiKey = () => flow.getAccessToken();
-    } catch (err) {
-      fmt.errorBlock(
-        'OAuth authentication required',
-        `Run ${accent('wunderland login')} to authenticate with your OpenAI subscription.`,
-      );
-      process.exitCode = 1;
-      return false;
-    }
+    fmt.errorBlock(
+      'Not yet supported',
+      'OAuth subscription-based usage (ChatGPT Plus/Pro) is not yet available.\n' +
+      'OpenAI subscription token usage requires a registered OAuth application.\n' +
+      'Please use an OpenAI API key instead — get one at https://platform.openai.com/api-keys',
+    );
+    process.exitCode = 1;
+    return false;
   } else {
     llmApiKey =
       providerId === 'openrouter' ? openrouterApiKey
@@ -150,17 +142,15 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   }
 
   const canUseLLM =
-    authMethod === 'oauth'
+    providerId === 'ollama'
       ? true
-      : providerId === 'ollama'
-        ? true
-        : providerId === 'openrouter'
-          ? !!openrouterApiKey
-          : providerId === 'anthropic'
-            ? !!process.env['ANTHROPIC_API_KEY']
-            : providerId === 'gemini'
-              ? !!process.env['GEMINI_API_KEY']
-              : !!llmApiKey || !!openrouterFallback;
+      : providerId === 'openrouter'
+        ? !!openrouterApiKey
+        : providerId === 'anthropic'
+          ? !!process.env['ANTHROPIC_API_KEY']
+          : providerId === 'gemini'
+            ? !!process.env['GEMINI_API_KEY']
+            : !!llmApiKey || !!openrouterFallback;
 
   ctx.providerId = providerId;
   ctx.model = model;

@@ -2,7 +2,7 @@
  * @fileoverview `wunderland login` — authenticate your LLM provider.
  *
  * Default interactive menu shows LLM authentication options:
- * - OpenAI OAuth (ChatGPT subscription — no API key needed)
+ * - OpenAI OAuth (ChatGPT subscription — currently disabled)
  * - OpenAI API Key
  * - Anthropic API Key
  * - Google Gemini API Key
@@ -20,7 +20,7 @@
 
 import type { GlobalFlags } from '../types.js';
 import { LLM_PROVIDERS } from '../constants.js';
-import { accent, success as sColor, dim, muted, bright, info as iColor } from '../ui/theme.js';
+import { accent, success as sColor, dim, muted, bright } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { updateConfig } from '../config/config-manager.js';
@@ -96,65 +96,13 @@ async function saveManualToken(
 // ── LLM Provider Login Flows ─────────────────────────────────────────────────
 
 async function loginOpenAIOAuth(_flags: Record<string, string | boolean>, globals: GlobalFlags): Promise<void> {
-  const authMod = await import('@framers/agentos/auth') as any;
-  const { OpenAIOAuthFlow, FileTokenStore } = authMod;
-  const store = new FileTokenStore();
-
-  // Check for cached tokens first
-  const existing = await store.load('openai');
-  if (existing) {
-    const checkFlow = new OpenAIOAuthFlow({ tokenStore: store });
-    if (checkFlow.isValid(existing)) {
-      const masked = existing.accessToken.slice(0, 8) + '...' + existing.accessToken.slice(-4);
-      const expiresIn = Math.round((existing.expiresAt - Date.now()) / 1000 / 60);
-      const unit = expiresIn > 1440 ? `${Math.round(expiresIn / 1440)} days` : `${expiresIn} minutes`;
-
-      console.log();
-      fmt.ok(`You're already logged in — no need to re-authenticate.`);
-      fmt.note(`Token: ${dim(masked)} · expires in ${accent(unit)}`);
-      console.log();
-      fmt.note(`Next step: ${accent('wunderland chat --oauth')}`);
-      console.log();
-      return;
-    }
-  }
-
-  await fmt.panel({
-    title: 'OpenAI OAuth Login',
-    style: 'brand',
-    content: [
-      `${bright('Authenticate with your ChatGPT subscription')}`,
-      `${dim('Opens your browser to log in — same flow as the Codex CLI.')}`,
-      '',
-      `${muted('Plan')}              ${muted('Price')}       ${muted('API Credits')}`,
-      `${iColor('ChatGPT Plus')}     $20/mo      $5/mo`,
-      `${iColor('ChatGPT Pro')}      $200/mo     $50/mo + unlimited Codex`,
-      `${iColor('ChatGPT Team')}     $25-30/mo   shared pool`,
-    ].join('\n'),
-  });
-
-  console.log();
-
-  const flow = new OpenAIOAuthFlow({
-    tokenStore: store,
-    onBrowserOpen: (_authUrl: string) => {
-      fmt.note('Opening your browser to log in with OpenAI...');
-      fmt.note(`If it doesn't open, visit: ${iColor(_authUrl)}`);
-      console.log();
-      fmt.note('Waiting for authorization...');
-    },
-  });
-
-  const tokens = await flow.authenticate();
-  printTokenSuccess('OpenAI', 'openai', tokens);
-
-  // Persist auth method in config
-  await updateConfig({ llmProvider: 'openai', llmAuthMethod: 'oauth' }, globals.config);
-
-  console.log();
-  fmt.ok(`Config updated: ${accent('llmAuthMethod = "oauth"')}`);
-  fmt.note(`Start chatting: ${accent('wunderland chat --oauth')}`);
-  console.log();
+  void globals;
+  fmt.errorBlock(
+    'Not yet supported',
+    'OAuth subscription-based usage (ChatGPT Plus/Pro) is not yet available.\n' +
+    'OpenAI subscription token usage requires a registered OAuth application.\n' +
+    'Please use an OpenAI API key instead — get one at https://platform.openai.com/api-keys',
+  );
 }
 
 async function loginApiKey(
