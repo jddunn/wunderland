@@ -149,7 +149,21 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     if (useDetected) {
       for (const d of detected) {
         apiKeys[d.envVar] = d.value;
-        if (!selectedProvider) selectedProvider = d.id;
+      }
+
+      // If multiple providers detected, let user choose which one to use
+      if (detected.length > 1) {
+        const chosenProvider = await p.select({
+          message: 'Multiple API keys detected. Which provider do you want to use?',
+          options: detected.map((d) => ({
+            value: d.id,
+            label: d.label,
+          })),
+        });
+        if (p.isCancel(chosenProvider)) return null;
+        selectedProvider = chosenProvider as string;
+      } else {
+        selectedProvider = detected[0].id;
       }
     }
   }
