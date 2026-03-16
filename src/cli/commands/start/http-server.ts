@@ -1223,6 +1223,13 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
               askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
                 if (autoApproveToolCalls) return true;
 
+                // Auto-approve read-only tools via HTTP API — they have no side effects
+                if (tool.hasSideEffects !== true) return true;
+
+                // Check if request explicitly opted in to auto-approve
+                // via X-Auto-Approve: true header
+                if (req.headers['x-auto-approve'] === 'true') return true;
+
                 const preview = safeJsonStringify(args, 1800);
                 const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
                 const actionId = `tool-${seedId}-${randomUUID()}`;
