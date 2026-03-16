@@ -357,6 +357,9 @@ export function createWelcomeHandler(config: WelcomeConfig) {
             if (first) welcomed.delete(first);
           }
 
+          // Wait for system join message to render in channel before posting welcome
+          await new Promise(r => setTimeout(r, 5000));
+
           await postWelcome(member, service);
         } catch (err: any) {
           console.error('[Welcome] Failed to welcome member:', err?.message ?? err);
