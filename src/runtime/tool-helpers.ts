@@ -26,7 +26,6 @@ import {
 import {
   FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
   DEFAULT_STEP_UP_AUTH_CONFIG,
-  ToolRiskTier,
   type StepUpAuthorizationConfig,
 } from '../core/types.js';
 import type { AuthorizableTool } from '../authorization/types.js';
@@ -50,8 +49,6 @@ import {
   buildToolFunctionNameMapping,
   formatToolNameRewriteSummary,
   resolveStrictToolNames,
-  resolveToolMapKeyFromFunctionName,
-  sanitizeToolDefsForProvider,
 } from './tool-function-names.js';
 
 const tracer = trace.getTracer('wunderland.runtime');
@@ -60,7 +57,7 @@ const tracer = trace.getTracer('wunderland.runtime');
  * When a tool fails, suggest alternative tools the LLM can try instead.
  * The LLM sees `suggestedFallbacks` in the error response and can act on it.
  */
-const TOOL_FALLBACK_MAP: Record<string, string[]> = {
+export const TOOL_FALLBACK_MAP: Record<string, string[]> = {
   'web_search': ['browser_navigate', 'news_search', 'research_aggregate'],
   'browser_navigate': ['stealth_navigate', 'web_search', 'research_aggregate'],
   'browser_scrape': ['stealth_scrape', 'web_search'],

@@ -19,25 +19,13 @@ import {
 } from '../authorization/StepUpAuthorizationManager.js';
 import {
   FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
-  DEFAULT_STEP_UP_AUTH_CONFIG,
   ToolRiskTier,
   type StepUpAuthorizationConfig,
 } from '../core/types.js';
-import type { AuthorizableTool } from '../authorization/types.js';
-import { SpanStatusCode, context, trace } from '@opentelemetry/api';
-import { logs, SeverityNumber } from '@opentelemetry/api-logs';
-import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';
-import { SafeGuardrails } from '../security/SafeGuardrails.js';
-import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
-import {
-  PERMISSION_SETS,
-  SECURITY_TIERS,
-  type PermissionSetName,
-  type SecurityTierName,
-} from '../security/SecurityTiers.js';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
+import { SeverityNumber } from '@opentelemetry/api-logs';
+import { isWunderlandOtelEnabled } from '../observability/otel.js';
 import * as path from 'node:path';
-import * as os from 'node:os';
-import { resolveAgentWorkspaceDir } from '@framers/agentos';
 import { resolveApiKeyInput } from './api-key-resolver.js';
 import {
   buildToolDefsFromMapping,
@@ -89,32 +77,25 @@ export {
   type ToolCallMessage,
   type LLMProviderConfig,
 } from './tool-helpers.js';
-import type { ToolInstance, ToolCallMessage, LLMProviderConfig } from './tool-helpers.js';
+import type { ToolInstance, LLMProviderConfig } from './tool-helpers.js';
 import {
   isEmptySearchResult,
   getGuardrails,
   safeJsonStringify,
-  truncateString,
   toAuthorizableTool,
   createAuthorizationManager,
   parseProviderId,
-  shouldFallback,
   toAnthropicMessagePayload,
   anthropicMessagesRequest,
   toAnthropicTools,
-  buildToolDefs,
   openaiChatWithTools,
   redactToolOutputForLLM,
   getStringProp,
   getBooleanProp,
   normalizeToolFailureMode,
-  foldMarkerChar,
-  foldMarkerText,
-  sanitizeToolOutputMarkers,
   wrapUntrustedToolOutput,
   getAgentIdForGuardrails,
   getAgentWorkspaceDirFromContext,
-  buildDefaultFolderPermissions,
   maybeConfigureGuardrailsForAgent,
   emitOtelLog,
   withSpan,
