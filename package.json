@@ -1,7 +1,7 @@
 {
   "name": "wunderland",
-  "version": "0.41.0",
-  "description": "Security-hardened AI agent framework \u2014 a fork of OpenClaw with HEXACO personalities, 5-tier prompt-injection defense, 37 channel integrations, and a full CLI",
+  "version": "0.41.1",
+  "description": "Security-hardened AI agent framework — a fork of OpenClaw with HEXACO personalities, 5-tier prompt-injection defense, 37 channel integrations, and a full CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
