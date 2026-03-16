@@ -14,6 +14,12 @@ import {
 } from '../../openai/tool-calling.js';
 import { maybeProxyAgentosRagRequest } from '../../../rag/http-proxy.js';
 import {
+  classifyResearchDepth,
+  buildResearchPrefix,
+  shouldInjectResearch,
+  type ResearchDepth,
+} from '../../../runtime/research-classifier.js';
+import {
   buildPersonaSessionKey,
   createRequestScopedToolMap,
   extractRequestedPersonaId,
@@ -1042,19 +1048,64 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           return;
         }
 
-        // Research depth escalation: /research or /deep prefix, or "research": true in body
+        // Research depth escalation: explicit prefix/body field, or LLM-as-judge auto-classify
         const researchMatch = message.match(/^\/(research|deep)\s+(.+)/is);
-        const researchDepth = parsed.research === true ? 'moderate'
+        let researchDepth: string | null = parsed.research === true ? 'moderate'
           : parsed.research === 'deep' ? 'deep'
           : parsed.research === 'quick' ? 'quick'
           : researchMatch ? (researchMatch[1].toLowerCase() === 'deep' ? 'deep' : 'moderate')
           : null;
         if (researchMatch) message = researchMatch[2].trim();
+
+        // Auto-classify with LLM-as-judge when no explicit depth
+        const autoClassifyEnabled = cfg?.research?.autoClassify !== false && parsed.autoClassify !== false;
+        if (!researchDepth && autoClassifyEnabled) {
+          try {
+            const classifierResult = await classifyResearchDepth(message, {
+              enabled: true,
+              llmCall: async (system: string, user: string) => {
+                const resp = await fetch(
+                  `${llmBaseUrl || 'https://api.openai.com/v1'}/chat/completions`,
+                  {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${llmApiKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      model: providerId === 'ollama' ? 'qwen2.5:3b' : providerId === 'gemini' ? 'gemini-2.0-flash-lite' : 'gpt-4o-mini',
+                      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+                      temperature: 0,
+                      max_tokens: 100,
+                    }),
+                  }
+                );
+                if (!resp.ok) return '{"depth":"none"}';
+                const data = await resp.json() as any;
+                return data?.choices?.[0]?.message?.content || '{"depth":"none"}';
+              },
+            });
+            const minDepth = (cfg?.research?.minDepthToInject as ResearchDepth) || 'quick';
+            if (shouldInjectResearch(classifierResult.depth, minDepth)) {
+              researchDepth = classifierResult.depth;
+            }
+          } catch {
+            // Classification failure — proceed without research injection
+          }
+        }
+
         if (researchDepth) {
-          message =
-            `[RESEARCH MODE: Use the deep_research tool with depth="${researchDepth}" to answer this query. ` +
-            `Decompose it into sub-questions, search multiple sources, analyze gaps, and synthesize a thorough ` +
-            `report with citations. Do NOT answer from your training data alone.]\n\n${message}`;
+          const prefix = buildResearchPrefix(researchDepth as ResearchDepth);
+          if (prefix) message = `${prefix}\n\n${message}`;
+        }
+
+        const streamMode = parsed.stream === true;
+
+        // When streaming, switch to SSE so progress events can be pushed to the client.
+        if (streamMode) {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+          });
         }
 
         let reply = '';
@@ -1317,6 +1368,22 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
                 console.warn(`[fallback] Primary provider failed (${err.message}), routing to ${provider}`);
               },
               getApiKey: oauthGetApiKey,
+              onToolProgress: streamMode
+                ? (info) => {
+                    try {
+                      const chunk = JSON.stringify({
+                        type: 'SYSTEM_PROGRESS',
+                        toolName: info.toolName,
+                        phase: info.phase,
+                        message: info.message,
+                        progress: info.progress ?? null,
+                      });
+                      res.write(`event: progress\ndata: ${chunk}\n\n`);
+                    } catch {
+                      // Connection may have been closed — ignore
+                    }
+                  }
+                : undefined,
             });
           } else {
             reply =
@@ -1331,7 +1398,17 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           sessions.set(internalSessionId, workingMessages);
         } catch (error) {
           turnFailed = true;
-          throw error;
+          if (streamMode) {
+            try {
+              const errChunk = JSON.stringify({
+                type: 'ERROR',
+                error: error instanceof Error ? error.message : String(error),
+              });
+              res.write(`event: error\ndata: ${errChunk}\n\n`);
+            } catch { /* ignore */ }
+          } else {
+            throw error;
+          }
         } finally {
           try {
             await adaptiveRuntime.recordTurnOutcome({
@@ -1356,7 +1433,22 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           reply = reply.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
           reply = reply.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
         }
-        sendJson(res, 200, { reply, personaId: requestActivePersonaId });
+
+        if (streamMode) {
+          if (!turnFailed) {
+            try {
+              const finalChunk = JSON.stringify({
+                type: 'REPLY',
+                reply,
+                personaId: requestActivePersonaId,
+              });
+              res.write(`event: reply\ndata: ${finalChunk}\n\n`);
+            } catch { /* ignore */ }
+          }
+          res.end();
+        } else {
+          sendJson(res, 200, { reply, personaId: requestActivePersonaId });
+        }
         return;
       }
 
