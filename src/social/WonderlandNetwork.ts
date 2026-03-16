@@ -53,7 +53,6 @@ import type {
   Tip,
   ApprovalQueueEntry,
   EngagementActionType,
-  PairwiseInfluenceDampingConfig,
   NewsroomConfig,
   CitizenLevel,
   EnclaveConfig,
@@ -63,7 +62,7 @@ import type {
   EmojiReaction,
   EmojiReactionCounts,
 } from './types.js';
-import { CitizenLevel as Level, XP_REWARDS } from './types.js';
+import { CitizenLevel as Level } from './types.js';
 
 /**
  * Callback for post storage.
@@ -179,31 +178,9 @@ interface AgentMoodInertia {
   threads: Map<string, InertiaVector>;
 }
 
-type PairwiseInfluenceAction =
-  | 'like'
-  | 'downvote'
-  | 'boost'
-  | 'reply'
-  | 'view'
-  | 'report'
-  | 'emoji_reaction';
+// PairwiseInfluenceAction moved to EngagementProcessor
 
-interface PairwiseInfluenceState {
-  score: number;
-  lastAtMs: number;
-  lastAction?: PairwiseInfluenceAction;
-  streak: number;
-}
-
-type ResolvedPairwiseInfluenceDampingConfig = {
-  enabled: boolean;
-  halfLifeMs: number;
-  suppressionThreshold: number;
-  minWeight: number;
-  scoreSlope: number;
-  streakSlope: number;
-  actionImpact: Record<PairwiseInfluenceAction, number>;
-};
+// PairwiseInfluenceState and ResolvedPairwiseInfluenceDampingConfig moved to EngagementProcessor
 
 /**
  * WonderlandNetwork is the top-level orchestrator.
@@ -254,14 +231,6 @@ export class WonderlandNetwork {
   /** External post storage callback */
   private postStoreCallback?: PostStoreCallback;
 
-  /** External emoji reaction storage callback */
-  private emojiReactionStoreCallback?: EmojiReactionStoreCallback;
-
-  /** External engagement action storage callback */
-  private engagementStoreCallback?: EngagementStoreCallback;
-
-  /** In-memory reaction dedup index: "entityType:entityId:reactorSeedId:emoji" */
-  private emojiReactionIndex: Set<string> = new Set();
   private engagementProcessor!: EngagementProcessor;
 
   /** Default LLM callback applied to newly registered citizens */
@@ -309,7 +278,7 @@ export class WonderlandNetwork {
   private moodInertiaState: Map<string, AgentMoodInertia> = new Map();
 
   /** Per actor->author influence history for anti-collusion damping. */
-  private pairwiseInfluenceState: Map<string, PairwiseInfluenceState> = new Map();
+  // pairwiseInfluenceState moved to EngagementProcessor
 
   /** External news feed ingestion framework */
   private newsFeedIngester?: NewsFeedIngester;
@@ -743,7 +712,7 @@ export class WonderlandNetwork {
    * Set external storage callback for emoji reactions.
    */
   setEmojiReactionStoreCallback(callback: EmojiReactionStoreCallback): void {
-    this.emojiReactionStoreCallback = callback;
+    this.engagementProcessor?.setEmojiReactionStoreCallback(callback);
   }
 
   /**
@@ -857,7 +826,7 @@ export class WonderlandNetwork {
 
   /** Set external storage callback for engagement actions (votes, views, boosts). */
   setEngagementStoreCallback(callback: EngagementStoreCallback): void {
-    this.engagementStoreCallback = callback;
+    this.engagementProcessor?.setEngagementStoreCallback(callback);
   }
 
   /** Preload published posts from DB into in-memory Map for browsing vote resolution. */

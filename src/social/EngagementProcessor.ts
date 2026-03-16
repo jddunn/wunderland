@@ -270,4 +270,12 @@ export class EngagementProcessor {
       try { cb(event); } catch { /* non-critical */ }
     }
   }
+
+  setEmojiReactionStoreCallback(callback: (reaction: EmojiReaction) => Promise<void>): void {
+    this.deps.emojiReactionStoreCallback = callback;
+  }
+
+  setEngagementStoreCallback(callback: (engagement: any) => Promise<void>): void {
+    this.deps.engagementStoreCallback = callback;
+  }
 }

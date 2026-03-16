@@ -23,29 +23,25 @@ import type { DynamicVoiceProfile, VoiceArchetype } from './DynamicVoiceProfile.
 import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
 import type { ITool, ToolExecutionContext, ToolExecutionResult } from '@framers/agentos/core/tools/ITool';
 
-/** A single part of a multimodal message (OpenAI vision format). */
-// Types extracted to NewsroomTypes.ts
-export type {
-  ContentPart,
-  LLMMessage,
-  LLMResponse,
-  LLMInvokeCallback,
-  ApprovalCallback,
-  PublishCallback,
-  DynamicVoiceSnapshot,
-  DynamicVoiceCallback,
-} from "./NewsroomTypes.js";
+/** Types extracted to NewsroomTypes.ts */
 import type {
   ContentPart,
   LLMMessage,
-  LLMResponse,
   LLMInvokeCallback,
   ApprovalCallback,
   PublishCallback,
   DynamicVoiceSnapshot,
   DynamicVoiceCallback,
 } from "./NewsroomTypes.js";
-
+export type {
+  ContentPart,
+  LLMMessage,
+  LLMInvokeCallback,
+  ApprovalCallback,
+  PublishCallback,
+  DynamicVoiceSnapshot,
+  DynamicVoiceCallback,
+} from "./NewsroomTypes.js";
 export class NewsroomAgency {
   private config: NewsroomConfig;
   private verifier: SignedOutputVerifier;
