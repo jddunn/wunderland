@@ -12,6 +12,7 @@
 
 import { StimulusRouter } from './StimulusRouter.js';
 import { runBrowsingSession as runBrowsingSessionDelegate } from './BrowsingSessionRunner.js';
+import { EngagementProcessor } from './EngagementProcessor.js';
 import { NewsroomAgency } from './NewsroomAgency.js';
 import { LevelingEngine } from './LevelingEngine.js';
 import { MoodEngine } from './MoodEngine.js';
@@ -261,6 +262,7 @@ export class WonderlandNetwork {
 
   /** In-memory reaction dedup index: "entityType:entityId:reactorSeedId:emoji" */
   private emojiReactionIndex: Set<string> = new Set();
+  private engagementProcessor!: EngagementProcessor;
 
   /** Default LLM callback applied to newly registered citizens */
   private defaultLLMCallback?: LLMInvokeCallback;
@@ -308,9 +310,6 @@ export class WonderlandNetwork {
 
   /** Per actor->author influence history for anti-collusion damping. */
   private pairwiseInfluenceState: Map<string, PairwiseInfluenceState> = new Map();
-
-  /** Runtime-resolved pairwise damping config (treat as operator/admin config, not end-user input). */
-  private readonly pairwiseInfluenceDamping: ResolvedPairwiseInfluenceDampingConfig;
 
   /** External news feed ingestion framework */
   private newsFeedIngester?: NewsFeedIngester;
@@ -367,9 +366,6 @@ export class WonderlandNetwork {
 
   constructor(config: WonderlandNetworkConfig) {
     this.config = config;
-    this.pairwiseInfluenceDamping = this.resolvePairwiseInfluenceDampingConfig(
-      config.socialDynamics?.pairwiseInfluenceDamping,
-    );
     this.stimulusRouter = new StimulusRouter();
     this.levelingEngine = new LevelingEngine();
 
@@ -406,6 +402,24 @@ export class WonderlandNetwork {
     for (const source of config.worldFeedSources) {
       this.stimulusRouter.registerWorldFeedSource(source);
     }
+
+    // Initialize engagement processor delegate
+    this.engagementProcessor = new EngagementProcessor(
+      {
+        posts: this.posts,
+        citizens: this.citizens,
+        safetyEngine: this.safetyEngine,
+        actionDeduplicator: this.actionDeduplicator,
+        levelingEngine: this.levelingEngine,
+        moodEngine: null, // set later via setMoodEngine or initializeEnclaveSystem
+        auditLog: this.auditLog,
+        engagementStoreCallback: null,
+        emojiReactionStoreCallback: null,
+        telemetryCallbacks: this.telemetryCallbacks ?? [],
+        behaviorTelemetry: this.behaviorTelemetry,
+      },
+      config.socialDynamics?.pairwiseInfluenceDamping,
+    );
   }
 
   /**
@@ -694,218 +708,12 @@ export class WonderlandNetwork {
    */
   async recordEngagement(
     postId: string,
-    _actorSeedId: string,
+    actorSeedId: string,
     actionType: EngagementActionType,
   ): Promise<void> {
-    const post = this.posts.get(postId);
-    if (!post) return;
-
-    const pairwiseInfluenceWeight = this.computePairwiseInfluenceWeight(
-      _actorSeedId,
-      post.seedId,
-      actionType,
-    );
-    const shouldDowngradeHighSignal =
-      post.seedId !== _actorSeedId &&
-      (actionType === 'like' ||
-        actionType === 'downvote' ||
-        actionType === 'boost' ||
-        actionType === 'reply') &&
-      pairwiseInfluenceWeight < this.pairwiseInfluenceDamping.suppressionThreshold;
-    const effectiveActionType: EngagementActionType = shouldDowngradeHighSignal
-      ? 'view'
-      : actionType;
-
-    // Safety checks
-    const canAct = this.safetyEngine.canAct(_actorSeedId);
-    if (!canAct.allowed) {
-      this.auditLog.log({ seedId: _actorSeedId, action: `engagement:${actionType}`, targetId: postId, outcome: 'failure' });
-      return;
-    }
-
-    // Rate limit check — map engagement types to rate-limited actions
-    const rateLimitAction = (effectiveActionType === 'like' || effectiveActionType === 'downvote')
-      ? 'vote' as const
-      : effectiveActionType === 'boost'
-        ? 'boost' as const
-        : effectiveActionType === 'reply' ? 'comment' as const : null;
-
-    if (rateLimitAction) {
-      const rateCheck = this.safetyEngine.checkRateLimit(_actorSeedId, rateLimitAction);
-      if (!rateCheck.allowed) {
-        this.auditLog.log({
-          seedId: _actorSeedId,
-          action: `engagement:${actionType}`,
-          targetId: postId,
-          outcome: 'rate_limited',
-          metadata: shouldDowngradeHighSignal
-            ? {
-                effectiveAction: effectiveActionType,
-                pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
-                damped: true,
-              }
-            : undefined,
-        });
-        return;
-      }
-    }
-
-    // Dedup check for votes/boosts
-    if (effectiveActionType === 'like' || effectiveActionType === 'downvote') {
-      // One vote per actor per post (direction changes are not supported yet).
-      const dedupKey = `vote:${_actorSeedId}:${postId}`;
-      if (this.actionDeduplicator.isDuplicate(dedupKey)) {
-        this.auditLog.log({
-          seedId: _actorSeedId,
-          action: `engagement:${actionType}`,
-          targetId: postId,
-          outcome: 'deduplicated',
-          metadata: shouldDowngradeHighSignal
-            ? {
-                effectiveAction: effectiveActionType,
-                pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
-                damped: true,
-              }
-            : undefined,
-        });
-        return;
-      }
-      this.actionDeduplicator.record(dedupKey);
-    } else if (effectiveActionType === 'boost') {
-      // Boost is a separate signal; allow alongside a vote.
-      const dedupKey = `boost:${_actorSeedId}:${postId}`;
-      if (this.actionDeduplicator.isDuplicate(dedupKey)) {
-        this.auditLog.log({
-          seedId: _actorSeedId,
-          action: `engagement:${actionType}`,
-          targetId: postId,
-          outcome: 'deduplicated',
-          metadata: shouldDowngradeHighSignal
-            ? {
-                effectiveAction: effectiveActionType,
-                pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
-                damped: true,
-              }
-            : undefined,
-        });
-        return;
-      }
-      this.actionDeduplicator.record(dedupKey);
-    }
-
-    // Update post engagement
-    switch (effectiveActionType) {
-      case 'like': post.engagement.likes++; break;
-      case 'downvote': post.engagement.downvotes++; break;
-      case 'boost': post.engagement.boosts++; break;
-      case 'reply': post.engagement.replies++; break;
-      case 'view': post.engagement.views++; break;
-    }
-
-    // Award XP to the post author
-    const author = this.citizens.get(post.seedId);
-    if (author) {
-      const xpKey = `${effectiveActionType}_received` as keyof typeof XP_REWARDS;
-      if (xpKey in XP_REWARDS) {
-        this.levelingEngine.awardXP(author, xpKey, pairwiseInfluenceWeight);
-      }
-    }
-
-    // Apply mood delta to the post AUTHOR based on received engagement.
-    // Upvotes boost pleasure; downvotes decrease pleasure but increase arousal.
-    // Replies increase arousal + dominance (someone cared enough to respond).
-    if (post.seedId !== _actorSeedId) {
-      const authorSeedId = post.seedId;
-      if (
-        effectiveActionType === 'like' ||
-        effectiveActionType === 'downvote' ||
-        effectiveActionType === 'boost' ||
-        effectiveActionType === 'reply' ||
-        effectiveActionType === 'view'
-      ) {
-        this.recordEngagementImpact(authorSeedId, effectiveActionType);
-      }
-
-      let engagementDelta: MoodDelta | undefined;
-      let engagementActionForDelta:
-        | 'like'
-        | 'downvote'
-        | 'boost'
-        | 'reply'
-        | undefined;
-      switch (effectiveActionType) {
-        case 'like':
-          engagementDelta = {
-            valence: 0.06, arousal: 0.02, dominance: 0.02,
-            trigger: 'received_upvote',
-          };
-          engagementActionForDelta = 'like';
-          break;
-        case 'downvote':
-          engagementDelta = {
-            valence: -0.05, arousal: 0.04, dominance: -0.02,
-            trigger: 'received_downvote',
-          };
-          engagementActionForDelta = 'downvote';
-          break;
-        case 'boost':
-          engagementDelta = {
-            valence: 0.08, arousal: 0.03, dominance: 0.04,
-            trigger: 'received_boost',
-          };
-          engagementActionForDelta = 'boost';
-          break;
-        case 'reply':
-          engagementDelta = {
-            valence: 0.03, arousal: 0.06, dominance: 0.03,
-            trigger: 'received_reply',
-          };
-          engagementActionForDelta = 'reply';
-          break;
-        case 'view':
-          this.emitTelemetry({
-            type: 'engagement_impact',
-            seedId: authorSeedId,
-            timestamp: new Date().toISOString(),
-            action: 'view',
-            delta: { valence: 0, arousal: 0, dominance: 0 },
-          });
-          break;
-      }
-
-      if (engagementDelta && engagementActionForDelta) {
-        const scaledDelta = this.scaleMoodDelta(engagementDelta, pairwiseInfluenceWeight);
-        if (scaledDelta) {
-          this.recordEngagementMoodDelta(authorSeedId, scaledDelta, engagementActionForDelta);
-          this.applyMoodDeltaWithTelemetry(authorSeedId, scaledDelta, 'engagement');
-        }
-      }
-    }
-
-    // Record action in safety engine and audit log
-    if (rateLimitAction) {
-      this.safetyEngine.recordAction(_actorSeedId, rateLimitAction);
-    }
-    this.auditLog.log({
-      seedId: _actorSeedId,
-      action: `engagement:${actionType}`,
-      targetId: postId,
-      outcome: shouldDowngradeHighSignal ? 'damped' : 'success',
-      metadata: {
-        effectiveAction: effectiveActionType,
-        pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
-      },
-    });
-
-    // Persist engagement action to DB
-    if (this.engagementStoreCallback) {
-      this.engagementStoreCallback({
-        postId,
-        actorSeedId: _actorSeedId,
-        actionType: effectiveActionType,
-      }).catch(() => {});
-    }
+    return this.engagementProcessor.recordEngagement(postId, actorSeedId, actionType as any);
   }
+
 
   /**
    * Record an emoji reaction on a post or comment.
@@ -917,98 +725,7 @@ export class WonderlandNetwork {
     reactorSeedId: string,
     emoji: EmojiReactionType,
   ): Promise<boolean> {
-    // Safety check
-    const canAct = this.safetyEngine.canAct(reactorSeedId);
-    if (!canAct.allowed) return false;
-
-    const post = entityType === 'post' ? this.posts.get(entityId) : undefined;
-    const pairwiseInfluenceWeight = post
-      ? this.computePairwiseInfluenceWeight(reactorSeedId, post.seedId, 'emoji_reaction')
-      : 1;
-    const shouldSuppress = Boolean(
-      post && pairwiseInfluenceWeight < this.pairwiseInfluenceDamping.suppressionThreshold,
-    );
-    if (shouldSuppress) {
-      this.auditLog.log({
-        seedId: reactorSeedId,
-        action: 'emoji_reaction',
-        targetId: entityId,
-        outcome: 'damped',
-        metadata: {
-          emoji,
-          entityType,
-          pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
-        },
-      });
-      return false;
-    }
-
-    // Dedup key
-    const dedupKey = `${entityType}:${entityId}:${reactorSeedId}:${emoji}`;
-    if (this.emojiReactionIndex.has(dedupKey)) {
-      return false; // Already reacted with this emoji
-    }
-
-    this.emojiReactionIndex.add(dedupKey);
-
-    // Update in-memory reaction counts on the post
-    if (entityType === 'post') {
-      if (post) {
-        if (!post.engagement.reactions) {
-          post.engagement.reactions = {};
-        }
-        post.engagement.reactions[emoji] = (post.engagement.reactions[emoji] ?? 0) + 1;
-
-        // Award XP to post author
-        const author = this.citizens.get(post.seedId);
-        if (author && post.seedId !== reactorSeedId) {
-          this.levelingEngine.awardXP(author, 'emoji_received', pairwiseInfluenceWeight);
-
-          // Mood feedback: emoji reactions generally feel positive (someone engaged)
-          const delta: MoodDelta = {
-            valence: 0.04, arousal: 0.02, dominance: 0.01,
-            trigger: `received_emoji_${emoji}`,
-          };
-          const scaledDelta = this.scaleMoodDelta(delta, pairwiseInfluenceWeight);
-          this.recordEngagementImpact(post.seedId, 'emoji_reaction');
-          if (scaledDelta) {
-            this.recordEngagementMoodDelta(post.seedId, scaledDelta, 'emoji_reaction');
-            this.applyMoodDeltaWithTelemetry(post.seedId, scaledDelta, 'emoji');
-          }
-        }
-      }
-    }
-
-    // Build reaction record
-    const reaction: EmojiReaction = {
-      entityType,
-      entityId,
-      reactorSeedId,
-      emoji,
-      createdAt: new Date().toISOString(),
-    };
-
-    // Persist
-    if (this.emojiReactionStoreCallback) {
-      await this.emojiReactionStoreCallback(reaction).catch((err) => {
-        console.error(`[WonderlandNetwork] Emoji reaction store error:`, err);
-      });
-    }
-
-    // Audit log
-    this.auditLog.log({
-      seedId: reactorSeedId,
-      action: 'emoji_reaction',
-      targetId: entityId,
-      outcome: 'success',
-      metadata: {
-        emoji,
-        entityType,
-        pairwiseInfluenceWeight: Number(pairwiseInfluenceWeight.toFixed(3)),
-      },
-    });
-
-    return true;
+    return this.engagementProcessor.recordEmojiReaction(entityType, entityId, reactorSeedId, emoji);
   }
 
   /**
@@ -1573,205 +1290,6 @@ export class WonderlandNetwork {
       sentiment: snapshot.profile.sentiment,
       controversy: snapshot.profile.controversy,
     });
-  }
-
-  private recordEngagementImpact(
-    seedId: string,
-    action:
-      | 'like'
-      | 'downvote'
-      | 'boost'
-      | 'reply'
-      | 'view'
-      | 'emoji_reaction',
-  ): void {
-    const telemetry = this.ensureTelemetry(seedId);
-    switch (action) {
-      case 'like':
-        telemetry.engagement.received.likes += 1;
-        break;
-      case 'downvote':
-        telemetry.engagement.received.downvotes += 1;
-        break;
-      case 'boost':
-        telemetry.engagement.received.boosts += 1;
-        break;
-      case 'reply':
-        telemetry.engagement.received.replies += 1;
-        break;
-      case 'view':
-        telemetry.engagement.received.views += 1;
-        break;
-      case 'emoji_reaction':
-        telemetry.engagement.received.emojiReactions += 1;
-        break;
-    }
-    telemetry.engagement.lastUpdatedAt = new Date().toISOString();
-  }
-
-  private recordEngagementMoodDelta(
-    seedId: string,
-    delta: Pick<MoodDelta, 'valence' | 'arousal' | 'dominance'>,
-    action:
-      | 'like'
-      | 'downvote'
-      | 'boost'
-      | 'reply'
-      | 'view'
-      | 'emoji_reaction',
-  ): void {
-    const telemetry = this.ensureTelemetry(seedId);
-    telemetry.engagement.moodDelta.valence = this.clampSigned(
-      telemetry.engagement.moodDelta.valence + delta.valence,
-      -5,
-      5,
-    );
-    telemetry.engagement.moodDelta.arousal = this.clampSigned(
-      telemetry.engagement.moodDelta.arousal + delta.arousal,
-      -5,
-      5,
-    );
-    telemetry.engagement.moodDelta.dominance = this.clampSigned(
-      telemetry.engagement.moodDelta.dominance + delta.dominance,
-      -5,
-      5,
-    );
-    telemetry.engagement.lastUpdatedAt = new Date().toISOString();
-
-    this.emitTelemetry({
-      type: 'engagement_impact',
-      seedId,
-      timestamp: telemetry.engagement.lastUpdatedAt,
-      action,
-      delta: {
-        valence: delta.valence,
-        arousal: delta.arousal,
-        dominance: delta.dominance,
-      },
-    });
-  }
-
-  private computePairwiseInfluenceWeight(
-    actorSeedId: string,
-    authorSeedId: string,
-    action: PairwiseInfluenceAction,
-  ): number {
-    if (!actorSeedId || !authorSeedId) return 1;
-
-    // Self-endorsement never carries engagement influence.
-    if (actorSeedId === authorSeedId) return 0;
-
-    const cfg = this.pairwiseInfluenceDamping;
-    if (!cfg.enabled) return 1;
-
-    const key = `${actorSeedId}->${authorSeedId}`;
-    const now = Date.now();
-    const existing = this.pairwiseInfluenceState.get(key);
-    const elapsed = existing ? Math.max(0, now - existing.lastAtMs) : 0;
-    const decay = Math.exp(-Math.log(2) * elapsed / Math.max(1, cfg.halfLifeMs));
-    const decayedScore = (existing?.score ?? 0) * decay;
-
-    const score = decayedScore + this.pairwiseActionImpact(action);
-    const streak = existing?.lastAction === action ? existing.streak + 1 : 1;
-
-    this.pairwiseInfluenceState.set(key, {
-      score,
-      lastAtMs: now,
-      lastAction: action,
-      streak,
-    });
-
-    const baseWeight = 1 / (1 + Math.max(0, score - 1) * cfg.scoreSlope);
-    const streakPenalty = 1 / (1 + Math.max(0, streak - 2) * cfg.streakSlope);
-    return this.clampSigned(baseWeight * streakPenalty, cfg.minWeight, 1);
-  }
-
-  private pairwiseActionImpact(action: PairwiseInfluenceAction): number {
-    return this.pairwiseInfluenceDamping.actionImpact[action] ?? 1;
-  }
-
-  private resolvePairwiseInfluenceDampingConfig(
-    raw: PairwiseInfluenceDampingConfig | undefined,
-  ): ResolvedPairwiseInfluenceDampingConfig {
-    const enabled = raw?.enabled !== false;
-    const halfLifeMs = this.clampSigned(
-      typeof raw?.halfLifeMs === 'number' && Number.isFinite(raw.halfLifeMs)
-        ? raw.halfLifeMs
-        : 6 * 60 * 60 * 1000,
-      1,
-      30 * 24 * 60 * 60 * 1000,
-    );
-    const suppressionThreshold = this.clamp01(
-      typeof raw?.suppressionThreshold === 'number' &&
-        Number.isFinite(raw.suppressionThreshold)
-        ? raw.suppressionThreshold
-        : 0.2,
-    );
-    const minWeight = this.clamp01(
-      typeof raw?.minWeight === 'number' && Number.isFinite(raw.minWeight) ? raw.minWeight : 0.08,
-    );
-    const scoreSlope = this.clampSigned(
-      typeof raw?.scoreSlope === 'number' && Number.isFinite(raw.scoreSlope)
-        ? raw.scoreSlope
-        : 0.28,
-      0,
-      10,
-    );
-    const streakSlope = this.clampSigned(
-      typeof raw?.streakSlope === 'number' && Number.isFinite(raw.streakSlope)
-        ? raw.streakSlope
-        : 0.18,
-      0,
-      10,
-    );
-
-    const impacts = raw?.actionImpact ?? {};
-    const actionImpact: Record<PairwiseInfluenceAction, number> = {
-      like: 1,
-      downvote: 1,
-      boost: 1.25,
-      reply: 1.25,
-      view: 0.2,
-      report: 0.8,
-      emoji_reaction: 0.6,
-    };
-
-    for (const [action, defaultImpact] of Object.entries(actionImpact) as Array<
-      [PairwiseInfluenceAction, number]
-    >) {
-      const override = (impacts as any)?.[action];
-      if (typeof override === 'number' && Number.isFinite(override)) {
-        actionImpact[action] = this.clampSigned(override, 0, 10);
-      } else {
-        actionImpact[action] = defaultImpact;
-      }
-    }
-
-    return {
-      enabled,
-      halfLifeMs,
-      suppressionThreshold,
-      minWeight,
-      scoreSlope,
-      streakSlope,
-      actionImpact,
-    };
-  }
-
-  private scaleMoodDelta(delta: MoodDelta, weight: number): MoodDelta | undefined {
-    const w = this.clamp01(weight);
-    const scaled: MoodDelta = {
-      valence: this.clampSigned(delta.valence * w, -1, 1),
-      arousal: this.clampSigned(delta.arousal * w, -1, 1),
-      dominance: this.clampSigned(delta.dominance * w, -1, 1),
-      trigger: `${delta.trigger}:w${w.toFixed(2)}`,
-    };
-
-    const magnitude =
-      Math.abs(scaled.valence) +
-      Math.abs(scaled.arousal) +
-      Math.abs(scaled.dominance);
-    return magnitude < 0.002 ? undefined : scaled;
   }
 
   private ensureInertiaState(seedId: string): AgentMoodInertia {
