@@ -7,23 +7,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mock the @framers/agentos/rag module ────────────────────────────────
 
-const mockRetrieve = vi.fn();
-const MockHydeRetriever = vi.fn().mockImplementation(() => ({
-  retrieve: mockRetrieve,
-  enabled: true,
-}));
+const { mockRetrieve, MockHydeRetriever, mockResolveHydeConfig } = vi.hoisted(() => {
+  const mockRetrieve = vi.fn();
+  const MockHydeRetriever = vi.fn().mockImplementation(() => ({
+    retrieve: mockRetrieve,
+    enabled: true,
+  }));
 
-const mockResolveHydeConfig = vi.fn().mockImplementation((partial: any) => ({
-  enabled: false,
-  initialThreshold: 0.7,
-  minThreshold: 0.3,
-  thresholdStep: 0.1,
-  adaptiveThreshold: true,
-  maxHypothesisTokens: 200,
-  hypothesisSystemPrompt: 'test prompt',
-  fullAnswerGranularity: true,
-  ...partial,
-}));
+  const mockResolveHydeConfig = vi.fn().mockImplementation((partial: any) => ({
+    enabled: false,
+    initialThreshold: 0.7,
+    minThreshold: 0.3,
+    thresholdStep: 0.1,
+    adaptiveThreshold: true,
+    maxHypothesisTokens: 200,
+    hypothesisSystemPrompt: 'test prompt',
+    fullAnswerGranularity: true,
+    ...partial,
+  }));
+
+  return { mockRetrieve, MockHydeRetriever, mockResolveHydeConfig };
+});
 
 vi.mock('@framers/agentos/rag', () => ({
   HydeRetriever: MockHydeRetriever,
@@ -105,6 +109,20 @@ describe('resolveHydeFromAgentConfig', () => {
     expect(config.initialThreshold).toBe(0.8);
     expect(config.minThreshold).toBe(0.4);
     expect(config.thresholdStep).toBe(0.05);
+  });
+
+  it('passes through advanced hypothesis controls from rag config', () => {
+    const config = resolveHydeFromAgentConfig({
+      hyde: {
+        maxHypothesisTokens: 256,
+        hypothesisSystemPrompt: 'Custom HyDE prompt',
+        fullAnswerGranularity: false,
+      },
+    } as any);
+
+    expect(config.maxHypothesisTokens).toBe(256);
+    expect(config.hypothesisSystemPrompt).toBe('Custom HyDE prompt');
+    expect(config.fullAnswerGranularity).toBe(false);
   });
 });
 
