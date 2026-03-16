@@ -11,7 +11,6 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import chalk from 'chalk';
 import {
-  HEX,
   accent,
   success as sColor,
   warn as wColor,
@@ -20,9 +19,7 @@ import {
   dim,
 } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
-import { visibleLength } from '../ui/ansi-utils.js';
 import { glyphs } from '../ui/glyphs.js';
-import { getUiRuntime } from '../ui/runtime.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
 import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
