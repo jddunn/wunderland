@@ -30,6 +30,9 @@ export function resolveHydeFromAgentConfig(
     minThreshold: hyde?.minThreshold ?? 0.3,
     thresholdStep: hyde?.thresholdStep ?? 0.1,
     adaptiveThreshold: hyde?.adaptiveThreshold ?? true,
+    maxHypothesisTokens: hyde?.maxHypothesisTokens,
+    hypothesisSystemPrompt: hyde?.hypothesisSystemPrompt,
+    fullAnswerGranularity: hyde?.fullAnswerGranularity,
   };
 }
 
