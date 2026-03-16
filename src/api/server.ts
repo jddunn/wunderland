@@ -105,8 +105,6 @@ import {
   toToolInstance,
   readBody,
   sendJson,
-  getHeaderString,
-  extractHitlSecret,
   isHitlAuthorized,
   inferTurnApprovalMode,
   finiteNumber,

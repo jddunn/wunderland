@@ -18,17 +18,16 @@ import { randomUUID } from 'node:crypto';
 
 import type { ITool } from '@framers/agentos';
 
-import { createWunderlandTools, getToolAvailability, type ToolRegistryConfig } from '../tools/ToolRegistry.js';
+import { createWunderlandTools, getToolAvailability } from '../tools/ToolRegistry.js';
 import {
   runToolCallingTurn,
   safeJsonStringify,
   type ToolInstance,
-  type LLMProviderConfig,
 } from '../runtime/tool-calling.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
 import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
 import { buildOllamaRuntimeOptions } from '../runtime/ollama-options.js';
-import { planTurnToolDefinitions, type TurnToolSelectionMode } from './turn-tool-selection.js';
+import { planTurnToolDefinitions } from './turn-tool-selection.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
@@ -43,9 +42,7 @@ import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 import type {
   WunderlandAdaptiveExecutionConfig,
   WunderlandAgentConfig,
-  WunderlandProviderId,
   WunderlandTaskOutcomeTelemetryConfig,
-  WunderlandToolFailureMode,
   WunderlandWorkspace,
 } from '../api/types.js';
 import { WunderlandConfigError } from '../config/errors.js';
@@ -55,7 +52,7 @@ import {
   resolveEffectiveAgentConfig,
 } from '../config/effective-agent-config.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
-import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats, DiscoverySkillEntry } from '../discovery/index.js';
+import type { WunderlandDiscoveryConfig, DiscoverySkillEntry } from '../discovery/index.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
@@ -81,7 +78,6 @@ export type {
 import type {
   WunderlandMessage,
   ToolCallRecord,
-  WunderlandTurnResult,
   WunderlandDiagnostics,
   ToolApprovalRequest,
   WunderlandApprovalsMode,
