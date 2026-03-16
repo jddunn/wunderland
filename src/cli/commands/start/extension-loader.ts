@@ -14,6 +14,7 @@ import { normalizeExtensionList } from '../../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../../extensions/settings.js';
 import { createConfiguredRagTools } from '../../../rag/runtime-tools.js';
 import { createLocalMemoryReadTool } from './local-memory-tool.js';
+import { resolveHydeFromAgentConfig } from '../../../rag/hyde-integration.js';
 import { createRequestFolderAccessTool } from '../../../tools/RequestFolderAccessTool.js';
 import { HumanInteractionManager, type IChannelAdapter } from '@framers/agentos';
 import {
@@ -496,6 +497,24 @@ export async function loadExtensions(ctx: any): Promise<void> {
           vectorStore,
           openaiApiKey: openaiKey,
           embeddingModel: cfg?.discovery?.embeddingModel || 'text-embedding-3-small',
+          hyde: {
+            ...resolveHydeFromAgentConfig(cfg?.rag),
+            llm:
+              ctx.canUseLLM && ctx.llmApiKey && ctx.model
+                ? {
+                    apiKey: ctx.llmApiKey,
+                    model: ctx.model,
+                    baseUrl: ctx.llmBaseUrl,
+                    extraHeaders:
+                      ctx.providerId === 'openrouter'
+                        ? {
+                            'HTTP-Referer': 'https://wunderland.sh',
+                            'X-Title': 'Wunderbot',
+                          }
+                        : undefined,
+                  }
+                : undefined,
+          },
         });
         toolMap.set(localMemoryTool.name, toToolInstance(localMemoryTool as any));
         fmt.ok('Local memory_read tool enabled (SqlVectorStore)');

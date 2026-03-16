@@ -7,10 +7,22 @@
  */
 
 import type { IVectorStore } from '@framers/agentos';
+import { HydeRetriever, type HydeConfig } from '@framers/agentos/rag';
 import { createMemoryReadTool } from '../../../tools/MemoryReadTool.js';
 import type { ToolExecutionContext } from '@framers/agentos';
 
 const COLLECTIONS = ['knowledge_base', 'auto_memories'] as const;
+
+type LocalMemoryLlmConfig = {
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+  extraHeaders?: Record<string, string>;
+};
+
+type LocalMemoryHydeConfig = Partial<HydeConfig> & {
+  llm?: LocalMemoryLlmConfig;
+};
 
 /**
  * Generate an embedding for a query string using OpenAI embeddings API.
@@ -38,6 +50,79 @@ async function generateQueryEmbedding(
   return data?.data?.[0]?.embedding ?? [];
 }
 
+function normalizeBaseUrl(baseUrl?: string): string {
+  const trimmed = typeof baseUrl === 'string' ? baseUrl.trim() : '';
+  return trimmed ? trimmed.replace(/\/+$/, '') : 'https://api.openai.com/v1';
+}
+
+function createOpenAICompatibleLlmCaller(config: LocalMemoryLlmConfig) {
+  const baseUrl = normalizeBaseUrl(config.baseUrl);
+
+  return async (systemPrompt: string, userPrompt: string): Promise<string> => {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+        ...(config.extraHeaders ?? {}),
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(`LLM hypothesis generation failed (${res.status}): ${detail}`);
+    }
+
+    const data = await res.json() as any;
+    return (
+      data?.choices?.[0]?.message?.content
+      ?? data?.choices?.[0]?.text
+      ?? ''
+    );
+  };
+}
+
+async function queryCollections(opts: {
+  vectorStore: IVectorStore;
+  embedding: number[];
+  queryText: string;
+  topK: number;
+  minSimilarityScore?: number;
+  forceVectorOnly?: boolean;
+}) {
+  const { vectorStore, embedding, queryText, topK, minSimilarityScore, forceVectorOnly } = opts;
+  const results = await Promise.all(
+    COLLECTIONS.map(async (collection) => {
+      try {
+        if (!forceVectorOnly && typeof vectorStore.hybridSearch === 'function') {
+          return await vectorStore.hybridSearch(collection, embedding, queryText, {
+            topK,
+            alpha: 0.7,
+            minSimilarityScore,
+          });
+        }
+        return await vectorStore.query(collection, embedding, {
+          topK,
+          minSimilarityScore,
+        });
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return results
+    .filter(Boolean)
+    .flatMap((result) => result!.documents ?? []);
+}
+
 /**
  * Create a memory_read tool backed by the local SqlVectorStore.
  * Returns null if required dependencies (vectorStore, apiKey) are missing.
@@ -46,8 +131,25 @@ export function createLocalMemoryReadTool(opts: {
   vectorStore: IVectorStore;
   openaiApiKey: string;
   embeddingModel?: string;
+  hyde?: LocalMemoryHydeConfig;
 }) {
   const { vectorStore, openaiApiKey, embeddingModel } = opts;
+  const hydeConfig = opts.hyde?.enabled ? opts.hyde : undefined;
+  const hydeRetriever =
+    hydeConfig?.llm
+      ? new HydeRetriever({
+          config: hydeConfig,
+          llmCaller: createOpenAICompatibleLlmCaller(hydeConfig.llm),
+          embeddingManager: {
+            generateEmbeddings: async ({ texts }: { texts: string | string[] }) => {
+              const firstText = Array.isArray(texts) ? texts[0] : texts;
+              return {
+                embeddings: [await generateQueryEmbedding(firstText, openaiApiKey, embeddingModel)],
+              };
+            },
+          } as any,
+        })
+      : null;
 
   return createMemoryReadTool(async (input: {
     query: string;
@@ -55,36 +157,86 @@ export function createLocalMemoryReadTool(opts: {
     context: ToolExecutionContext;
   }) => {
     const { query, topK } = input;
+    let queryTextForEmbedding = query;
+    let queryTextForSearch = query;
+    let minSimilarityScore: number | undefined;
+    let forceVectorOnly = false;
+
+    if (hydeRetriever && hydeConfig) {
+      try {
+        const { hypothesis } = await hydeRetriever.generateHypothesis(query);
+        if (hypothesis) {
+          queryTextForEmbedding = hypothesis;
+          queryTextForSearch = hypothesis;
+          forceVectorOnly = true;
+        }
+      } catch {
+        // Fall back to standard retrieval if HyDE generation fails.
+      }
+    }
 
     // Generate query embedding
-    const embedding = await generateQueryEmbedding(query, openaiApiKey, embeddingModel);
+    const embedding = await generateQueryEmbedding(
+      queryTextForEmbedding,
+      openaiApiKey,
+      embeddingModel,
+    );
     if (embedding.length === 0) {
       return { items: [], context: 'No embedding generated for query.' };
     }
 
-    // Query all collections in parallel, gracefully skip missing ones
-    const results = await Promise.all(
-      COLLECTIONS.map(async (collection) => {
-        try {
-          // Prefer hybridSearch (combines vector + FTS) if available
-          if (typeof vectorStore.hybridSearch === 'function') {
-            return await vectorStore.hybridSearch(collection, embedding, query, {
-              topK,
-              alpha: 0.7, // 70% semantic, 30% lexical
-            });
-          }
-          return await vectorStore.query(collection, embedding, { topK });
-        } catch {
-          // Collection may not exist yet — skip silently
-          return null;
-        }
-      }),
-    );
+    let allDocs = await queryCollections({
+      vectorStore,
+      embedding,
+      queryText: queryTextForSearch,
+      topK,
+      minSimilarityScore,
+      forceVectorOnly,
+    });
 
-    // Merge and sort by similarity score (descending)
-    const allDocs = results
-      .filter(Boolean)
-      .flatMap((r) => r!.documents ?? [])
+    if (hydeConfig?.enabled && forceVectorOnly) {
+      const threshold =
+        typeof hydeConfig.initialThreshold === 'number'
+          ? hydeConfig.initialThreshold
+          : 0.7;
+      const minThreshold =
+        typeof hydeConfig.minThreshold === 'number'
+          ? hydeConfig.minThreshold
+          : 0.3;
+      const thresholdStep =
+        typeof hydeConfig.thresholdStep === 'number' && hydeConfig.thresholdStep > 0
+          ? hydeConfig.thresholdStep
+          : 0.1;
+      const adaptiveThreshold = hydeConfig.adaptiveThreshold !== false;
+
+      minSimilarityScore = threshold;
+      allDocs = await queryCollections({
+        vectorStore,
+        embedding,
+        queryText: queryTextForSearch,
+        topK,
+        minSimilarityScore,
+        forceVectorOnly: true,
+      });
+
+      while (
+        adaptiveThreshold &&
+        allDocs.length === 0 &&
+        minSimilarityScore - thresholdStep >= minThreshold
+      ) {
+        minSimilarityScore = Math.round((minSimilarityScore - thresholdStep) * 100) / 100;
+        allDocs = await queryCollections({
+          vectorStore,
+          embedding,
+          queryText: queryTextForSearch,
+          topK,
+          minSimilarityScore,
+          forceVectorOnly: true,
+        });
+      }
+    }
+
+    allDocs = allDocs
       .sort((a, b) => (b.similarityScore ?? 0) - (a.similarityScore ?? 0))
       .slice(0, topK);
 
