@@ -532,7 +532,7 @@ function printApiKeySuccess(displayName: string, envVar: string): void {
 type LoginChoice = 'openai-oauth' | 'openai-key' | 'anthropic-key' | 'gemini-key' | 'openrouter-key' | 'other-key';
 
 const LOGIN_OPTIONS: Array<{ value: LoginChoice; label: string; hint: string }> = [
-  { value: 'openai-oauth',  label: 'OpenAI (ChatGPT Subscription)', hint: 'OAuth login — no API key needed' },
+  { value: 'openai-oauth',  label: 'OpenAI (ChatGPT Subscription)', hint: 'not yet supported — use API key instead' },
   { value: 'openai-key',    label: 'OpenAI (API Key)',               hint: 'paste your OPENAI_API_KEY' },
   { value: 'anthropic-key', label: 'Anthropic (API Key)',            hint: 'paste your ANTHROPIC_API_KEY' },
   { value: 'gemini-key',    label: 'Google Gemini (API Key)',        hint: 'paste your GEMINI_API_KEY' },
@@ -603,8 +603,13 @@ export default async function cmdLogin(
   try {
     switch (choice) {
       case 'openai-oauth':
-        await loginOpenAIOAuth(flags, globals);
-        break;
+        fmt.errorBlock(
+          'Not yet supported',
+          'OAuth subscription-based usage (ChatGPT Plus/Pro) is not yet available.\n' +
+          'OpenAI subscription token usage requires a registered OAuth application.\n' +
+          'Please use an OpenAI API key instead — get one at https://platform.openai.com/api-keys',
+        );
+        return;
       case 'openai-key':
         await loginApiKey('openai', globals);
         break;
