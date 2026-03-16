@@ -83,6 +83,11 @@ function isChatAuthorized(req: IncomingMessage, url: URL, chatSecret: string): b
   return extractChatSecret(req, url) === chatSecret;
 }
 
+function isLoopbackRequest(req: IncomingMessage): boolean {
+  const remote = req.socket.remoteAddress || '';
+  return remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+}
+
 function extractFeedSecret(req: IncomingMessage, url: URL): string {
   const fromHeader = getHeaderString(req, 'x-wunderland-feed-secret');
   if (fromHeader) return fromHeader;
@@ -169,7 +174,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
       res.setHeader(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, X-API-Key, X-Wunderland-HITL-Secret, X-Wunderland-Chat-Secret, X-Wunderland-Feed-Secret',
+        'Content-Type, Authorization, X-API-Key, X-Auto-Approve, X-Wunderland-HITL-Secret, X-Wunderland-Chat-Secret, X-Wunderland-Feed-Secret',
       );
 
       if (req.method === 'OPTIONS') {
@@ -1031,10 +1036,25 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
 
         const body = await readBody(req);
         const parsed = JSON.parse(body || '{}');
-        const message = typeof parsed.message === 'string' ? parsed.message.trim() : '';
+        let message = typeof parsed.message === 'string' ? parsed.message.trim() : '';
         if (!message) {
           sendJson(res, 400, { error: 'Missing "message" in JSON body.' });
           return;
+        }
+
+        // Research depth escalation: /research or /deep prefix, or "research": true in body
+        const researchMatch = message.match(/^\/(research|deep)\s+(.+)/is);
+        const researchDepth = parsed.research === true ? 'moderate'
+          : parsed.research === 'deep' ? 'deep'
+          : parsed.research === 'quick' ? 'quick'
+          : researchMatch ? (researchMatch[1].toLowerCase() === 'deep' ? 'deep' : 'moderate')
+          : null;
+        if (researchMatch) message = researchMatch[2].trim();
+        if (researchDepth) {
+          message =
+            `[RESEARCH MODE: Use the deep_research tool with depth="${researchDepth}" to answer this query. ` +
+            `Decompose it into sub-questions, search multiple sources, analyze gaps, and synthesize a thorough ` +
+            `report with citations. Do NOT answer from your training data alone.]\n\n${message}`;
         }
 
         let reply = '';
@@ -1226,9 +1246,16 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
                 // Auto-approve read-only tools via HTTP API — they have no side effects
                 if (tool.hasSideEffects !== true) return true;
 
-                // Check if request explicitly opted in to auto-approve
-                // via X-Auto-Approve: true header
-                if (req.headers['x-auto-approve'] === 'true') return true;
+                // Explicit auto-approval for side-effect tools is only honored
+                // for loopback requests or authenticated remote requests.
+                const explicitAutoApprove =
+                  getHeaderString(req, 'x-auto-approve').toLowerCase() === 'true';
+                if (
+                  explicitAutoApprove &&
+                  (isLoopbackRequest(req) || (!!chatSecret && isChatAuthorized(req, url, chatSecret)))
+                ) {
+                  return true;
+                }
 
                 const preview = safeJsonStringify(args, 1800);
                 const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
