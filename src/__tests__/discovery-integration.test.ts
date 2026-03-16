@@ -335,6 +335,16 @@ describe('validateWunderlandAgentConfig — rag field', () => {
         strategy: 'hybrid_search',
         strategyParams: { mmrLambda: 0.7, mmrCandidateMultiplier: 5 },
         rewrite: { enabled: true, maxVariants: 2 },
+        hyde: {
+          enabled: true,
+          initialThreshold: 0.8,
+          minThreshold: 0.4,
+          thresholdStep: 0.05,
+          adaptiveThreshold: true,
+          maxHypothesisTokens: 256,
+          hypothesisSystemPrompt: 'Custom HyDE prompt',
+          fullAnswerGranularity: false,
+        },
       },
     });
     const ragIssues = issues.filter((i) => i.path.startsWith('rag'));
@@ -360,6 +370,7 @@ describe('validateWunderlandAgentConfig — rag field', () => {
         filters: 'bad',
         strategyParams: { mmrLambda: '0.7' },
         rewrite: { enabled: 'yes' },
+        hyde: { enabled: 'yes', maxHypothesisTokens: '256' },
       },
     });
     expect(issues.some((i) => i.path === 'rag.collectionIds')).toBe(true);
@@ -367,6 +378,8 @@ describe('validateWunderlandAgentConfig — rag field', () => {
     expect(issues.some((i) => i.path === 'rag.filters')).toBe(true);
     expect(issues.some((i) => i.path === 'rag.strategyParams.mmrLambda')).toBe(true);
     expect(issues.some((i) => i.path === 'rag.rewrite.enabled')).toBe(true);
+    expect(issues.some((i) => i.path === 'rag.hyde.enabled')).toBe(true);
+    expect(issues.some((i) => i.path === 'rag.hyde.maxHypothesisTokens')).toBe(true);
   });
 });
 
