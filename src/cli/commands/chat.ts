@@ -33,6 +33,12 @@ import {
 } from '../openai/tool-calling.js';
 import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
 import { ToolFailureLearner } from '../../runtime/tool-failure-learner.js';
+import {
+  classifyResearchDepth,
+  buildResearchPrefix,
+  shouldInjectResearch,
+  type ResearchDepth,
+} from '../../runtime/research-classifier.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
 import { resolveStrictToolNames } from '../../runtime/tool-function-names.js';
@@ -1445,6 +1451,12 @@ export default async function cmdChat(
             });
           }
         },
+        onToolProgress: (info) => {
+          const icon = chalk.hex(C.cyan)('\u{1F50D}');
+          const label = chalk.hex(C.cyan)(`[${info.toolName}]`);
+          const msg = chalk.hex(C.dim)(info.message);
+          console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${icon} ${label} ${msg}`);
+        },
       });
     } catch (error) {
       turnFailed = true;
@@ -1519,24 +1531,75 @@ export default async function cmdChat(
   }
 
   // ── Slash command handler (returns true if the input was a slash command) ──
+  // ── Research classifier config ──
+  const researchClassifierEnabled = cfg?.research?.autoClassify !== false;
+  const researchMinDepth: ResearchDepth = (cfg?.research?.minDepthToInject as ResearchDepth) || 'quick';
+
+  const classifierLlmCall = async (system: string, user: string): Promise<string> => {
+    // Use the same provider but with a simple non-tool-calling request
+    const response = await fetch(
+      `${llmBaseUrl || 'https://api.openai.com/v1'}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${llmApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: providerId === 'ollama' ? 'qwen2.5:3b' : providerId === 'gemini' ? 'gemini-2.0-flash-lite' : 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          temperature: 0,
+          max_tokens: 100,
+        }),
+      }
+    );
+    if (!response.ok) return '{"depth":"none","reasoning":"classifier request failed"}';
+    const data = await response.json() as any;
+    return data?.choices?.[0]?.message?.content || '{"depth":"none"}';
+  };
+
   /**
    * Handle /research and /deep prefixes — wraps the query with explicit
    * instructions to use deep_research tool at the specified depth.
+   *
+   * Also runs the LLM-as-judge classifier for auto-detection when no
+   * explicit prefix is given.
    */
-  function applyResearchPrefix(input: string): string {
+  async function applyResearchPrefix(input: string): Promise<string> {
+    // Explicit /research or /deep prefix — skip classifier
     const researchMatch = input.match(/^\/(research|deep)\s+(.+)/is);
-    if (!researchMatch) return input;
+    if (researchMatch) {
+      const depth = researchMatch[1].toLowerCase() === 'deep' ? 'deep' : 'moderate';
+      const query = researchMatch[2].trim();
+      console.log(
+        `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)(`[research:${depth}]`)} ${query}`
+      );
+      const prefix = buildResearchPrefix(depth as ResearchDepth);
+      return prefix ? `${prefix}\n\n${query}` : query;
+    }
 
-    const depth = researchMatch[1].toLowerCase() === 'deep' ? 'deep' : 'moderate';
-    const query = researchMatch[2].trim();
-    console.log(
-      `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)(`[research:${depth}]`)} ${query}`
-    );
-    return (
-      `[RESEARCH MODE: Use the deep_research tool with depth="${depth}" to answer this query. ` +
-      `Decompose it into sub-questions, search multiple sources, analyze gaps, and synthesize a thorough ` +
-      `report with citations. Do NOT answer from your training data alone.]\n\n${query}`
-    );
+    // Auto-classify with LLM-as-judge (if enabled)
+    if (!researchClassifierEnabled) return input;
+
+    const classification = await classifyResearchDepth(input, {
+      enabled: true,
+      llmCall: classifierLlmCall,
+    });
+
+    if (shouldInjectResearch(classification.depth, researchMinDepth)) {
+      if (verbose) {
+        console.log(
+          `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)(`[auto-research:${classification.depth}]`)} ${chalk.hex(C.dim)(classification.reasoning)} ${chalk.hex(C.dim)(`(${classification.latencyMs}ms)`)}`
+        );
+      }
+      const prefix = buildResearchPrefix(classification.depth);
+      return prefix ? `${prefix}\n\n${input}` : input;
+    }
+
+    return input;
   }
 
   function handleSlashCommand(input: string): boolean {
@@ -1748,7 +1811,7 @@ export default async function cmdChat(
       if (!input) continue;
       if (input === '/exit' || input === 'exit' || input === 'quit') break;
       if (handleSlashCommand(input)) continue;
-      await safeChatTurn(applyResearchPrefix(input));
+      await safeChatTurn(await applyResearchPrefix(input));
     } else {
       // Concurrent: race stdin vs channel message queue
       let stdinLine: string | undefined;
@@ -1779,7 +1842,7 @@ export default async function cmdChat(
         if (!input) continue;
         if (input === '/exit' || input === 'exit' || input === 'quit') break;
         if (handleSlashCommand(input)) continue;
-        await safeChatTurn(applyResearchPrefix(input));
+        await safeChatTurn(await applyResearchPrefix(input));
       }
     }
   }
