@@ -129,6 +129,7 @@ export class PresetLoader {
    */
   static getPresetIds(): string[] {
     return [
+      'ai-receptionist',
       'research-assistant',
       'customer-support',
       'creative-writer',

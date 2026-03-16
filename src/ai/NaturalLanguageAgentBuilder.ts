@@ -167,6 +167,7 @@ const EXTRACTION_PROMPT = `You are an AI configuration expert. Extract structure
 - security-auditor: Vigilant security-focused analyst
 - devops-assistant: Infrastructure and deployment specialist
 - personal-assistant: Friendly, organized daily helper
+- ai-receptionist: Professional front-desk receptionist for intake and routing
 
 **Available skills (40 curated):**
 1password, account-manager, apple-notes, apple-reminders, blog-publisher, bluesky-bot, coding-agent, content-creator, deep-research, discord-helper, facebook-bot, git, github, healthcheck, image-gen, instagram-bot, linkedin-bot, mastodon-bot, memory-manager, notion, obsidian, pinterest-bot, reddit-bot, seo-campaign, slack-helper, social-broadcast, spotify-player, summarize, threads-bot, tiktok-bot, trello, twitter-bot, voice-conversation, weather, web-scraper, web-search, whisper-transcribe, youtube-bot
@@ -321,6 +322,7 @@ export async function extractAgentConfig(
       'security-auditor',
       'devops-assistant',
       'personal-assistant',
+      'ai-receptionist',
     ];
     if (extracted.preset && !validPresets.includes(extracted.preset)) {
       console.warn(`Invalid preset "${extracted.preset}", ignoring`);
