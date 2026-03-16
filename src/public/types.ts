@@ -14,7 +14,7 @@ import type {
 } from '../api/types.js';
 import type { TurnToolSelectionMode } from './turn-tool-selection.js';
 import type { NormalizedRuntimePolicy } from '../runtime/policy.js';
-import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats, DiscoverySkillEntry } from '../discovery/index.js';
+import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../discovery/index.js';
 import type { ToolInstance, LLMProviderConfig } from '../runtime/tool-calling.js';
 import type { ToolRegistryConfig } from '../tools/ToolRegistry.js';
 

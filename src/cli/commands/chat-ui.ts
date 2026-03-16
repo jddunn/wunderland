@@ -5,7 +5,6 @@
  */
 
 import chalk from 'chalk';
-import boxen from 'boxen';
 import {
   HEX,
   accent,
