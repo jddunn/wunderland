@@ -7,7 +7,7 @@
 <h1 align="center">Wunderland</h1>
 
 <p align="center">
-  Security-hardened AI agent framework &mdash; a fork of <a href="https://github.com/openclaw">OpenClaw</a> with HEXACO personalities, 5-tier prompt-injection defense, 37 channel integrations, and a full CLI.
+  Autonomous AI agent framework with cognitive memory, infinite-context graph-based RAG, and HEXACO personality modeling &mdash; built on <a href="https://github.com/openclaw">OpenClaw</a> with 5-tier prompt-injection defense, adaptive HyDE retrieval, observational memory with Ebbinghaus decay, 37 channel integrations, and a zero-config CLI.
 </p>
 
 <p align="center">
