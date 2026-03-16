@@ -67,6 +67,7 @@ import { loadConfig } from '../config/config-manager.js';
 import { normalizeExtensionList } from '../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../extensions/settings.js';
 import { createConfiguredRagTools } from '../../rag/runtime-tools.js';
+import { resolveHydeFromAgentConfig } from '../../rag/hyde-integration.js';
 import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
 import { buildOllamaRuntimeOptions } from '../../runtime/ollama-options.js';
 import { createRequestFolderAccessTool } from '../../tools/RequestFolderAccessTool.js';
@@ -81,6 +82,7 @@ import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
 } from '../../voice/speech-catalog.js';
+import { createLocalMemoryReadTool } from './start/local-memory-tool.js';
 import { ContextWindowManager } from '@framers/agentos/memory';
 import type { InfiniteContextConfig } from '@framers/agentos/memory';
 
@@ -1182,6 +1184,52 @@ export default async function cmdChat(
       '[wunderland/chat] Per-agent storage init failed:',
       err instanceof Error ? err.message : err
     );
+  }
+
+  if (!toolMap.has('memory_read') && agentStorageManager) {
+    const openaiKey = process.env['OPENAI_API_KEY'];
+    if (openaiKey) {
+      try {
+        const localMemoryTool = createLocalMemoryReadTool({
+          vectorStore: agentStorageManager.getVectorStore(),
+          openaiApiKey: openaiKey,
+          embeddingModel: cfg?.discovery?.embeddingModel || 'text-embedding-3-small',
+          hyde: {
+            ...resolveHydeFromAgentConfig(cfg?.rag),
+            llm:
+              canUseLLM && llmApiKey && model
+                ? {
+                    apiKey: llmApiKey,
+                    model,
+                    baseUrl: llmBaseUrl,
+                    extraHeaders:
+                      providerId === 'openrouter'
+                        ? {
+                            'HTTP-Referer': 'https://wunderland.sh',
+                            'X-Title': 'Wunderbot',
+                          }
+                        : undefined,
+                  }
+                : undefined,
+          },
+        });
+        const filtered = filterToolMapByPolicy({
+          toolMap: new Map([[localMemoryTool.name, toToolInstance(localMemoryTool as any)]]),
+          toolAccessProfile: policy.toolAccessProfile,
+          permissions,
+        });
+        const localTool = filtered.toolMap.get(localMemoryTool.name);
+        if (localTool) {
+          toolMap.set(localMemoryTool.name, localTool);
+          discoveryManager?.reindex?.({ toolMap }).catch(() => {});
+          if (verbose) {
+            fmt.note('Local memory_read tool enabled (SqlVectorStore)');
+          }
+        }
+      } catch {
+        // Storage not ready — skip silently
+      }
+    }
   }
 
   // ── Tool failure learner (saves lessons to RAG from tool errors) ─────────
