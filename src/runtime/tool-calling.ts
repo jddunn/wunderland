@@ -154,6 +154,18 @@ export async function runToolCallingTurn(opts: {
   strictToolNames?: boolean;
   /** Enable verbose tool-calling logs. Defaults to false; set to true or use DEBUG=1 for diagnostics. */
   debug?: boolean;
+  /**
+   * Optional callback fired when a tool emits progress events during execution.
+   * Used by long-running tools like deep_research to report intermediate steps.
+   * The callback receives the tool name, a phase label, a human-readable message,
+   * and an optional 0-1 progress fraction.
+   */
+  onToolProgress?: (info: {
+    toolName: string;
+    phase: string;
+    message: string;
+    progress?: number;
+  }) => void;
 }): Promise<string> {
   const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
   const debugMode = opts.debug ?? (process.env.DEBUG === '1' || process.env.DEBUG === 'true' || process.env.WUNDERLAND_DEBUG === '1');
@@ -558,6 +570,13 @@ export async function runToolCallingTurn(opts: {
             // Tier 1 / Tier 2: authorized — no prompt needed
           }
 
+          // Build per-call tool context with progress callback if provided.
+          const callToolContext: Record<string, unknown> = opts.onToolProgress
+            ? { ...opts.toolContext, onToolProgress: (info: { phase: string; message: string; progress?: number }) => {
+                try { opts.onToolProgress!({ toolName, ...info }); } catch { /* ignore */ }
+              } }
+            : opts.toolContext;
+
           const start = Date.now();
           let result: { success: boolean; output?: unknown; error?: string };
           try {
@@ -644,7 +663,7 @@ export async function runToolCallingTurn(opts: {
                         }
                       }
                       // Retry the original tool execution
-                      return await tool.execute(args, opts.toolContext);
+                      return await tool.execute(args, callToolContext);
                     }
                   }
 
@@ -659,7 +678,7 @@ export async function runToolCallingTurn(opts: {
                 }
 
                 // Original execution continues if guardrails pass
-                return await tool.execute(args, opts.toolContext);
+                return await tool.execute(args, callToolContext);
               },
             );
           } catch (err) {
