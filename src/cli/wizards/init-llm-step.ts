@@ -179,7 +179,7 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
       {
         value: 'openai-oauth',
         label: 'OpenAI (Subscription)',
-        hint: 'ChatGPT Plus/Pro — no API key needed',
+        hint: 'ChatGPT Plus/Pro — not yet supported',
       },
     ];
 
@@ -191,9 +191,12 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     if (p.isCancel(chosenProvider)) return null;
 
     if (chosenProvider === 'openai-oauth') {
-      selectedProvider = 'openai';
-      useOAuth = true;
-      fmt.note(`Run ${accent('wunderland login')} after init to authenticate with your OpenAI subscription.`);
+      fmt.errorBlock(
+        'Not yet supported',
+        'OAuth subscription-based usage (ChatGPT Plus/Pro) is not yet available.\n' +
+        'Please use an OpenAI API key instead — get one at https://platform.openai.com/api-keys',
+      );
+      return null;
     } else {
       selectedProvider = chosenProvider as string;
     }
