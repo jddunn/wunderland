@@ -264,6 +264,10 @@ export async function startOllama(baseUrl?: string): Promise<void> {
 
   const child = spawn('ollama', ['serve'], {
     detached: true,
+    env: {
+      ...process.env,
+      OLLAMA_HOST: new URL(targetBaseUrl).host,
+    },
     stdio: 'ignore',
   });
 
@@ -548,13 +552,18 @@ async function pullModelViaApi(modelId: string, baseUrl?: string): Promise<void>
 }
 
 export async function pullModel(modelId: string, baseUrl?: string): Promise<void> {
-  if (!isLocalOllamaBaseUrl(baseUrl)) {
+  const targetBaseUrl = resolveOllamaBase(baseUrl);
+  if (!isLocalOllamaBaseUrl(targetBaseUrl)) {
     await pullModelViaApi(modelId, baseUrl);
     return;
   }
 
   return new Promise<void>((resolve, reject) => {
     const child = spawn('ollama', ['pull', modelId], {
+      env: {
+        ...process.env,
+        OLLAMA_HOST: new URL(targetBaseUrl).host,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
