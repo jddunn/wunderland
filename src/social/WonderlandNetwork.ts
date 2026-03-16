@@ -11,12 +11,13 @@
  */
 
 import { StimulusRouter } from './StimulusRouter.js';
+import { runBrowsingSession as runBrowsingSessionDelegate } from './BrowsingSessionRunner.js';
 import { NewsroomAgency } from './NewsroomAgency.js';
 import { LevelingEngine } from './LevelingEngine.js';
 import { MoodEngine } from './MoodEngine.js';
 import { EnclaveRegistry } from './EnclaveRegistry.js';
 import { PostDecisionEngine } from './PostDecisionEngine.js';
-import { BrowsingEngine, type BrowsingPostCandidate } from './BrowsingEngine.js';
+import { BrowsingEngine } from './BrowsingEngine.js';
 import { TraitEvolution } from './TraitEvolution.js';
 import { PromptEvolution } from './PromptEvolution.js';
 import { ContentSentimentAnalyzer } from './ContentSentimentAnalyzer.js';
@@ -2187,377 +2188,31 @@ export class WonderlandNetwork {
     if (!this.enclaveSystemInitialized || !this.browsingEngine || !this.moodEngine) {
       return null;
     }
-
     const citizen = this.citizens.get(seedId);
     if (!citizen || !citizen.isActive || !citizen.personality) {
       return null;
     }
-
-    // Safety checks
-    const canAct = this.safetyEngine.canAct(seedId);
-    if (!canAct.allowed) return null;
-
-    const browseCheck = this.safetyEngine.checkRateLimit(seedId, 'browse');
-    if (!browseCheck.allowed) return null;
-
-    // Build a real feed snapshot for this session.
-    const allPosts = [...this.posts.values()]
-      .filter((p) => p.status === 'published' && p.seedId !== seedId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    const topicTags = citizen.subscribedTopics ?? [];
-    const postsByEnclave = new Map<string, BrowsingPostCandidate[]>();
-    const fallbackFeed: BrowsingPostCandidate[] = [];
-
-    for (const post of allPosts) {
-      const analysis = this.contentSentimentAnalyzer
-        ? this.contentSentimentAnalyzer.analyze(post.content, topicTags)
-        : {
-            relevance: 0.35,
-            controversy: 0.2,
-            sentiment: 0,
-            replyCount: 0,
-          };
-
-      const candidate: BrowsingPostCandidate = {
-        postId: post.postId,
-        authorSeedId: post.seedId,
-        enclave: post.enclave,
-        createdAt: post.createdAt,
-        analysis: {
-          ...analysis,
-          replyCount: Math.max(0, Number(post.engagement.replies ?? 0)),
-        },
-      };
-
-      fallbackFeed.push(candidate);
-      if (post.enclave) {
-        const bucket = postsByEnclave.get(post.enclave) ?? [];
-        bucket.push(candidate);
-        postsByEnclave.set(post.enclave, bucket);
-      }
-    }
-
-    const sessionResult = this.browsingEngine.startSession(seedId, citizen.personality, {
-      postsByEnclave,
-      fallbackPosts: fallbackFeed,
-    });
-
-    const record: BrowsingSessionRecord = {
+    return runBrowsingSessionDelegate({
       seedId,
-      enclavesVisited: sessionResult.enclavesVisited,
-      postsRead: sessionResult.postsRead,
-      commentsWritten: sessionResult.commentsWritten,
-      votesCast: sessionResult.votesCast,
-      emojiReactions: sessionResult.emojiReactions,
-      startedAt: sessionResult.startedAt.toISOString(),
-      finishedAt: sessionResult.finishedAt.toISOString(),
-    };
-
-    const postById = new Map(allPosts.map((post) => [post.postId, post]));
-    let fallbackCursor = 0;
-    const maxHighSignalPerAuthor = 5;
-    const highSignalByAuthor = new Map<string, number>();
-
-    const pickFallbackPost = (): WonderlandPost | undefined => {
-      if (allPosts.length === 0) return undefined;
-      const idx = fallbackCursor % allPosts.length;
-      fallbackCursor += 1;
-      return allPosts[idx];
-    };
-
-    const canEmitHighSignal = (authorSeedId: string, cost = 1): boolean => {
-      const used = highSignalByAuthor.get(authorSeedId) ?? 0;
-      return used + cost <= maxHighSignalPerAuthor;
-    };
-
-    const markHighSignal = (authorSeedId: string, cost = 1): void => {
-      const used = highSignalByAuthor.get(authorSeedId) ?? 0;
-      highSignalByAuthor.set(authorSeedId, used + cost);
-    };
-
-    // Rate-limit write stimuli per session to prevent spam while allowing
-    // meaningful engagement. Votes and reactions are unlimited; only LLM-generated
-    // content (comments, new posts) is capped.
-    let commentStimuliSent = 0;
-    let createPostStimuliSent = 0;
-    const maxCommentStimuli = 3;
-    const maxCreatePostStimuli = 2;
-
-    for (const action of sessionResult.actions) {
-      // BrowsingEngine now emits real post IDs when contextual feed candidates are available.
-      const realPost = postById.get(action.postId) ?? pickFallbackPost();
-
-      // "create_post" doesn't require a target post — it's the agent's own initiative.
-      if (action.action === 'create_post' && createPostStimuliSent < maxCreatePostStimuli) {
-        createPostStimuliSent += 1;
-        const enclaveHint = action.enclave ? ` in e/${action.enclave}` : '';
-        void this.stimulusRouter
-          .emitInternalThought(
-            `You feel inspired after browsing${enclaveHint}. Share an original post that adds signal (not noise).`,
-            seedId,
-            'normal',
-          )
-          .catch(() => {});
-      }
-
-      if (realPost) {
-        if (action.action === 'upvote') {
-          // Votes are cheap DB writes — no high-signal gating needed.
-          await this.recordEngagement(realPost.postId, seedId, 'like');
-          // "Boost" (aka amplify/repost) is a bots-only distribution signal. It is:
-          // - separate from voting (can co-exist with a like/downvote),
-          // - heavily rate-limited (default: 1/day per agent via SafetyEngine),
-          // - intended to be rare and personality/mood-driven.
-          try {
-            const boostCheck = this.safetyEngine.checkRateLimit(seedId, 'boost');
-            if (boostCheck.allowed) {
-              const traits = citizen.personality;
-              const mood = this.moodEngine?.getState(seedId) ?? { valence: 0, arousal: 0, dominance: 0 };
-              const emojis = new Set(action.emojis ?? []);
-
-              // Strong endorsement signals (emoji reactions are mood/personality-driven).
-              const strongPositive = emojis.has('fire') || emojis.has('100') || emojis.has('heart');
-              const strongCuriosity = emojis.has('brain') || emojis.has('alien');
-
-              // Base chance is intentionally low; strong signals + expressive personalities boost it.
-              let p = 0.01;
-              p += (traits.extraversion ?? 0) * 0.04;
-              p += Math.max(0, mood.arousal) * 0.02;
-              p += Math.max(0, mood.dominance) * 0.02;
-              if (strongPositive) p += 0.15;
-              else if (strongCuriosity) p += 0.08;
-              p = Math.max(0, Math.min(0.35, p));
-
-              if (Math.random() < p && canEmitHighSignal(realPost.seedId)) {
-                await this.recordEngagement(realPost.postId, seedId, 'boost');
-                markHighSignal(realPost.seedId);
-              }
-            }
-          } catch {
-            // Non-critical: boosting is optional and should never break browsing.
-          }
-          // Chained endorsement comment: upvote → enthusiastic reply
-          if (action.chainedAction === 'comment' && action.chainedContext === 'endorsement') {
-            if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
-              commentStimuliSent += 1;
-              markHighSignal(realPost.seedId);
-              void this.stimulusRouter
-                .emitAgentReply(
-                  realPost.postId,
-                  realPost.seedId,
-                  realPost.content.slice(0, 600),
-                  seedId,
-                  'high',
-                  'endorsement',
-                )
-                .catch(() => {});
-            }
-          }
-        } else if (action.action === 'downvote') {
-          // Votes are cheap DB writes — no high-signal gating needed.
-          await this.recordEngagement(realPost.postId, seedId, 'downvote');
-          // Chained dissent comment: downvote -> critical reply with dissent context.
-          if (action.chainedAction === 'comment' && action.chainedContext === 'dissent') {
-            if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
-              commentStimuliSent += 1;
-              markHighSignal(realPost.seedId);
-              void this.stimulusRouter
-                .emitAgentReply(
-                  realPost.postId,
-                  realPost.seedId,
-                  realPost.content.slice(0, 600),
-                  seedId,
-                  'high',
-                  'dissent',
-                )
-                .catch(() => {});
-            }
-          }
-        } else if (action.action === 'comment') {
-          // Convert "comment" intent into a targeted agent_reply stimulus so the
-          // agent actually writes a threaded reply post.
-          if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
-            commentStimuliSent += 1;
-            markHighSignal(realPost.seedId);
-            void this.stimulusRouter
-              .emitAgentReply(
-                realPost.postId,
-                realPost.seedId,
-                realPost.content.slice(0, 600),
-                seedId,
-                'high',
-              )
-              .catch(() => {});
-          }
-        } else if (action.action === 'read_comments') {
-          await this.recordEngagement(realPost.postId, seedId, 'view');
-          // Curiosity-driven reply: reading comments triggers a response
-          if (action.chainedAction === 'comment' && action.chainedContext === 'curiosity') {
-            if (commentStimuliSent < maxCommentStimuli && canEmitHighSignal(realPost.seedId)) {
-              commentStimuliSent += 1;
-              markHighSignal(realPost.seedId);
-              void this.stimulusRouter
-                .emitAgentReply(
-                  realPost.postId,
-                  realPost.seedId,
-                  realPost.content.slice(0, 600),
-                  seedId,
-                  'normal',
-                  'curiosity',
-                )
-                .catch(() => {});
-            }
-          }
-        } else if (action.action === 'skip') {
-          await this.recordEngagement(realPost.postId, seedId, 'view');
-        }
-      }
-
-      // Emoji reactions also resolve to real posts
-      if (action.emojis && action.emojis.length > 0 && realPost) {
-        if (canEmitHighSignal(realPost.seedId)) {
-          for (const emoji of action.emojis) {
-            await this.recordEmojiReaction('post', realPost.postId, seedId, emoji);
-          }
-          markHighSignal(realPost.seedId);
-        }
-      }
-    }
-
-    // Browsing-driven enclave discovery: when an agent engages positively with
-    // posts from enclaves they're not subscribed to, they auto-join.
-    if (this.enclaveRegistry) {
-      const currentSubs = new Set(this.enclaveRegistry.getSubscriptions(seedId));
-      const enclaveEngagement = new Map<string, number>();
-
-      for (const action of sessionResult.actions) {
-        const post = postById.get(action.postId);
-        const enclave = post?.enclave ?? action.enclave;
-        if (!enclave || currentSubs.has(enclave)) continue;
-
-        // Positive engagement signals: upvote, comment, emoji, read_comments
-        const signal = action.action === 'upvote' ? 2
-          : action.action === 'comment' || action.action === 'create_post' ? 3
-          : action.action === 'read_comments' ? 1
-          : (action.emojis && action.emojis.length > 0) ? 1
-          : 0;
-
-        if (signal > 0) {
-          enclaveEngagement.set(enclave, (enclaveEngagement.get(enclave) ?? 0) + signal);
-        }
-      }
-
-      // Auto-join enclaves where engagement score exceeds threshold
-      // (2+ positive interactions with that enclave's content)
-      for (const [enclave, score] of enclaveEngagement) {
-        if (score >= 2) {
-          try {
-            this.enclaveRegistry.subscribe(seedId, enclave);
-            // Update the newsroom's enclave list
-            const newsroom = this.newsrooms.get(seedId);
-            if (newsroom) {
-              const updatedSubs = this.enclaveRegistry.getSubscriptions(seedId);
-              newsroom.setEnclaveSubscriptions(updatedSubs);
-            }
-          } catch {
-            // Enclave doesn't exist or already subscribed — safe to ignore
-          }
-        }
-      }
-    }
-
-    this.browsingSessionLog.set(seedId, record);
-
-    // Persist browsing session
-    if (this.browsingPersistenceAdapter) {
-      const sessionId = `${seedId}-${Date.now()}`;
-      this.browsingPersistenceAdapter.saveBrowsingSession(sessionId, record).catch(() => {});
-    }
-
-    // Award XP for browsing activity
-    if (record.postsRead > 0) {
-      this.levelingEngine.awardXP(citizen, 'view_received');
-    }
-
-    // Decay mood toward baseline after session
-    this.moodEngine?.decayToBaseline(seedId, 1);
-
-    // Micro-evolution: accumulated browsing behavior slowly drifts HEXACO base traits
-    if (this.traitEvolution && this.moodEngine) {
-      // Record mood exposure (sustained mood state presses on traits)
-      const currentMood = this.moodEngine.getState(seedId);
-      if (currentMood) {
-        this.traitEvolution.recordMoodExposure(seedId, currentMood);
-      }
-
-      // Record browsing actions and enclave participation
-      this.traitEvolution.recordBrowsingSession(seedId, sessionResult);
-
-      // Attempt evolution tick — returns updated traits if enough data accumulated
-      const evolvedTraits = this.traitEvolution.evolve(seedId);
-      if (evolvedTraits) {
-        // Update MoodEngine baselines (preserves current mood, shifts what they decay toward)
-        this.moodEngine.updateBaseTraits(seedId, evolvedTraits);
-
-        // Update citizen profile so future stimulus processing uses evolved traits
-        citizen.personality = evolvedTraits;
-      }
-    }
-
-    // Prompt evolution: accumulated behavior slowly grows new behavioral directives
-    if (this.promptEvolution && this.defaultLLMCallback) {
-      this.promptEvolution.recordSession(seedId);
-
-      const newsroom = this.newsrooms.get(seedId);
-      if (newsroom) {
-        const currentMood = this.moodEngine?.getState(seedId);
-        const traitNarrative = this.traitEvolution?.getEvolutionSummary(seedId, citizen.personality)?.narrative;
-
-        // Adapt the LLM callback to the simpler reflection signature
-        const reflectionLlm = async (systemPrompt: string, userPrompt: string): Promise<string> => {
-          const response = await this.defaultLLMCallback!([
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ], undefined, { temperature: 0.3, max_tokens: 300 });
-          return response.content || '';
-        };
-
-        const newAdaptations = await this.promptEvolution.maybeReflect(seedId, {
-          name: citizen.displayName,
-          basePrompt: newsroom.getBaseSystemPrompt(),
-          traitDrift: traitNarrative,
-          activitySummary: sessionResult,
-          mood: currentMood,
-        }, reflectionLlm);
-
-        if (newAdaptations) {
-          // Update config so next buildPersonaSystemPrompt() includes evolved behaviors
-          newsroom.setEvolvedAdaptations(this.promptEvolution.getActiveAdaptations(seedId));
-
-          this.auditLog.log({
-            seedId,
-            action: 'prompt_reflection',
-            outcome: 'success',
-            metadata: {
-              newAdaptations: newAdaptations.map(a => a.text),
-              totalActive: this.promptEvolution.getActiveAdaptations(seedId).length,
-            },
-          });
-        }
-      }
-    }
-
-    // Record in safety engine and audit log
-    this.safetyEngine.recordAction(seedId, 'browse');
-    this.auditLog.log({
-      seedId,
-      action: 'browse_session',
-      outcome: 'success',
-      metadata: { postsRead: record.postsRead, votesCast: record.votesCast, commentsWritten: record.commentsWritten },
+      citizen: citizen as any,
+      posts: this.posts,
+      safetyEngine: this.safetyEngine,
+      moodEngine: this.moodEngine,
+      browsingEngine: this.browsingEngine,
+      contentSentimentAnalyzer: this.contentSentimentAnalyzer,
+      stimulusRouter: this.stimulusRouter,
+      enclaveRegistry: this.enclaveRegistry,
+      newsrooms: this.newsrooms as any,
+      browsingSessionLog: this.browsingSessionLog,
+      browsingPersistenceAdapter: this.browsingPersistenceAdapter,
+      levelingEngine: this.levelingEngine,
+      traitEvolution: this.traitEvolution,
+      promptEvolution: this.promptEvolution,
+      auditLog: this.auditLog,
+      defaultLLMCallback: this.defaultLLMCallback as any,
+      recordEngagement: (postId: string, actorSeedId: string, action: string) => this.recordEngagement(postId, actorSeedId, action as any),
+      recordEmojiReaction: (async (entityType: string, entityId: string, reactorSeedId: string, emoji: string) => { await (this as any).recordEmojiReaction(entityType, entityId, reactorSeedId, emoji); }) as any,
     });
-
-    return record;
   }
 
   /**
