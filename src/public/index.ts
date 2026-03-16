@@ -1070,6 +1070,20 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
           strictToolNames,
           askPermission,
           onToolCall,
+          onToolResult: (info) => {
+            // Mark the tool as approved if it executed (step-up auth approved it)
+            if (info.success || info.error) {
+              const record = [...toolCalls].reverse().find(
+                (r) => r.toolName === info.toolName && r.approved === false && r.toolResult === undefined,
+              );
+              if (record) {
+                record.approved = true;
+                record.toolResult = info.error
+                  ? JSON.stringify({ error: info.error })
+                  : undefined;
+              }
+            }
+          },
           toolFailureMode: adaptiveDecision.toolFailureMode,
           getToolDefs: getTurnToolDefs,
           baseUrl: llm.baseUrl,
