@@ -61,6 +61,7 @@ export interface RAGQueryInput {
 export interface RAGQueryResult {
   success: boolean;
   query: string;
+  hydeUsed?: boolean;
   chunks: Array<{
     chunkId: string;
     documentId: string;
