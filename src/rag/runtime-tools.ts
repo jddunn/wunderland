@@ -4,6 +4,7 @@ import type { WunderlandAgentConfig } from '../api/types.js';
 import { createMemoryReadTool, type MemoryReadResult } from '../tools/MemoryReadTool.js';
 import { RAGTool } from '../tools/RAGTool.js';
 import { WunderlandRAGClient, type RAGQueryInput } from './rag-client.js';
+import { resolveHydeFromAgentConfig } from './hyde-integration.js';
 
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -47,6 +48,7 @@ function buildBaseQueryInput(
     query: input.query,
     topK: input.topK ?? config.rag?.defaultTopK ?? 6,
     collectionIds: defaultCollectionIds,
+    hyde: config.rag ? resolveHydeFromAgentConfig(config.rag) : undefined,
     preset: config.rag?.preset,
     includeAudit: config.rag?.includeAudit,
     includeGraphRag: config.rag?.includeGraphRag,
@@ -121,6 +123,7 @@ export function createConfiguredRagTools(config: WunderlandAgentConfig): ITool[]
         includeAudit: config.rag?.includeAudit,
         includeGraphRag: config.rag?.includeGraphRag,
         includeDebug: config.rag?.includeDebug,
+        hyde: config.rag ? resolveHydeFromAgentConfig(config.rag) : undefined,
         queryVariants: config.rag?.queryVariants,
         rewrite: config.rag?.rewrite,
         strategy: config.rag?.strategy,

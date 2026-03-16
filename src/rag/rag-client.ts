@@ -43,6 +43,16 @@ export interface RAGQueryInput {
     enabled?: boolean;
     maxVariants?: number;
   };
+  hyde?: {
+    enabled?: boolean;
+    initialThreshold?: number;
+    minThreshold?: number;
+    thresholdStep?: number;
+    adaptiveThreshold?: boolean;
+    maxHypothesisTokens?: number;
+    hypothesisSystemPrompt?: string;
+    fullAnswerGranularity?: boolean;
+  };
   includeAudit?: boolean;
   includeGraphRag?: boolean;
   debug?: boolean;
