@@ -1,6 +1,6 @@
 {
   "name": "wunderland",
-  "version": "0.42.1",
+  "version": "0.42.2",
   "description": "Autonomous AI agent framework with cognitive memory, infinite-context graph-based RAG, and HEXACO personality modeling — built on OpenClaw with 5-tier prompt-injection defense, adaptive HyDE retrieval, observational memory with Ebbinghaus decay, 37 channel integrations, and a zero-config CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -98,15 +98,15 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@framers/agentos": "workspace:*",
+    "@framers/agentos": ">=0.1.0",
     "@framers/agentos-ext-cli-executor": "^1.2.0",
     "@framers/agentos-ext-giphy": "^1.0.0",
     "@framers/agentos-ext-image-search": "^1.0.0",
     "@framers/agentos-ext-news-search": "^1.0.0",
-    "@framers/agentos-ext-voice-synthesis": "workspace:*",
+    "@framers/agentos-ext-voice-synthesis": ">=1.0.0",
     "@framers/agentos-ext-web-browser": "^1.2.1",
     "@framers/agentos-ext-web-search": "^1.1.1",
-    "@framers/agentos-extensions-registry": "workspace:*",
+    "@framers/agentos-extensions-registry": ">=0.1.0",
     "@framers/sql-storage-adapter": "^0.5.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.201.1",
@@ -128,7 +128,7 @@
     "uuid": "^9.0.0"
   },
   "optionalDependencies": {
-    "@framers/agentos-skills-registry": "workspace:*"
+    "@framers/agentos-skills-registry": ">=0.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
