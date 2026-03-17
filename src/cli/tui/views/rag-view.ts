@@ -257,11 +257,15 @@ export class RagView {
   }
 
   private back(): void {
-    this.keys.pop();
+    this.dispose();
     this.onBack();
   }
 
+  private disposed = false;
+
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.keys.pop();
   }
 }

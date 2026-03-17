@@ -543,21 +543,28 @@ export async function chatCompletionsRequest(
     { source: `${providerName} chat completions` },
   );
 
-  const fetchUrl = `${baseUrl}/chat/completions`;
+  // Gemini uses query-param auth (?key=), not Bearer header
+  const isGemini = baseUrl.includes('generativelanguage.googleapis.com');
+  const fetchUrl = isGemini
+    ? `${baseUrl}/chat/completions?key=${encodeURIComponent(apiKey)}`
+    : `${baseUrl}/chat/completions`;
   // Ollama inference with tools can take several minutes — use generous timeouts.
   // Node's undici has separate headersTimeout/bodyTimeout defaults (300s each) that
   // fire independently of AbortController.  Override via the dispatcher option.
   const controller = new AbortController();
   const fetchTimeout = setTimeout(() => controller.abort(), 10 * 60_000); // 10 minutes
   if (process.env.DEBUG === '1' || process.env.DEBUG === 'true' || process.env.WUNDERLAND_DEBUG === '1') {
-    console.log(`[tool-calling] POST ${fetchUrl} (model=${provider.model}, tools=${tools.length})`);
+    console.log(`[tool-calling] POST ${fetchUrl.replace(/key=[^&]+/, 'key=***')} (model=${provider.model}, tools=${tools.length})`);
   }
 
   const isLocalLLM = /localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\./.test(fetchUrl);
+  const authHeaders: Record<string, string> = isGemini
+    ? {} // Gemini auth is via query param, not header
+    : { Authorization: `Bearer ${apiKey}` };
   const fetchOpts: RequestInit & Record<string, unknown> = {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      ...authHeaders,
       'Content-Type': 'application/json',
       ...(provider.extraHeaders || {}),
     },
