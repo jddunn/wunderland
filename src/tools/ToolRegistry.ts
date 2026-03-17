@@ -205,5 +205,5 @@ export { SerperSearchTool } from './SerperSearchTool.js';
 export { WebSearchTool, ResearchAggregatorTool, FactCheckTool } from '@framers/agentos-ext-web-search';
 export { GiphySearchTool } from '@framers/agentos-ext-giphy';
 export { ImageSearchTool } from '@framers/agentos-ext-image-search';
-export { TextToSpeechTool, SpeechToTextTool } from '@framers/agentos-ext-voice-synthesis';
+export { TextToSpeechTool } from '@framers/agentos-ext-voice-synthesis';
 export { NewsSearchTool } from '@framers/agentos-ext-news-search';
