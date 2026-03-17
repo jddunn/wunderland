@@ -193,7 +193,7 @@ export class ExtensionsView {
   }
 
   private back(): void {
-    this.keys.pop();
+    this.dispose();
     this.onBack();
   }
 
@@ -281,7 +281,11 @@ export class ExtensionsView {
     ];
   }
 
+  private disposed = false;
+
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.keys.pop();
   }
 }

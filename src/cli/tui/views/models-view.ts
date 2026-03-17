@@ -176,7 +176,7 @@ export class ModelsView {
   }
 
   private back(): void {
-    this.keys.pop();
+    this.dispose();
     this.onBack();
   }
 
@@ -269,7 +269,11 @@ export class ModelsView {
     ];
   }
 
+  private disposed = false;
+
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.keys.pop();
   }
 }
