@@ -18,43 +18,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Resolve workspace protocol to latest npm versions
-        run: |
-          node -e "
-            const { execSync } = require('child_process');
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            for (const g of ['dependencies','optionalDependencies','peerDependencies']) {
-              if (!pkg[g]) continue;
-              for (const [name, ver] of Object.entries(pkg[g])) {
-                if (!String(ver).startsWith('workspace:')) continue;
-                try {
-                  const latest = execSync('npm view ' + name + ' version 2>/dev/null', { encoding: 'utf8' }).trim();
-                  pkg[g][name] = '^' + latest;
-                  console.log(name + ': workspace:* → ^' + latest);
-                } catch {
-                  pkg[g][name] = '*';
-                  console.warn(name + ': workspace:* → * (not found on npm)');
-                }
-              }
-            }
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          "
-
       - name: Install dependencies
-        run: npm install --legacy-peer-deps --ignore-scripts 2>&1 || { cat ~/.npm/_logs/*-debug-0.log 2>/dev/null | tail -50; exit 1; }
-        env:
-          NODE_OPTIONS: "--max-old-space-size=8192"
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build
-        run: npm run build
+        run: pnpm build
 
       - name: Run tests
-        run: npx vitest run
+        run: pnpm exec vitest run
         env:
           CI: true
 
@@ -70,6 +49,10 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -146,15 +129,13 @@ jobs:
 
       - name: Install and build
         if: steps.bump.outputs.bump != 'none'
-        run: npm install --legacy-peer-deps && npm run build
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
+        run: pnpm install --no-frozen-lockfile && pnpm build
 
       - name: Publish to npm
         id: publish
         if: steps.bump.outputs.bump != 'none'
         run: |
-          npm publish --access public
+          pnpm publish --access public --no-git-checks
           echo "published=true" >> "$GITHUB_OUTPUT"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
