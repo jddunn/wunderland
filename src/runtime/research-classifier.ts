@@ -39,6 +39,11 @@ export interface ResearchClassifierLlmCallOptions {
   fetchImpl?: typeof fetch;
 }
 
+function normalizeBaseUrl(value: string | undefined): string {
+  const trimmed = (value || 'https://api.openai.com/v1').trim();
+  return trimmed.replace(/\/+$/, '');
+}
+
 const CLASSIFIER_SYSTEM_PROMPT = `You are a query complexity classifier. Given a user query, classify it into ONE of these research depth tiers:
 
 **none** — The query can be answered from general knowledge. Examples: greetings, simple factual questions, code syntax, math, creative writing, conversation.
@@ -63,7 +68,7 @@ export function createResearchClassifierLlmCall(
   options: ResearchClassifierLlmCallOptions,
 ): (system: string, user: string) => Promise<string> {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const baseUrl = options.baseUrl || 'https://api.openai.com/v1';
+  const baseUrl = normalizeBaseUrl(options.baseUrl);
   const model = resolveResearchClassifierModel(options.providerId);
 
   return async (system: string, user: string): Promise<string> => {

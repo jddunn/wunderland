@@ -151,6 +151,28 @@ describe('createResearchClassifierLlmCall', () => {
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body).model).toBe('gemini-2.0-flash-lite');
   });
 
+  it('normalizes trailing slashes on the configured base URL', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '{"depth":"quick","reasoning":"current info"}' } }],
+      }),
+    })) as any;
+    const llmCall = createResearchClassifierLlmCall({
+      providerId: 'openai',
+      apiKey: 'openai-key',
+      baseUrl: 'https://api.openai.com/v1/',
+      fetchImpl,
+    });
+
+    await llmCall('system prompt', 'latest weather');
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/chat/completions',
+      expect.any(Object),
+    );
+  });
+
   it('falls back to a none classification payload on HTTP errors', async () => {
     const llmCall = createResearchClassifierLlmCall({
       fetchImpl: vi.fn(async () => ({ ok: false })) as any,

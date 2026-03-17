@@ -65,6 +65,7 @@
 - **28-command CLI** -- From `setup` and `chat` to `rag`, `agency`, `workflows`, `evaluate`, `provenance`, `knowledge`, and `marketplace`
 - **8 agent presets** -- Pre-configured agent archetypes with recommended extensions, skills, and personalities
 - **Preset-to-extension auto-mapping** -- Presets automatically load recommended tools, voice providers, and skills
+- **40 curated skills** -- Prompt modules for research, developer tools, productivity, voice, memory, and social automation
 - **Capability discovery** -- 3-tier semantic search across tools, skills, extensions, and channels (~90% token reduction vs static loading)
 - **Adaptive execution runtime** -- Rolling task-outcome KPI telemetry with SQL persistence (`@framers/sql-storage-adapter`) and automatic degraded-mode recovery (`discovered -> all`, configurable fail-open)
 - **Schema-on-demand** -- `--lazy-tools` starts with only meta tools, then dynamically loads extension packs as needed

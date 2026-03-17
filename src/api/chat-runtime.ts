@@ -17,7 +17,7 @@ import {
   normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
 } from '../runtime/policy.js';
-import { SkillRegistry, resolveDefaultSkillsDirs } from '../skills/index.js';
+import { resolveDefaultSkillsDirs } from '../skills/index.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
 import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
@@ -32,6 +32,7 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../core/index.js';
+import { resolveSkillContext } from '../core/resolve-skill-context.js';
 import {
   buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
@@ -495,54 +496,18 @@ export async function createWunderlandChatRuntime(opts: {
   liveToolMap = toolMap;
 
   let skillsPrompt = '';
-  const skillEntries: Array<{ name: string; description: string; content: string }> = [];
-  const skillRegistry = new SkillRegistry();
-  const dirs = resolveDefaultSkillsDirs({ cwd: workingDirectory });
-  if (dirs.length > 0) {
-    try {
-      await skillRegistry.loadFromDirs(dirs);
-      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
-      if (snapshot.prompt) skillsPrompt = snapshot.prompt;
-      if (typeof skillRegistry.listAll === 'function') {
-        for (const entry of skillRegistry.listAll() as any[]) {
-          const skill = entry.skill ?? entry;
-          skillEntries.push({
-            name: skill.name ?? 'unknown',
-            description: skill.description ?? '',
-            content: skill.content ?? '',
-          });
-        }
-      }
-    } catch (error) {
-      logger.warn?.('[wunderland/api] Failed to load filesystem skills', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  if (Array.isArray(agentConfig.skills) && agentConfig.skills.length > 0) {
-    try {
-      const { resolveSkillsByNames } = await import('../core/PresetSkillResolver.js');
-      const snapshot = await resolveSkillsByNames(agentConfig.skills);
-      if (snapshot?.prompt) {
-        skillsPrompt = [skillsPrompt, snapshot.prompt].filter(Boolean).join('\n\n');
-      }
-      if (Array.isArray(snapshot?.skills)) {
-        const existing = new Set(skillEntries.map((entry) => entry.name));
-        for (const skill of snapshot.skills as any[]) {
-          const name = typeof skill === 'string' ? skill : skill.name ?? 'unknown';
-          if (!existing.has(name)) {
-            skillEntries.push({ name, description: '', content: '' });
-            existing.add(name);
-          }
-        }
-      }
-    } catch (error) {
-      logger.warn?.('[wunderland/api] Failed to resolve curated skills', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+  const resolvedSkills = await resolveSkillContext({
+    filesystemDirs: resolveDefaultSkillsDirs({ cwd: workingDirectory }),
+    curatedSkills:
+      Array.isArray(agentConfig.skills) && agentConfig.skills.length > 0
+        ? agentConfig.skills
+        : undefined,
+    platform: process.platform,
+    logger,
+    warningPrefix: '[wunderland/api]',
+  });
+  skillsPrompt = resolvedSkills.skillsPrompt;
+  const skillEntries = resolvedSkills.skillEntries;
 
   discoveryManager = new WunderlandDiscoveryManager(buildDiscoveryOptionsFromAgentConfig(agentConfig));
   try {

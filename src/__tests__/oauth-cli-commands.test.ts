@@ -64,28 +64,13 @@ describe('wunderland login', () => {
     }
   });
 
-  it('defaults provider to openai when no flag given', async () => {
+  it('shows the unsupported message when OpenAI subscription auth is selected', async () => {
     // Mock @clack/prompts to auto-select openai-oauth (avoids interactive TTY hang)
     vi.doMock('@clack/prompts', () => ({
       intro: vi.fn(),
       cancel: vi.fn(),
       isCancel: vi.fn(() => false),
       select: vi.fn(async () => 'openai-oauth'),
-    }));
-
-    // Mock the auth module to verify it's called
-    vi.doMock('@framers/agentos/auth', () => ({
-      OpenAIOAuthFlow: class {
-        authenticate = vi.fn(async () => ({
-          accessToken: 'test-token-01234567890123456789',
-          refreshToken: 'refresh-tok',
-          expiresAt: Date.now() + 3600_000,
-        }));
-        isValid = vi.fn(() => false);
-      },
-      FileTokenStore: class {
-        load = vi.fn(async () => null);
-      },
     }));
 
     // Re-import so the mock takes effect
@@ -94,16 +79,16 @@ describe('wunderland login', () => {
     try {
       await cmdLogin([], {}, globals);
       const output = cap.logs.join('\n');
-      // Should show OpenAI OAuth Login header
-      expect(output).toContain('OpenAI');
-      // Should show success with token info
-      expect(output).toContain('Authenticated');
+      expect(output).toContain('Not yet supported');
+      expect(output).toContain('ChatGPT Plus/Pro');
+      expect(output).toContain('Please use an OpenAI API key instead');
+      expect(process.exitCode).toBeUndefined();
     } finally {
       cap.restore();
     }
   });
 
-  it('shows error on auth failure', async () => {
+  it('does not attempt the deprecated OpenAI OAuth auth flow', async () => {
     // Mock @clack/prompts to auto-select openai-oauth (avoids interactive TTY hang)
     vi.doMock('@clack/prompts', () => ({
       intro: vi.fn(),
@@ -112,26 +97,15 @@ describe('wunderland login', () => {
       select: vi.fn(async () => 'openai-oauth'),
     }));
 
-    vi.doMock('@framers/agentos/auth', () => ({
-      OpenAIOAuthFlow: class {
-        authenticate = vi.fn(async () => {
-          throw new Error('Network timeout');
-        });
-        isValid = vi.fn(() => false);
-      },
-      FileTokenStore: class {
-        load = vi.fn(async () => null);
-      },
-    }));
-
     const { default: cmdLogin } = await import('../cli/commands/login.js');
     const cap = captureConsole();
     try {
       await cmdLogin([], {}, globals);
-      expect(process.exitCode).toBe(1);
       const output = cap.logs.join('\n');
-      expect(output).toContain('Login failed');
-      expect(output).toContain('Network timeout');
+      expect(output).toContain('Not yet supported');
+      expect(output).toContain('registered OAuth application');
+      expect(output).not.toContain('Login failed');
+      expect(process.exitCode).toBeUndefined();
     } finally {
       cap.restore();
     }

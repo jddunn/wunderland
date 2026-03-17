@@ -19,6 +19,12 @@ function mockOpenAIChatCompletionSequence(responses: Array<Record<string, unknow
   return fetchMock;
 }
 
+const quietRuntimeOptions = {
+  discovery: { enabled: false },
+  taskOutcomeTelemetry: { enabled: false },
+  adaptiveExecution: { enabled: false },
+} as const;
+
 describe('wunderland public API', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -30,6 +36,7 @@ describe('wunderland public API', () => {
       createWunderland({
         llm: { providerId: 'openai', apiKey: '', model: 'gpt-test' },
         tools: 'none',
+        ...quietRuntimeOptions,
       }),
     ).rejects.toBeInstanceOf(WunderlandConfigError);
   });
@@ -43,7 +50,7 @@ describe('wunderland public API', () => {
     const app = await createWunderland({
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
     });
 
     const s = app.session('s1');
@@ -91,7 +98,7 @@ describe('wunderland public API', () => {
       tools: { custom: [sideEffectTool] },
       approvals: { mode: 'deny-side-effects' },
       agentConfig: { security: { wrapToolOutputs: false } },
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
     });
 
     const out = await app.session('s').sendText('run the tool');
@@ -139,7 +146,7 @@ describe('wunderland public API', () => {
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: { custom: [readTool] },
       agentConfig: { security: { wrapToolOutputs: false } },
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
     });
 
     const out = await app.session('s').sendText('run the tool');
@@ -164,7 +171,7 @@ describe('wunderland public API', () => {
     const app = await createWunderland({
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
       memory: manager,
     });
 
@@ -186,7 +193,7 @@ describe('wunderland public API', () => {
     const app = await createWunderland({
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
       memory,
     });
 
