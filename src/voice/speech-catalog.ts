@@ -21,6 +21,7 @@ const STT_PROVIDER_ALIASES: Record<string, string> = {
   openai: 'openai-whisper',
   'openai-whisper': 'openai-whisper',
   deepgram: 'deepgram',
+  'whisper-local': 'whisper-local',
 };
 
 export function getDefaultVoiceExtensions(): string[] {
@@ -63,6 +64,8 @@ export function createSpeechExtensionEnvOverrides(opts: {
   providerDefaults?: SpeechProviderDefaults;
 } = {}): Record<string, { options: Record<string, string | undefined> }> {
   const env = opts.env ?? process.env;
+  const preferredTtsProvider = opts.providerDefaults?.tts?.trim().toLowerCase();
+  const preferredSttProvider = opts.providerDefaults?.stt?.trim().toLowerCase();
 
   return {
     'speech-runtime': {
@@ -78,7 +81,18 @@ export function createSpeechExtensionEnvOverrides(opts: {
     },
     'voice-synthesis': {
       options: {
+        openaiApiKey: env['OPENAI_API_KEY'],
+        openaiBaseUrl: env['OPENAI_BASE_URL'],
         elevenLabsApiKey: env['ELEVENLABS_API_KEY'],
+        deepgramApiKey: env['DEEPGRAM_API_KEY'],
+        deepgramBaseUrl: env['DEEPGRAM_BASE_URL'],
+        whisperLocalBaseUrl: env['WHISPER_LOCAL_BASE_URL'],
+        defaultProvider:
+          preferredTtsProvider === 'openai-tts' ? 'openai'
+            : preferredTtsProvider === 'elevenlabs' ? 'elevenlabs'
+              : preferredTtsProvider,
+        defaultSttProvider:
+          preferredSttProvider === 'openai-whisper' ? 'openai' : preferredSttProvider,
       },
     },
   };

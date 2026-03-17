@@ -120,7 +120,7 @@ export async function resolveLlmConfig(opts: {
       : providerId === 'ollama'
         ? ollamaBaseUrl
         : providerId === 'gemini'
-          ? (opts.llm?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai/')
+          ? (opts.llm?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai')
           : opts.llm?.baseUrl;
 
   const openrouterApiKey = String(process.env['OPENROUTER_API_KEY'] || '').trim();
@@ -142,6 +142,16 @@ export async function resolveLlmConfig(opts: {
       ? 'oauth'
       : 'api-key';
 
+  if (authMethod === 'oauth') {
+    throw new WunderlandConfigError('OpenAI OAuth is not currently supported.', [
+      {
+        path: 'llmAuthMethod',
+        message: 'Subscription-based OpenAI OAuth is disabled until a first-party OAuth application is registered.',
+        hint: 'Use OPENAI_API_KEY or pass llm.apiKey instead.',
+      },
+    ]);
+  }
+
   const apiKey =
     typeof opts.llm?.apiKey === 'string'
       ? opts.llm.apiKey
@@ -155,32 +165,18 @@ export async function resolveLlmConfig(opts: {
               ? String(process.env['GEMINI_API_KEY'] || '')
               : String(process.env['OPENAI_API_KEY'] || '');
 
-  // For OAuth, we don't require an API key — tokens are resolved dynamically
   let getApiKey: (() => Promise<string>) | undefined;
 
-  if (authMethod === 'oauth') {
-    try {
-      // Dynamic import to avoid hard dependency on the auth module
-      const { OpenAIOAuthFlow, FileTokenStore } = await import('@framers/agentos/auth');
-      const flow = new OpenAIOAuthFlow({ tokenStore: new FileTokenStore() });
-      getApiKey = () => flow.getAccessToken();
-    } catch {
-      // Fallback: if the auth module isn't available, treat as api-key
-    }
-  }
-
   const canUseLLM =
-    authMethod === 'oauth'
-      ? true // OAuth handles auth dynamically
-      : providerId === 'ollama'
-        ? true
-        : providerId === 'openrouter'
-          ? !!openrouterApiKey
-          : providerId === 'anthropic'
-            ? !!process.env['ANTHROPIC_API_KEY']
-            : providerId === 'gemini'
-              ? !!process.env['GEMINI_API_KEY']
-              : !!apiKey || !!fallback;
+    providerId === 'ollama'
+      ? true
+      : providerId === 'openrouter'
+        ? !!openrouterApiKey
+        : providerId === 'anthropic'
+          ? !!process.env['ANTHROPIC_API_KEY']
+          : providerId === 'gemini'
+            ? !!process.env['GEMINI_API_KEY']
+            : !!apiKey || !!fallback;
 
   const openaiFallbackEnabled = providerId === 'openai' && !!fallback;
 

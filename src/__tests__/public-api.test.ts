@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-import type { ITool } from '@framers/agentos';
+import { AgentMemory, type ITool } from '@framers/agentos';
+import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 import { createWunderland, WunderlandConfigError } from '../index.js';
 
 function mockOpenAIChatCompletionSequence(responses: Array<Record<string, unknown>>) {
@@ -149,5 +150,46 @@ describe('wunderland public API', () => {
     expect(out.toolCalls[0]?.approved).toBe(true);
     expect(out.toolCalls[0]?.toolResult).toContain('"ok": true');
   });
-});
 
+  it('wraps a raw cognitive memory manager into AgentMemory', async () => {
+    const manager = {
+      initialize: vi.fn(),
+      shutdown: vi.fn(),
+      encode: vi.fn(),
+      retrieve: vi.fn(),
+      assembleForPrompt: vi.fn(),
+      getMemoryHealth: vi.fn(),
+    } as unknown as ICognitiveMemoryManager;
+
+    const app = await createWunderland({
+      llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
+      tools: 'none',
+      discovery: { enabled: false },
+      memory: manager,
+    });
+
+    expect(app.memory).toBeDefined();
+    expect(app.memory).toBeInstanceOf(AgentMemory);
+    expect(app.memory?.raw).toBe(manager);
+  });
+
+  it('preserves an existing AgentMemory instance', async () => {
+    const memory = AgentMemory.wrap({
+      initialize: vi.fn(),
+      shutdown: vi.fn(),
+      encode: vi.fn(),
+      retrieve: vi.fn(),
+      assembleForPrompt: vi.fn(),
+      getMemoryHealth: vi.fn(),
+    } as unknown as ICognitiveMemoryManager);
+
+    const app = await createWunderland({
+      llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
+      tools: 'none',
+      discovery: { enabled: false },
+      memory,
+    });
+
+    expect(app.memory).toBe(memory);
+  });
+});
