@@ -60,6 +60,7 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../core/index.js';
+import { resolveSkillContext } from '../core/resolve-skill-context.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
@@ -235,89 +236,31 @@ async function resolveSkillsFromOpts(opts: {
   }
 
   const promptParts: string[] = [];
-  const allEntries: DiscoverySkillEntry[] = [];
-  const allNames: string[] = [];
-
-  // 1. Directory-based skills (local dirs + defaults)
-  if (dirs.length > 0 || includeDefaults) {
-    try {
-      const skillsMod: any = await import('../skills/index.js');
-      const SkillRegistry = skillsMod.SkillRegistry;
-      const resolveDefaultSkillsDirs = skillsMod.resolveDefaultSkillsDirs;
-
-      const registry = new SkillRegistry();
-      const scanDirs = [...dirs];
-      if (includeDefaults && typeof resolveDefaultSkillsDirs === 'function') {
-        scanDirs.push(...resolveDefaultSkillsDirs({ cwd: process.cwd() }));
-      }
-      if (scanDirs.length > 0) {
-        await registry.loadFromDirs(scanDirs);
-        const snapshot = registry.buildSnapshot({ platform: process.platform, strict: true });
-        if (snapshot.prompt) promptParts.push(snapshot.prompt);
-        // Extract entries for discovery
-        if (typeof registry.listAll === 'function') {
-          for (const entry of registry.listAll() as any[]) {
-            const skill = entry.skill ?? entry;
-            const name = skill.name ?? 'unknown';
-            allEntries.push({
-              name,
-              description: skill.description ?? '',
-              content: skill.content ?? '',
-            });
-            allNames.push(name);
-          }
-        }
-      }
-    } catch (err) {
-      opts.logger.warn?.('[wunderland] Failed to load skills from directories (continuing without)', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+  const scanDirs = [...dirs];
+  if (includeDefaults) {
+    const skillsMod: any = await import('../skills/index.js');
+    const resolveDefaultSkillsDirs = skillsMod.resolveDefaultSkillsDirs;
+    if (typeof resolveDefaultSkillsDirs === 'function') {
+      scanDirs.push(...resolveDefaultSkillsDirs({ cwd: process.cwd() }));
     }
   }
 
-  // 2. Named skills from curated registry
-  if (namedSkills.length > 0) {
-    try {
-      const { resolveSkillsByNames } = await import('../core/PresetSkillResolver.js');
+  const resolved = await resolveSkillContext({
+    filesystemDirs: scanDirs,
+    curatedSkills: namedSkills.includes('all') ? 'all' : namedSkills,
+    platform: process.platform,
+    logger: opts.logger,
+    warningPrefix: '[wunderland]',
+  });
 
-      let snapshot: any;
-      if (namedSkills.includes('all')) {
-        // Load all curated skills
-        const catalogModule: string = '@framers/agentos-skills-registry/catalog';
-        const catalog: any = await import(catalogModule);
-        const allSkillNames = typeof catalog.listSkillNames === 'function'
-          ? catalog.listSkillNames()
-          : typeof catalog.searchSkills === 'function'
-            ? catalog.searchSkills('').map((s: any) => s.name)
-            : [];
-        snapshot = await resolveSkillsByNames(allSkillNames);
-      } else {
-        snapshot = await resolveSkillsByNames(namedSkills);
-      }
-
-      if (snapshot?.prompt) promptParts.push(snapshot.prompt);
-
-      // Build SkillEntries for discovery
-      if (Array.isArray(snapshot?.skills)) {
-        for (const skill of snapshot.skills as any[]) {
-          const name = typeof skill === 'string' ? skill : skill.name ?? 'unknown';
-          if (!allNames.includes(name)) {
-            allEntries.push({ name, description: '', content: '' });
-            allNames.push(name);
-          }
-        }
-      }
-    } catch (err) {
-      opts.logger.warn?.('[wunderland] Failed to load curated skills (continuing without)', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  if (resolved.skillsPrompt) {
+    promptParts.push(resolved.skillsPrompt);
   }
 
   return {
     skillsPrompt: promptParts.filter(Boolean).join('\n\n'),
-    skillEntries: allEntries,
-    skillNames: allNames,
+    skillEntries: resolved.skillEntries,
+    skillNames: resolved.skillNames,
   };
 }
 

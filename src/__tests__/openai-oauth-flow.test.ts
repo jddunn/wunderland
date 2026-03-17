@@ -1,6 +1,18 @@
+import { get } from 'node:http';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { OpenAIOAuthFlow } from '@framers/agentos/auth';
 import type { IOAuthTokenStore, OAuthTokenSet } from '@framers/agentos/auth';
+
+const { execMock } = vi.hoisted(() => ({
+  execMock: vi.fn((_cmd: string, cb?: (error: Error | null) => void) => {
+    cb?.(null);
+    return {} as any;
+  }),
+}));
+
+vi.mock('node:child_process', () => ({
+  exec: execMock,
+}));
 
 /** In-memory token store for testing. */
 class MemoryTokenStore implements IOAuthTokenStore {
@@ -21,11 +33,12 @@ class MemoryTokenStore implements IOAuthTokenStore {
 
 describe('OpenAIOAuthFlow', () => {
   let memStore: MemoryTokenStore;
-  let onUserCode: ReturnType<typeof vi.fn>;
+  let onBrowserOpen: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     memStore = new MemoryTokenStore();
-    onUserCode = vi.fn();
+    onBrowserOpen = vi.fn();
+    execMock.mockClear();
   });
 
   afterEach(() => {
@@ -37,7 +50,17 @@ describe('OpenAIOAuthFlow', () => {
     return new OpenAIOAuthFlow({
       tokenStore: memStore,
       clientId: opts?.clientId ?? 'test-client-id',
-      onUserCode,
+      onBrowserOpen,
+    });
+  }
+
+  async function sendCallback(path: string): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const req = get(`http://127.0.0.1:1455${path}`, (res) => {
+        res.resume();
+        res.on('end', () => resolve());
+      });
+      req.on('error', reject);
     });
   }
 
@@ -215,36 +238,18 @@ describe('OpenAIOAuthFlow', () => {
   });
 
   describe('authenticate()', () => {
-    it('performs device code flow and returns tokens', async () => {
+    it('performs browser-based PKCE flow and returns tokens', async () => {
       const flow = createFlow();
-      let pollCount = 0;
+
+      onBrowserOpen.mockImplementation((authUrl: string) => {
+        const state = new URL(authUrl).searchParams.get('state');
+        expect(state).toBeTruthy();
+        setTimeout(() => {
+          void sendCallback(`/auth/callback?code=auth-code-456&state=${encodeURIComponent(state!)}`);
+        }, 10);
+      });
 
       const fetchMock = vi.fn(async (url: string) => {
-        if (typeof url === 'string' && url.includes('/deviceauth/usercode')) {
-          return {
-            ok: true,
-            json: async () => ({
-              device_auth_id: 'dev-123',
-              user_code: 'ABC-DEF',
-              interval: 0.01, // very short interval for testing
-            }),
-          };
-        }
-        if (typeof url === 'string' && url.includes('/deviceauth/token')) {
-          pollCount++;
-          if (pollCount < 2) {
-            // First poll: pending (403)
-            return { ok: false, status: 403, text: async () => 'pending' };
-          }
-          // Second poll: success
-          return {
-            ok: true,
-            json: async () => ({
-              authorization_code: 'auth-code-456',
-              code_verifier: 'verifier-789',
-            }),
-          };
-        }
         if (typeof url === 'string' && url.includes('/oauth/token')) {
           return {
             ok: true,
@@ -261,9 +266,7 @@ describe('OpenAIOAuthFlow', () => {
 
       const result = await flow.authenticate();
 
-      // Verify user code was displayed
-      expect(onUserCode).toHaveBeenCalledOnce();
-      expect(onUserCode).toHaveBeenCalledWith('ABC-DEF', expect.any(String));
+      expect(onBrowserOpen).toHaveBeenCalledOnce();
 
       // Verify tokens
       expect(result.accessToken).toBe('final-access-token');
@@ -274,12 +277,23 @@ describe('OpenAIOAuthFlow', () => {
       const saved = await memStore.load('openai');
       expect(saved?.accessToken).toBe('final-access-token');
 
-      // Verify fetch calls: 1 usercode + 2 polls + 1 token exchange = 4
-      expect(fetchMock).toHaveBeenCalledTimes(4);
+      // Verify fetch calls: token exchange only
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, opts] = fetchMock.mock.calls[0];
+      expect(url).toContain('/oauth/token');
+      expect(String(opts?.body)).toContain('grant_type=authorization_code');
+      expect(String(opts?.body)).toContain('code=auth-code-456');
     });
 
-    it('throws on device code request failure', async () => {
+    it('throws on token exchange failure', async () => {
       const flow = createFlow();
+
+      onBrowserOpen.mockImplementation((authUrl: string) => {
+        const state = new URL(authUrl).searchParams.get('state');
+        setTimeout(() => {
+          void sendCallback(`/auth/callback?code=bad-code&state=${encodeURIComponent(state!)}`);
+        }, 10);
+      });
 
       vi.stubGlobal('fetch', vi.fn(async () => ({
         ok: false,
@@ -288,7 +302,7 @@ describe('OpenAIOAuthFlow', () => {
       })));
 
       await expect(flow.authenticate()).rejects.toThrow(
-        /Failed to request device code/,
+        /Token exchange failed: 500/,
       );
     });
   });

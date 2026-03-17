@@ -20,7 +20,7 @@ import * as path from 'node:path';
 
 import { HumanInteractionManager } from '@framers/agentos';
 
-import { SkillRegistry, resolveDefaultSkillsDirs } from '../skills/index.js';
+import { resolveDefaultSkillsDirs } from '../skills/index.js';
 import { resolveExtensionsByNames } from '../core/PresetExtensionResolver.js';
 import { PairingManager } from '../pairing/PairingManager.js';
 import {
@@ -29,6 +29,7 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../core/index.js';
+import { resolveSkillContext } from '../core/resolve-skill-context.js';
 import {
   buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
@@ -269,9 +270,9 @@ export async function createWunderlandServer(opts?: {
   const providerFromConfig = typeof (cfg as any).llmProvider === 'string' ? String((cfg as any).llmProvider).trim() : '';
   const providerIdRaw = String(opts?.llm?.providerId ?? providerFromConfig ?? 'openai').trim().toLowerCase();
   const providerId = providerIdRaw as WunderlandProviderId | string;
-  if (!new Set<string>(['openai', 'openrouter', 'ollama', 'anthropic']).has(providerId)) {
+  if (!new Set<string>(['openai', 'openrouter', 'ollama', 'anthropic', 'gemini']).has(providerId)) {
     throw new Error(
-      `createWunderlandServer: unsupported LLM provider "${providerIdRaw}". Supported: openai, openrouter, ollama, anthropic`,
+      `createWunderlandServer: unsupported LLM provider "${providerIdRaw}". Supported: openai, openrouter, ollama, anthropic, gemini`,
     );
   }
 
@@ -325,7 +326,7 @@ export async function createWunderlandServer(opts?: {
       : providerId === 'ollama'
         ? ollamaBaseUrl
         : providerId === 'gemini'
-          ? (opts?.llm?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai/')
+          ? (opts?.llm?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai')
           : opts?.llm?.baseUrl;
 
   const llmApiKey =
@@ -347,11 +348,11 @@ export async function createWunderlandServer(opts?: {
     providerId === 'ollama'
       ? true
       : providerId === 'openrouter'
-        ? !!openrouterApiKey
+        ? !!llmApiKey
         : providerId === 'anthropic'
-          ? !!process.env['ANTHROPIC_API_KEY']
+          ? !!llmApiKey
           : providerId === 'gemini'
-            ? !!process.env['GEMINI_API_KEY']
+            ? !!llmApiKey
             : !!llmApiKey || !!openrouterFallback;
 
   const openaiFallbackEnabled = providerId === 'openai' && !!openrouterFallback;
@@ -702,48 +703,22 @@ export async function createWunderlandServer(opts?: {
   for (const [k, v] of filtered.toolMap.entries()) toolMap.set(k, v);
 
   let skillsPrompt = '';
-  const skillEntries: Array<{ name: string; description: string; content: string }> = [];
+  let skillEntries: Array<{ name: string; description: string; content: string }> = [];
   if (enableSkills) {
-    const parts: string[] = [];
-    const skillRegistry = new SkillRegistry();
-    const dirs = resolveDefaultSkillsDirs({ cwd: workingDirectory });
-    if (dirs.length > 0) {
-      await skillRegistry.loadFromDirs(dirs);
-      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
-      if (snapshot.prompt) parts.push(snapshot.prompt);
-      if (typeof skillRegistry.listAll === 'function') {
-        for (const entry of skillRegistry.listAll() as any[]) {
-          const skill = entry.skill ?? entry;
-          skillEntries.push({
-            name: skill.name ?? 'unknown',
-            description: skill.description ?? '',
-            content: skill.content ?? '',
-          });
-        }
-      }
-    }
-
-    if (Array.isArray((cfg as any).skills) && (cfg as any).skills.length > 0) {
-      try {
-        const { resolveSkillsByNames } = await import('../core/PresetSkillResolver.js');
-        const presetSnapshot = await (resolveSkillsByNames as any)((cfg as any).skills);
-        if (presetSnapshot?.prompt) parts.push(presetSnapshot.prompt);
-        if (Array.isArray(presetSnapshot?.skills)) {
-          const existing = new Set(skillEntries.map((entry) => entry.name));
-          for (const skill of presetSnapshot.skills as any[]) {
-            const name = typeof skill === 'string' ? skill : skill.name ?? 'unknown';
-            if (!existing.has(name)) {
-              skillEntries.push({ name, description: '', content: '' });
-              existing.add(name);
-            }
-          }
-        }
-      } catch {
-        // optional
-      }
-    }
-
-    skillsPrompt = parts.filter(Boolean).join('\n\n');
+    const resolvedSkills = await resolveSkillContext({
+      filesystemDirs: resolveDefaultSkillsDirs({ cwd: workingDirectory }),
+      curatedSkills:
+        Array.isArray((cfg as any).skills) && (cfg as any).skills.length > 0
+          ? ((cfg as any).skills as string[])
+          : undefined,
+      platform: process.platform,
+      logger: {
+        warn: (msg: string, meta?: unknown) => logger.warn?.(msg, meta),
+      },
+      warningPrefix: '[wunderland/api]',
+    });
+    skillsPrompt = resolvedSkills.skillsPrompt;
+    skillEntries = resolvedSkills.skillEntries;
   }
 
   discoveryManager = new WunderlandDiscoveryManager(buildDiscoveryOptionsFromAgentConfig(cfg));
