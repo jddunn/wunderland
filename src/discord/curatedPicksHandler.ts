@@ -26,30 +26,54 @@ const CACHE_MAX_ENTRIES = 50;
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SIMILARITY_THRESHOLD = 0.45; // Jaccard word overlap — 0.45 catches "same story, different headline"
 
-const CURATION_ADDENDUM = `
-You are the editorial voice of Wunderland News — curating only the most wild, paradigm-shattering, conversation-starting news for the Rabbit Hole community (Discord for builders, engineers, hackers, and the dangerously curious).
+const CURATION_JUDGE_PROMPT = `
+You are the selection judge for Wunderland News — curating only the most wild, conversation-starting news for the Rabbit Hole community (builders, engineers, hackers, and the dangerously curious).
 
-You will receive a numbered list of articles. Pick ONLY ONE — the single most insane, thought-provoking, or world-changing story. You have extremely high standards.
+You will receive a numbered list of articles. Pick ONLY ONE story. Your job is to judge whether anything is actually worth interrupting the main community feed for.
 
-HARD REQUIREMENTS — reject EVERYTHING that doesn't meet ALL of these:
-- Must be genuinely shocking, paradigm-shifting, or deeply counterintuitive
-- Must provoke strong opinions — if it doesn't make people want to argue, skip it
-- Must be the kind of thing that makes you stop scrolling and say "wait, WHAT?"
-- Must matter to builders, engineers, researchers, or anyone who thinks deeply
+HARD REQUIREMENTS:
+- Must be genuinely surprising, consequential, or deeply counterintuitive
+- Must be likely to provoke real discussion or disagreement among smart technical people
+- Must matter to builders, engineers, researchers, traders, or power users
+- Must clear this bar: "Would people still care about this in a week?"
 
-INSTANT REJECT (respond with {} if this is all you see):
+INSTANT REJECT:
 - Corporate announcements, product launches, funding rounds
 - Incremental updates ("X releases version Y")
-- Earnings reports, stock movements, routine market news
-- Clickbait or hype without substance
-- Anything boring. If in doubt, it's boring. Skip it.
+- Routine earnings, stock movement, or market churn
+- Clickbait, vague hype, or anything that feels disposable
+- Anything boring. If in doubt, it is boring.
 
-Your bar is: "Would this story still be talked about in a week?" If no, skip it.
+If NOTHING clears this bar, respond with exactly {}
 
-If NOTHING clears this bar, respond with exactly: {}
+Otherwise respond with ONLY JSON:
+{"index": <0-based index of the selected article>}`.trim();
 
-Otherwise respond with ONLY a JSON object (no markdown, no code fences):
-{ "index": <0-based index of the selected article>, "hook": "<one line, all lowercase, like you're texting your group chat. examples of the ENERGY (don't copy these): 'bro what did i just read', 'oh so we're just doing this now huh', 'yooo this is actually insane'. no preamble. no 'Hey everyone'. raw reaction only.>", "commentary": "<1-3 sentences. you are a specific person with a specific take — not a news anchor. BANNED: 'this changes everything', 'brace yourselves', 'challenges everything we know', 'game-changer', 'paradigm shift', 'buckle up', 'it remains to be seen', 'only time will tell', 'this is huge'. REQUIRED: name a specific winner, loser, or consequence. if you can't make a specific claim about who benefits or gets screwed, you don't understand the story well enough to comment on it. write like a smart, slightly unhinged person on twitter, not a journalist.>" }`.trim();
+const CURATION_COPY_PROMPT = `
+You are the editorial voice of Wunderland News.
+
+You will receive one selected article. Write:
+- a hook: one lowercase raw reaction line, like you're texting a smart group chat
+- commentary: 1-3 sentences with a specific take, not neutral summary
+
+BANNED:
+- "this changes everything"
+- "brace yourselves"
+- "challenges everything we know"
+- "game-changer"
+- "paradigm shift"
+- "buckle up"
+- "it remains to be seen"
+- "only time will tell"
+- "this is huge"
+
+REQUIRED:
+- name a specific winner, loser, or concrete consequence
+- sound like a smart, slightly unhinged person online, not a journalist
+- no markdown, no code fences, JSON only
+
+Respond with ONLY JSON:
+{"hook":"<line>","commentary":"<1-3 sentences>"}`.trim();
 
 interface CandidateArticle {
   title: string;
@@ -64,6 +88,11 @@ interface CacheEntry {
   timestamp: number;
 }
 
+interface CuratedCopy {
+  hook: string;
+  commentary: string;
+}
+
 export interface CuratedPicksConfig {
   channelId: string;
   openaiApiKey: string;
@@ -73,6 +102,15 @@ export interface CuratedPicksConfig {
   intervalMs?: number;
   /** Separate bot token for posting news (posts as "Wunderland News" bot instead of the agent bot) */
   newsBotToken?: string;
+}
+
+function extractJsonObject(content: string): string | null {
+  const cleaned = String(content ?? '')
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  return match?.[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,17 +254,14 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
   async function curateAndComment(
     candidates: CandidateArticle[],
   ): Promise<{ article: CandidateArticle; hook: string; commentary: string } | null> {
-    // Don't prepend the agent's generic system prompt — it dilutes the editorial voice
-    const systemPrompt = CURATION_ADDENDUM;
-
     const articleList = candidates
       .map((a, i) => `${i}. [${a.category.toUpperCase()}] "${a.title}"${a.date ? ` (${a.date})` : ''}`)
       .join('\n');
 
-    const userPrompt = `Here are today's articles:\n\n${articleList}`;
+    const judgePrompt = `Here are today's articles:\n\n${articleList}`;
 
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const judgeRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -235,36 +270,72 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
+            { role: 'system', content: CURATION_JUDGE_PROMPT },
+            { role: 'user', content: judgePrompt },
           ],
-          max_tokens: 400,
-          temperature: 1.0,
+          max_tokens: 120,
+          temperature: 0.2,
         }),
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        console.error(`[CuratedPicks] OpenAI API error ${res.status}: ${text}`);
+      if (!judgeRes.ok) {
+        const text = await judgeRes.text().catch(() => '');
+        console.error(`[CuratedPicks] Judge API error ${judgeRes.status}: ${text}`);
         return null;
       }
 
-      const data = await res.json() as any;
-      const content = data?.choices?.[0]?.message?.content?.trim();
-      if (!content || content === '{}') return null;
+      const judgeData = await judgeRes.json() as any;
+      const judgeContent = judgeData?.choices?.[0]?.message?.content?.trim() ?? '';
+      if (!judgeContent || judgeContent === '{}') return null;
 
-      // Strip markdown code fences if present
-      const cleaned = content.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim();
-      const parsed = JSON.parse(cleaned);
+      const judgeJson = extractJsonObject(judgeContent);
+      if (!judgeJson) return null;
+      const judgeParsed = JSON.parse(judgeJson) as { index?: unknown };
+      const idx = Number(judgeParsed.index);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= candidates.length) return null;
 
-      if (parsed.index == null || !parsed.hook || !parsed.commentary) return null;
-      const idx = Number(parsed.index);
-      if (idx < 0 || idx >= candidates.length) return null;
+      const article = candidates[idx];
+      const copyPrompt = `Selected article:
+
+Title: ${article.title}
+Category: ${article.category}
+Date: ${article.date || 'unknown'}
+URL: ${article.url}`;
+
+      const copyRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: CURATION_COPY_PROMPT },
+            { role: 'user', content: copyPrompt },
+          ],
+          max_tokens: 260,
+          temperature: 0.95,
+        }),
+      });
+
+      if (!copyRes.ok) {
+        const text = await copyRes.text().catch(() => '');
+        console.error(`[CuratedPicks] Copy API error ${copyRes.status}: ${text}`);
+        return null;
+      }
+
+      const copyData = await copyRes.json() as any;
+      const copyContent = copyData?.choices?.[0]?.message?.content?.trim() ?? '';
+      const copyJson = extractJsonObject(copyContent);
+      if (!copyJson) return null;
+      const copyParsed = JSON.parse(copyJson) as Partial<CuratedCopy>;
+      if (!copyParsed.hook || !copyParsed.commentary) return null;
 
       return {
-        article: candidates[idx],
-        hook: parsed.hook,
-        commentary: parsed.commentary,
+        article,
+        hook: String(copyParsed.hook).trim(),
+        commentary: String(copyParsed.commentary).trim(),
       };
     } catch (err: any) {
       console.error('[CuratedPicks] Curation failed:', err?.message ?? err);
@@ -369,3 +440,10 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
 
   return { startSchedule };
 }
+
+export const __testing = {
+  extractJsonObject,
+  tokenize,
+  titleSimilarity,
+  isTooSimilar,
+};

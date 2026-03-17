@@ -383,6 +383,36 @@ describe('validateWunderlandAgentConfig — rag field', () => {
   });
 });
 
+describe('validateWunderlandAgentConfig — research field', () => {
+  it('accepts valid research config', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      research: {
+        autoClassify: true,
+        minDepthToInject: 'moderate',
+      },
+    });
+    expect(issues.filter((i) => i.path.startsWith('research'))).toHaveLength(0);
+  });
+
+  it('reports invalid research field types', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      research: {
+        autoClassify: 'yes',
+        minDepthToInject: 'aggressive',
+      },
+    });
+    expect(issues.some((i) => i.path === 'research.autoClassify')).toBe(true);
+    expect(issues.some((i) => i.path === 'research.minDepthToInject')).toBe(true);
+  });
+
+  it('reports issue when research is not an object', () => {
+    const { issues } = validateWunderlandAgentConfig({
+      research: 'deep',
+    });
+    expect(issues.some((i) => i.path === 'research')).toBe(true);
+  });
+});
+
 describe('validateWunderlandAgentConfig — personaRegistry field', () => {
   it('accepts valid persona registry config', () => {
     const { issues } = validateWunderlandAgentConfig({

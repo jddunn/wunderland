@@ -108,6 +108,51 @@ function chunkText(text: string, maxLen = 1800): string[] {
   return chunks;
 }
 
+function normalizeDiscordChannelName(name: string): string {
+  return String(name ?? '')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/[\u{FE0F}\u{200D}]/gu, '')
+    .replace(/^[#\s\-_]+/, '')
+    .replace(/[#\s\-_]+$/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-');
+}
+
+export async function resolveCuratedPicksChannelId(cfg: any, discordService: any): Promise<string | undefined> {
+  const channels = (cfg as any)?.feeds?.channels ?? {};
+
+  const explicit =
+    (typeof channels.curated_picks === 'string' && channels.curated_picks)
+    || (typeof channels.general === 'string' && channels.general);
+  if (explicit) return explicit;
+
+  try {
+    const client = discordService?.getClient?.();
+    const guilds = client?.guilds?.cache;
+    if (guilds?.size) {
+      for (const guild of guilds.values()) {
+        const fetched = await guild.channels.fetch();
+        const general = fetched.find((channel: any) =>
+          channel
+          && 'name' in channel
+          && 'send' in channel
+          && normalizeDiscordChannelName(channel.name) === 'general');
+        if (general?.id) return general.id;
+      }
+    }
+  } catch {
+    // Fall through to config-backed defaults.
+  }
+
+  return (
+    (typeof channels.community === 'string' && channels.community)
+    || (typeof channels.info === 'string' && channels.info)
+    || (typeof channels.welcome === 'string' && channels.welcome)
+    || undefined
+  );
+}
+
 function getSenderLabel(m: ChannelMessage): string {
   const d = (m.sender && typeof m.sender === 'object') ? m.sender : ({} as any);
   const display = typeof d.displayName === 'string' && d.displayName.trim() ? d.displayName.trim() : '';
@@ -727,15 +772,17 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
   // ── Curated Picks Integration (Discord) ────────────────────────────
   {
     const discordAdapterPicks = adapterByPlatform.get('discord') as any;
-    const generalChannelId = (cfg as any)?.feeds?.channels?.welcome as string | undefined;
     const openaiKeyPicks = process.env.OPENAI_API_KEY;
     const scraperUrl = (cfg as any)?.feeds?.scraperApiUrl || 'http://localhost:8420';
+    const curatedPicksChannelId = discordAdapterPicks
+      ? await resolveCuratedPicksChannelId(cfg, discordAdapterPicks.service)
+      : undefined;
 
-    if (discordAdapterPicks && generalChannelId && openaiKeyPicks) {
+    if (discordAdapterPicks && curatedPicksChannelId && openaiKeyPicks) {
       try {
         const { createCuratedPicksHandler } = await import('../../../discord/curatedPicksHandler.js');
         const picksHandler = createCuratedPicksHandler({
-          channelId: generalChannelId,
+          channelId: curatedPicksChannelId,
           openaiApiKey: openaiKeyPicks,
           systemPrompt: (cfg as any)?.systemPrompt || '',
           scraperApiUrl: scraperUrl,
@@ -750,6 +797,8 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
         const msg = err instanceof Error ? err.message : String(err);
         fmt.warning(`Curated picks failed: ${msg}`);
       }
+    } else if (discordAdapterPicks && openaiKeyPicks) {
+      fmt.warning('Curated picks channel could not be resolved');
     }
   }
 }

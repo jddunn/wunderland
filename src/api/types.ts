@@ -232,6 +232,15 @@ export interface WunderlandAgentPersonaRegistryConfig {
   selectedPersonaId?: string;
 }
 
+export type WunderlandResearchDepth = 'none' | 'quick' | 'moderate' | 'deep';
+
+export interface WunderlandAgentResearchConfig {
+  /** Enable LLM-as-judge research depth classification. Default: true. */
+  autoClassify?: boolean;
+  /** Minimum classified depth required before research instructions are injected. */
+  minDepthToInject?: WunderlandResearchDepth;
+}
+
 /**
  * Minimal shape of the `agent.config.json` schema used by Wunderland CLI/runtime.
  * This is the "control-plane" config you export from dashboards and run with
@@ -257,7 +266,7 @@ export type WunderlandAgentConfig = {
   }>;
   llmProvider?: string;
   llmModel?: string;
-  /** Auth method for the LLM provider. 'api-key' (default) or 'oauth' for subscription-based tokens. */
+  /** Auth method for the LLM provider. Use 'api-key'. 'oauth' remains for legacy config detection and is rejected at runtime. */
   llmAuthMethod?: 'api-key' | 'oauth';
   /** Ollama-specific runtime settings. */
   ollama?: Partial<{
@@ -363,6 +372,8 @@ export type WunderlandAgentConfig = {
   };
   /** RAG / long-term memory configuration. */
   rag?: WunderlandAgentRagConfig;
+  /** Research depth escalation / classifier configuration. */
+  research?: WunderlandAgentResearchConfig;
   /** AgentOS persona registry configuration. */
   personaRegistry?: WunderlandAgentPersonaRegistryConfig;
 };

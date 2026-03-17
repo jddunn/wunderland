@@ -18,11 +18,19 @@ export interface ToolRegistryConfig {
   braveApiKey?: string;
   searxngUrl?: string;
   giphyApiKey?: string;
+  openaiApiKey?: string;
+  openaiBaseUrl?: string;
   elevenLabsApiKey?: string;
+  deepgramApiKey?: string;
+  deepgramBaseUrl?: string;
+  whisperLocalBaseUrl?: string;
+  ollamaBaseUrl?: string;
   pexelsApiKey?: string;
   unsplashApiKey?: string;
   pixabayApiKey?: string;
   newsApiKey?: string;
+  defaultTtsProvider?: string;
+  defaultSttProvider?: string;
   /**
    * Optional allowlist for curated tool packs. Defaults to 'all'.
    * Values correspond to `TOOL_CATALOG[].name` from @framers/agentos-extensions-registry
@@ -46,6 +54,7 @@ export const WUNDERLAND_TOOL_IDS = {
   GIPHY_SEARCH: 'giphy_search',
   IMAGE_SEARCH: 'image_search',
   TEXT_TO_SPEECH: 'text_to_speech',
+  SPEECH_TO_TEXT: 'speech_to_text',
   SOCIAL_POST: 'social_post',
   FEED_READ: 'feed_read',
   FEED_SEARCH: 'feed_search',
@@ -69,7 +78,9 @@ function buildSecretsMap(config?: ToolRegistryConfig): Record<string, string> {
   add('brave.apiKey', config?.braveApiKey, 'BRAVE_API_KEY');
   add('searxng.url', config?.searxngUrl, 'SEARXNG_URL');
   add('giphy.apiKey', config?.giphyApiKey, 'GIPHY_API_KEY');
+  add('openai.apiKey', config?.openaiApiKey, 'OPENAI_API_KEY');
   add('elevenlabs.apiKey', config?.elevenLabsApiKey, 'ELEVENLABS_API_KEY');
+  add('deepgram.apiKey', config?.deepgramApiKey, 'DEEPGRAM_API_KEY');
   add('pexels.apiKey', config?.pexelsApiKey, 'PEXELS_API_KEY');
   add('unsplash.apiKey', config?.unsplashApiKey, 'UNSPLASH_ACCESS_KEY');
   add('pixabay.apiKey', config?.pixabayApiKey, 'PIXABAY_API_KEY');
@@ -92,6 +103,21 @@ export async function createWunderlandTools(config?: ToolRegistryConfig): Promis
     productivity: config?.productivity,
     channels: 'none',
     secrets,
+    overrides: {
+      'voice-synthesis': {
+        options: {
+          openaiApiKey: config?.openaiApiKey || process.env.OPENAI_API_KEY,
+          openaiBaseUrl: config?.openaiBaseUrl || process.env.OPENAI_BASE_URL,
+          elevenLabsApiKey: config?.elevenLabsApiKey || process.env.ELEVENLABS_API_KEY,
+          deepgramApiKey: config?.deepgramApiKey || process.env.DEEPGRAM_API_KEY,
+          deepgramBaseUrl: config?.deepgramBaseUrl || process.env.DEEPGRAM_BASE_URL,
+          whisperLocalBaseUrl: config?.whisperLocalBaseUrl || process.env.WHISPER_LOCAL_BASE_URL,
+          ollamaBaseUrl: config?.ollamaBaseUrl || process.env.OLLAMA_BASE_URL,
+          defaultProvider: config?.defaultTtsProvider || process.env.TTS_PROVIDER,
+          defaultSttProvider: config?.defaultSttProvider || process.env.STT_PROVIDER,
+        },
+      },
+    },
   } as Parameters<typeof createCuratedManifest>[0]);
 
   const tools: ITool[] = [];
@@ -119,6 +145,18 @@ export function getToolAvailability(config?: ToolRegistryConfig): Record<string,
   const secrets = buildSecretsMap(config);
 
   const hasWebKey = !!(secrets['serper.apiKey'] || secrets['serpapi.apiKey'] || secrets['brave.apiKey'] || secrets['searxng.url']);
+  const hasTtsProvider = !!(
+    secrets['openai.apiKey'] ||
+    secrets['elevenlabs.apiKey'] ||
+    config?.ollamaBaseUrl ||
+    process.env.OLLAMA_BASE_URL
+  );
+  const hasSttProvider = !!(
+    secrets['openai.apiKey'] ||
+    secrets['deepgram.apiKey'] ||
+    config?.whisperLocalBaseUrl ||
+    process.env.WHISPER_LOCAL_BASE_URL
+  );
 
   return {
     [WUNDERLAND_TOOL_IDS.WEB_SEARCH]: {
@@ -148,8 +186,16 @@ export function getToolAvailability(config?: ToolRegistryConfig): Record<string,
         : 'No image API keys set',
     },
     [WUNDERLAND_TOOL_IDS.TEXT_TO_SPEECH]: {
-      available: !!secrets['elevenlabs.apiKey'],
-      reason: secrets['elevenlabs.apiKey'] ? undefined : 'ELEVENLABS_API_KEY not set',
+      available: hasTtsProvider,
+      reason: hasTtsProvider
+        ? undefined
+        : 'No TTS provider configured. Set OPENAI_API_KEY, ELEVENLABS_API_KEY, or OLLAMA_BASE_URL.',
+    },
+    [WUNDERLAND_TOOL_IDS.SPEECH_TO_TEXT]: {
+      available: hasSttProvider,
+      reason: hasSttProvider
+        ? undefined
+        : 'No STT provider configured. Set OPENAI_API_KEY, DEEPGRAM_API_KEY, or WHISPER_LOCAL_BASE_URL.',
     },
   };
 }
@@ -159,5 +205,5 @@ export { SerperSearchTool } from './SerperSearchTool.js';
 export { WebSearchTool, ResearchAggregatorTool, FactCheckTool } from '@framers/agentos-ext-web-search';
 export { GiphySearchTool } from '@framers/agentos-ext-giphy';
 export { ImageSearchTool } from '@framers/agentos-ext-image-search';
-export { TextToSpeechTool } from '@framers/agentos-ext-voice-synthesis';
+export { TextToSpeechTool, SpeechToTextTool } from '@framers/agentos-ext-voice-synthesis';
 export { NewsSearchTool } from '@framers/agentos-ext-news-search';

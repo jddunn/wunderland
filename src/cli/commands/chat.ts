@@ -36,6 +36,7 @@ import { ToolFailureLearner } from '../../runtime/tool-failure-learner.js';
 import {
   classifyResearchDepth,
   buildResearchPrefix,
+  createResearchClassifierLlmCall,
   shouldInjectResearch,
   type ResearchDepth,
 } from '../../runtime/research-classifier.js';
@@ -1534,32 +1535,11 @@ export default async function cmdChat(
   // ── Research classifier config ──
   const researchClassifierEnabled = cfg?.research?.autoClassify !== false;
   const researchMinDepth: ResearchDepth = (cfg?.research?.minDepthToInject as ResearchDepth) || 'quick';
-
-  const classifierLlmCall = async (system: string, user: string): Promise<string> => {
-    // Use the same provider but with a simple non-tool-calling request
-    const response = await fetch(
-      `${llmBaseUrl || 'https://api.openai.com/v1'}/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${llmApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: providerId === 'ollama' ? 'qwen2.5:3b' : providerId === 'gemini' ? 'gemini-2.0-flash-lite' : 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-          temperature: 0,
-          max_tokens: 100,
-        }),
-      }
-    );
-    if (!response.ok) return '{"depth":"none","reasoning":"classifier request failed"}';
-    const data = await response.json() as any;
-    return data?.choices?.[0]?.message?.content || '{"depth":"none"}';
-  };
+  const classifierLlmCall = createResearchClassifierLlmCall({
+    providerId,
+    apiKey: llmApiKey,
+    baseUrl: llmBaseUrl,
+  });
 
   /**
    * Handle /research and /deep prefixes — wraps the query with explicit
