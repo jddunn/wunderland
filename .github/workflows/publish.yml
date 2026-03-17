@@ -45,8 +45,13 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
 
-      - name: Install dependencies (retry once for npm propagation)
-        run: npm install --legacy-peer-deps || (echo "Retrying after 30s..." && sleep 30 && npm install --legacy-peer-deps)
+      - name: Install dependencies
+        run: |
+          npm install --legacy-peer-deps 2>&1 || {
+            echo "=== Install failed, dumping debug log ==="
+            cat ~/.npm/_logs/*-debug-0.log 2>/dev/null | tail -100
+            exit 1
+          }
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
