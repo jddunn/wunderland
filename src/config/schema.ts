@@ -297,6 +297,28 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
     }
   }
 
+  if (cfg.research !== undefined) {
+    if (!isPlainObject(cfg.research)) {
+      issues.push({ path: 'research', message: 'Expected object.' });
+    } else {
+      const research = cfg.research as Record<string, unknown>;
+      if (research.autoClassify !== undefined && typeof research.autoClassify !== 'boolean') {
+        issues.push({ path: 'research.autoClassify', message: 'Expected boolean.' });
+      }
+      if (research.minDepthToInject !== undefined) {
+        if (
+          typeof research.minDepthToInject !== 'string'
+          || !['none', 'quick', 'moderate', 'deep'].includes(research.minDepthToInject)
+        ) {
+          issues.push({
+            path: 'research.minDepthToInject',
+            message: 'Expected "none", "quick", "moderate", or "deep".',
+          });
+        }
+      }
+    }
+  }
+
   if (cfg.personaRegistry !== undefined) {
     if (!isPlainObject(cfg.personaRegistry)) {
       issues.push({ path: 'personaRegistry', message: 'Expected object.' });

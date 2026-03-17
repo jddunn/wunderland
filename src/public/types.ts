@@ -3,7 +3,8 @@
  * Extracted from public/index.ts for readability.
  */
 
-import type { ITool } from '@framers/agentos';
+import type { ITool, AgentMemory } from '@framers/agentos';
+import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 import type {
   WunderlandAgentConfig,
   WunderlandProviderId,
@@ -174,6 +175,11 @@ export type WunderlandOptions = {
   };
   /** Optional default userId for guardrails/audit context. */
   userId?: string;
+  /**
+   * Optional cognitive memory facade or raw cognitive memory manager.
+   * When provided, Wunderland exposes it on the returned app.
+   */
+  memory?: AgentMemory | ICognitiveMemoryManager;
   logger?: {
     debug?: (msg: string, meta?: unknown) => void;
     info?: (msg: string, meta?: unknown) => void;
@@ -212,5 +218,6 @@ export type WunderlandSession = {
 export type WunderlandApp = {
   session: (sessionId?: string) => WunderlandSession;
   diagnostics: () => WunderlandDiagnostics;
+  memory?: AgentMemory;
   close: () => Promise<void>;
 };

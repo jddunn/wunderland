@@ -32,6 +32,13 @@ export interface ResearchClassifierConfig {
   overrides?: { pattern: RegExp; depth: ResearchDepth }[];
 }
 
+export interface ResearchClassifierLlmCallOptions {
+  providerId?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  fetchImpl?: typeof fetch;
+}
+
 const CLASSIFIER_SYSTEM_PROMPT = `You are a query complexity classifier. Given a user query, classify it into ONE of these research depth tiers:
 
 **none** — The query can be answered from general knowledge. Examples: greetings, simple factual questions, code syntax, math, creative writing, conversation.
@@ -45,6 +52,49 @@ const CLASSIFIER_SYSTEM_PROMPT = `You are a query complexity classifier. Given a
 Respond with ONLY a JSON object: {"depth": "none|quick|moderate|deep", "reasoning": "one sentence why"}
 
 Do NOT explain. Do NOT add extra text. ONLY the JSON object.`;
+
+export function resolveResearchClassifierModel(providerId?: string): string {
+  if (providerId === 'ollama') return 'qwen2.5:3b';
+  if (providerId === 'gemini') return 'gemini-2.0-flash-lite';
+  return 'gpt-4o-mini';
+}
+
+export function createResearchClassifierLlmCall(
+  options: ResearchClassifierLlmCallOptions,
+): (system: string, user: string) => Promise<string> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const baseUrl = options.baseUrl || 'https://api.openai.com/v1';
+  const model = resolveResearchClassifierModel(options.providerId);
+
+  return async (system: string, user: string): Promise<string> => {
+    const response = await fetchImpl(
+      `${baseUrl}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${options.apiKey ?? ''}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          temperature: 0,
+          max_tokens: 100,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      return '{"depth":"none","reasoning":"classifier request failed"}';
+    }
+
+    const data = await response.json() as any;
+    return data?.choices?.[0]?.message?.content || '{"depth":"none"}';
+  };
+}
 
 /**
  * Classify a user query's required research depth using LLM-as-a-judge.

@@ -41,7 +41,7 @@ export interface CliConfig {
     imageGeneration?: string;
     /** Text-to-speech provider: 'openai' | 'elevenlabs'. */
     tts?: string;
-    /** Speech-to-text provider: 'openai' | 'deepgram'. */
+    /** Speech-to-text provider: 'openai' | 'deepgram' | 'whisper-local'. */
     stt?: string;
     /** Web search provider: 'serper' | 'brave' | 'duckduckgo'. */
     webSearch?: string;

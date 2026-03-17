@@ -103,7 +103,7 @@
     "@framers/agentos-ext-giphy": "^1.0.0",
     "@framers/agentos-ext-image-search": "^1.0.0",
     "@framers/agentos-ext-news-search": "^1.0.0",
-    "@framers/agentos-ext-voice-synthesis": "^1.0.0",
+    "@framers/agentos-ext-voice-synthesis": "workspace:*",
     "@framers/agentos-ext-web-browser": "^1.2.1",
     "@framers/agentos-ext-web-search": "^1.1.1",
     "@framers/agentos-extensions-registry": "workspace:*",

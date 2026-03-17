@@ -16,7 +16,8 @@
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-import type { ITool } from '@framers/agentos';
+import { AgentMemory, type ITool } from '@framers/agentos';
+import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 
 import { createWunderlandTools, getToolAvailability } from '../tools/ToolRegistry.js';
 import {
@@ -128,6 +129,25 @@ function toToolInstance(tool: ITool): ToolInstance {
     requiredCapabilities: tool.requiredCapabilities,
     execute: ((input: any, context: any) => tool.execute(input, context)) as any,
   };
+}
+
+function resolveAgentMemory(
+  input: WunderlandOptions['memory'],
+): AgentMemory | undefined {
+  if (!input) return undefined;
+  const candidate = input as { remember?: unknown; recall?: unknown; raw?: unknown };
+  if (
+    input instanceof AgentMemory ||
+    (
+      typeof input === 'object' &&
+      typeof candidate.remember === 'function' &&
+      typeof candidate.recall === 'function' &&
+      'raw' in candidate
+    )
+  ) {
+    return input as unknown as AgentMemory;
+  }
+  return AgentMemory.wrap(input as ICognitiveMemoryManager);
 }
 
 async function resolveToolMap(opts: {
@@ -498,6 +518,7 @@ function buildLibrarySystemPrompt(agentConfig: WunderlandAgentConfig, policy: No
 // =============================================================================
 
 export async function createWunderland(opts: WunderlandOptions = {}): Promise<WunderlandApp> {
+  const memory = resolveAgentMemory(opts.memory);
   const baseLogger = consoleLogger();
   const logger: Required<NonNullable<WunderlandOptions['logger']>> = {
     debug: opts.logger?.debug ?? baseLogger.debug,
@@ -535,7 +556,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         path: 'llm',
         message: `providerId=${llm.providerId} is not configured for use.`,
         hint: llm.providerId === 'openai'
-          ? 'Set OPENAI_API_KEY, use llmAuthMethod: "oauth" with `wunderland login`, or pass llm.apiKey.'
+          ? 'Set OPENAI_API_KEY or pass llm.apiKey.'
           : llm.providerId === 'openrouter'
             ? 'Set OPENROUTER_API_KEY or pass llm.apiKey.'
             : llm.providerId === 'anthropic'
@@ -970,7 +991,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     sessions.clear();
   };
 
-  return { session, diagnostics, close };
+  return { session, diagnostics, memory, close };
 }
 
 // Convenience re-exports for library consumers (types only).
