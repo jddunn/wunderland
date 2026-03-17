@@ -45,6 +45,8 @@ import {
   getDefaultVoiceExtensions,
 } from '../voice/speech-catalog.js';
 import type { WunderlandAgentConfig, WunderlandLLMConfig, WunderlandWorkspace } from './types.js';
+import { AgentMemory } from '@framers/agentos';
+import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 
 type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;
@@ -56,6 +58,7 @@ type LoggerLike = {
 export type WunderlandChatRuntime = {
   readonly policy: NormalizedRuntimePolicy;
   readonly toolMap: Map<string, ToolInstance>;
+  readonly memory?: AgentMemory;
   /** Returns a copy of the current message history for a session. */
   getMessages: (sessionId?: string) => Array<Record<string, unknown>>;
   /** Run one user turn and return the assistant's text reply. */
@@ -67,6 +70,25 @@ export type WunderlandChatRuntime = {
     },
   ) => Promise<string>;
 };
+
+function resolveAgentMemory(
+  input: AgentMemory | ICognitiveMemoryManager | undefined,
+): AgentMemory | undefined {
+  if (!input) return undefined;
+  const candidate = input as { remember?: unknown; recall?: unknown; raw?: unknown };
+  if (
+    input instanceof AgentMemory ||
+    (
+      typeof input === 'object' &&
+      typeof candidate.remember === 'function' &&
+      typeof candidate.recall === 'function' &&
+      'raw' in candidate
+    )
+  ) {
+    return input as unknown as AgentMemory;
+  }
+  return AgentMemory.wrap(input);
+}
 
 function consoleLogger(): Required<LoggerLike> {
   return {
@@ -406,6 +428,7 @@ export async function createWunderlandChatRuntime(opts: {
   llm: WunderlandLLMConfig;
   workspace?: Partial<WunderlandWorkspace>;
   workingDirectory?: string;
+  memory?: AgentMemory | ICognitiveMemoryManager;
   /**
    * When true, bypasses Tier-3 approvals (fully autonomous). Still enforces:
    * - permission sets
@@ -420,6 +443,7 @@ export async function createWunderlandChatRuntime(opts: {
   askPermission?: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
   logger?: LoggerLike;
 }): Promise<WunderlandChatRuntime> {
+  const memory = resolveAgentMemory(opts.memory);
   const baseLogger = consoleLogger();
   const logger: Required<LoggerLike> = {
     debug: opts.logger?.debug ?? baseLogger.debug,
@@ -589,6 +613,7 @@ export async function createWunderlandChatRuntime(opts: {
   return {
     policy,
     toolMap,
+    memory,
     getMessages: (sessionId?: string) => {
       const key = sessionId && sessionId.trim() ? sessionId.trim() : 'default';
       const msgs = sessions.get(key) ?? [];

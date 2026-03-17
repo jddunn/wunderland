@@ -27,6 +27,28 @@ describe('speech-catalog', () => {
     });
   });
 
+  it('maps provider defaults and env vars into voice-synthesis extension overrides', () => {
+    const overrides = createSpeechExtensionEnvOverrides({
+      env: {
+        OPENAI_API_KEY: 'sk-openai',
+        DEEPGRAM_API_KEY: 'dg-test',
+        WHISPER_LOCAL_BASE_URL: 'http://127.0.0.1:8080/v1',
+      },
+      providerDefaults: {
+        tts: 'openai',
+        stt: 'whisper-local',
+      },
+    });
+
+    expect(overrides['voice-synthesis']?.options).toMatchObject({
+      openaiApiKey: 'sk-openai',
+      deepgramApiKey: 'dg-test',
+      whisperLocalBaseUrl: 'http://127.0.0.1:8080/v1',
+      defaultProvider: 'openai',
+      defaultSttProvider: 'whisper-local',
+    });
+  });
+
   it('honors preferred TTS provider before env fallback order', () => {
     expect(
       getPreferredRuntimeTtsProviderId(

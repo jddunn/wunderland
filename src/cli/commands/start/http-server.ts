@@ -16,6 +16,7 @@ import { maybeProxyAgentosRagRequest } from '../../../rag/http-proxy.js';
 import {
   classifyResearchDepth,
   buildResearchPrefix,
+  createResearchClassifierLlmCall,
   shouldInjectResearch,
   type ResearchDepth,
 } from '../../../runtime/research-classifier.js';
@@ -1063,24 +1064,11 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           try {
             const classifierResult = await classifyResearchDepth(message, {
               enabled: true,
-              llmCall: async (system: string, user: string) => {
-                const resp = await fetch(
-                  `${llmBaseUrl || 'https://api.openai.com/v1'}/chat/completions`,
-                  {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${llmApiKey}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      model: providerId === 'ollama' ? 'qwen2.5:3b' : providerId === 'gemini' ? 'gemini-2.0-flash-lite' : 'gpt-4o-mini',
-                      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-                      temperature: 0,
-                      max_tokens: 100,
-                    }),
-                  }
-                );
-                if (!resp.ok) return '{"depth":"none"}';
-                const data = await resp.json() as any;
-                return data?.choices?.[0]?.message?.content || '{"depth":"none"}';
-              },
+              llmCall: createResearchClassifierLlmCall({
+                providerId,
+                apiKey: llmApiKey,
+                baseUrl: llmBaseUrl,
+              }),
             });
             const minDepth = (cfg?.research?.minDepthToInject as ResearchDepth) || 'quick';
             if (shouldInjectResearch(classifierResult.depth, minDepth)) {
