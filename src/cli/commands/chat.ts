@@ -22,7 +22,7 @@ import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
-import { SkillRegistry, resolveDefaultSkillsDirs } from '../../skills/index.js';
+import { resolveDefaultSkillsDirs } from '../../skills/index.js';
 import {
   runToolCallingTurn,
   safeJsonStringify,
@@ -59,6 +59,7 @@ import {
   DEFAULT_SECURITY_PROFILE,
   createStepUpAuthConfigFromTier,
 } from '../../core/index.js';
+import { resolveSkillContext } from '../../core/resolve-skill-context.js';
 import {
   WunderlandDiscoveryManager,
   type WunderlandDiscoveryConfig,
@@ -829,7 +830,7 @@ export default async function cmdChat(
   const discoveryOpts: WunderlandDiscoveryConfig = { ...buildDiscoveryOptionsFromAgentConfig(cfg ?? {}), verbose };
   // Skills — load from filesystem dirs + config-declared skills (BEFORE discovery so we can pass entries)
   let skillsPrompt = '';
-  const skillEntries: Array<{
+  let skillEntries: Array<{
     name: string;
     description: string;
     content: string;
@@ -837,53 +838,21 @@ export default async function cmdChat(
     tags?: string[];
   }> = [];
   if (enableSkills) {
-    const parts: string[] = [];
-
-    // 1. Directory-based skills (local ./skills/ dirs, --skills-dir flag)
-    const skillRegistry = new SkillRegistry();
-    const dirs = resolveDefaultSkillsDirs({
-      cwd: process.cwd(),
-      skillsDirFlag: typeof flags['skills-dir'] === 'string' ? flags['skills-dir'] : undefined,
+    const resolvedSkills = await resolveSkillContext({
+      filesystemDirs: resolveDefaultSkillsDirs({
+        cwd: process.cwd(),
+        skillsDirFlag: typeof flags['skills-dir'] === 'string' ? flags['skills-dir'] : undefined,
+      }),
+      curatedSkills: Array.isArray(cfg?.skills) && cfg.skills.length > 0 ? (cfg.skills as string[]) : undefined,
+      platform: process.platform,
+      logger: {
+        warn: (msg: string, meta?: unknown) => console.warn(msg, meta ?? ''),
+      },
+      warningPrefix: '[wunderland/chat]',
     });
-    if (dirs.length > 0) {
-      await skillRegistry.loadFromDirs(dirs);
-      const snapshot = skillRegistry.buildSnapshot({ platform: process.platform, strict: true });
-      if (snapshot.prompt) parts.push(snapshot.prompt);
-      // Extract entries for discovery indexing
-      if (typeof skillRegistry.listAll === 'function') {
-        for (const entry of skillRegistry.listAll() as any[]) {
-          const skill = entry.skill ?? entry;
-          skillEntries.push({
-            name: skill.name ?? 'unknown',
-            description: skill.description ?? '',
-            content: skill.content ?? '',
-          });
-        }
-      }
-    }
 
-    // 2. Config-declared skills (from agent.config.json "skills" array)
-    try {
-      if (Array.isArray(cfg?.skills) && cfg.skills.length > 0) {
-        const { resolveSkillsByNames } = await import('../../core/PresetSkillResolver.js');
-        const presetSnapshot = await resolveSkillsByNames(cfg.skills as string[]);
-        if (presetSnapshot.prompt) parts.push(presetSnapshot.prompt);
-        // Extract skill names for discovery
-        if (Array.isArray(presetSnapshot.skills)) {
-          const existing = new Set(skillEntries.map((e) => e.name));
-          for (const skill of presetSnapshot.skills as any[]) {
-            const name = typeof skill === 'string' ? skill : (skill.name ?? 'unknown');
-            if (!existing.has(name)) {
-              skillEntries.push({ name, description: '', content: '' });
-            }
-          }
-        }
-      }
-    } catch {
-      /* non-fatal — no config or registry not installed */
-    }
-
-    skillsPrompt = parts.filter(Boolean).join('\n\n');
+    skillsPrompt = resolvedSkills.skillsPrompt;
+    skillEntries = resolvedSkills.skillEntries;
   }
 
   // Discovery — initialized after skills so skillEntries can be indexed
