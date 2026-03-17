@@ -5,7 +5,7 @@
  */
 
 export { WunderlandAdaptiveExecutionRuntime } from './adaptive-execution.js';
-export { resolveAgentDisplayName, buildAgentIdentitySummary } from './agent-identity.js';
+export { resolveAgentDisplayName, firstNonEmptyString } from './agent-identity.js';
 export { resolveApiKeyInput } from './api-key-resolver.js';
 export { buildOllamaRuntimeOptions } from './ollama-options.js';
 export {
@@ -24,7 +24,10 @@ export {
   type ResearchClassification,
   type ResearchClassifierConfig,
 } from './research-classifier.js';
-export { buildSystemPrompt } from './system-prompt-builder.js';
+export {
+  buildAgenticSystemPrompt,
+  buildAgenticSystemPrompt as buildSystemPrompt,
+} from './system-prompt-builder.js';
 export { runToolCallingTurn, safeJsonStringify, type ToolInstance } from './tool-calling.js';
 export { ToolFailureLearner } from './tool-failure-learner.js';
 export { TOOL_FALLBACK_MAP } from './tool-helpers.js';
