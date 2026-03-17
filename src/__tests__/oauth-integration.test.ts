@@ -12,55 +12,19 @@ describe('OAuth integration — createWunderland()', () => {
     vi.restoreAllMocks();
   });
 
-  it('resolves OAuth config when llmAuthMethod is "oauth" and tokens exist', async () => {
-    // Mock the @framers/agentos/auth module
-    const mockGetAccessToken = vi.fn(async () => 'oauth-test-token-123');
-
-    vi.doMock('@framers/agentos/auth', () => ({
-      OpenAIOAuthFlow: class {
-        getAccessToken = mockGetAccessToken;
-      },
-      FileTokenStore: class {
-        load = vi.fn(async () => null);
-        save = vi.fn(async () => {});
-        clear = vi.fn(async () => {});
-      },
-    }));
-
-    // Mock fetch for the chat completions call
-    const fetchMock = vi.fn(async (_url: string, opts: any) => {
-      // Capture the Authorization header
-      const authHeader = opts?.headers?.Authorization;
-      return {
-        ok: true,
-        status: 200,
-        text: async () => JSON.stringify({
-          model: 'gpt-test',
-          usage: {},
-          choices: [{ message: { role: 'assistant', content: `Auth: ${authHeader}` } }],
-        }),
-      };
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const app = await createWunderland({
-      agentConfig: {
-        llmProvider: 'openai',
-        llmModel: 'gpt-test',
-        llmAuthMethod: 'oauth',
-      },
-      llm: { providerId: 'openai', apiKey: '', model: 'gpt-test' },
-      tools: 'none',
-      discovery: { enabled: false },
-    });
-
-    expect(app).toBeDefined();
-
-    // The diagnostics should show the provider
-    const diag = app.diagnostics();
-    expect(diag.llm.providerId).toBe('openai');
-
-    await app.close();
+  it('rejects deprecated OpenAI OAuth config', async () => {
+    await expect(
+      createWunderland({
+        agentConfig: {
+          llmProvider: 'openai',
+          llmModel: 'gpt-test',
+          llmAuthMethod: 'oauth',
+        },
+        llm: { providerId: 'openai', apiKey: '', model: 'gpt-test' },
+        tools: 'none',
+        discovery: { enabled: false },
+      }),
+    ).rejects.toThrow('OpenAI OAuth is not currently supported.');
   });
 
   it('falls back gracefully when @framers/agentos/auth is not available', async () => {

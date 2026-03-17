@@ -24,6 +24,42 @@ describe('resolveLlmConfig', () => {
     expect(result.baseUrl).toBe('https://generativelanguage.googleapis.com/v1beta/openai');
   });
 
+  it('treats direct provider apiKey overrides as usable for non-OpenAI providers', async () => {
+    const [gemini, openrouter, anthropic] = await Promise.all([
+      resolveLlmConfig({
+        agentConfig: { llmProvider: 'gemini' },
+        llm: { providerId: 'gemini', apiKey: 'gemini-direct-key' },
+      }),
+      resolveLlmConfig({
+        agentConfig: { llmProvider: 'openrouter' },
+        llm: { providerId: 'openrouter', apiKey: 'openrouter-direct-key' },
+      }),
+      resolveLlmConfig({
+        agentConfig: { llmProvider: 'anthropic' },
+        llm: { providerId: 'anthropic', apiKey: 'anthropic-direct-key' },
+      }),
+    ]);
+
+    expect(gemini.canUseLLM).toBe(true);
+    expect(openrouter.canUseLLM).toBe(true);
+    expect(anthropic.canUseLLM).toBe(true);
+  });
+
+  it('normalizes trailing slashes on explicit baseUrl overrides', async () => {
+    const result = await resolveLlmConfig({
+      agentConfig: {
+        llmProvider: 'openrouter',
+      },
+      llm: {
+        providerId: 'openrouter',
+        apiKey: 'direct-key',
+        baseUrl: 'https://openrouter.ai/api/v1/',
+      },
+    });
+
+    expect(result.baseUrl).toBe('https://openrouter.ai/api/v1');
+  });
+
   it('rejects disabled OpenAI OAuth auth mode', async () => {
     await expect(
       resolveLlmConfig({

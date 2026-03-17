@@ -20,7 +20,27 @@ function simpleChatResponse(content: string) {
   return { model: 'gpt-test', usage: {}, choices: [{ message: { role: 'assistant', content } }] };
 }
 
+function mockExtensionResolver(result?: { missing?: string[] }) {
+  vi.doMock('../core/PresetExtensionResolver.js', () => ({
+    resolveExtensionsByNames: vi.fn(async () => ({
+      manifest: { packs: [] },
+      missing: result?.missing ?? [],
+      blocked: [],
+    })),
+  }));
+}
+
+const quietRuntimeOptions = {
+  discovery: { enabled: false },
+  taskOutcomeTelemetry: { enabled: false },
+  adaptiveExecution: { enabled: false },
+} as const;
+
 describe('wunderland public API — skills & extensions', () => {
+  beforeEach(() => {
+    mockExtensionResolver();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -44,7 +64,7 @@ describe('wunderland public API — skills & extensions', () => {
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
       skills: ['github', 'web-search'],
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
     });
 
     const diag = app.diagnostics();
@@ -63,7 +83,7 @@ describe('wunderland public API — skills & extensions', () => {
     const app = await createWunderland({
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
     });
 
     const diag = app.diagnostics();
@@ -73,6 +93,7 @@ describe('wunderland public API — skills & extensions', () => {
   });
 
   it('accepts preset option without crashing', async () => {
+    const warn = vi.fn();
     mockOpenAIChatCompletionSequence([simpleChatResponse('hello')]);
 
     // If preset isn't found, should warn and continue
@@ -80,11 +101,13 @@ describe('wunderland public API — skills & extensions', () => {
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
       preset: 'nonexistent-preset',
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
+      logger: { warn },
     });
 
     const diag = app.diagnostics();
     expect(diag.tools.count).toBeGreaterThanOrEqual(0);
+    expect(warn).toHaveBeenCalled();
   });
 
   it('applies preset defaults from agent config and merges preset skills', async () => {
@@ -107,7 +130,7 @@ describe('wunderland public API — skills & extensions', () => {
         presetId: 'research-assistant',
         skills: ['custom-skill'],
       },
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
     });
 
     expect(app.diagnostics().policy.securityTier).toBe('balanced');
@@ -124,21 +147,26 @@ describe('wunderland public API — skills & extensions', () => {
   });
 
   it('accepts extensions option without crashing when registry unavailable', async () => {
+    const warn = vi.fn();
+    mockExtensionResolver({ missing: ['web-search', 'giphy'] });
     mockOpenAIChatCompletionSequence([simpleChatResponse('hello')]);
 
     const app = await createWunderland({
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
       extensions: { tools: ['web-search', 'giphy'] },
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
+      logger: { warn },
     });
 
     const diag = app.diagnostics();
     // Should not crash — extensions gracefully degrade
     expect(diag.tools.count).toBeGreaterThanOrEqual(0);
+    expect(warn).toHaveBeenCalledWith('[wunderland] Some extensions not available: web-search, giphy');
   });
 
   it('accepts skills as object with dirs and names', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockOpenAIChatCompletionSequence([simpleChatResponse('hello')]);
 
     const app = await createWunderland({
@@ -149,11 +177,12 @@ describe('wunderland public API — skills & extensions', () => {
         dirs: ['/tmp/nonexistent-skills-dir'],
         includeDefaults: false,
       },
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
     });
 
     const diag = app.diagnostics();
     expect(diag.skills).toBeDefined();
+    expect(warnSpy).toHaveBeenCalled();
   });
 
   it('close() cleans up resources', async () => {
@@ -162,7 +191,7 @@ describe('wunderland public API — skills & extensions', () => {
     const app = await createWunderland({
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       tools: 'none',
-      discovery: { enabled: false },
+      ...quietRuntimeOptions,
     });
 
     await expect(app.close()).resolves.not.toThrow();

@@ -8,6 +8,13 @@ import { WunderlandConfigError } from './errors.js';
 import { resolveEffectiveAgentConfig } from './effective-agent-config.js';
 import { validateWunderlandAgentConfig } from './schema.js';
 
+function normalizeBaseUrl(value: string | undefined): string | undefined {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/\/+$/, '');
+}
+
 export async function loadAgentConfig(opts: {
   agentConfig?: WunderlandAgentConfig;
   configPath?: string;
@@ -116,12 +123,13 @@ export async function resolveLlmConfig(opts: {
 
   const baseUrl =
     providerId === 'openrouter'
-      ? (opts.llm?.baseUrl ?? 'https://openrouter.ai/api/v1')
+      ? (normalizeBaseUrl(opts.llm?.baseUrl) ?? 'https://openrouter.ai/api/v1')
       : providerId === 'ollama'
         ? ollamaBaseUrl
         : providerId === 'gemini'
-          ? (opts.llm?.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta/openai')
-          : opts.llm?.baseUrl;
+          ? (normalizeBaseUrl(opts.llm?.baseUrl) ??
+            'https://generativelanguage.googleapis.com/v1beta/openai')
+          : normalizeBaseUrl(opts.llm?.baseUrl);
 
   const openrouterApiKey = String(process.env['OPENROUTER_API_KEY'] || '').trim();
 
@@ -171,11 +179,11 @@ export async function resolveLlmConfig(opts: {
     providerId === 'ollama'
       ? true
       : providerId === 'openrouter'
-        ? !!openrouterApiKey
+        ? !!apiKey
         : providerId === 'anthropic'
-          ? !!process.env['ANTHROPIC_API_KEY']
+          ? !!apiKey
           : providerId === 'gemini'
-            ? !!process.env['GEMINI_API_KEY']
+            ? !!apiKey
             : !!apiKey || !!fallback;
 
   const openaiFallbackEnabled = providerId === 'openai' && !!fallback;
