@@ -203,12 +203,22 @@ export function buildToolDefsFromMapping<TTool extends { name: string; descripti
   for (const [functionName, toolMapKey] of entries) {
     const tool = toolMap.get(toolMapKey);
     if (!tool) continue;
+    // Strip OpenAI-forbidden top-level schema keywords and fix empty required
+    const params = { ...tool.inputSchema };
+    for (const forbidden of ['oneOf', 'anyOf', 'allOf', 'not', 'enum']) {
+      delete params[forbidden];
+    }
+    if (!params.type) params.type = 'object';
+    if (Array.isArray(params.required) && params.required.length === 0) {
+      delete params.required;
+    }
+
     defs.push({
       type: 'function',
       function: {
         name: functionName,
         description: tool.description,
-        parameters: tool.inputSchema,
+        parameters: params,
       },
     });
   }
