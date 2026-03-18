@@ -513,6 +513,7 @@ function buildSelfDocumentation(): string {
 function buildToolResourcefulnessInstructions(): string {
   return [
     'Tool Usage & Resourcefulness:',
+    '- Search result limits: Set maxResults based on query type. Shopping/product queries (laptops, phones, deals): use maxResults=25-50. Comparison queries: maxResults=15-20. Simple factual queries: maxResults=5-10. Always err on the side of more results for shopping and recommendation queries.',
     '- When the user gives you a specific URL to visit or check out, load that page directly instead of using web_search summaries. Use browser_navigate by default, but prefer stealth_navigate first for known anti-bot sites if that tool is available.',
     '- When web_search returns results, ALWAYS examine them carefully and present relevant findings to the user. Never say "I couldn\'t find information" when you received search results — extract and synthesize what was found.',
     '- If web_search results are insufficient for a specific query (real estate listings, product prices, domain lookups, etc.), visit the relevant site directly. Use stealth_navigate for anti-bot/e-commerce sites when available, otherwise browser_navigate for compatible sites (e.g., zillow.com, namecheap.com, documentation sites). Enable the needed browser extension first with extensions_enable if it is not loaded.',
