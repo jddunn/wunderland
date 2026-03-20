@@ -21,8 +21,6 @@ const CHANNEL_SUBS = [
   { slug: 'jobs-creative',   label: 'Creative Jobs',  emoji: '\u{1F3A8}', group: 'jobs'    },
   { slug: 'jobs-marketing',  label: 'Marketing Jobs', emoji: '\u{1F4E2}', group: 'jobs'    },
   { slug: 'udemy-deals',     label: 'Udemy Deals',    emoji: '\u{1F393}', group: 'markets' },
-  { slug: 'crypto-trending', label: 'Crypto',         emoji: '\u{1F4C8}', group: 'markets' },
-  { slug: 'short-squeeze',   label: 'Short Squeeze',  emoji: '\u{1F4CA}', group: 'markets' },
   { slug: 'uniswap-sniper',  label: 'Uniswap',        emoji: '\u{1F52B}', group: 'markets' },
 ] as const;
 
@@ -305,7 +303,7 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
         },
         {
           name: '\u{1F4C8} Markets & Deals',
-          value: 'Udemy Deals \u2022 Crypto Trending \u2022 Short Squeeze \u2022 Uniswap Sniper',
+          value: 'Udemy Deals \u2022 Uniswap Sniper',
           inline: false,
         },
       ],
@@ -344,9 +342,9 @@ export function createChannelSubsHandler(config: ChannelSubsConfig) {
       ),
     );
 
-    // Row 3 — Markets (4 buttons)
+    // Row 3 — Markets (crypto-trending & short-squeeze moved to public COMMUNITY)
     const marketsRow = new ActionRowBuilder().addComponents(
-      ...['udemy-deals', 'crypto-trending', 'short-squeeze', 'uniswap-sniper'].map(
+      ...['udemy-deals', 'uniswap-sniper'].map(
         (slug) => {
           const ch = CHANNEL_SUBS.find((c) => c.slug === slug)!;
           return new ButtonBuilder()
