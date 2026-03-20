@@ -119,10 +119,8 @@ export function createWelcomeHandler(config: WelcomeConfig) {
         }
       }
     }
-    // Always include /verify and /faq at the end if not already present
-    if (!cmdSet.has('`/verify`')) {
-      cmdLines.push('`/verify` — Link your RabbitHole account to unlock premium channels');
-    }
+    // Always include /faq at the end if not already present
+    // Note: /verify is not yet live — omitted until signups are available on rabbithole.inc
     if (!cmdSet.has('`/faq`')) {
       cmdLines.push('`/faq` — Search FAQs about the community and platform');
     }
