@@ -20,7 +20,10 @@ export type HelpTopicId =
   | 'export'
   | 'faq'
   | 'llm'
-  | 'email';
+  | 'email'
+  | 'whatsapp'
+  | 'slack'
+  | 'signal';
 
 export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: string }> = [
   {
@@ -74,6 +77,21 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     summary: 'Gmail virtual assistant: sync, search, projects, reports.',
   },
   {
+    id: 'whatsapp',
+    title: 'WhatsApp',
+    summary: 'Connect your Wunderbot to WhatsApp via Twilio or Meta Cloud API.',
+  },
+  {
+    id: 'slack',
+    title: 'Slack',
+    summary: 'Connect your Wunderbot to a Slack workspace via OAuth.',
+  },
+  {
+    id: 'signal',
+    title: 'Signal',
+    summary: 'Connect your Wunderbot to Signal via signal-cli daemon.',
+  },
+  {
     id: 'faq',
     title: 'FAQ',
     summary: 'Frequently asked questions about setup, voice, LLMs, and more.',
@@ -112,6 +130,9 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'export' || topic === 'png' || topic === 'screenshot') return 'export';
     if (topic === 'llm' || topic === 'llms' || topic === 'providers' || topic === 'provider' || topic === 'models' || topic === 'model' || topic === 'ollama' || topic === 'openai' || topic === 'anthropic' || topic === 'gemini' || topic === 'openrouter') return 'llm';
     if (topic === 'email' || topic === 'gmail' || topic === 'mail') return 'email';
+    if (topic === 'whatsapp' || topic === 'wa') return 'whatsapp';
+    if (topic === 'slack') return 'slack';
+    if (topic === 'signal') return 'signal';
     if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
   })();
@@ -406,6 +427,108 @@ export function printHelpTopic(topicRaw: string): void {
     return;
   }
 
+  if (resolved === 'whatsapp') {
+    printTitle('WhatsApp Integration');
+    console.log(`  ${dim('Connect your Wunderbot to WhatsApp for chat-based interactions.')}`);
+    console.log();
+    console.log(`  ${bright('Quick Start:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland connect whatsapp')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Providers:')}`);
+    console.log(`     ${accent('Twilio')}            ${dim('Paid, production-grade — reliable delivery, phone number provisioning')}`);
+    console.log(`     ${accent('Meta Cloud API')}    ${dim('Free tier available — direct from Meta, requires app review for production')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Twilio Setup:')}`);
+    console.log(`     ${iColor('1')} Create a Twilio account and get a WhatsApp-enabled number`);
+    console.log(`     ${iColor('2')} Set environment variables:`);
+    console.log(`        ${accent('TWILIO_ACCOUNT_SID')}     ${dim('your Twilio Account SID')}`);
+    console.log(`        ${accent('TWILIO_AUTH_TOKEN')}      ${dim('your Twilio Auth Token')}`);
+    console.log(`        ${accent('TWILIO_WHATSAPP_FROM')}   ${dim('e.g. whatsapp:+14155238886')}`);
+    console.log(`     ${iColor('3')} Configure the webhook URL in Twilio console`);
+    console.log();
+    console.log(`  ${bright('Meta Cloud API Setup:')}`);
+    console.log(`     ${iColor('1')} Create an app at developers.facebook.com`);
+    console.log(`     ${iColor('2')} Set environment variables:`);
+    console.log(`        ${accent('META_WHATSAPP_TOKEN')}         ${dim('your permanent access token')}`);
+    console.log(`        ${accent('META_WHATSAPP_PHONE_ID')}      ${dim('your phone number ID')}`);
+    console.log(`        ${accent('META_WHATSAPP_VERIFY_TOKEN')}  ${dim('webhook verification token')}`);
+    console.log(`     ${iColor('3')} Configure the webhook URL in Meta dashboard`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Webhook URL:')}`);
+    console.log(`     ${accent('https://your-server/wunderland/channels/inbound/whatsapp/{seedId}')}`);
+    console.log(`     ${dim('Chat commands work the same as other channels.')}`);
+    console.log();
+    console.log(`  ${dim('Full guide:')} ${accent('docs/CHANNEL_INTEGRATIONS.md')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'slack') {
+    printTitle('Slack Integration');
+    console.log(`  ${dim('Connect your Wunderbot to a Slack workspace.')}`);
+    console.log();
+    console.log(`  ${bright('Quick Start:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland connect slack')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('How It Works:')}`);
+    console.log(`     ${dim('Routes through rabbithole.inc OAuth — no manual app creation needed.')}`);
+    console.log(`     ${dim('The connect command opens your browser to authorize the Slack app.')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Auto-Reply Modes:')}`);
+    console.log(`     ${accent('off')}          ${dim('Bot does not reply automatically')}`);
+    console.log(`     ${accent('dm')}           ${dim('Reply only to direct messages')}`);
+    console.log(`     ${accent('mentions')}     ${dim('Reply when @mentioned in channels')}`);
+    console.log(`     ${accent('all')}          ${dim('Reply to every message in configured channels')}`);
+    console.log();
+    console.log(`  ${dim('Set mode:')} ${accent('wunderland config set slack.autoReply mentions')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Environment Variables (self-hosted):')}`);
+    console.log(`     ${accent('SLACK_OAUTH_CLIENT_ID')}      ${dim('your Slack app client ID')}`);
+    console.log(`     ${accent('SLACK_OAUTH_CLIENT_SECRET')}   ${dim('your Slack app client secret')}`);
+    console.log(`     ${accent('SLACK_BOT_TOKEN')}             ${dim('xoxb-... bot token')}`);
+    console.log();
+    console.log(`  ${dim('Webhook is already configured via the Slack Events API — no manual URL setup.')}`);
+    console.log();
+    console.log(`  ${dim('Full guide:')} ${accent('docs/CHANNEL_INTEGRATIONS.md')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'signal') {
+    printTitle('Signal Integration');
+    console.log(`  ${dim('Connect your Wunderbot to Signal for private, encrypted messaging.')}`);
+    console.log();
+    console.log(`  ${bright('Quick Start:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland connect signal')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Prerequisites:')}`);
+    console.log(`     ${dim('Requires')} ${accent('signal-cli')} ${dim('installed on your system.')}`);
+    console.log(`     ${dim('Install:')} ${accent('brew install signal-cli')} ${dim('(macOS) or see github.com/AsamK/signal-cli')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Setup Wizard:')}`);
+    console.log(`     ${iColor('1')} ${accent('wunderland connect signal')} ${dim('walks you through registration')}`);
+    console.log(`     ${iColor('2')} Link or register a phone number with signal-cli`);
+    console.log(`     ${iColor('3')} Verify via SMS or voice call`);
+    console.log(`     ${iColor('4')} The daemon starts and listens for incoming messages`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Running the Daemon:')}`);
+    console.log(`     ${dim('signal-cli runs as a JSON-RPC daemon. The webhook URL is:')}`);
+    console.log(`     ${accent('http://localhost:{port}/wunderland/channels/inbound/signal/{seedId}')}`);
+    console.log();
+    console.log(`  ${dim('Full guide:')} ${accent('docs/CHANNEL_INTEGRATIONS.md')}`);
+    console.log();
+    return;
+  }
+
   if (resolved === 'faq') {
     printTitle('Frequently Asked Questions');
     console.log();
@@ -453,7 +576,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log();
 
     console.log(`  ${hr()}`);
-    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, email, presets, security, tui, ui, export')}`);
+    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, email, whatsapp, slack, signal, presets, security, tui, ui, export')}`);
     console.log(`  ${dim('Full docs:')} ${accent(URLS.docs)}`);
     console.log();
     return;
