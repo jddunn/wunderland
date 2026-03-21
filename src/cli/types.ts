@@ -102,6 +102,33 @@ export interface CliConfig {
     preset?: ObservabilityPreset;
   };
 
+  /** WhatsApp credentials (written by `wunderland connect whatsapp`). */
+  whatsapp?: {
+    provider: 'twilio' | 'meta';
+    // Twilio
+    accountSid?: string;
+    authToken?: string;
+    phoneNumber?: string;
+    // Meta
+    accessToken?: string;
+    businessId?: string;
+    phoneNumberId?: string;
+  };
+
+  /** Slack connection (written by `wunderland connect slack`). */
+  slack?: {
+    workspace?: string;
+    channel?: string;
+    botToken?: string;
+  };
+
+  /** Signal credentials (written by `wunderland connect signal`). */
+  signal?: {
+    phoneNumber?: string;
+    cliPath?: string;
+    daemonPort?: number;
+  };
+
   /** Google OAuth tokens (written by `wunderland connect gmail`). */
   google?: {
     clientId?: string;
