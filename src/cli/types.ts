@@ -102,6 +102,17 @@ export interface CliConfig {
     preset?: ObservabilityPreset;
   };
 
+  /** Google OAuth tokens (written by `wunderland connect gmail`). */
+  google?: {
+    clientId?: string;
+    clientSecret?: string;
+    refreshToken?: string;
+    accessToken?: string;
+    email?: string;
+    /** Token expiry timestamp (ms since epoch). */
+    expiresAt?: number;
+  };
+
   /** CLI/TUI UI preferences. */
   ui?: {
     /** UI theme. */
