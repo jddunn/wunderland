@@ -19,7 +19,8 @@ export type HelpTopicId =
   | 'security'
   | 'export'
   | 'faq'
-  | 'llm';
+  | 'llm'
+  | 'email';
 
 export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: string }> = [
   {
@@ -68,6 +69,11 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     summary: 'Configure OpenAI, Anthropic, Gemini, Ollama, or OpenRouter.',
   },
   {
+    id: 'email',
+    title: 'Email Intelligence',
+    summary: 'Gmail virtual assistant: sync, search, projects, reports.',
+  },
+  {
     id: 'faq',
     title: 'FAQ',
     summary: 'Frequently asked questions about setup, voice, LLMs, and more.',
@@ -105,6 +111,7 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'security' || topic === 'approvals' || topic === 'hitl') return 'security';
     if (topic === 'export' || topic === 'png' || topic === 'screenshot') return 'export';
     if (topic === 'llm' || topic === 'llms' || topic === 'providers' || topic === 'provider' || topic === 'models' || topic === 'model' || topic === 'ollama' || topic === 'openai' || topic === 'anthropic' || topic === 'gemini' || topic === 'openrouter') return 'llm';
+    if (topic === 'email' || topic === 'gmail' || topic === 'mail') return 'email';
     if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
   })();
@@ -349,6 +356,56 @@ export function printHelpTopic(topicRaw: string): void {
     return;
   }
 
+  if (resolved === 'email') {
+    printTitle('Email Intelligence — Gmail Virtual Assistant');
+    console.log(`  ${dim('Connect your Gmail and get AI-powered email intelligence:')}`);
+    console.log(`  ${dim('thread hierarchy, project detection, search, reports, and more.')}`);
+    console.log();
+    console.log(`  ${bright('Quick Start:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland connect gmail')}       ${dim('Connect your Gmail account (opens browser)')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland chat')}                ${dim('Start chatting — ask about your emails')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('What You Can Do:')}`);
+    console.log(`     ${dim(g.bullet)} ${dim('"What\'s happening with Project Alpha?"')} ${muted('— cross-thread project summaries')}`);
+    console.log(`     ${dim(g.bullet)} ${dim('"Any new emails from Sarah?"')} ${muted('— filtered search')}`);
+    console.log(`     ${dim(g.bullet)} ${dim('"Summarize the API redesign thread"')} ${muted('— thread summaries')}`);
+    console.log(`     ${dim(g.bullet)} ${dim('"Export Project Alpha as PDF"')} ${muted('— generate reports')}`);
+    console.log(`     ${dim(g.bullet)} ${accent('/email inbox')} ${muted('— see your inbox')}`);
+    console.log(`     ${dim(g.bullet)} ${accent('/email projects')} ${muted('— see auto-detected projects')}`);
+    console.log(`     ${dim(g.bullet)} ${accent('/email search <query>')} ${muted('— semantic search across all email')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Setup:')}`);
+    console.log(`     ${iColor('1')} ${accent('wunderland connect gmail')}     ${dim('(one-time, opens browser OAuth)')}`);
+    console.log(`     ${iColor('2')} ${dim('That\'s it — Gmail auto-syncs on next chat/start')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('CLI Commands:')}`);
+    console.log(`     ${accent('/email inbox')}             ${dim('View inbox')}`);
+    console.log(`     ${accent('/email projects')}          ${dim('View auto-detected projects')}`);
+    console.log(`     ${accent('/email search <query>')}    ${dim('Semantic search')}`);
+    console.log(`     ${accent('/email thread <id>')}       ${dim('Thread detail')}`);
+    console.log(`     ${accent('/email report <project> <format>')} ${dim('Generate report (PDF/MD/JSON)')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Dashboard (Rabbithole):')}`);
+    console.log(`     ${dim('Your Wunderbot dashboard at')} ${accent('/app/dashboard/[seedId]/email/')} ${dim('has:')}`);
+    console.log(`     ${dim(g.bullet)} ${bright('Inbox tab')} ${dim('— thread-centric view with search')}`);
+    console.log(`     ${dim(g.bullet)} ${bright('Projects tab')} ${dim('— auto-detected project groupings')}`);
+    console.log(`     ${dim(g.bullet)} ${bright('Intelligence tab')} ${dim('— stats, stale threads, AI chat widget')}`);
+    console.log(`     ${dim(g.bullet)} ${bright('Settings tab')} ${dim('— manage accounts, digests, SMTP')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Self-Hosted:')}`);
+    console.log(`     ${accent('wunderland connect gmail')} ${dim('works everywhere. Uses browser OAuth')}`);
+    console.log(`     ${dim('with PKCE — no API keys to configure manually.')}`);
+    console.log();
+    console.log(`  ${dim('Full guide:')} ${accent('docs/EMAIL_INTELLIGENCE.md')}`);
+    console.log();
+    return;
+  }
+
   if (resolved === 'faq') {
     printTitle('Frequently Asked Questions');
     console.log();
@@ -396,7 +453,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log();
 
     console.log(`  ${hr()}`);
-    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, presets, security, tui, ui, export')}`);
+    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, email, presets, security, tui, ui, export')}`);
     console.log(`  ${dim('Full docs:')} ${accent(URLS.docs)}`);
     console.log();
     return;
