@@ -7,13 +7,14 @@
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import { info as iColor, bright, dim, muted } from '../ui/theme.js';
+import { info as iColor, bright, dim, muted, accent, success as sColor, warn as wColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { createStepProgress } from '../ui/progress.js';
 import { getConfigPath } from '../config/config-manager.js';
 import { getEnvPath, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
+import { loadConfig } from '../config/config-manager.js';
 import { URLS, LLM_PROVIDERS, TOOL_KEY_PROVIDERS } from '../constants.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -82,6 +83,9 @@ export default async function cmdDoctor(
       connectivity.push({ label: ep.label, url: ep.url, ok: result.ok, latency: result.latency });
     }
 
+    const jsonConfig = await loadConfig();
+    const gmailConnected = !!(process.env['GOOGLE_REFRESH_TOKEN'] || jsonConfig?.google?.refreshToken);
+
     const output = {
       configuration: {
         configJson: { path: configPath, exists: existsSync(configPath) },
@@ -98,6 +102,12 @@ export default async function cmdDoctor(
         platform: pc.platform,
         status: pc.allSet ? 'configured' : pc.anySet ? 'partial' : 'not_configured',
       })),
+      email: {
+        gmail: {
+          connected: gmailConnected,
+          email: jsonConfig?.google?.email || null,
+        },
+      },
       connectivity,
     };
 
@@ -191,7 +201,21 @@ export default async function cmdDoctor(
   }
   console.log();
 
-  // 4. Connectivity (async checks with live spinners)
+  // 4. Gmail / Email Intelligence
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('Email Intelligence')}`);
+  {
+    const config = await loadConfig();
+    const hasRefreshToken = !!(process.env['GOOGLE_REFRESH_TOKEN'] || config?.google?.refreshToken);
+    const gmailEmail = config?.google?.email;
+    if (hasRefreshToken) {
+      console.log(`    ${sColor(g.ok)} Gmail: connected${gmailEmail ? ` (${gmailEmail})` : ''}`);
+    } else {
+      console.log(`    ${wColor(g.warn)} Gmail: not connected — run ${accent("'wunderland connect gmail'")}`);
+    }
+  }
+  console.log();
+
+  // 5. Connectivity (async checks with live spinners)
   console.log(`  ${iColor(g.bulletHollow)} ${bright('Connectivity')}`);
   for (const ep of endpoints) {
     progress.start(stepIdx);
