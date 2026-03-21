@@ -74,6 +74,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('list-presets')}           List personality & agent presets
       ${w('list-personas')}          List AgentOS personas
       ${w('config')}                Read/write config values
+      ${w('connect')} ${d('<service>')}      Connect Gmail, Calendar, etc. via OAuth
       ${w('env')}                   Manage API keys & secrets
 
     ${w('Deploy')}
@@ -420,6 +421,12 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     usage: ['wunderland version'],
     examples: ['wunderland version'],
   },
+  connect: {
+    summary: 'Connect external services (Gmail, etc.) via OAuth.',
+    usage: ['wunderland connect <service>'],
+    examples: ['wunderland connect gmail'],
+    notes: ['Opens your browser for secure OAuth authorization. No API keys needed.'],
+  },
 };
 
 function printCommandHelp(command: string): boolean {
@@ -503,6 +510,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   completions:       () => import('./commands/completions.js'),
   quickstart:        () => import('./commands/quickstart.js'),
   new:               () => import('./commands/new.js'),
+  connect:           () => import('./commands/connect.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
