@@ -15,6 +15,7 @@ import { getConfigPath } from '../config/config-manager.js';
 import { getEnvPath, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets } from '../config/secrets.js';
 import { loadConfig } from '../config/config-manager.js';
+import { execFile } from 'node:child_process';
 import { URLS, LLM_PROVIDERS, TOOL_KEY_PROVIDERS } from '../constants.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -30,6 +31,12 @@ async function checkReachable(url: string, timeoutMs = 5000): Promise<{ ok: bool
   } catch {
     return { ok: false, latency: Date.now() - start };
   }
+}
+
+async function whichBinary(name: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile('which', [name], (err) => resolve(!err));
+  });
 }
 
 // ── Command ─────────────────────────────────────────────────────────────────
@@ -215,7 +222,61 @@ export default async function cmdDoctor(
   }
   console.log();
 
-  // 5. Connectivity (async checks with live spinners)
+  // 5. WhatsApp
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('WhatsApp')}`);
+  {
+    const config = await loadConfig();
+    const hasTwilio = !!(process.env['TWILIO_ACCOUNT_SID'] && process.env['TWILIO_AUTH_TOKEN']);
+    const hasMeta = !!(process.env['META_WHATSAPP_TOKEN'] && process.env['META_WHATSAPP_PHONE_ID']);
+    const hasConfig = !!(config as any)?.whatsapp;
+    const twilioPhone = process.env['TWILIO_WHATSAPP_FROM'] || '';
+    if (hasTwilio) {
+      console.log(`    ${sColor(g.ok)} WhatsApp: connected via Twilio${twilioPhone ? ` (${twilioPhone})` : ''}`);
+    } else if (hasMeta) {
+      console.log(`    ${sColor(g.ok)} WhatsApp: connected via Meta Cloud API`);
+    } else if (hasConfig) {
+      console.log(`    ${sColor(g.ok)} WhatsApp: configured`);
+    } else {
+      console.log(`    ${wColor(g.warn)} WhatsApp: not connected — run ${accent("'wunderland connect whatsapp'")}`);
+    }
+  }
+  console.log();
+
+  // 6. Slack
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('Slack')}`);
+  {
+    const config = await loadConfig();
+    const hasOAuth = !!process.env['SLACK_OAUTH_CLIENT_ID'];
+    const hasBotToken = !!process.env['SLACK_BOT_TOKEN'];
+    const hasConfig = !!(config as any)?.slack;
+    const workspace = (config as any)?.slack?.workspace || '';
+    if (hasBotToken || hasOAuth) {
+      console.log(`    ${sColor(g.ok)} Slack: connected${workspace ? ` (${workspace})` : ''}`);
+    } else if (hasConfig) {
+      console.log(`    ${sColor(g.ok)} Slack: configured${workspace ? ` (${workspace})` : ''}`);
+    } else {
+      console.log(`    ${wColor(g.warn)} Slack: not connected — run ${accent("'wunderland connect slack'")}`);
+    }
+  }
+  console.log();
+
+  // 7. Signal
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('Signal')}`);
+  {
+    const config = await loadConfig();
+    const hasSignalCli = await whichBinary('signal-cli');
+    const phoneNumber = (config as any)?.signal?.phoneNumber || '';
+    if (hasSignalCli && phoneNumber) {
+      console.log(`    ${sColor(g.ok)} Signal: connected (${phoneNumber})`);
+    } else if (hasSignalCli) {
+      console.log(`    ${wColor(g.warn)} Signal: signal-cli found but not registered — run ${accent("'wunderland connect signal'")}`);
+    } else {
+      console.log(`    ${wColor(g.warn)} Signal: signal-cli not found — install with ${accent("'brew install signal-cli'")}`);
+    }
+  }
+  console.log();
+
+  // 8. Connectivity (async checks with live spinners)
   console.log(`  ${iColor(g.bulletHollow)} ${bright('Connectivity')}`);
   for (const ep of endpoints) {
     progress.start(stepIdx);
