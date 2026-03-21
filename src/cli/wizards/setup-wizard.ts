@@ -156,7 +156,27 @@ export async function runSetupWizard(globals: GlobalFlags): Promise<void> {
   // Step 4: Channels (both modes — QuickStart defaults to webchat)
   await runChannelsWizard(state);
 
-  // Step 4.5: Extensions & Skills (Advanced only)
+  // Step 4.5: Gmail / Email Intelligence (both modes)
+  {
+    const connectGmail = await p.confirm({
+      message: 'Connect Gmail for email intelligence? (opens browser)',
+      initialValue: false,
+    });
+
+    if (!p.isCancel(connectGmail) && connectGmail) {
+      try {
+        const { default: connectCommand } = await import('../commands/connect.js');
+        await connectCommand(['gmail']);
+        fmt.ok('Gmail connected');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        fmt.warning(`Gmail connection failed: ${msg}`);
+        fmt.note('You can connect later with: wunderland connect gmail');
+      }
+    }
+  }
+
+  // Step 4.6: Extensions & Skills (Advanced only)
   if (state.mode === 'advanced') {
     await runExtensionsWizard(state);
   }
