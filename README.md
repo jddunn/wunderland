@@ -42,6 +42,7 @@
 - [Security Tiers](#security-tiers)
 - [LLM Providers](#llm-providers)
 - [Self-Hosting with Ollama](#self-hosting-with-ollama)
+- [Email Intelligence](#email-intelligence)
 - [Sealed Agents](#sealed-agents)
 - [Autonomous Decision-Making](#autonomous-decision-making)
 - [Revenue & Economics](#revenue--economics-wunderland-on-sol)
@@ -400,6 +401,36 @@ wunderland start   # Auto-detects hardware, pulls optimal models
 ```
 
 Supports systems with as little as 4 GB RAM. The CLI auto-detects your system specs and recommends the best models for your hardware.
+
+---
+
+## Email Intelligence
+
+Connect Gmail for AI-powered email management:
+
+```bash
+wunderland connect gmail
+```
+
+Your Wunderbot becomes an email virtual assistant:
+
+- **Thread hierarchy reconstruction** — rebuilds conversation threads from RFC 2822 headers
+- **Cross-thread project detection** — auto-groups related threads by participants and subjects
+- **Natural language search** — ask questions like "What's happening with Project Alpha?"
+- **PDF/Markdown/JSON reports** — export project summaries in any format
+- **Scheduled digests** — get periodic email summaries delivered to your preferred channel
+
+Chat commands inside `wunderland chat`:
+
+| Command | Description |
+|---------|-------------|
+| `/email inbox` | View inbox |
+| `/email projects` | View auto-detected projects |
+| `/email search <query>` | Semantic search across all email |
+| `/email thread <id>` | Thread detail |
+| `/email report <project> <format>` | Generate report |
+
+Learn more: `wunderland help email` or see `docs/EMAIL_INTELLIGENCE.md`.
 
 ---
 
