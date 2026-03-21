@@ -422,10 +422,15 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     examples: ['wunderland version'],
   },
   connect: {
-    summary: 'Connect external services (Gmail, etc.) via OAuth.',
+    summary: 'Connect external services (Gmail, WhatsApp, Slack, Signal) via OAuth or setup wizard.',
     usage: ['wunderland connect <service>'],
-    examples: ['wunderland connect gmail'],
-    notes: ['Opens your browser for secure OAuth authorization. No API keys needed.'],
+    examples: [
+      'wunderland connect gmail',
+      'wunderland connect whatsapp',
+      'wunderland connect slack',
+      'wunderland connect signal',
+    ],
+    notes: ['Opens your browser for secure OAuth authorization (Gmail, WhatsApp Meta, Slack) or runs an interactive setup wizard (WhatsApp Twilio, Signal).'],
   },
 };
 
