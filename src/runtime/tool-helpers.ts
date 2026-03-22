@@ -107,6 +107,192 @@ export function getGuardrails(): SafeGuardrails {
   return _guardrails;
 }
 
+// ── Content Security Pipeline (singleton, optional) ──────────────────────────
+//
+// Unlike SafeGuardrails (filesystem-level), the SecurityPipeline provides
+// content-level guardrails: Pre-LLM classification, Dual-LLM auditing,
+// output signing, and extension-based guardrail packs (PII, ML, code safety, etc.).
+//
+// This is OPTIONAL — if never initialized, `getSecurityPipeline()` returns
+// `undefined` and the runtime operates without content guardrails.
+
+import type { WunderlandSecurityPipeline } from '../security/WunderlandSecurityPipeline.js';
+import type { GuardrailPackConfig } from '../security/types.js';
+
+/** Singleton reference — `undefined` until explicitly initialized. */
+let _securityPipeline: WunderlandSecurityPipeline | undefined;
+
+/**
+ * Returns the active {@link WunderlandSecurityPipeline} singleton, or
+ * `undefined` if no pipeline has been initialized.
+ *
+ * Content guardrails are opt-in: callers should null-check the result.
+ */
+export function getSecurityPipeline(): WunderlandSecurityPipeline | undefined {
+  return _securityPipeline;
+}
+
+/**
+ * Configuration for initializing the content security pipeline.
+ */
+export interface SecurityPipelineInitOptions {
+  /** Named security tier (dangerous | permissive | balanced | strict | paranoid). */
+  securityTier: string;
+  /**
+   * Optional LLM invoker for Dual-LLM Auditing (required for `strict` and
+   * `paranoid` tiers). When omitted, dual-LLM audit is silently disabled.
+   */
+  auditorInvoker?: (prompt: string) => Promise<string>;
+  /**
+   * Per-agent overrides for guardrail extension packs. Merged on top of the
+   * tier's defaults — `true` enables a pack, `false` disables it.
+   */
+  guardrailPackOverrides?: Partial<GuardrailPackConfig>;
+  /**
+   * When `true`, all guardrail extension packs are disabled regardless of
+   * tier config. The Pre-LLM Classifier still runs (fast, regex-based).
+   * Equivalent to `--no-guardrails` CLI flag.
+   */
+  disableGuardrailPacks?: boolean;
+  /**
+   * Explicit list of pack names to enable (overrides tier defaults).
+   * Equivalent to `--guardrails=pii,code-safety` CLI flag.
+   * Valid names: `pii`, `ml`, `topic`, `code`, `grounding`.
+   */
+  enableOnlyPacks?: string[];
+  /** Seed ID for output signing context. */
+  seedId?: string;
+}
+
+/**
+ * Short pack alias → {@link GuardrailPackConfig} key mapping.
+ * Used by the `--guardrails=pii,code,...` CLI flag.
+ */
+const PACK_ALIAS_MAP: Record<string, keyof GuardrailPackConfig> = {
+  pii: 'piiRedaction',
+  'pii-redaction': 'piiRedaction',
+  ml: 'mlClassifiers',
+  'ml-classifiers': 'mlClassifiers',
+  topic: 'topicality',
+  topicality: 'topicality',
+  code: 'codeSafety',
+  'code-safety': 'codeSafety',
+  grounding: 'groundingGuard',
+  'grounding-guard': 'groundingGuard',
+};
+
+/**
+ * Initializes the content security pipeline singleton.
+ *
+ * This is called once during startup (`wunderland start`, `wunderland chat`,
+ * or `createWunderlandChatRuntime`) after the security tier is resolved.
+ * It is intentionally fail-safe: if the pipeline cannot be created (e.g.
+ * missing dependencies), a warning is logged and the runtime continues
+ * without content guardrails.
+ *
+ * @param opts - Pipeline initialization options.
+ * @returns Summary of active guardrail packs for startup logging.
+ */
+export async function initializeSecurityPipeline(
+  opts: SecurityPipelineInitOptions,
+): Promise<{ active: string[]; total: number } | null> {
+  try {
+    const { createPipelineFromTier, SECURITY_TIERS, isValidSecurityTier } = await import(
+      '../security/SecurityTiers.js'
+    );
+
+    const tierName = isValidSecurityTier(opts.securityTier)
+      ? opts.securityTier
+      : 'balanced';
+
+    // Determine which guardrail packs should be enabled.
+    const tierConfig = SECURITY_TIERS[tierName];
+    const tierDefaults: GuardrailPackConfig = tierConfig.pipelineConfig.enabledGuardrailPacks ?? {};
+
+    let resolvedPacks: GuardrailPackConfig;
+
+    if (opts.disableGuardrailPacks) {
+      // --no-guardrails: disable all packs but keep PreLLM classifier
+      resolvedPacks = {
+        piiRedaction: false,
+        mlClassifiers: false,
+        topicality: false,
+        codeSafety: false,
+        groundingGuard: false,
+      };
+    } else if (opts.enableOnlyPacks && opts.enableOnlyPacks.length > 0) {
+      // --guardrails=pii,code: enable only the specified packs
+      resolvedPacks = {
+        piiRedaction: false,
+        mlClassifiers: false,
+        topicality: false,
+        codeSafety: false,
+        groundingGuard: false,
+      };
+      for (const alias of opts.enableOnlyPacks) {
+        const key = PACK_ALIAS_MAP[alias.trim().toLowerCase()];
+        if (key) {
+          resolvedPacks[key] = true;
+        }
+      }
+    } else {
+      // Merge tier defaults with per-agent overrides from config
+      resolvedPacks = {
+        ...tierDefaults,
+        ...opts.guardrailPackOverrides,
+      };
+    }
+
+    // Build the pipeline with the resolved pack config.
+    // We import WunderlandSecurityPipeline to create with overridden packs.
+    const { WunderlandSecurityPipeline: PipelineCtor } = await import(
+      '../security/WunderlandSecurityPipeline.js'
+    );
+
+    const pipelineConfig = {
+      ...tierConfig.pipelineConfig,
+      enabledGuardrailPacks: resolvedPacks,
+    };
+
+    const pipeline = new PipelineCtor(pipelineConfig, opts.auditorInvoker);
+
+    if (opts.seedId) {
+      pipeline.setSeedId(opts.seedId);
+    }
+
+    _securityPipeline = pipeline;
+
+    // Build summary of active packs for logging.
+    const allPackNames: Array<[keyof GuardrailPackConfig, string]> = [
+      ['piiRedaction', 'pii-redaction'],
+      ['mlClassifiers', 'ml-classifiers'],
+      ['topicality', 'topicality'],
+      ['codeSafety', 'code-safety'],
+      ['groundingGuard', 'grounding-guard'],
+    ];
+    const active = allPackNames
+      .filter(([key]) => resolvedPacks[key])
+      .map(([, label]) => label);
+
+    return { active, total: allPackNames.length };
+  } catch (err) {
+    // Non-fatal: log a warning and continue without content guardrails.
+    console.warn(
+      '[wunderland] Security pipeline initialization failed (running without content guardrails):',
+      err instanceof Error ? err.message : String(err),
+    );
+    _securityPipeline = undefined;
+    return null;
+  }
+}
+
+/**
+ * Resets the security pipeline singleton. Primarily for testing.
+ */
+export function resetSecurityPipeline(): void {
+  _securityPipeline = undefined;
+}
+
 export function getStringProp(obj: Record<string, unknown>, key: string): string | undefined {
   const v = obj[key];
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;
