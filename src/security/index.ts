@@ -3,7 +3,7 @@
  * @module wunderland/security
  */
 
-// Types
+// Types (includes GuardrailPackConfig, SecurityPipelineConfig, etc.)
 export * from './types.js';
 
 // Pre-LLM Classifier (Layer 1)
@@ -32,6 +32,7 @@ export {
 export {
   type SecurityTierName,
   type SecurityTierConfig,
+  type EnhancedSecurityTierConfig,
   SECURITY_TIERS,
   getSecurityTier,
   createPipelineFromTier,
