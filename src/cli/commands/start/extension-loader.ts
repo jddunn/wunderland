@@ -21,6 +21,7 @@ import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
 } from '../../../voice/speech-catalog.js';
+import { getRecommendations, formatRecommendations } from '../../extensions/recommender.js';
 
 type ExtensionHttpHandler = (
   req: import('node:http').IncomingMessage,
@@ -146,27 +147,24 @@ export async function loadExtensions(ctx: any): Promise<void> {
       extensionsFromConfig?.productivity ?? globalExts?.productivity ?? [],
     );
 
-    if (
-      !productivityExtensions.includes('email-gmail') &&
-      !toolExtensions.includes('email-gmail')
-    ) {
-      const gClientId = (getSecret('google.clientId') || '').trim();
-      const gClientSecret = (getSecret('google.clientSecret') || '').trim();
-      const gRefreshToken = (getSecret('google.refreshToken') || '').trim();
-      if (gClientId && gClientSecret && gRefreshToken) {
-        productivityExtensions.push('email-gmail');
-      }
-    }
+    // Smart extension recommendations based on detected credentials
+    const allEnabled = [
+      ...(toolExtensions ?? []),
+      ...(voiceExtensions ?? []),
+      ...(productivityExtensions ?? []),
+    ];
 
-    if (
-      !productivityExtensions.includes('calendar-google') &&
-      !toolExtensions.includes('calendar-google')
-    ) {
-      const gClientId = (getSecret('google.clientId') || '').trim();
-      const gClientSecret = (getSecret('google.clientSecret') || '').trim();
-      const gRefreshToken = (getSecret('google.refreshToken') || '').trim();
-      if (gClientId && gClientSecret && gRefreshToken) {
-        productivityExtensions.push('calendar-google');
+    const recs = await getRecommendations({
+      env: process.env,
+      enabledExtensions: allEnabled,
+    });
+
+    if (recs.length > 0) {
+      const summary = formatRecommendations(recs);
+      console.log(summary);
+      // Auto-add recommended extensions (user sees the summary)
+      for (const r of recs) {
+        toolExtensions.push(r.extensionId);
       }
     }
 
