@@ -69,6 +69,9 @@ const TOOL_FALLBACK_MAP: Record<string, string[]> = {
 // Helpers, types, and utilities extracted to tool-helpers.ts
 export {
   getGuardrailsInstance,
+  getSecurityPipeline,
+  initializeSecurityPipeline,
+  resetSecurityPipeline,
   safeJsonStringify,
   truncateString,
   buildToolDefs,
@@ -76,6 +79,7 @@ export {
   type ToolInstance,
   type ToolCallMessage,
   type LLMProviderConfig,
+  type SecurityPipelineInitOptions,
 } from './tool-helpers.js';
 import type { ToolInstance, LLMProviderConfig } from './tool-helpers.js';
 import {
@@ -101,6 +105,7 @@ import {
   withSpan,
   buildStrictToolNameError,
   shouldLogRewrite,
+  getSecurityPipeline,
 } from "./tool-helpers.js";
 
 export async function runToolCallingTurn(opts: {
@@ -196,6 +201,41 @@ export async function runToolCallingTurn(opts: {
     maybeConfigureGuardrailsForAgent(opts.toolContext);
   } catch {
     // Non-fatal: guardrails will still deny filesystem tools when configured to require it.
+  }
+
+  // ── Content Security Pipeline: evaluate user input before LLM call ────────
+  // The pipeline runs Pre-LLM Classification + guardrail extension packs on
+  // the latest user message. If the input is blocked, we return immediately
+  // without invoking the LLM.
+  const contentPipeline = getSecurityPipeline();
+  if (contentPipeline) {
+    try {
+      // Extract the most recent user message text for classification.
+      const lastMsg = opts.messages[opts.messages.length - 1];
+      const userText =
+        lastMsg?.role === 'user' && typeof lastMsg.content === 'string'
+          ? lastMsg.content
+          : undefined;
+
+      if (userText) {
+        contentPipeline.reset();
+        const inputResult = await contentPipeline.evaluateInput({
+          input: { textInput: userText },
+        } as any);
+
+        if (inputResult?.action === 'block') {
+          const blockReason =
+            inputResult.metadata?.reason ??
+            inputResult.metadata?.explanation ??
+            'Input blocked by security pipeline.';
+          const blockMsg = `I'm unable to process that request. ${blockReason}`;
+          opts.messages.push({ role: 'assistant', content: blockMsg });
+          return blockMsg;
+        }
+      }
+    } catch {
+      // Non-fatal: if input evaluation fails, proceed without blocking.
+    }
   }
 
   // Use provided manager or create one based on permission mode
@@ -445,6 +485,27 @@ export async function runToolCallingTurn(opts: {
           content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
           // Also strip leading **<think>...</think>** markdown-wrapped variants.
           content = content.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
+
+          // ── Content Security Pipeline: evaluate LLM output ──────────────
+          // Run Dual-LLM Auditor + guardrail extension packs on the final
+          // assistant response. If blocked, replace with a safe message.
+          if (contentPipeline && content) {
+            try {
+              const outputResult = await contentPipeline.evaluateOutput({
+                chunk: { finalResponseText: content },
+              } as any);
+
+              if (outputResult?.action === 'block') {
+                const safeMsg =
+                  'I generated a response but it was blocked by the security pipeline. Please try rephrasing your request.';
+                opts.messages.push({ role: 'assistant', content: safeMsg });
+                return safeMsg;
+              }
+            } catch {
+              // Non-fatal: if output evaluation fails, return the original content.
+            }
+          }
+
           opts.messages.push({ role: 'assistant', content: content || '(no content)' });
           return content || '';
         }
