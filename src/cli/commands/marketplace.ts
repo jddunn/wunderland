@@ -12,6 +12,8 @@ import { accent, dim, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+import { installExtension } from '../extensions/installer.js';
+import { promptForMissingSecrets } from '../extensions/secret-prompter.js';
 
 interface MarketplaceItem {
   id: string;
@@ -20,6 +22,14 @@ interface MarketplaceItem {
   description: string;
   installed: boolean;
   source: 'skills' | 'tools' | 'channels' | 'providers';
+  /** npm package name for installable extensions. */
+  packageName?: string;
+  /** Secret IDs required by the extension. */
+  requiredSecrets?: string[];
+  /** Environment variables the extension reads. */
+  envVars?: string[];
+  /** URL to obtain API keys / docs. */
+  docsUrl?: string;
 }
 
 async function loadAllItems(): Promise<MarketplaceItem[]> {
@@ -62,6 +72,10 @@ async function loadAllItems(): Promise<MarketplaceItem[]> {
           description: ext.description,
           installed: ext.available,
           source,
+          packageName: ext.packageName,
+          requiredSecrets: ext.requiredSecrets,
+          envVars: ext.envVars,
+          docsUrl: ext.docsUrl,
         });
       }
     }
@@ -81,6 +95,36 @@ function fuzzyMatch(query: string, item: MarketplaceItem): boolean {
     item.category.toLowerCase().includes(q) ||
     item.source.toLowerCase().includes(q)
   );
+}
+
+/**
+ * Builds the SecretRequirement[] expected by promptForMissingSecrets from
+ * the marketplace item's metadata. Each required secret is paired with
+ * the corresponding env var (falls back to upper-cased secret id).
+ */
+function buildSecretRequirements(
+  item: MarketplaceItem,
+): { id: string; envVar: string; signupUrl?: string }[] {
+  if (!item.requiredSecrets?.length && !item.envVars?.length) return [];
+
+  const envVars = item.envVars ?? [];
+  const secrets = item.requiredSecrets ?? [];
+
+  // If we only have envVars but no requiredSecrets, derive entries from envVars
+  if (secrets.length === 0) {
+    return envVars.map((ev) => ({
+      id: ev,
+      envVar: ev,
+      signupUrl: item.docsUrl,
+    }));
+  }
+
+  // Pair each required secret with a matching env var (positional or uppercased fallback)
+  return secrets.map((secretId, idx) => ({
+    id: secretId,
+    envVar: envVars[idx] ?? secretId.toUpperCase().replace(/[^A-Z0-9]/g, '_'),
+    signupUrl: item.docsUrl,
+  }));
 }
 
 export default async function cmdMarketplace(
@@ -201,7 +245,40 @@ export default async function cmdMarketplace(
         return;
       }
 
-      fmt.note(`Extension "${item.name}" is not yet installed.\nTo add it, install the npm package: ${accent(`pnpm add @framers/agentos-ext-${item.id}`)}`);
+      const pkg = item.packageName ?? `@framers/agentos-ext-${item.id}`;
+      fmt.note(`Installing ${accent(item.name)} (${dim(pkg)})...`);
+      fmt.blank();
+
+      const ok = await installExtension(pkg);
+
+      if (!ok) {
+        // Fall back to printing the manual install command
+        fmt.errorBlock(
+          'Auto-install failed',
+          `You can install manually:\n  ${accent(`pnpm add ${pkg}`)}`,
+        );
+        fmt.blank();
+        return;
+      }
+
+      fmt.ok(`${accent(item.name)} installed successfully.`);
+
+      // Prompt for any missing secrets / API keys the extension requires
+      const secrets = buildSecretRequirements(item);
+      if (secrets.length > 0) {
+        fmt.blank();
+        fmt.note('This extension requires API keys. Let\'s set them up:');
+        const results = await promptForMissingSecrets(secrets);
+        if (results.length > 0) {
+          fmt.blank();
+          fmt.ok(`${results.length} secret(s) saved to ${dim('.env')}.`);
+        }
+      }
+
+      fmt.blank();
+      fmt.kvPair('Extension', accent(item.name));
+      fmt.kvPair('Package', dim(pkg));
+      fmt.kvPair('Status', sColor('installed'));
       fmt.blank();
 
     } else {
