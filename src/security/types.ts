@@ -258,6 +258,32 @@ export interface SecurityPipelineConfig {
 
   /** Output signing config */
   signingConfig?: Partial<OutputSigningConfig>;
+
+  /**
+   * Guardrail extension packs to enable for this security tier.
+   * Each pack is loaded lazily via dynamic import — if the package
+   * isn't installed, it's silently skipped.
+   */
+  enabledGuardrailPacks?: GuardrailPackConfig;
+}
+
+/**
+ * Configuration for which guardrail extension packs are enabled.
+ * All flags default to `false` when omitted. Each pack is resolved
+ * via dynamic `import()` at pipeline init time, so missing npm
+ * packages are silently skipped without crashing.
+ */
+export interface GuardrailPackConfig {
+  /** Four-tier PII detection and redaction. @default false */
+  piiRedaction?: boolean;
+  /** ML-based toxicity, injection, and jailbreak detection. @default false */
+  mlClassifiers?: boolean;
+  /** Embedding-based topic enforcement + drift detection. @default false */
+  topicality?: boolean;
+  /** OWASP Top 10 code safety scanning. @default false */
+  codeSafety?: boolean;
+  /** RAG-grounded hallucination detection via NLI. @default false */
+  groundingGuard?: boolean;
 }
 
 // ============================================================================
