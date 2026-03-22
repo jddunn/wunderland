@@ -347,7 +347,8 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.piiRedaction) {
       try {
         const mod = await import('@framers/agentos-ext-pii-redaction');
-        const pack = mod.createPiiRedactionGuardrail({ redactionStyle: 'placeholder' });
+        const factory = mod.createPiiRedactionGuardrail ?? mod.createPiiRedactionPack;
+        const pack = factory({ redactionStyle: 'placeholder' });
         const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
         if (descriptor) packs.push(descriptor.payload as IGuardrailService);
       } catch {
@@ -358,7 +359,8 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.mlClassifiers) {
       try {
         const mod = await import('@framers/agentos-ext-ml-classifiers');
-        const pack = mod.createMLClassifierGuardrail();
+        const factory = mod.createMLClassifierGuardrail ?? mod.createMLClassifierPack;
+        const pack = factory();
         const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
         if (descriptor) packs.push(descriptor.payload as IGuardrailService);
       } catch {
@@ -369,7 +371,8 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.topicality) {
       try {
         const mod = await import('@framers/agentos-ext-topicality');
-        const pack = mod.createTopicalityGuardrail();
+        const factory = mod.createTopicalityGuardrail ?? mod.createTopicalityPack;
+        const pack = factory();
         const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
         if (descriptor) packs.push(descriptor.payload as IGuardrailService);
       } catch {
@@ -380,7 +383,8 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.codeSafety) {
       try {
         const mod = await import('@framers/agentos-ext-code-safety');
-        const pack = mod.createCodeSafetyGuardrail();
+        const factory = mod.createCodeSafetyGuardrail ?? mod.createCodeSafetyPack;
+        const pack = factory();
         const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
         if (descriptor) packs.push(descriptor.payload as IGuardrailService);
       } catch {
@@ -391,7 +395,8 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.groundingGuard) {
       try {
         const mod = await import('@framers/agentos-ext-grounding-guard');
-        const pack = mod.createGroundingGuardrail();
+        const factory = mod.createGroundingGuardrail ?? mod.createGroundingGuardPack;
+        const pack = factory();
         const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
         if (descriptor) packs.push(descriptor.payload as IGuardrailService);
       } catch {
@@ -419,7 +424,9 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (this.additionalGuardrails.length === 0) return null;
 
     const results = await Promise.allSettled(
-      this.additionalGuardrails.map((g) => g.evaluateInput(payload)),
+      this.additionalGuardrails
+        .filter((g) => g.evaluateInput)
+        .map((g) => g.evaluateInput!(payload)),
     );
 
     let flagResult: GuardrailEvaluationResult | null = null;
@@ -476,7 +483,9 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (this.additionalGuardrails.length === 0) return null;
 
     const results = await Promise.allSettled(
-      this.additionalGuardrails.map((g) => g.evaluateOutput(payload)),
+      this.additionalGuardrails
+        .filter((g) => g.evaluateOutput)
+        .map((g) => g.evaluateOutput!(payload)),
     );
 
     let flagResult: GuardrailEvaluationResult | null = null;
