@@ -28,6 +28,30 @@ import type { ToolInstance } from './tool-calling.js';
 
 export type ExecutionMode = 'autonomous' | 'human-all' | 'human-dangerous';
 
+/**
+ * Resolved guardrail pack overrides from `agent.config.json` `security.guardrailPacks`.
+ * Each key toggles a specific guardrail extension pack on/off, overriding tier defaults.
+ */
+export interface GuardrailPackOverrides {
+  /** Four-tier PII detection and redaction. */
+  piiRedaction?: boolean;
+  /** ML-based toxicity, injection, and jailbreak detection. */
+  mlClassifiers?: boolean;
+  /** Embedding-based topic enforcement + drift detection. */
+  topicality?: boolean;
+  /** OWASP Top 10 code safety scanning. */
+  codeSafety?: boolean;
+  /** RAG-grounded hallucination detection via NLI. */
+  groundingGuard?: boolean;
+}
+
+/**
+ * Fully normalized runtime policy resolved from agent config + CLI flags.
+ *
+ * This structure is passed to every runtime subsystem (tool filtering,
+ * authorization, system prompt building, guardrails) so they all use a
+ * single, consistent set of resolved values.
+ */
 export type NormalizedRuntimePolicy = {
   securityTier: SecurityTierName;
   permissionSet: PermissionSetName;
@@ -35,6 +59,21 @@ export type NormalizedRuntimePolicy = {
   executionMode: ExecutionMode;
   wrapToolOutputs: boolean;
   folderPermissions?: FolderPermissionConfig;
+  /**
+   * Per-agent guardrail pack overrides (from `security.guardrailPacks`).
+   * When present, merged on top of the tier's default pack config.
+   */
+  guardrailPackOverrides?: GuardrailPackOverrides;
+  /**
+   * When `true`, all guardrail extension packs are disabled.
+   * Equivalent to `--no-guardrails` CLI flag.
+   */
+  disableGuardrailPacks?: boolean;
+  /**
+   * Explicit list of pack short-names to enable (overrides tier defaults).
+   * Equivalent to `--guardrails=pii,code-safety` CLI flag.
+   */
+  enableOnlyGuardrailPacks?: string[];
 };
 
 export function normalizeSecurityTier(raw: unknown): SecurityTierName {
@@ -83,6 +122,36 @@ export function normalizeFolderPermissions(raw: unknown): FolderPermissionConfig
   return raw as FolderPermissionConfig;
 }
 
+/**
+ * Extracts guardrail pack overrides from `security.guardrailPacks` in agent config.
+ *
+ * @param raw - The `security.guardrailPacks` value from agent.config.json.
+ * @returns Normalized overrides, or `undefined` if none specified.
+ */
+export function normalizeGuardrailPackOverrides(raw: unknown): GuardrailPackOverrides | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const obj = raw as Record<string, unknown>;
+  const result: GuardrailPackOverrides = {};
+  let hasAny = false;
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === 'boolean') {
+      (result as any)[key] = value;
+      hasAny = true;
+    }
+  }
+  return hasAny ? result : undefined;
+}
+
+/**
+ * Normalizes the full runtime policy from agent config (merged with CLI overrides).
+ *
+ * This is the single source of truth for all runtime security decisions.
+ * CLI flags like `--security-tier`, `--no-guardrails`, and `--guardrails=...`
+ * should be merged into the `agentConfig` object before calling this function.
+ *
+ * @param agentConfig - Merged agent config object (config file + CLI overrides).
+ * @returns Fully normalized runtime policy.
+ */
 export function normalizeRuntimePolicy(agentConfig: any): NormalizedRuntimePolicy {
   const securityTier = normalizeSecurityTier(agentConfig?.securityTier ?? agentConfig?.security?.tier);
   const permissionSet = normalizePermissionSet(agentConfig?.permissionSet ?? agentConfig?.security?.permissionSet, securityTier);
@@ -90,8 +159,26 @@ export function normalizeRuntimePolicy(agentConfig: any): NormalizedRuntimePolic
   const executionMode = normalizeExecutionMode(agentConfig?.executionMode, securityTier);
   const wrapToolOutputs = normalizeWrapToolOutputs(agentConfig?.security?.wrapToolOutputs, securityTier);
   const folderPermissions = normalizeFolderPermissions(agentConfig?.security?.folderPermissions);
+  const guardrailPackOverrides = normalizeGuardrailPackOverrides(agentConfig?.security?.guardrailPacks);
 
-  return { securityTier, permissionSet, toolAccessProfile, executionMode, wrapToolOutputs, folderPermissions };
+  // CLI-level guardrail flags (injected by chat.ts / start command before calling this).
+  const disableGuardrailPacks = agentConfig?.disableGuardrailPacks === true;
+  const enableOnlyGuardrailPacks: string[] | undefined =
+    Array.isArray(agentConfig?.enableOnlyGuardrailPacks) && agentConfig.enableOnlyGuardrailPacks.length > 0
+      ? agentConfig.enableOnlyGuardrailPacks
+      : undefined;
+
+  return {
+    securityTier,
+    permissionSet,
+    toolAccessProfile,
+    executionMode,
+    wrapToolOutputs,
+    folderPermissions,
+    guardrailPackOverrides,
+    disableGuardrailPacks,
+    enableOnlyGuardrailPacks,
+  };
 }
 
 export function getPermissionsForSet(name: PermissionSetName): GranularPermissions {

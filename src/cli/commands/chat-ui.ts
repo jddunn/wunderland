@@ -64,6 +64,8 @@ export function printChatHeader(info: {
   securityTier: string;
   toolProfile: string;
   cliExecution: boolean;
+  /** Human-readable guardrail pack summary (e.g. "pii, code-safety (2/5)") */
+  guardrailPacks?: string;
 }): void {
   const contentWidth = getChatWidth();
   const innerWidth = contentWidth - 2;
@@ -115,6 +117,11 @@ export function printChatHeader(info: {
   );
   lines.push(kvLine('Security Tier', accent(info.securityTier)));
   lines.push(kvLine('Tool Profile', accent(info.toolProfile)));
+  if (info.guardrailPacks) {
+    lines.push(kvLine('Guardrail Packs', info.guardrailPacks === 'none' || info.guardrailPacks === 'unavailable'
+      ? dim(info.guardrailPacks)
+      : sColor(info.guardrailPacks)));
+  }
   lines.push(kvLine('CLI Execution', info.cliExecution ? wColor('enabled') : dim('disabled')));
   if (info.turnApproval !== 'off')
     lines.push(kvLine('Turn Checkpoints', sColor(info.turnApproval)));
@@ -125,6 +132,8 @@ export function printChatHeader(info: {
   lines.push(frameLine(helpHint, innerWidth));
   const restrictHint = `   ${dim('Restrict: --security-tier=balanced  |  --profile=assistant')}`;
   lines.push(frameLine(restrictHint, innerWidth));
+  const guardrailHint = `   ${dim('Guardrails: --no-guardrails  |  --guardrails=pii,code,grounding')}`;
+  lines.push(frameLine(guardrailHint, innerWidth));
   lines.push(empty);
   lines.push(botBorder);
   lines.push('');

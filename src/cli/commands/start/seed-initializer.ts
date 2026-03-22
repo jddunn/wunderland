@@ -18,7 +18,20 @@ import {
 } from '../../../core/index.js';
 
 export async function initializeSeed(ctx: any): Promise<void> {
-  const { cfg, globalConfig } = ctx;
+  const { cfg, globalConfig, flags } = ctx;
+
+  // ── Inject CLI guardrail flags into the config before policy normalization ──
+  // --no-guardrails → disableGuardrailPacks
+  // --guardrails=pii,code-safety → enableOnlyGuardrailPacks
+  if (flags?.['no-guardrails'] === true) {
+    cfg.disableGuardrailPacks = true;
+  }
+  const guardrailsFlag = typeof flags?.['guardrails'] === 'string'
+    ? String(flags['guardrails']).trim()
+    : '';
+  if (guardrailsFlag) {
+    cfg.enableOnlyGuardrailPacks = guardrailsFlag.split(',').map((s: string) => s.trim()).filter(Boolean);
+  }
 
   const seedId = String(cfg.seedId || 'seed_local_agent');
   const displayName = resolveAgentDisplayName({
@@ -82,6 +95,47 @@ export async function initializeSeed(ctx: any): Promise<void> {
     stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
   });
 
+  // ── Content Security Pipeline (optional) ──────────────────────────────────
+  // Creates the WunderlandSecurityPipeline from the resolved tier + config
+  // overrides. Fail-safe: if creation fails, agent runs without content guardrails.
+  let guardrailSummary: { active: string[]; total: number } | null = null;
+  try {
+    const { initializeSecurityPipeline } = await import('../../../runtime/tool-helpers.js');
+    guardrailSummary = await initializeSecurityPipeline({
+      securityTier: policy.securityTier,
+      guardrailPackOverrides: policy.guardrailPackOverrides,
+      disableGuardrailPacks: policy.disableGuardrailPacks,
+      enableOnlyPacks: policy.enableOnlyGuardrailPacks,
+      seedId,
+    });
+  } catch (err: any) {
+    console.warn(
+      '[wunderland] Security pipeline not available, running without content guardrails:',
+      err?.message ?? err,
+    );
+  }
+
+  // Log active guardrail packs for operator visibility.
+  if (guardrailSummary) {
+    const { active, total } = guardrailSummary;
+    if (active.length > 0) {
+      console.log(
+        `[wunderland] Security tier: ${policy.securityTier}`,
+      );
+      console.log(
+        `[wunderland] Guardrail packs: ${active.join(', ')} (${active.length} of ${total} active)`,
+      );
+    } else {
+      console.log(
+        `[wunderland] Security tier: ${policy.securityTier} (no guardrail packs active)`,
+      );
+    }
+  } else {
+    console.log(
+      `[wunderland] Security tier: ${policy.securityTier} (content guardrails unavailable)`,
+    );
+  }
+
   ctx.seedId = seedId;
   ctx.displayName = displayName;
   ctx.description = description;
@@ -89,6 +143,7 @@ export async function initializeSeed(ctx: any): Promise<void> {
   ctx.permissions = permissions;
   ctx.seed = seed;
   ctx.security = security;
+  ctx.guardrailSummary = guardrailSummary;
   ctx.LOCAL_ONLY_CHANNELS = LOCAL_ONLY_CHANNELS;
   ctx.CLI_REQUIRED_CHANNELS = CLI_REQUIRED_CHANNELS;
   ctx.turnApprovalMode = turnApprovalMode;
