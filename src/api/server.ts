@@ -615,7 +615,7 @@ export async function createWunderlandServer(opts?: {
 
       // Optional skills extension (may not be installed)
       try {
-        const skillsPkg = '@framers/agentos-ext-skills';
+        const skillsPkg = '@framers/agentos-skills';
         const skillsExt = await import(/* webpackIgnore: true */ skillsPkg);
         if ((skillsExt as any)?.createExtensionPack) {
           packs.push((skillsExt as any).createExtensionPack({ options: {}, logger: console, getSecret }));
