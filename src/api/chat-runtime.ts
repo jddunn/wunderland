@@ -607,7 +607,13 @@ export async function createWunderlandChatRuntime(opts: {
         { role: 'system', content: systemPrompt },
       ];
 
-      history.push({ role: 'user', content: String(input ?? '') });
+      const userContent = String(input ?? '');
+      history.push({ role: 'user', content: userContent });
+
+      // Feed user message to memory observer (automatic observation extraction)
+      if (memory?.observe) {
+        memory.observe('user', userContent).catch(() => {});
+      }
 
       const reply = await runToolCallingTurn({
         providerId: opts.llm.providerId,
@@ -625,6 +631,11 @@ export async function createWunderlandChatRuntime(opts: {
         ollamaOptions: buildOllamaRuntimeOptions(agentConfig.ollama),
         fallback: opts.llm.fallback,
       });
+
+      // Feed assistant reply to memory observer
+      if (memory?.observe && reply?.content) {
+        memory.observe('assistant', String(reply.content)).catch(() => {});
+      }
 
       sessions.set(key, history);
       return reply;
