@@ -127,6 +127,20 @@
     "playwright-core": "^1.58.1",
     "uuid": "^9.0.0"
   },
+  "peerDependencies": {
+    "@framers/agentos-ext-pii-redaction": ">=0.1.0",
+    "@framers/agentos-ext-ml-classifiers": ">=0.1.0",
+    "@framers/agentos-ext-topicality": ">=0.1.0",
+    "@framers/agentos-ext-code-safety": ">=0.1.0",
+    "@framers/agentos-ext-grounding-guard": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@framers/agentos-ext-pii-redaction": { "optional": true },
+    "@framers/agentos-ext-ml-classifiers": { "optional": true },
+    "@framers/agentos-ext-topicality": { "optional": true },
+    "@framers/agentos-ext-code-safety": { "optional": true },
+    "@framers/agentos-ext-grounding-guard": { "optional": true }
+  },
   "optionalDependencies": {
     "@framers/agentos-skills-registry": ">=0.1.0"
   },
