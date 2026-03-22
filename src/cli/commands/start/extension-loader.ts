@@ -17,6 +17,7 @@ import { createLocalMemoryReadTool } from './local-memory-tool.js';
 import { resolveHydeFromAgentConfig } from '../../../rag/hyde-integration.js';
 import { createRequestFolderAccessTool } from '../../../tools/RequestFolderAccessTool.js';
 import { HumanInteractionManager, type IChannelAdapter } from '@framers/agentos';
+import { MarkdownWorkingMemory, UpdateWorkingMemoryTool, ReadWorkingMemoryTool } from '@framers/agentos/memory';
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
@@ -521,6 +522,20 @@ export async function loadExtensions(ctx: any): Promise<void> {
       }
     }
   }
+
+  // --- Persistent markdown working memory ---
+  const wmPath = path.join(workspaceBaseDir, 'agents', workspaceAgentId, 'working-memory.md');
+  const wmTemplate = cfg?.workingMemoryTemplate as string | undefined;
+  const markdownMemory = new MarkdownWorkingMemory(wmPath, wmTemplate);
+  markdownMemory.ensureFile();
+
+  const updateWmTool = new UpdateWorkingMemoryTool(markdownMemory);
+  const readWmTool = new ReadWorkingMemoryTool(markdownMemory);
+  toolMap.set(updateWmTool.name, updateWmTool as any);
+  toolMap.set(readWmTool.name, readWmTool as any);
+
+  // Store reference for prompt injection
+  ctx.markdownWorkingMemory = markdownMemory;
 
   // Enforce tool access profile + permission set so the model only sees allowed tools.
   const filtered = filterToolMapByPolicy({
