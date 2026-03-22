@@ -218,6 +218,23 @@ export default async function cmdChat(
     cliDefaults.toolAccessProfile = profileFlag;
   }
 
+  // ── Guardrail pack CLI flags ──────────────────────────────────────────────
+  // --no-guardrails    → disable all guardrail extension packs
+  // --guardrails=X,Y   → enable only the specified packs
+  if (flags['no-guardrails'] === true) {
+    cliDefaults.disableGuardrailPacks = true;
+  }
+  const guardrailsFlag =
+    typeof flags['guardrails'] === 'string'
+      ? String(flags['guardrails']).trim()
+      : '';
+  if (guardrailsFlag) {
+    cliDefaults.enableOnlyGuardrailPacks = guardrailsFlag
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+  }
+
   const policy = normalizeRuntimePolicy({ ...cliDefaults, ...(cfg || {}) });
   const permissions = getPermissionsForSet(policy.permissionSet);
   const turnApprovalMode = (() => {
@@ -925,6 +942,23 @@ export default async function cmdChat(
       ? cfg.selectedPersonaId.trim()
       : seedId;
 
+  // ── Content Security Pipeline (optional) ──────────────────────────────────
+  // Initializes the WunderlandSecurityPipeline singleton for content-level
+  // guardrails. Fail-safe: if creation fails, chat continues without them.
+  let guardrailSummary: { active: string[]; total: number } | null = null;
+  try {
+    const { initializeSecurityPipeline } = await import('../../runtime/tool-helpers.js');
+    guardrailSummary = await initializeSecurityPipeline({
+      securityTier: policy.securityTier,
+      guardrailPackOverrides: policy.guardrailPackOverrides,
+      disableGuardrailPacks: policy.disableGuardrailPacks,
+      enableOnlyPacks: policy.enableOnlyGuardrailPacks,
+      seedId,
+    });
+  } catch {
+    // Non-fatal — content guardrails not available.
+  }
+
   // ── Per-agent storage + auto-ingest pipeline ──────────────────────────────
   let agentStorageManager: AgentStorageManager | undefined;
   let autoIngestPipeline: IMemoryAutoIngestPipeline | undefined;
@@ -1156,6 +1190,11 @@ export default async function cmdChat(
     securityTier: policy.securityTier || 'permissive',
     toolProfile: policy.toolAccessProfile || 'developer',
     cliExecution: permissions.system?.cliExecution !== false,
+    guardrailPacks: guardrailSummary
+      ? guardrailSummary.active.length > 0
+        ? `${guardrailSummary.active.join(', ')} (${guardrailSummary.active.length}/${guardrailSummary.total})`
+        : 'none'
+      : 'unavailable',
   });
 
   // ── Channel message queue (bridges async channel events into the REPL) ──

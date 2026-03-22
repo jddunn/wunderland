@@ -478,6 +478,23 @@ export async function createWunderlandChatRuntime(opts: {
       ? agentConfig.selectedPersonaId.trim()
       : seed.seedId;
   const dangerouslySkipCommandSafety = false;
+
+  // ── Content Security Pipeline (optional) ──────────────────────────────────
+  // Initializes the WunderlandSecurityPipeline singleton for content-level
+  // guardrails. Fail-safe: if creation fails, the runtime continues without them.
+  try {
+    const { initializeSecurityPipeline } = await import('../runtime/tool-helpers.js');
+    await initializeSecurityPipeline({
+      securityTier: policy.securityTier,
+      guardrailPackOverrides: policy.guardrailPackOverrides,
+      disableGuardrailPacks: policy.disableGuardrailPacks,
+      enableOnlyPacks: policy.enableOnlyGuardrailPacks,
+      seedId: seedIdForWorkspace,
+    });
+  } catch {
+    // Non-fatal — content guardrails not available.
+    logger.warn?.('[wunderland/api] Security pipeline initialization failed (continuing without content guardrails)');
+  }
   let discoveryManager: WunderlandDiscoveryManager | null = null;
   let liveToolMap: Map<string, ToolInstance> | null = null;
 
