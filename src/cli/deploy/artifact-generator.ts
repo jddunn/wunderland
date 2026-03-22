@@ -132,7 +132,7 @@ export function resolveRequiredPackages(agentConfig: Record<string, unknown>): {
   const toolPackages = allToolNames
     .map((name) => toolEntryByName.get(name)?.packageName)
     .filter((pkg): pkg is string => typeof pkg === 'string' && pkg.trim().length > 0)
-    .filter((pkg) => pkg !== '@framers/agentos-ext-skills');
+    .filter((pkg) => pkg !== '@framers/agentos-skills');
 
   const channelPackages: string[] = [];
   const missingChannelNotes: string[] = [];
