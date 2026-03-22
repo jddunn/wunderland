@@ -197,7 +197,7 @@ export async function initializeSecurityPipeline(
   opts: SecurityPipelineInitOptions,
 ): Promise<{ active: string[]; total: number } | null> {
   try {
-    const { createPipelineFromTier, SECURITY_TIERS, isValidSecurityTier } = await import(
+    const { SECURITY_TIERS, isValidSecurityTier } = await import(
       '../security/SecurityTiers.js'
     );
 
