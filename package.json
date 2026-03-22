@@ -26,6 +26,30 @@
       "import": "./dist/advanced/*.js",
       "types": "./dist/advanced/*.d.ts"
     },
+    "./config": {
+      "import": "./dist/config/index.js",
+      "types": "./dist/config/index.d.ts"
+    },
+    "./security": {
+      "import": "./dist/security/index.js",
+      "types": "./dist/security/index.d.ts"
+    },
+    "./runtime": {
+      "import": "./dist/runtime/index.js",
+      "types": "./dist/runtime/index.d.ts"
+    },
+    "./storage": {
+      "import": "./dist/storage/index.js",
+      "types": "./dist/storage/index.d.ts"
+    },
+    "./guardrails": {
+      "import": "./dist/guardrails/index.js",
+      "types": "./dist/guardrails/index.d.ts"
+    },
+    "./voice": {
+      "import": "./dist/voice/index.js",
+      "types": "./dist/voice/index.d.ts"
+    },
     "./discovery": {
       "import": "./dist/discovery/index.js",
       "types": "./dist/discovery/index.d.ts"
