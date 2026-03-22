@@ -347,10 +347,12 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.piiRedaction) {
       try {
         const mod = await import('@framers/agentos-ext-pii-redaction');
-        const factory = mod.createPiiRedactionGuardrail ?? mod.createPiiRedactionPack;
-        const pack = factory({ redactionStyle: 'placeholder' });
-        const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
-        if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
+        if (typeof factory === 'function') {
+          const pack = (factory as (...args: unknown[]) => { descriptors: Array<{ kind: string; payload: unknown }> })({ redactionStyle: 'placeholder' });
+          const descriptor = pack.descriptors.find((d) => d.kind === 'guardrail');
+          if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        }
       } catch {
         /* @framers/agentos-ext-pii-redaction not installed — skip silently */
       }
@@ -359,10 +361,12 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.mlClassifiers) {
       try {
         const mod = await import('@framers/agentos-ext-ml-classifiers');
-        const factory = mod.createMLClassifierGuardrail ?? mod.createMLClassifierPack;
-        const pack = factory();
-        const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
-        if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
+        if (typeof factory === 'function') {
+          const pack = (factory as () => { descriptors: Array<{ kind: string; payload: unknown }> })();
+          const descriptor = pack.descriptors.find((d) => d.kind === 'guardrail');
+          if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        }
       } catch {
         /* @framers/agentos-ext-ml-classifiers not installed — skip silently */
       }
@@ -371,10 +375,12 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.topicality) {
       try {
         const mod = await import('@framers/agentos-ext-topicality');
-        const factory = mod.createTopicalityGuardrail ?? mod.createTopicalityPack;
-        const pack = factory();
-        const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
-        if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
+        if (typeof factory === 'function') {
+          const pack = (factory as () => { descriptors: Array<{ kind: string; payload: unknown }> })();
+          const descriptor = pack.descriptors.find((d) => d.kind === 'guardrail');
+          if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        }
       } catch {
         /* @framers/agentos-ext-topicality not installed — skip silently */
       }
@@ -383,10 +389,12 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.codeSafety) {
       try {
         const mod = await import('@framers/agentos-ext-code-safety');
-        const factory = mod.createCodeSafetyGuardrail ?? mod.createCodeSafetyPack;
-        const pack = factory();
-        const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
-        if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
+        if (typeof factory === 'function') {
+          const pack = (factory as () => { descriptors: Array<{ kind: string; payload: unknown }> })();
+          const descriptor = pack.descriptors.find((d) => d.kind === 'guardrail');
+          if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        }
       } catch {
         /* @framers/agentos-ext-code-safety not installed — skip silently */
       }
@@ -395,10 +403,12 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
     if (enabled.groundingGuard) {
       try {
         const mod = await import('@framers/agentos-ext-grounding-guard');
-        const factory = mod.createGroundingGuardrail ?? mod.createGroundingGuardPack;
-        const pack = factory();
-        const descriptor = pack.descriptors.find((d: { kind: string }) => d.kind === 'guardrail');
-        if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
+        if (typeof factory === 'function') {
+          const pack = (factory as () => { descriptors: Array<{ kind: string; payload: unknown }> })();
+          const descriptor = pack.descriptors.find((d) => d.kind === 'guardrail');
+          if (descriptor) packs.push(descriptor.payload as IGuardrailService);
+        }
       } catch {
         /* @framers/agentos-ext-grounding-guard not installed — skip silently */
       }
