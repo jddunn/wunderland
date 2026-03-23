@@ -307,6 +307,23 @@ export type WunderlandAgentConfig = {
   suggestedChannels?: string[];
   /** Optional secret overrides (in addition to env vars). */
   secrets?: Record<string, string>;
+  /** Memory retrieval configuration. */
+  memory?: {
+    /** Total token budget for memory context per turn. @default 4000 */
+    retrievalBudgetTokens?: number;
+    /** Enable/disable memory retrieval. @default true */
+    enabled?: boolean;
+    /** Infinite context window config. */
+    infiniteContext?: {
+      enabled?: boolean;
+      strategy?: 'sliding' | 'hierarchical' | 'hybrid';
+      compactionThreshold?: number;
+      preserveRecentTurns?: number;
+      transparencyLevel?: 'none' | 'summary' | 'detailed';
+    };
+    /** Max context tokens for context window manager. */
+    maxContextTokens?: number;
+  };
   /** Optional security overrides that the runtime reads. */
   security?: Partial<{
     tier: SecurityTierName | string;
