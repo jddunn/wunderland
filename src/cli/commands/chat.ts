@@ -1011,12 +1011,17 @@ export default async function cmdChat(
   let memorySystem: MemorySystem | null = null;
   if (agentStorageManager && cfg?.memory?.enabled !== false) {
     try {
+      // Lazy-load GraphRAG engine (optional)
+      let graphRAG: any = undefined;
+      try { graphRAG = await agentStorageManager.getGraphRAGEngine(); } catch { /* optional */ }
+
       memorySystem = await createMemorySystem({
         vectorStore: agentStorageManager.getVectorStore(),
         traits: personality,
         llm: { providerId, apiKey: llmApiKey, baseUrl: llmBaseUrl },
         ollama: cfg?.ollama,
         markdownMemory: (ctx as any).markdownWorkingMemory,
+        graphRAG,
         retrievalBudgetTokens: cfg?.memory?.retrievalBudgetTokens ?? 4000,
         agentId: seedId,
       });
