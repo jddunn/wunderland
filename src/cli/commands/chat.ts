@@ -88,6 +88,8 @@ import {
   getDefaultVoiceExtensions,
 } from '../../voice/speech-catalog.js';
 import { createLocalMemoryReadTool } from './start/local-memory-tool.js';
+import { createMemorySystem, type MemorySystem } from '../../memory/index.js';
+import { injectMemoryContext } from '../../memory/index.js';
 import { ContextWindowManager } from '@framers/agentos/memory';
 import type { InfiniteContextConfig } from '@framers/agentos/memory';
 
@@ -1005,6 +1007,24 @@ export default async function cmdChat(
     );
   }
 
+  // ── Memory Retrieval System ───────────────────────────────────────
+  let memorySystem: MemorySystem | null = null;
+  if (agentStorageManager && cfg?.memory?.enabled !== false) {
+    try {
+      memorySystem = await createMemorySystem({
+        vectorStore: agentStorageManager.getVectorStore(),
+        traits: personality,
+        llm: { providerId, apiKey: llmApiKey, baseUrl: llmBaseUrl },
+        ollama: cfg?.ollama,
+        markdownMemory: (ctx as any).markdownWorkingMemory,
+        retrievalBudgetTokens: cfg?.memory?.retrievalBudgetTokens ?? 4000,
+        agentId: seedId,
+      });
+    } catch {
+      // Non-fatal — chat works without memory retrieval
+    }
+  }
+
   if (!toolMap.has('memory_read') && agentStorageManager) {
     const openaiKey = process.env['OPENAI_API_KEY'];
     if (openaiKey) {
@@ -1335,6 +1355,11 @@ export default async function cmdChat(
     replyTarget?: { adapter: ChannelAdapterInstance; conversationId: string }
   ): Promise<void> {
     messages.push({ role: 'user', content: input });
+
+    // Retrieve and inject memory context
+    if (memorySystem) {
+      await injectMemoryContext(messages as any, memorySystem, input).catch(() => {});
+    }
 
     // Track message in context window manager
     contextWindowManager?.addMessage('user', input);
