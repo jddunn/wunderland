@@ -5,7 +5,7 @@
  */
 
 import type { IVectorStore } from '@framers/agentos';
-import type { HexacoTraits, CognitiveMemoryConfig } from '@framers/agentos/memory';
+import type { HexacoTraits } from '@framers/agentos/memory';
 import type { MarkdownWorkingMemory } from '@framers/agentos/memory';
 
 /** GraphRAG engine interface (lazy-loaded, optional). */
@@ -63,11 +63,9 @@ export interface MemoryTurnResult {
 export async function createMemorySystem(config: MemorySystemConfig): Promise<MemorySystem> {
   const {
     vectorStore,
-    traits = {},
     markdownMemory,
     graphRAG,
     retrievalBudgetTokens = 4000,
-    agentId,
   } = config;
 
   const collectionName = `auto_memories`;
@@ -75,18 +73,20 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
   return {
     async retrieveForTurn(userInput: string): Promise<MemoryTurnResult | null> {
       try {
-        // 1. Query vector store for relevant memories
-        const results = await vectorStore.query(collectionName, {
-          queryText: userInput,
-          topK: 10,
-          minScore: 0.3,
-          filter: {},
-        }).catch(() => ({ results: [] }));
-
+        // 1. Query vector store for relevant memories (text-based search)
         const retrievedTexts: string[] = [];
-        for (const r of (results as any)?.results ?? results ?? []) {
-          const text = r?.textContent ?? r?.metadata?.content ?? '';
-          if (text) retrievedTexts.push(text);
+        try {
+          // Use listDocuments with text filter as fallback for stores without embedding
+          const docs = await (vectorStore as any).listDocuments?.(collectionName, {
+            filter: { $textSearch: userInput },
+            limit: 10,
+          }) ?? { documents: [] };
+          for (const doc of docs?.documents ?? []) {
+            const text = doc?.textContent ?? doc?.metadata?.content ?? '';
+            if (text) retrievedTexts.push(text);
+          }
+        } catch {
+          // Vector store query not supported — skip
         }
 
         // 2. Query GraphRAG for entity-based context (optional)
@@ -159,7 +159,7 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
       }
     },
 
-    async observe(role: 'user' | 'assistant', content: string): Promise<void> {
+    async observe(_role: 'user' | 'assistant', _content: string): Promise<void> {
       // Observation is already handled by auto-ingest pipeline and memory.observe()
       // This is a passthrough for future CognitiveMemoryManager integration
     },
