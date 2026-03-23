@@ -1020,7 +1020,7 @@ export default async function cmdChat(
         traits: personality,
         llm: { providerId, apiKey: llmApiKey, baseUrl: llmBaseUrl },
         ollama: cfg?.ollama,
-        markdownMemory: (ctx as any).markdownWorkingMemory,
+        markdownMemory: undefined, // TODO: wire from extension-loader ctx
         graphRAG,
         retrievalBudgetTokens: cfg?.memory?.retrievalBudgetTokens ?? 4000,
         agentId: seedId,
