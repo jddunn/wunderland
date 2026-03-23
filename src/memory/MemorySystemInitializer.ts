@@ -1,12 +1,21 @@
 // packages/wunderland/src/memory/MemorySystemInitializer.ts
 /**
  * Creates the memory retrieval system from existing wunderland infrastructure.
- * Auto-detects embedding provider from agent LLM config.
+ * Queries vector store + optional GraphRAG for per-turn context injection.
  */
 
 import type { IVectorStore } from '@framers/agentos';
 import type { HexacoTraits, CognitiveMemoryConfig } from '@framers/agentos/memory';
 import type { MarkdownWorkingMemory } from '@framers/agentos/memory';
+
+/** GraphRAG engine interface (lazy-loaded, optional). */
+interface IGraphRAGLike {
+  localSearch(query: string, options?: { topK?: number }): Promise<{
+    entities: Array<{ name: string; description: string; relevanceScore: number }>;
+    relationships: Array<{ source: string; target: string; description: string }>;
+    contextText: string;
+  }>;
+}
 
 export interface MemorySystemConfig {
   /** Vector store from AgentStorageManager. */
@@ -26,6 +35,8 @@ export interface MemorySystemConfig {
   };
   /** Persistent markdown working memory instance. */
   markdownMemory?: MarkdownWorkingMemory;
+  /** GraphRAG engine for entity-based context (optional). */
+  graphRAG?: IGraphRAGLike;
   /** Total token budget for memory retrieval. @default 4000 */
   retrievalBudgetTokens?: number;
   /** Agent ID for scoping. */
@@ -54,6 +65,7 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
     vectorStore,
     traits = {},
     markdownMemory,
+    graphRAG,
     retrievalBudgetTokens = 4000,
     agentId,
   } = config;
@@ -77,17 +89,37 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
           if (text) retrievedTexts.push(text);
         }
 
-        // 2. Read persistent markdown working memory
+        // 2. Query GraphRAG for entity-based context (optional)
+        let graphContext = '';
+        if (graphRAG) {
+          try {
+            const graphResult = await graphRAG.localSearch(userInput, { topK: 5 });
+            if (graphResult.contextText) {
+              graphContext = graphResult.contextText;
+            } else if (graphResult.entities.length > 0) {
+              const entityLines = graphResult.entities
+                .slice(0, 5)
+                .map(e => `- **${e.name}**: ${e.description}`);
+              const relLines = graphResult.relationships
+                .slice(0, 5)
+                .map(r => `- ${r.source} → ${r.target}: ${r.description}`);
+              graphContext = [...entityLines, ...relLines].join('\n');
+            }
+          } catch {
+            // GraphRAG query failed — continue without it
+          }
+        }
+
+        // 3. Read persistent markdown working memory
         const persistentText = markdownMemory?.read() ?? '';
 
-        // 3. Assemble context
-        if (retrievedTexts.length === 0 && !persistentText) return null;
+        // 4. Assemble context
+        if (retrievedTexts.length === 0 && !persistentText && !graphContext) return null;
 
         const sections: string[] = [];
 
         if (persistentText) {
-          // Truncate persistent memory to 5% of budget
-          const pmBudget = Math.floor(retrievalBudgetTokens * 0.05) * 4; // chars
+          const pmBudget = Math.floor(retrievalBudgetTokens * 0.05) * 4;
           const truncPm = persistentText.length > pmBudget
             ? persistentText.slice(0, pmBudget) + '\n<!-- truncated -->'
             : persistentText;
@@ -95,8 +127,7 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
         }
 
         if (retrievedTexts.length > 0) {
-          // Truncate retrieved memories to 65% of budget
-          const recallBudget = Math.floor(retrievalBudgetTokens * 0.65) * 4;
+          const recallBudget = Math.floor(retrievalBudgetTokens * 0.55) * 4;
           let used = 0;
           const included: string[] = [];
           for (const text of retrievedTexts) {
@@ -109,6 +140,14 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
           }
         }
 
+        if (graphContext) {
+          const graphBudget = Math.floor(retrievalBudgetTokens * 0.10) * 4;
+          const truncGraph = graphContext.length > graphBudget
+            ? graphContext.slice(0, graphBudget) + '\n<!-- truncated -->'
+            : graphContext;
+          sections.push(`## Knowledge Graph Context\n\n${truncGraph}`);
+        }
+
         if (sections.length === 0) return null;
 
         const contextText = sections.join('\n\n');
@@ -116,7 +155,6 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
 
         return { contextText, tokensUsed };
       } catch {
-        // Non-fatal — return null on any error
         return null;
       }
     },
