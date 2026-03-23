@@ -48,6 +48,8 @@ import {
 import type { WunderlandAgentConfig, WunderlandLLMConfig, WunderlandWorkspace } from './types.js';
 import { AgentMemory } from '@framers/agentos';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
+import { createMemorySystem, type MemorySystem } from '../memory/index.js';
+import { injectMemoryContext } from '../memory/index.js';
 
 type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;
@@ -512,6 +514,30 @@ export async function createWunderlandChatRuntime(opts: {
   });
   liveToolMap = toolMap;
 
+  // ── Memory Retrieval System ───────────────────────────────────────────
+  let memorySystem: MemorySystem | null = null;
+  if (agentConfig.memory?.enabled !== false) {
+    try {
+      const { AgentStorageManager, resolveAgentStorageConfig } = await import('../storage/index.js');
+      const storageConfig = resolveAgentStorageConfig(seedIdForWorkspace, (agentConfig as any).storage);
+      const storageMgr = new AgentStorageManager(storageConfig);
+      await storageMgr.initialize();
+
+      memorySystem = await createMemorySystem({
+        vectorStore: storageMgr.getVectorStore(),
+        traits: seed.personality as any,
+        llm: { providerId: opts.llm.providerId, apiKey: opts.llm.apiKey, baseUrl: opts.llm.baseUrl },
+        ollama: (agentConfig as any).ollama,
+        retrievalBudgetTokens: agentConfig.memory?.retrievalBudgetTokens ?? 4000,
+        agentId: seedIdForWorkspace,
+      });
+    } catch (err) {
+      logger.warn?.('[wunderland/api] Memory system init failed (continuing without retrieval)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   let skillsPrompt = '';
   const resolvedSkills = await resolveSkillContext({
     filesystemDirs: resolveDefaultSkillsDirs({ cwd: workingDirectory }),
@@ -613,6 +639,11 @@ export async function createWunderlandChatRuntime(opts: {
       // Feed user message to memory observer (automatic observation extraction)
       if (memory?.observe) {
         memory.observe('user', userContent).catch(() => {});
+      }
+
+      // Retrieve and inject memory context
+      if (memorySystem) {
+        await injectMemoryContext(history as any, memorySystem, userContent).catch(() => {});
       }
 
       const reply = await runToolCallingTurn({
