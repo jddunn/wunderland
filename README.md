@@ -250,8 +250,9 @@ await session.sendText('Investigate recent SQL adapter changes', {
 ### CLI
 
 ```bash
-# Install globally
-npm install -g wunderland
+# Install globally (pnpm recommended — npm on Node 25 has resolution bugs)
+pnpm add -g wunderland
+# or: npm install -g wunderland (requires Node 22 LTS)
 
 # Interactive setup wizard
 wunderland setup

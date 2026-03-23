@@ -118,8 +118,9 @@
     "url": "https://github.com/jddunn/wunderland/issues"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0 <25.0.0"
   },
+  "packageManager": "pnpm@10.15.1",
   "dependencies": {
     "@clack/prompts": "^0.9.1",
     "@framers/agentos": ">=0.1.0",
