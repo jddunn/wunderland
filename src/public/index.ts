@@ -347,11 +347,12 @@ async function resolveExtensionsFromOpts(opts: {
     overrides as Record<string, any>,
   );
 
+  // Default extensions when none specified — matches CLI defaults
   if (toolExts.length === 0 && voiceExts.length === 0 && prodExts.length === 0) {
-    return {
-      ...empty,
-      mergedOverrides,
-    };
+    toolExts = [
+      'cli-executor', 'web-search', 'web-browser', 'content-extraction',
+      'giphy', 'image-search', 'news-search', 'weather', 'deep-research', 'github',
+    ];
   }
 
   try {
