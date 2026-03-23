@@ -525,7 +525,7 @@ export async function createWunderlandChatRuntime(opts: {
 
       memorySystem = await createMemorySystem({
         vectorStore: storageMgr.getVectorStore(),
-        traits: seed.personality as any,
+        traits: (agentConfig.personality ?? {}) as any,
         llm: { providerId: opts.llm.providerId, apiKey: opts.llm.apiKey, baseUrl: opts.llm.baseUrl },
         ollama: (agentConfig as any).ollama,
         retrievalBudgetTokens: agentConfig.memory?.retrievalBudgetTokens ?? 4000,
@@ -664,8 +664,8 @@ export async function createWunderlandChatRuntime(opts: {
       });
 
       // Feed assistant reply to memory observer
-      if (memory?.observe && reply?.content) {
-        memory.observe('assistant', String(reply.content)).catch(() => {});
+      if (memory?.observe && reply) {
+        memory.observe('assistant', String(reply)).catch(() => {});
       }
 
       sessions.set(key, history);
