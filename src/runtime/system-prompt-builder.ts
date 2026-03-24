@@ -491,6 +491,8 @@ function buildSelfDocumentation(): string {
     '    wunderland rag ingest-image <file> Ingest image (LLM caption → embed)',
     '    wunderland rag ingest-audio <file> Ingest audio (Whisper transcript → embed)',
     '    wunderland rag query <text>        Search RAG memory',
+    '    wunderland rag query-image <file>  Search assets using a query image',
+    '    wunderland rag query-audio <file>  Search assets using a query audio clip',
     '    wunderland rag collections list    List collections',
     '    wunderland rag collections create  Create a new collection',
     '    wunderland rag documents list      List ingested documents',
