@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { join } from 'node:path';
 
 import { AgentMemory, type ITool } from '@framers/agentos';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
@@ -198,5 +199,19 @@ describe('wunderland public API', () => {
     });
 
     expect(app.memory).toBe(memory);
+  });
+
+  it('loads and compiles workflow and mission YAML files', async () => {
+    const app = await createWunderland({
+      llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
+      tools: 'none',
+      ...quietRuntimeOptions,
+    });
+
+    const workflow = await app.loadWorkflow(join(process.cwd(), 'examples/workflow-research.yaml'));
+    const mission = await app.loadMission(join(process.cwd(), 'examples/mission-deep-research.yaml'));
+
+    expect(typeof workflow.toIR).toBe('function');
+    expect(typeof mission.toIR).toBe('function');
   });
 });
