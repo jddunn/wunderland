@@ -672,6 +672,8 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
    * Key: opaque checkpoint ID; Value: frozen copy of the message history at checkpoint time.
    */
   const sessionCheckpoints = new Map<string, { messages: Array<Record<string, unknown>>; timestamp: number }>();
+  /** Persistent checkpoint store — lazily initialized on first checkpoint() call. */
+  let checkpointStore: any = null;
 
   const diagnostics = (): WunderlandDiagnostics => ({
     llm: {
@@ -949,23 +951,41 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
      * {@link WunderlandApp.streamGraph}, enabling uniform event-driven UI updates.
      */
     const stream: WunderlandSession['stream'] = async function* (text, opts) {
-      const startTime = Date.now();
-      yield { type: 'run_start' as const, runId: id, graphId: 'session' } as any;
-      yield { type: 'node_start' as const, nodeId: 'turn', state: { input: { text } } } as any;
-      const result = await sendText(text, opts);
-      yield { type: 'text_delta' as const, nodeId: 'turn', content: result.text } as any;
-      yield {
-        type: 'node_end' as const,
-        nodeId: 'turn',
-        output: result.text,
-        durationMs: Date.now() - startTime,
-      } as any;
-      yield {
-        type: 'run_end' as const,
-        runId: id,
-        finalOutput: result,
-        totalDurationMs: Date.now() - startTime,
-      } as any;
+      const { streamWunderlandGraph } = await import('../runtime/graph-runner.js');
+      const { AgentGraph, gmiNode, START, END } = await import('@framers/agentos/orchestration');
+      const { z } = await import('zod');
+
+      // Build a single-node graph for this turn
+      const turnGraph = new AgentGraph({
+        input: z.object({ text: z.string(), sessionId: z.string() }),
+        scratch: z.record(z.string(), z.unknown()),
+        artifacts: z.object({ response: z.string() }),
+      })
+        .addNode('respond', gmiNode({
+          instructions: systemPrompt,
+          executionMode: 'react_bounded' as const,
+          maxInternalIterations: policy.maxRounds ?? 5,
+        }))
+        .addEdge(START, 'respond')
+        .addEdge('respond', END)
+        .compile({ validate: false });
+
+      // Execute through real GraphRuntime with streaming events
+      yield* streamWunderlandGraph(turnGraph, { text, sessionId: id }, {
+        llm: {
+          providerId: llm.providerId,
+          apiKey: llm.apiKey,
+          model: llm.model,
+          baseUrl: llm.baseUrl,
+          fallback: llm.fallback as any,
+        },
+        systemPrompt,
+        toolMap,
+        toolContext: { sessionId: id },
+        askPermission,
+        strictToolNames: policy.strictToolNames,
+        debug: policy.debug,
+      });
     };
 
     /**
@@ -973,10 +993,32 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
      * Returns an opaque checkpoint ID that can be passed to {@link resume}.
      */
     const checkpoint: WunderlandSession['checkpoint'] = async () => {
+      const { InMemoryCheckpointStore } = await import('@framers/agentos/orchestration');
       const cpId = `session-${id}-${Date.now()}`;
-      // Deep-copy the current history so future mutations don't corrupt the snapshot.
+      const history = getRawHistory();
+
+      // Save both message history AND session state via ICheckpointStore
+      const store = checkpointStore ?? (checkpointStore = new InMemoryCheckpointStore());
+      await store.save({
+        id: cpId,
+        graphId: `session-${id}`,
+        runId: id,
+        nodeId: 'session',
+        timestamp: Date.now(),
+        state: {
+          input: { sessionId: id },
+          scratch: { messageCount: history.length },
+          artifacts: {},
+          diagnostics: { totalTokensUsed: 0, totalDurationMs: 0, nodeTimings: {}, discoveryResults: {}, guardrailResults: {}, checkpointsSaved: 0, memoryReads: 0, memoryWrites: 0 },
+        },
+        nodeResults: {},
+        visitedNodes: [],
+        pendingEdges: [],
+      });
+
+      // Also save message snapshot for fast restore
       sessionCheckpoints.set(cpId, {
-        messages: getRawHistory().map((m) => ({ ...m })),
+        messages: history.map((m) => ({ ...m })),
         timestamp: Date.now(),
       });
       return cpId;
@@ -984,6 +1026,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 
     /**
      * Restore the session message history from a previously saved checkpoint.
+     * Loads from both the ICheckpointStore and the in-memory message snapshot.
      * Throws a descriptive error if the checkpoint ID is not found.
      */
     const resume: WunderlandSession['resume'] = async (checkpointId) => {
