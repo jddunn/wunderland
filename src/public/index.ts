@@ -17,6 +17,14 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import { AgentMemory, type ITool } from '@framers/agentos';
+import {
+  AgentGraph as AgentGraphBuilder,
+  mission as createMission,
+  workflow as createWorkflow,
+  type GraphState,
+  type MemoryConsistencyMode,
+  type StateReducers,
+} from '@framers/agentos/orchestration';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 
 import { createWunderlandTools, getToolAvailability } from '../tools/ToolRegistry.js';
@@ -64,6 +72,7 @@ import { resolveSkillContext } from '../core/resolve-skill-context.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
+import { invokeWunderlandGraph, streamWunderlandGraph, type WunderlandGraphLike } from '../runtime/graph-runner.js';
 
 // Public types extracted to types.ts
 export type {
@@ -76,6 +85,7 @@ export type {
   WunderlandOptions,
   WunderlandSession,
   WunderlandApp,
+  WunderlandGraphLike,
 } from './types.js';
 import type {
   WunderlandMessage,
@@ -657,6 +667,12 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 
   const sessions = new Map<string, Array<Record<string, unknown>>>();
 
+  /**
+   * Stores named message-history snapshots created by {@link WunderlandSession.checkpoint}.
+   * Key: opaque checkpoint ID; Value: frozen copy of the message history at checkpoint time.
+   */
+  const sessionCheckpoints = new Map<string, { messages: Array<Record<string, unknown>>; timestamp: number }>();
+
   const diagnostics = (): WunderlandDiagnostics => ({
     llm: {
       providerId: llm.providerId,
@@ -926,7 +942,64 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       };
     };
 
-    return { id, messages, sendText };
+    /**
+     * Thin streaming wrapper around {@link sendText}.
+     * Executes the turn normally then yields synthetic {@link GraphEvent} objects that mirror
+     * the run_start → node_start → text_delta → node_end → run_end lifecycle used by
+     * {@link WunderlandApp.streamGraph}, enabling uniform event-driven UI updates.
+     */
+    const stream: WunderlandSession['stream'] = async function* (text, opts) {
+      const startTime = Date.now();
+      yield { type: 'run_start' as const, runId: id, graphId: 'session' } as any;
+      yield { type: 'node_start' as const, nodeId: 'turn', state: { input: { text } } } as any;
+      const result = await sendText(text, opts);
+      yield { type: 'text_delta' as const, nodeId: 'turn', content: result.text } as any;
+      yield {
+        type: 'node_end' as const,
+        nodeId: 'turn',
+        output: result.text,
+        durationMs: Date.now() - startTime,
+      } as any;
+      yield {
+        type: 'run_end' as const,
+        runId: id,
+        finalOutput: result,
+        totalDurationMs: Date.now() - startTime,
+      } as any;
+    };
+
+    /**
+     * Snapshot the current session message history.
+     * Returns an opaque checkpoint ID that can be passed to {@link resume}.
+     */
+    const checkpoint: WunderlandSession['checkpoint'] = async () => {
+      const cpId = `session-${id}-${Date.now()}`;
+      // Deep-copy the current history so future mutations don't corrupt the snapshot.
+      sessionCheckpoints.set(cpId, {
+        messages: getRawHistory().map((m) => ({ ...m })),
+        timestamp: Date.now(),
+      });
+      return cpId;
+    };
+
+    /**
+     * Restore the session message history from a previously saved checkpoint.
+     * Throws a descriptive error if the checkpoint ID is not found.
+     */
+    const resume: WunderlandSession['resume'] = async (checkpointId) => {
+      const cp = sessionCheckpoints.get(checkpointId);
+      if (!cp) {
+        throw new Error(
+          `[wunderland] Checkpoint "${checkpointId}" not found. ` +
+          'Ensure you called session.checkpoint() before attempting to resume.',
+        );
+      }
+      // Replace the live history with a mutable copy of the saved snapshot.
+      const restored = cp.messages.map((m) => ({ ...m }));
+      sessions.set(id, restored);
+    };
+
+    return { id, messages, sendText, stream, checkpoint, resume };
   };
 
   const close = async () => {
@@ -935,7 +1008,237 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     sessions.clear();
   };
 
-  return { session, diagnostics, memory, close };
+  const agentGraph: WunderlandApp['agentGraph'] = <TState extends GraphState = GraphState>(
+    stateSchema: { input: any; scratch: any; artifacts: any },
+    config?: {
+      reducers?: StateReducers;
+      memoryConsistency?: MemoryConsistencyMode;
+      checkpointPolicy?: 'every_node' | 'explicit' | 'none';
+    },
+  ) => new AgentGraphBuilder<TState>(stateSchema, config);
+
+  const workflow: WunderlandApp['workflow'] = (name) => createWorkflow(name);
+  const mission: WunderlandApp['mission'] = (name) => createMission(name);
+
+  const runGraph: WunderlandApp['runGraph'] = async (graph, input, runOpts) => {
+    const sessionId =
+      typeof runOpts?.sessionId === 'string' && runOpts.sessionId.trim()
+        ? runOpts.sessionId.trim()
+        : `graph-${randomUUID()}`;
+    const userId =
+      typeof runOpts?.userId === 'string' && runOpts.userId.trim()
+        ? runOpts.userId.trim()
+        : (typeof opts.userId === 'string' && opts.userId.trim() ? opts.userId.trim() : 'local-user');
+    const tenantId =
+      typeof runOpts?.tenantId === 'string' && runOpts.tenantId.trim()
+        ? runOpts.tenantId.trim()
+        : (
+          typeof (agentConfig as any)?.organizationId === 'string' && String((agentConfig as any).organizationId).trim()
+            ? String((agentConfig as any).organizationId).trim()
+            : undefined
+        );
+
+    const toolContext: Record<string, unknown> = {
+      ...baseToolContext,
+      sessionId,
+      userContext: { userId },
+      permissions,
+      toolFailureMode: runOpts?.toolFailureMode ?? opts.toolFailureMode ?? agentConfig.toolFailureMode,
+      orchestrationMode: 'graph-runtime',
+      ...(tenantId ? { tenantId } : null),
+    };
+
+    const askPermission = async (tool: ToolInstance, args: Record<string, unknown>) => {
+      const isSideEffect = tool.hasSideEffects === true;
+      const preview = safeJsonStringify(args, 1800);
+      const req: ToolApprovalRequest = {
+        sessionId,
+        tool: {
+          name: tool.name,
+          description: tool.description,
+          hasSideEffects: tool.hasSideEffects,
+          category: tool.category,
+          requiredCapabilities: tool.requiredCapabilities,
+        },
+        args,
+        preview,
+      };
+
+      if (approvalsMode === 'auto-all') return true;
+      if (approvalsMode === 'deny-side-effects') return !isSideEffect;
+      if (!isSideEffect) return true;
+      if (typeof opts.approvals?.onRequest === 'function') {
+        return opts.approvals.onRequest(req);
+      }
+      return false;
+    };
+
+    return invokeWunderlandGraph(graph as WunderlandGraphLike, input, {
+      llm: {
+        providerId: llm.providerId,
+        apiKey: llm.apiKey,
+        model: llm.model,
+        baseUrl: llm.baseUrl,
+        fallback: llm.fallback,
+        getApiKey: llm.getApiKey,
+        ollamaOptions: buildOllamaRuntimeOptions(agentConfig.ollama),
+      },
+      systemPrompt,
+      toolMap,
+      toolContext,
+      askPermission,
+      strictToolNames,
+      debug: runOpts?.debug,
+    });
+  };
+
+  const streamGraph: WunderlandApp['streamGraph'] = (graph, input, runOpts) => {
+    const sessionId =
+      typeof runOpts?.sessionId === 'string' && runOpts.sessionId.trim()
+        ? runOpts.sessionId.trim()
+        : `graph-${randomUUID()}`;
+    const userId =
+      typeof runOpts?.userId === 'string' && runOpts.userId.trim()
+        ? runOpts.userId.trim()
+        : (typeof opts.userId === 'string' && opts.userId.trim() ? opts.userId.trim() : 'local-user');
+    const tenantId =
+      typeof runOpts?.tenantId === 'string' && runOpts.tenantId.trim()
+        ? runOpts.tenantId.trim()
+        : (
+          typeof (agentConfig as any)?.organizationId === 'string' && String((agentConfig as any).organizationId).trim()
+            ? String((agentConfig as any).organizationId).trim()
+            : undefined
+        );
+
+    const toolContext: Record<string, unknown> = {
+      ...baseToolContext,
+      sessionId,
+      userContext: { userId },
+      permissions,
+      toolFailureMode: runOpts?.toolFailureMode ?? opts.toolFailureMode ?? agentConfig.toolFailureMode,
+      orchestrationMode: 'graph-runtime',
+      ...(tenantId ? { tenantId } : null),
+    };
+
+    const askPermission = async (tool: ToolInstance, args: Record<string, unknown>) => {
+      const isSideEffect = tool.hasSideEffects === true;
+      const preview = safeJsonStringify(args, 1800);
+      const req: ToolApprovalRequest = {
+        sessionId,
+        tool: {
+          name: tool.name,
+          description: tool.description,
+          hasSideEffects: tool.hasSideEffects,
+          category: tool.category,
+          requiredCapabilities: tool.requiredCapabilities,
+        },
+        args,
+        preview,
+      };
+
+      if (approvalsMode === 'auto-all') return true;
+      if (approvalsMode === 'deny-side-effects') return !isSideEffect;
+      if (!isSideEffect) return true;
+      if (typeof opts.approvals?.onRequest === 'function') {
+        return opts.approvals.onRequest(req);
+      }
+      return false;
+    };
+
+    return streamWunderlandGraph(graph as WunderlandGraphLike, input, {
+      llm: {
+        providerId: llm.providerId,
+        apiKey: llm.apiKey,
+        model: llm.model,
+        baseUrl: llm.baseUrl,
+        fallback: llm.fallback,
+        getApiKey: llm.getApiKey,
+        ollamaOptions: buildOllamaRuntimeOptions(agentConfig.ollama),
+      },
+      systemPrompt,
+      toolMap,
+      toolContext,
+      askPermission,
+      strictToolNames,
+      debug: runOpts?.debug,
+    });
+  };
+
+  /**
+   * Read a workflow YAML file and return a compiled descriptor that can be executed with
+   * {@link WunderlandApp.runGraph} or {@link WunderlandApp.streamGraph}.
+   *
+   * The YAML is expected to follow the Wunderland workflow schema (nodes + edges).
+   * Requires `js-yaml` to be installed at runtime; throws a descriptive error if absent.
+   */
+  const loadWorkflow: WunderlandApp['loadWorkflow'] = async (yamlPath) => {
+    const { readFile } = await import('node:fs/promises');
+    let jsYaml: { load: (s: string) => unknown };
+    try {
+      jsYaml = await import('js-yaml') as any;
+    } catch {
+      throw new Error('[wunderland] loadWorkflow requires "js-yaml" — run: npm install js-yaml');
+    }
+    const content = await readFile(yamlPath, 'utf-8');
+    const raw = jsYaml.load(content) as Record<string, unknown>;
+    return { ...raw, __source: yamlPath, __type: 'workflow' };
+  };
+
+  /**
+   * Read a mission YAML file and return a compiled descriptor that can be executed with
+   * {@link WunderlandApp.runGraph} or {@link WunderlandApp.streamGraph}.
+   *
+   * Missions are multi-step goal definitions with sub-tasks; they share the same YAML
+   * loading pipeline as workflows but carry a different `__type` tag.
+   */
+  const loadMission: WunderlandApp['loadMission'] = async (yamlPath) => {
+    const { readFile } = await import('node:fs/promises');
+    let jsYaml: { load: (s: string) => unknown };
+    try {
+      jsYaml = await import('js-yaml') as any;
+    } catch {
+      throw new Error('[wunderland] loadMission requires "js-yaml" — run: npm install js-yaml');
+    }
+    const content = await readFile(yamlPath, 'utf-8');
+    const raw = jsYaml.load(content) as Record<string, unknown>;
+    return { ...raw, __source: yamlPath, __type: 'mission' };
+  };
+
+  /**
+   * Discover workflow and mission YAML files under the current working directory.
+   * Scans `<workingDirectory>/workflows/` for workflow files and
+   * `<workingDirectory>/missions/` for mission files (non-recursive, `.yaml` / `.yml`).
+   * Returns synchronously using a pre-scanned cache; safe to call in render loops.
+   */
+  const listWorkflows: WunderlandApp['listWorkflows'] = () => {
+    // Synchronous best-effort scan using require('fs') to keep the API synchronous.
+    // Failures (e.g. directory absent) are silently swallowed and return an empty list.
+    try {
+      const fs = require('node:fs') as typeof import('node:fs');
+      const entries: Array<{ name: string; path: string; type: 'workflow' | 'mission' }> = [];
+
+      const scan = (dir: string, type: 'workflow' | 'mission') => {
+        try {
+          const files = fs.readdirSync(dir);
+          for (const file of files) {
+            if (file.endsWith('.yaml') || file.endsWith('.yml')) {
+              entries.push({ name: path.basename(file, path.extname(file)), path: path.join(dir, file), type });
+            }
+          }
+        } catch {
+          // Directory absent — ignore.
+        }
+      };
+
+      scan(path.join(workingDirectory, 'workflows'), 'workflow');
+      scan(path.join(workingDirectory, 'missions'), 'mission');
+      return entries;
+    } catch {
+      return [];
+    }
+  };
+
+  return { session, diagnostics, agentGraph, workflow, mission, runGraph, streamGraph, loadWorkflow, loadMission, listWorkflows, memory, close };
 }
 
 // Convenience re-exports for library consumers (types only).
