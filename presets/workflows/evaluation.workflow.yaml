@@ -1,0 +1,21 @@
+name: evaluation
+description: "LLM-as-judge evaluation harness"
+input:
+  content: { type: string, required: true }
+  rubric: { type: string, required: true }
+returns:
+  scores: { type: object }
+  passed: { type: boolean }
+steps:
+  - id: judge-1
+    gmi:
+      instructions: "As Judge 1, score the content against the rubric. Output JSON scores."
+      executionMode: single_turn
+  - id: judge-2
+    gmi:
+      instructions: "As Judge 2 (independent), score the content against the rubric. Output JSON scores."
+      executionMode: single_turn
+  - id: aggregate
+    gmi:
+      instructions: "Average the two judges' scores. Output final scores and whether it passed (all >= 7)."
+      executionMode: single_turn
