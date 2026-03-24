@@ -3,10 +3,40 @@
  * @module wunderland/cli/commands/workflows
  */
 
+import { existsSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+
 import type { GlobalFlags } from '../types.js';
 import { accent, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+
+const LOCAL_WORKFLOW_DIRS = ['workflows', 'missions', 'orchestration'];
+const WORKFLOW_FILE_EXTENSIONS = ['.mjs', '.js', '.ts', '.workflow.json', '.mission.json', '.workflow.yaml', '.workflow.yml', '.mission.yaml', '.mission.yml'];
+const BUNDLED_EXAMPLES = [
+  'examples/workflow-orchestration.mjs',
+  'examples/agent-graph-orchestration.mjs',
+  'examples/mission-orchestration.mjs',
+];
+
+function findWorkflowDefinitions(cwd: string): string[] {
+  const found = new Set<string>();
+
+  for (const dir of LOCAL_WORKFLOW_DIRS) {
+    const absDir = path.join(cwd, dir);
+    if (!existsSync(absDir)) continue;
+
+    for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const fullPath = path.join(absDir, entry.name);
+      if (WORKFLOW_FILE_EXTENSIONS.some((ext) => entry.name.endsWith(ext))) {
+        found.add(path.relative(cwd, fullPath));
+      }
+    }
+  }
+
+  return [...found].sort();
+}
 
 export default async function cmdWorkflows(
   args: string[],
@@ -21,26 +51,76 @@ export default async function cmdWorkflows(
     fmt.section('wunderland workflows');
     console.log(`
   ${accent('Subcommands:')}
-    ${dim('list')}                List workflow definitions
-    ${dim('run <name>')}          Execute a workflow
-    ${dim('status <id>')}         Check workflow instance status
-    ${dim('cancel <id>')}         Cancel a running workflow
+    ${dim('list')}                 List local workflow/mission definition files
+    ${dim('examples')}             Show bundled orchestration examples
+    ${dim('run <file>')}            Compile and preview a workflow YAML file
+    ${dim('explain <file>')}       Show the compiled node/edge graph for a workflow
+    ${dim('status <id>')}          Check workflow instance status
+    ${dim('cancel <id>')}          Cancel a running workflow
 
   ${accent('Flags:')}
     ${dim('--format json|table')}  Output format
 `);
+    fmt.note(`Author graphs with ${accent(`import { workflow, mission, AgentGraph } from 'wunderland/workflows'`)}.`);
+    fmt.note(`Execute compiled graphs in-process with ${accent('createWunderland().runGraph(...)')}.`);
     return;
   }
 
   try {
     if (sub === 'list') {
       fmt.section('Workflows');
-      fmt.note('No workflow definitions found. Define workflows in your agent configuration.');
+      const definitions = findWorkflowDefinitions(process.cwd());
+      if (definitions.length === 0) {
+        fmt.note('No local workflow definition files found.');
+        fmt.note(`Create ${accent('workflows/')} or ${accent('missions/')} and see ${accent('wunderland help workflows')}.`);
+      } else {
+        for (const definition of definitions) {
+          console.log(`  ${accent('•')} ${definition}`);
+        }
+      }
       fmt.blank();
+    } else if (sub === 'examples') {
+      fmt.section('Bundled Orchestration Examples');
+      for (const example of BUNDLED_EXAMPLES) {
+        console.log(`  ${accent('•')} ${example}`);
+      }
+      fmt.blank();
+      fmt.note(`Use ${accent('wunderland help workflows')} for authoring guidance.`);
     } else if (sub === 'run') {
-      const name = args[1];
-      if (!name) { fmt.errorBlock('Missing name', 'Usage: wunderland workflows run <name>'); process.exitCode = 1; return; }
-      fmt.note(`Workflow execution requires a running backend with workflow engine enabled.`);
+      const target = args[1];
+      if (!target) { fmt.errorBlock('Missing file', 'Usage: wunderland workflows run <file>'); process.exitCode = 1; return; }
+      const { readFile } = await import('node:fs/promises');
+      const { resolve } = await import('node:path');
+      const { compileWorkflowYaml } = await import('../../orchestration/yaml-compiler.js');
+
+      const yamlPath = resolve(process.cwd(), target);
+      const content = await readFile(yamlPath, 'utf-8');
+      const compiled = compileWorkflowYaml(content);
+      const ir = compiled.toIR();
+      console.log(`\n  Workflow: ${ir.name}`);
+      console.log(`  Nodes: ${ir.nodes.length}, Edges: ${ir.edges.length}`);
+      console.log(`  Status: compiled successfully\n`);
+      // Full execution would need runtime config — for now show the compiled graph
+    } else if (sub === 'explain') {
+      const target = args[1];
+      if (!target) { fmt.errorBlock('Missing file', 'Usage: wunderland workflows explain <file>'); process.exitCode = 1; return; }
+      const { readFile } = await import('node:fs/promises');
+      const { resolve } = await import('node:path');
+      const { compileWorkflowYaml } = await import('../../orchestration/yaml-compiler.js');
+
+      const yamlPath = resolve(process.cwd(), target);
+      const content = await readFile(yamlPath, 'utf-8');
+      const compiled = compileWorkflowYaml(content);
+      const ir = compiled.toIR();
+      console.log(`\n  Workflow: ${ir.name}\n`);
+      for (const node of ir.nodes) {
+        console.log(`  ├── ${node.id} (${node.type})`);
+      }
+      console.log(`\n  Edges:`);
+      for (const edge of ir.edges) {
+        console.log(`  ${edge.source} → ${edge.target} [${edge.type}]`);
+      }
+      console.log();
     } else if (sub === 'status') {
       const id = args[1];
       if (!id) { fmt.errorBlock('Missing ID', 'Usage: wunderland workflows status <id>'); process.exitCode = 1; return; }

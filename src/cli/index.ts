@@ -347,9 +347,9 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     examples: ['wunderland agency list', 'wunderland agency create ops-team'],
   },
   workflows: {
-    summary: 'Run or inspect workflow executions.',
-    usage: ['wunderland workflows [list|run|status|cancel] [options]'],
-    examples: ['wunderland workflows list', 'wunderland workflows run nightly-summary'],
+    summary: 'Discover orchestration files and inspect workflow executions.',
+    usage: ['wunderland workflows [list|examples|run|status|cancel] [options]'],
+    examples: ['wunderland workflows list', 'wunderland workflows examples', 'wunderland help workflows'],
   },
   evaluate: {
     summary: 'Run evaluation datasets and inspect results.',
@@ -487,6 +487,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   rag:            () => import('./commands/rag.js'),
   agency:         () => import('./commands/agency.js'),
   workflows:      () => import('./commands/workflows.js'),
+  mission:        () => import('./commands/mission.js'),
   evaluate:       () => import('./commands/evaluate.js'),
   provenance:     () => import('./commands/provenance.js'),
   knowledge:      () => import('./commands/knowledge.js'),
