@@ -1,0 +1,19 @@
+name: research-pipeline
+description: "Multi-source research with quality scoring"
+input:
+  topic: { type: string, required: true }
+returns:
+  summary: { type: string }
+  sources: { type: array, items: { type: string } }
+steps:
+  - id: search
+    tool: web_search
+    effectClass: external
+  - id: evaluate
+    gmi:
+      instructions: "Evaluate source quality. Assign a confidence score 0-1 to scratch.confidence"
+      executionMode: single_turn
+  - id: summarize
+    gmi:
+      instructions: "Write a cited summary from the evaluated sources"
+      executionMode: single_turn

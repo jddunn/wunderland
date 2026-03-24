@@ -1,0 +1,14 @@
+name: report-writer
+description: "Generate a structured report with human review"
+goal: "Write a comprehensive report on {topic} with executive summary, key findings, and recommendations"
+input:
+  topic: { type: string, required: true }
+  audience: { type: string, default: "executive" }
+returns:
+  report: { type: string }
+  executive_summary: { type: string }
+planner:
+  strategy: linear
+  maxSteps: 10
+policy:
+  guardrails: [pii-redaction]
