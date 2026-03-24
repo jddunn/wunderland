@@ -29,6 +29,14 @@ export {
   buildAgenticSystemPrompt as buildSystemPrompt,
 } from './system-prompt-builder.js';
 export { runToolCallingTurn, safeJsonStringify, type ToolInstance } from './tool-calling.js';
+export {
+  createWunderlandGraphRuntime,
+  invokeWunderlandGraph,
+  streamWunderlandGraph,
+  resolveCompiledGraph,
+  type WunderlandGraphLike,
+  type WunderlandGraphRunConfig,
+} from './graph-runner.js';
 export { ToolFailureLearner } from './tool-failure-learner.js';
 export { TOOL_FALLBACK_MAP } from './tool-helpers.js';
 export {

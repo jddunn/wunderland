@@ -39,11 +39,22 @@ import {
   LoopController,
   type LoopConfig,
   type LoopContext,
-  type LoopEvent,
-  type ToolCallRequest as LoopToolCallRequest,
-  type ToolCallResult,
 } from '@framers/agentos/orchestration';
 import { wrapLLMAsGenerator } from './llm-stream-adapter.js';
+
+type LoopToolCallRequest = {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+};
+
+type ToolCallResult = {
+  id: string;
+  name: string;
+  success: boolean;
+  output?: unknown;
+  error?: string;
+};
 
 const tracer = trace.getTracer('wunderland.runtime');
 
