@@ -35,6 +35,15 @@ import {
   resolveToolMapKeyFromFunctionName,
   sanitizeToolDefsForProvider,
 } from './tool-function-names.js';
+import {
+  LoopController,
+  type LoopConfig,
+  type LoopContext,
+  type LoopEvent,
+  type ToolCallRequest as LoopToolCallRequest,
+  type ToolCallResult,
+} from '@framers/agentos/orchestration';
+import { wrapLLMAsGenerator } from './llm-stream-adapter.js';
 
 const tracer = trace.getTracer('wunderland.runtime');
 
@@ -263,12 +272,534 @@ export async function runToolCallingTurn(opts: {
         })()
       : null;
 
-  for (let round = 0; round < rounds; round += 1) {
-    const roundToolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> = [];
-    const turnResult = await withSpan<string | null>(
-      'wunderland.turn',
-      { round, has_tools: opts.toolMap.size > 0 },
-      async () => {
+  // ---------------------------------------------------------------------------
+  // Extracted helper: callLLMForTurn
+  // Performs the provider-specific LLM call with OTel instrumentation, fallback
+  // tracking, and debug logging. Returns the raw OpenAI-compatible response
+  // (wrapped in { choices: [{ message, finish_reason }] } shape for the
+  // wrapLLMAsGenerator adapter).
+  // ---------------------------------------------------------------------------
+  const callLLMForTurn = async (
+    round: number,
+    toolDefs: Array<Record<string, unknown>>,
+  ): Promise<unknown> => {
+    let fallbackTriggered = false;
+    let fallbackProvider = '';
+
+    const invoke = async () => {
+      if (providerId === 'ollama') {
+        const provider = await ollamaProviderPromise!;
+        const result = await provider.generateCompletion(
+          opts.model,
+          opts.messages as any,
+          {
+            temperature: 0.2,
+            maxTokens: 1400,
+            tools: toolDefs,
+            customModelParams: opts.ollamaOptions,
+          },
+        );
+        const message = result.choices?.[0]?.message;
+        if (!message) {
+          throw new Error('Ollama returned an empty response.');
+        }
+        return {
+          message,
+          model: result.modelId || opts.model,
+          usage: {
+            prompt_tokens: result.usage?.promptTokens,
+            completion_tokens: result.usage?.completionTokens,
+            total_tokens: result.usage?.totalTokens,
+            costUSD: result.usage?.costUSD,
+          },
+          provider: 'Ollama',
+        };
+      }
+
+      if (providerId === 'anthropic') {
+        const anthropicApiKey = await resolveApiKeyInput(
+          opts.getApiKey ? opts.getApiKey : opts.apiKey,
+          { source: 'Anthropic Messages API' },
+        );
+        const payload = toAnthropicMessagePayload(opts.messages);
+        return await anthropicMessagesRequest({
+          apiKey: anthropicApiKey,
+          model: opts.model,
+          system: payload.system,
+          messages: payload.messages,
+          tools: toAnthropicTools(toolDefs),
+          temperature: 0.2,
+          maxTokens: 1400,
+        });
+      }
+
+      return await openaiChatWithTools({
+        apiKey: opts.apiKey,
+        model: opts.model,
+        messages: opts.messages,
+        tools: toolDefs,
+        temperature: 0.2,
+        maxTokens: 1400,
+        baseUrl: opts.baseUrl,
+        fallback: opts.fallback,
+        onFallback: (primaryError, providerName) => {
+          fallbackTriggered = true;
+          fallbackProvider = providerName;
+          opts.onFallback?.(primaryError, providerName);
+        },
+        getApiKey: opts.getApiKey,
+      });
+    };
+
+    const llmResult = !isWunderlandOtelEnabled()
+      ? await invoke()
+      : await tracer.startActiveSpan(
+          'wunderland.llm.chat_completions',
+          { attributes: { round, tools_count: toolDefs.length, provider: providerId } },
+          async (span) => {
+            try {
+              const res = await invoke();
+
+              try {
+                span.setAttribute('provider', res.provider);
+                span.setAttribute('model', res.model);
+                span.setAttribute('llm.fallback.used', fallbackTriggered);
+                if (fallbackTriggered) span.setAttribute('llm.fallback.provider', fallbackProvider);
+              } catch {
+                // ignore
+              }
+
+              // Best-effort: attach token usage as safe span attributes (no content).
+              try {
+                const u: any = res.usage && typeof res.usage === 'object' ? res.usage : null;
+                const total = typeof u?.total_tokens === 'number' ? u.total_tokens : undefined;
+                const prompt = typeof u?.prompt_tokens === 'number' ? u.prompt_tokens : undefined;
+                const completion = typeof u?.completion_tokens === 'number' ? u.completion_tokens : undefined;
+                if (typeof total === 'number') span.setAttribute('llm.usage.total_tokens', total);
+                if (typeof prompt === 'number') span.setAttribute('llm.usage.prompt_tokens', prompt);
+                if (typeof completion === 'number') span.setAttribute('llm.usage.completion_tokens', completion);
+              } catch {
+                // ignore
+              }
+
+              return res;
+            } catch (error) {
+              try {
+                span.recordException(error as any);
+              } catch {
+                // ignore
+              }
+              try {
+                span.setStatus({
+                  code: SpanStatusCode.ERROR,
+                  message: error instanceof Error ? error.message : String(error),
+                });
+              } catch {
+                // ignore
+              }
+              throw error;
+            } finally {
+              span.end();
+            }
+          },
+        );
+
+    // Re-wrap into standard { choices: [{ message, finish_reason }] } shape
+    // so wrapLLMAsGenerator can consume it uniformly.
+    return {
+      choices: [{
+        message: (llmResult as any).message,
+        finish_reason: (llmResult as any).message?.tool_calls?.length ? 'tool_calls' : 'stop',
+      }],
+    };
+  };
+
+  // ---------------------------------------------------------------------------
+  // Extracted helper: executeToolWithContext
+  // Handles tool-name rewriting resolution, step-up auth, guardrails,
+  // content security, fallback suggestions, telemetry, and message pushing.
+  // Returns a ToolCallResult. On fail_closed abort, sets the earlyReturn
+  // sentinel so the outer loop terminates.
+  // ---------------------------------------------------------------------------
+
+  /** Sentinel: when set to a non-null string, the outer loop returns this value. */
+  let earlyReturn: string | null = null;
+  /** Set to true after addToolResults; consumed by the next generateStream call. */
+  let pendingCheckpoint = false;
+
+  /**
+   * Per-round state shared between generateStream and executeTool callbacks.
+   * Reset at the top of each LoopController iteration via the generateStream wrapper.
+   */
+  let currentRound = 0;
+  let currentNameMapping: ReturnType<typeof buildToolFunctionNameMapping> | null = null;
+  let currentSanitizedDefs: ReturnType<typeof sanitizeToolDefsForProvider> | null = null;
+  const roundToolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> = [];
+
+  const executeToolWithContext = async (tc: LoopToolCallRequest): Promise<ToolCallResult> => {
+    const round = currentRound;
+    const nameMapping = currentNameMapping!;
+    const sanitizedDefs = currentSanitizedDefs!;
+
+    const maybeFailClosed = (reason: string): string | null => {
+      if (!failClosedOnToolFailure) return null;
+      const reply = `[tool_failure_mode=fail_closed] ${reason}`;
+      opts.messages.push({ role: 'assistant', content: reply });
+      return reply;
+    };
+
+    const requestedToolName = tc.name;
+    const callId = tc.id;
+
+    // Malformed tool call guard (shouldn't happen with wrapLLMAsGenerator, but be safe)
+    if (!requestedToolName) {
+      opts.messages.push({ role: 'tool', tool_call_id: callId, content: JSON.stringify({ error: 'Malformed tool call.' }) });
+      const failReply = maybeFailClosed('Malformed tool call returned by model.');
+      if (failReply) { earlyReturn = failReply; }
+      return { id: callId, name: requestedToolName || 'unknown', success: false, error: 'Malformed tool call.' };
+    }
+
+    const resolvedToolKey = resolveToolMapKeyFromFunctionName({
+      functionName: requestedToolName,
+      toolMap: opts.toolMap,
+      mapping: nameMapping,
+      sanitizedAliasByName: sanitizedDefs.aliasBySanitizedName,
+    });
+    const tool = resolvedToolKey ? opts.toolMap.get(resolvedToolKey) : undefined;
+    if (!tool) {
+      emitOtelLog({
+        name: 'wunderland.runtime',
+        body: 'tool_lookup_miss',
+        severity: SeverityNumber.WARN,
+        attributes: { requested_tool_name: requestedToolName, round },
+      });
+      opts.messages.push({ role: 'tool', tool_call_id: callId, content: JSON.stringify({ error: `Tool not found: ${requestedToolName}` }) });
+      const failReply = maybeFailClosed(`Tool not found: ${requestedToolName}.`);
+      if (failReply) { earlyReturn = failReply; }
+      return { id: callId, name: requestedToolName, success: false, error: `Tool not found: ${requestedToolName}` };
+    }
+
+    const toolName = tool.name || resolvedToolKey || requestedToolName;
+    const args = tc.arguments;
+
+    roundToolCalls.push({ toolName, hasSideEffects: tool.hasSideEffects === true, args });
+
+    if (opts.onToolCall) {
+      try {
+        opts.onToolCall(tool, args);
+      } catch {
+        // ignore logging hook errors
+      }
+    }
+
+    // ── Unified authorization (single prompt path, not three) ──────────
+    let hitlApprovedThisCall = false;
+    {
+      const authResult = await authManager.authorize({
+        tool: toAuthorizableTool(tool),
+        args,
+        context: {
+          userId: String(opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
+            ? (opts.toolContext['userContext'] as Record<string, unknown>)?.['userId'] ?? 'cli-user'
+            : 'cli-user'),
+          sessionId: String(opts.toolContext?.['gmiId'] ?? 'cli'),
+          gmiId: String(opts.toolContext?.['personaId'] ?? 'cli'),
+        },
+        timestamp: new Date(),
+      });
+
+      if (!authResult.authorized) {
+        if (authResult.tier === ToolRiskTier.TIER_3_SYNC_HITL && !opts.dangerouslySkipPermissions) {
+          const ok = await opts.askPermission(tool, args);
+          if (!ok) {
+            const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
+            opts.messages.push({
+              role: 'tool',
+              tool_call_id: callId,
+              content: shouldWrapToolOutputs
+                ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: callId, includeWarning: false })
+                : denial,
+            });
+            const failReply = maybeFailClosed(`Permission denied for tool: ${toolName}.`);
+            if (failReply) { earlyReturn = failReply; }
+            return { id: callId, name: toolName, success: false, error: `Permission denied for tool: ${toolName}` };
+          }
+          hitlApprovedThisCall = true;
+        } else if (!opts.dangerouslySkipPermissions) {
+          const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
+          opts.messages.push({
+            role: 'tool',
+            tool_call_id: callId,
+            content: shouldWrapToolOutputs
+              ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: callId, includeWarning: false })
+              : denial,
+          });
+          const failReply = maybeFailClosed(`Permission denied for tool: ${toolName}.`);
+          if (failReply) { earlyReturn = failReply; }
+          return { id: callId, name: toolName, success: false, error: `Permission denied for tool: ${toolName}` };
+        }
+      }
+      // Tier 1 / Tier 2: authorized — no prompt needed
+    }
+
+    // Build per-call tool context with progress callback if provided.
+    const callToolContext: Record<string, unknown> = opts.onToolProgress
+      ? { ...opts.toolContext, onToolProgress: (info: { phase: string; message: string; progress?: number }) => {
+          try { opts.onToolProgress!({ toolName, ...info }); } catch { /* ignore */ }
+        } }
+      : opts.toolContext;
+
+    const start = Date.now();
+    let result: { success: boolean; output?: unknown; error?: string };
+    try {
+      result = await withSpan(
+        'wunderland.tool.execute',
+        {
+          tool_name: toolName,
+          tool_category: tool.category ?? '',
+          tool_has_side_effects: tool.hasSideEffects === true,
+          authorized: true,
+        },
+        async () => {
+          // Pre-check: file_read on directories should fail-fast without permission prompts
+          if (tool.name === 'file_read') {
+            const readPath = (args as any).path || (args as any).file_path || (args as any).filePath;
+            if (typeof readPath === 'string') {
+              try {
+                const fsp = await import('node:fs/promises');
+                const s = await fsp.stat(path.resolve(readPath));
+                if (s.isDirectory()) {
+                  return {
+                    success: false,
+                    error: `"${readPath}" is a directory, not a file. Use list_directory to view directory contents.`,
+                  };
+                }
+              } catch { /* path doesn't exist — let normal flow handle */ }
+            }
+          }
+
+          // Safe Guardrails validation
+          const guardrails = getGuardrails();
+          const agentId = getAgentIdForGuardrails(opts.toolContext);
+          const guardrailsCheck = await guardrails.validateBeforeExecution({
+            toolId: resolvedToolKey || tool.name,
+            toolName: tool.name,
+            args,
+            agentId,
+            userId: (opts.toolContext.userContext as any)?.userId,
+            sessionId: opts.toolContext.sessionId as string | undefined,
+            workingDirectory: getAgentWorkspaceDirFromContext(opts.toolContext, agentId),
+            tool: tool as any,
+          });
+
+          if (!guardrailsCheck.allowed) {
+            // Attempt automatic permission escalation via HITL
+            const deniedPaths = (guardrailsCheck.violations || [])
+              .map(v => v.attemptedPath)
+              .filter((p): p is string => !!p);
+            const allEscalatable = deniedPaths.length > 0 && deniedPaths.every(p => guardrails.isEscalatable(p));
+
+            if (allEscalatable) {
+              const operation = deniedPaths.length > 0 ? (guardrailsCheck.violations?.[0]?.operation || tool.name) : tool.name;
+              const isWrite = operation.includes('write') || operation.includes('delete') || operation.includes('append');
+
+              const autoGrant = hitlApprovedThisCall || opts.dangerouslySkipPermissions;
+              const approved = autoGrant || (opts.askPermission
+                ? await opts.askPermission(
+                    { ...tool, name: `folder_access:${tool.name}`, description: `Grant ${isWrite ? 'write' : 'read'} access to: ${deniedPaths.join(', ')}` } as ToolInstance,
+                    { paths: deniedPaths, operation: isWrite ? 'write' : 'read', originalTool: tool.name },
+                  )
+                : false);
+
+              if (approved) {
+                for (const p of deniedPaths) {
+                  const dir = p.endsWith('/') ? p : path.dirname(p);
+                  guardrails.addFolderRule(agentId, {
+                    pattern: `${dir}/**`,
+                    read: true,
+                    write: isWrite,
+                    description: `Granted at runtime for ${tool.name}`,
+                  });
+
+                  const shellSvc = (tool as any).shellService;
+                  if (shellSvc && typeof shellSvc.addReadRoot === 'function') {
+                    shellSvc.addReadRoot(dir);
+                    if (isWrite) {
+                      shellSvc.addWriteRoot(dir);
+                    }
+                  }
+                }
+                return await tool.execute(args, callToolContext);
+              }
+            }
+
+            return {
+              success: false,
+              error: guardrailsCheck.reason,
+              output: {
+                violations: guardrailsCheck.violations,
+                canRequestAccess: allEscalatable,
+              },
+            };
+          }
+
+          return await tool.execute(args, callToolContext);
+        },
+      );
+    } catch (err) {
+      const durationMs = Math.max(0, Date.now() - start);
+      emitOtelLog({
+        name: 'wunderland.runtime',
+        body: `tool_execute_error:${toolName}`,
+        severity: SeverityNumber.ERROR,
+        attributes: { tool_name: toolName, duration_ms: durationMs, round },
+      });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (opts.onToolResult) {
+        try {
+          opts.onToolResult({ toolName, args, success: false, error: errMsg, durationMs });
+        } catch { /* ignore */ }
+      }
+      let apiKeyGuidance: string | undefined;
+      try {
+        const registry = await import('@framers/agentos-extensions-registry');
+        const getApiKeyGuidance = (registry as any).getApiKeyGuidance;
+        if (typeof getApiKeyGuidance === 'function') apiKeyGuidance = getApiKeyGuidance(errMsg, toolName) ?? undefined;
+      } catch { /* best-effort */ }
+      const fallbacks = TOOL_FALLBACK_MAP[toolName];
+      const availableFallbacks = fallbacks?.filter(f => opts.toolMap?.has(f));
+      opts.messages.push({
+        role: 'tool',
+        tool_call_id: callId,
+        content: JSON.stringify({
+          error: `Tool threw: ${errMsg}`,
+          ...(apiKeyGuidance ? { apiKeyGuidance } : null),
+          ...(availableFallbacks?.length ? { suggestedFallbacks: availableFallbacks } : null),
+        }),
+      });
+      const failReply = maybeFailClosed(`Tool ${toolName} threw: ${errMsg}`);
+      if (failReply) { earlyReturn = failReply; }
+      return { id: callId, name: toolName, success: false, error: errMsg };
+    }
+
+    const durationMs = Math.max(0, Date.now() - start);
+    emitOtelLog({
+      name: 'wunderland.runtime',
+      body: `tool_execute:${toolName}`,
+      severity: SeverityNumber.INFO,
+      attributes: { tool_name: toolName, success: result?.success === true, duration_ms: durationMs, round },
+    });
+
+    if (opts.onToolResult) {
+      try {
+        opts.onToolResult({
+          toolName,
+          args,
+          success: result?.success === true,
+          error: result?.success ? undefined : (result?.error || 'Tool failed'),
+          durationMs,
+        });
+      } catch { /* ignore callback errors */ }
+    }
+
+    let payload: unknown;
+    if (result?.success) {
+      payload = redactToolOutputForLLM(result.output);
+      const emptyFallbacks = TOOL_FALLBACK_MAP[toolName];
+      const availableEmptyFallbacks = emptyFallbacks?.filter(f => opts.toolMap?.has(f));
+      if (availableEmptyFallbacks?.length && isEmptySearchResult(result.output)) {
+        payload = {
+          ...((typeof payload === 'object' && payload) || { output: payload }),
+          suggestedFallbacks: availableEmptyFallbacks,
+          hint: 'Search returned 0 results. Try the suggested fallback tools.',
+        };
+      }
+    } else {
+      const errorMsg = result?.error || 'Tool failed';
+      let apiKeyHint: string | undefined;
+      try {
+        const registry = await import('@framers/agentos-extensions-registry');
+        const getApiKeyGuidance = (registry as any).getApiKeyGuidance;
+        if (typeof getApiKeyGuidance === 'function') apiKeyHint = getApiKeyGuidance(errorMsg, toolName) ?? undefined;
+      } catch { /* best-effort */ }
+      const fallbacksOnFail = TOOL_FALLBACK_MAP[toolName];
+      const availableFallbacksOnFail = fallbacksOnFail?.filter(f => opts.toolMap?.has(f));
+      payload = {
+        error: errorMsg,
+        ...(apiKeyHint ? { apiKeyGuidance: apiKeyHint } : null),
+        ...(availableFallbacksOnFail?.length ? { suggestedFallbacks: availableFallbacksOnFail } : null),
+      };
+    }
+    const json = safeJsonStringify(payload, 20000);
+    if (debugMode) {
+      console.log(`[tool-calling] Tool ${toolName} result: success=${result?.success}, output=${json.slice(0, 300)}`);
+    }
+    const content = shouldWrapToolOutputs
+      ? wrapUntrustedToolOutput(json, { toolName, toolCallId: callId, includeWarning: true })
+      : json;
+    opts.messages.push({ role: 'tool', tool_call_id: callId, content });
+
+    if (!result?.success) {
+      const failReply = maybeFailClosed(`Tool ${toolName} failed: ${result?.error || 'Tool failed'}`);
+      if (failReply) { earlyReturn = failReply; }
+    }
+
+    return {
+      id: callId,
+      name: toolName,
+      success: result?.success === true,
+      output: result?.output,
+      error: result?.success ? undefined : (result?.error || 'Tool failed'),
+    };
+  };
+
+  // ---------------------------------------------------------------------------
+  // Main loop: LoopController-driven ReAct cycle
+  // ---------------------------------------------------------------------------
+  const controller = new LoopController();
+  const loopConfig: LoopConfig = {
+    maxIterations: rounds,
+    parallelTools: false,
+    failureMode: toolFailureMode,
+  };
+
+  /** Tracks the final text response across rounds for the return value. */
+  let finalText = '';
+  /** Accumulates text within a single round (reset when tool_call_request arrives). */
+  let pendingText = '';
+
+  const loopContext: LoopContext = {
+    generateStream: () => {
+      // We return an async generator that:
+      // 1. Fires the per-round checkpoint from the previous round (async, awaitable)
+      // 2. Builds tool name mappings for this round
+      // 3. Delegates to wrapLLMAsGenerator for the actual LLM call
+      const self = (async function* (): AsyncGenerator<
+        import('./llm-stream-adapter.js').LoopChunk,
+        import('./llm-stream-adapter.js').LoopOutput,
+        undefined
+      > {
+        // Fire the per-round checkpoint from the previous round (if any).
+        // addToolResults is synchronous so checkpoint must be deferred here.
+        if (pendingCheckpoint && requireCheckpointAfterRound && earlyReturn === null) {
+          const ok = await opts.askCheckpoint!({ round: currentRound, toolCalls: [...roundToolCalls] });
+          if (!ok) {
+            earlyReturn = '[HITL] Paused by operator.';
+          }
+        }
+        pendingCheckpoint = false;
+        currentRound++;
+
+        if (earlyReturn !== null) {
+          // Checkpoint rejected — return empty output to terminate the loop.
+          return { responseText: '', toolCalls: [], finishReason: 'stop' };
+        }
+
+        // Reset per-round state.
+        const round = currentRound - 1;
+        roundToolCalls.length = 0;
+
+        // Build tool name mapping and defs for this round.
         const nameMapping = buildToolFunctionNameMapping(opts.toolMap);
         if (nameMapping.rewrites.length > 0) {
           const summary = formatToolNameRewriteSummary(nameMapping.rewrites);
@@ -340,526 +871,128 @@ export async function runToolCallingTurn(opts: {
           }
         }
 
+        // Stash for executeTool to reference.
+        currentNameMapping = nameMapping;
+        currentSanitizedDefs = sanitizedDefs;
+
         const toolDefs = sanitizedDefs.toolDefs;
 
-        // LLM call span (safe metadata only; no prompt/output content).
-        let fallbackTriggered = false;
-        let fallbackProvider = '';
-
-        const invoke = async () => {
-          if (providerId === 'ollama') {
-            const provider = await ollamaProviderPromise!;
-            const result = await provider.generateCompletion(
-              opts.model,
-              opts.messages as any,
-              {
-                temperature: 0.2,
-                maxTokens: 1400,
-                tools: toolDefs,
-                customModelParams: opts.ollamaOptions,
-              },
-            );
-            const message = result.choices?.[0]?.message;
-            if (!message) {
-              throw new Error('Ollama returned an empty response.');
-            }
-            return {
-              message,
-              model: result.modelId || opts.model,
-              usage: {
-                prompt_tokens: result.usage?.promptTokens,
-                completion_tokens: result.usage?.completionTokens,
-                total_tokens: result.usage?.totalTokens,
-                costUSD: result.usage?.costUSD,
-              },
-              provider: 'Ollama',
-            };
-          }
-
-          if (providerId === 'anthropic') {
-            const anthropicApiKey = await resolveApiKeyInput(
-              opts.getApiKey ? opts.getApiKey : opts.apiKey,
-              { source: 'Anthropic Messages API' },
-            );
-            const payload = toAnthropicMessagePayload(opts.messages);
-            return await anthropicMessagesRequest({
-              apiKey: anthropicApiKey,
-              model: opts.model,
-              system: payload.system,
-              messages: payload.messages,
-              tools: toAnthropicTools(toolDefs),
-              temperature: 0.2,
-              maxTokens: 1400,
-            });
-          }
-
-          return await openaiChatWithTools({
-            apiKey: opts.apiKey,
-            model: opts.model,
-            messages: opts.messages,
-            tools: toolDefs,
-            temperature: 0.2,
-            maxTokens: 1400,
-            baseUrl: opts.baseUrl,
-            fallback: opts.fallback,
-            onFallback: (primaryError, providerName) => {
-              fallbackTriggered = true;
-              fallbackProvider = providerName;
-              opts.onFallback?.(primaryError, providerName);
-            },
-            getApiKey: opts.getApiKey,
-          });
-        };
-
-        const llmResult = !isWunderlandOtelEnabled()
-          ? await invoke()
-          : await tracer.startActiveSpan(
-              'wunderland.llm.chat_completions',
-              { attributes: { round, tools_count: toolDefs.length, provider: providerId } },
-              async (span) => {
-                try {
-                  const res = await invoke();
-
-                  try {
-                    span.setAttribute('provider', res.provider);
-                    span.setAttribute('model', res.model);
-                    span.setAttribute('llm.fallback.used', fallbackTriggered);
-                    if (fallbackTriggered) span.setAttribute('llm.fallback.provider', fallbackProvider);
-                  } catch {
-                    // ignore
-                  }
-
-                  // Best-effort: attach token usage as safe span attributes (no content).
-                  try {
-                    const u: any = res.usage && typeof res.usage === 'object' ? res.usage : null;
-                    const total = typeof u?.total_tokens === 'number' ? u.total_tokens : undefined;
-                    const prompt = typeof u?.prompt_tokens === 'number' ? u.prompt_tokens : undefined;
-                    const completion = typeof u?.completion_tokens === 'number' ? u.completion_tokens : undefined;
-                    if (typeof total === 'number') span.setAttribute('llm.usage.total_tokens', total);
-                    if (typeof prompt === 'number') span.setAttribute('llm.usage.prompt_tokens', prompt);
-                    if (typeof completion === 'number') span.setAttribute('llm.usage.completion_tokens', completion);
-                  } catch {
-                    // ignore
-                  }
-
-                  return res;
-                } catch (error) {
-                  try {
-                    span.recordException(error as any);
-                  } catch {
-                    // ignore
-                  }
-                  try {
-                    span.setStatus({
-                      code: SpanStatusCode.ERROR,
-                      message: error instanceof Error ? error.message : String(error),
-                    });
-                  } catch {
-                    // ignore
-                  }
-                  throw error;
-                } finally {
-                  span.end();
-                }
-              },
-            );
-
-        const { message } = llmResult;
-
-        const toolCalls = message.tool_calls || [];
-
-        // Debug: log LLM response shape (only when debug mode is on)
-        if (debugMode) {
-          const contentPreview = typeof message.content === 'string' ? message.content.slice(0, 200) : '(null)';
-          console.log(`[tool-calling] Round ${round}: toolCalls=${toolCalls.length}, content="${contentPreview}"`);
-          if (toolCalls.length > 0) {
-            for (const tc of toolCalls) {
-              console.log(`[tool-calling]   → ${tc?.function?.name}(${(tc?.function?.arguments || '').slice(0, 100)})`);
-            }
-          }
+        // Delegate to the LLM adapter generator, yielding all chunks and
+        // returning its LoopOutput as our own return value.
+        const llmGen = wrapLLMAsGenerator(() => callLLMForTurn(round, toolDefs));
+        let iterResult = await llmGen.next();
+        while (!iterResult.done) {
+          yield iterResult.value as import('./llm-stream-adapter.js').LoopChunk;
+          iterResult = await llmGen.next();
         }
+        return iterResult.value;
+      })();
 
-        if (toolCalls.length === 0) {
-          let content = typeof message.content === 'string' ? message.content.trim() : '';
-          // Strip <think>...</think> blocks from models like qwen3 that use thinking mode.
-          content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
-          // Also strip leading **<think>...</think>** markdown-wrapped variants.
-          content = content.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
+      // Cast needed because LoopContext expects the AgentOS LoopChunk/LoopOutput
+      // types which are structurally identical to the adapter's types.
+      return self as any;
+    },
 
-          // ── Content Security Pipeline: evaluate LLM output ──────────────
-          // Run Dual-LLM Auditor + guardrail extension packs on the final
-          // assistant response. If blocked, replace with a safe message.
-          if (contentPipeline && content) {
-            try {
-              const outputResult = await contentPipeline.evaluateOutput({
-                chunk: { finalResponseText: content },
-              } as any);
+    executeTool: (tc: LoopToolCallRequest) => executeToolWithContext(tc),
 
-              if (outputResult?.action === 'block') {
-                const safeMsg =
-                  'I generated a response but it was blocked by the security pipeline. Please try rephrasing your request.';
-                opts.messages.push({ role: 'assistant', content: safeMsg });
-                return safeMsg;
-              }
-            } catch {
-              // Non-fatal: if output evaluation fails, return the original content.
-            }
+    addToolResults: (_results: ToolCallResult[]) => {
+      // Tool result messages are already pushed by executeToolWithContext.
+      // Mark that this round had tools executed so the checkpoint fires
+      // at the start of the next generateStream call (where we can await).
+      pendingCheckpoint = true;
+    },
+  };
+
+  for await (const event of controller.execute(loopConfig, loopContext)) {
+    // Check for fail_closed early abort after each event.
+    if (earlyReturn !== null) {
+      return earlyReturn;
+    }
+
+    switch (event.type) {
+      case 'text_delta': {
+        // Accumulate text. If the model also emits tool calls in this round,
+        // pendingText will be included in the assistant message. If not,
+        // finalText captures it for the loop_complete handler.
+        pendingText += event.content;
+        finalText += event.content;
+        break;
+      }
+
+      case 'tool_call_request': {
+        // Push the assistant message with tool_calls (and any preceding text).
+        const rawToolCalls = event.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments),
+          },
+        }));
+        if (debugMode) {
+          const roundNum = currentRound - 1;
+          const contentPreview = pendingText ? pendingText.slice(0, 200) : '(null)';
+          console.log(`[tool-calling] Round ${roundNum}: toolCalls=${rawToolCalls.length}, content="${contentPreview}"`);
+          for (const tc of rawToolCalls) {
+            console.log(`[tool-calling]   → ${tc.function.name}(${tc.function.arguments.slice(0, 100)})`);
           }
-
-          opts.messages.push({ role: 'assistant', content: content || '(no content)' });
-          return content || '';
         }
 
         opts.messages.push({
           role: 'assistant',
-          content: typeof message.content === 'string' ? message.content : null,
-          tool_calls: toolCalls,
+          content: pendingText || null,
+          tool_calls: rawToolCalls,
         });
+        pendingText = '';
+        break;
+      }
 
-        for (const call of toolCalls) {
-          const maybeFailClosed = (reason: string): string | null => {
-            if (!failClosedOnToolFailure) return null;
-            const reply = `[tool_failure_mode=fail_closed] ${reason}`;
-            opts.messages.push({ role: 'assistant', content: reply });
-            return reply;
-          };
+      case 'tool_result':
+      case 'tool_error':
+        // Already handled inside executeToolWithContext (messages pushed, hooks fired).
+        break;
 
-          const requestedToolName = call?.function?.name;
-          const rawArgs = call?.function?.arguments;
+      case 'loop_complete': {
+        // Natural termination: model returned text without tool calls.
+        // Apply content security and think-tag stripping to finalText.
+        let content = finalText.trim();
+        content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+        content = content.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
 
-          if (!requestedToolName || typeof rawArgs !== 'string') {
-            opts.messages.push({ role: 'tool', tool_call_id: call?.id, content: JSON.stringify({ error: 'Malformed tool call.' }) });
-            const failReply = maybeFailClosed('Malformed tool call returned by model.');
-            if (failReply) return failReply;
-            continue;
-          }
-
-          const resolvedToolKey = resolveToolMapKeyFromFunctionName({
-            functionName: requestedToolName,
-            toolMap: opts.toolMap,
-            mapping: nameMapping,
-            sanitizedAliasByName: sanitizedDefs.aliasBySanitizedName,
-          });
-          const tool = resolvedToolKey ? opts.toolMap.get(resolvedToolKey) : undefined;
-          if (!tool) {
-            emitOtelLog({
-              name: 'wunderland.runtime',
-              body: 'tool_lookup_miss',
-              severity: SeverityNumber.WARN,
-              attributes: { requested_tool_name: requestedToolName, round },
-            });
-            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Tool not found: ${requestedToolName}` }) });
-            const failReply = maybeFailClosed(`Tool not found: ${requestedToolName}.`);
-            if (failReply) return failReply;
-            continue;
-          }
-
-          const toolName = tool.name || resolvedToolKey || requestedToolName;
-
-          let args: Record<string, unknown>;
+        if (contentPipeline && content) {
           try {
-            args = JSON.parse(rawArgs);
+            const outputResult = await contentPipeline.evaluateOutput({
+              chunk: { finalResponseText: content },
+            } as any);
+
+            if (outputResult?.action === 'block') {
+              const safeMsg =
+                'I generated a response but it was blocked by the security pipeline. Please try rephrasing your request.';
+              opts.messages.push({ role: 'assistant', content: safeMsg });
+              return safeMsg;
+            }
           } catch {
-            opts.messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: `Invalid JSON arguments for ${requestedToolName}` }) });
-            const failReply = maybeFailClosed(`Invalid JSON arguments for ${requestedToolName}.`);
-            if (failReply) return failReply;
-            continue;
-          }
-
-          roundToolCalls.push({ toolName, hasSideEffects: tool.hasSideEffects === true, args });
-
-          if (opts.onToolCall) {
-            try {
-              opts.onToolCall(tool, args);
-            } catch {
-              // ignore logging hook errors
-            }
-          }
-
-          // ── Unified authorization (single prompt path, not three) ──────────
-          // Gate 1 (requireApprovalForAllTools) and Gate 2 (StepUpAuth) are merged.
-          // If the auth manager classifies a tool as TIER_1 or TIER_2, no prompt fires
-          // even when requireApprovalForAllTools is set. This prevents over-prompting
-          // for safe navigation tools like change_directory / list_directory.
-          let hitlApprovedThisCall = false;
-          {
-            const authResult = await authManager.authorize({
-              tool: toAuthorizableTool(tool),
-              args,
-              context: {
-                userId: String(opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
-                  ? (opts.toolContext['userContext'] as Record<string, unknown>)?.['userId'] ?? 'cli-user'
-                  : 'cli-user'),
-                sessionId: String(opts.toolContext?.['gmiId'] ?? 'cli'),
-                gmiId: String(opts.toolContext?.['personaId'] ?? 'cli'),
-              },
-              timestamp: new Date(),
-            });
-
-            if (!authResult.authorized) {
-              if (authResult.tier === ToolRiskTier.TIER_3_SYNC_HITL && !opts.dangerouslySkipPermissions) {
-                // Tier 3: require interactive prompt (exactly one)
-                const ok = await opts.askPermission(tool, args);
-                if (!ok) {
-                  const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
-                  opts.messages.push({
-                    role: 'tool',
-                    tool_call_id: call.id,
-                    content: shouldWrapToolOutputs
-                      ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: call.id, includeWarning: false })
-                      : denial,
-                  });
-                  const failReply = maybeFailClosed(`Permission denied for tool: ${toolName}.`);
-                  if (failReply) return failReply;
-                  continue;
-                }
-                hitlApprovedThisCall = true;
-              } else if (!opts.dangerouslySkipPermissions) {
-                const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
-                opts.messages.push({
-                  role: 'tool',
-                  tool_call_id: call.id,
-                  content: shouldWrapToolOutputs
-                    ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: call.id, includeWarning: false })
-                    : denial,
-                });
-                const failReply = maybeFailClosed(`Permission denied for tool: ${toolName}.`);
-                if (failReply) return failReply;
-                continue;
-              }
-            }
-            // Tier 1 / Tier 2: authorized — no prompt needed
-          }
-
-          // Build per-call tool context with progress callback if provided.
-          const callToolContext: Record<string, unknown> = opts.onToolProgress
-            ? { ...opts.toolContext, onToolProgress: (info: { phase: string; message: string; progress?: number }) => {
-                try { opts.onToolProgress!({ toolName, ...info }); } catch { /* ignore */ }
-              } }
-            : opts.toolContext;
-
-          const start = Date.now();
-          let result: { success: boolean; output?: unknown; error?: string };
-          try {
-            result = await withSpan(
-              'wunderland.tool.execute',
-              {
-                tool_name: toolName,
-                tool_category: tool.category ?? '',
-                tool_has_side_effects: tool.hasSideEffects === true,
-                authorized: true,
-              },
-              async () => {
-                // Pre-check: file_read on directories should fail-fast without permission prompts
-                if (tool.name === 'file_read') {
-                  const readPath = (args as any).path || (args as any).file_path || (args as any).filePath;
-                  if (typeof readPath === 'string') {
-                    try {
-                      const fsp = await import('node:fs/promises');
-                      const s = await fsp.stat(path.resolve(readPath));
-                      if (s.isDirectory()) {
-                        return {
-                          success: false,
-                          error: `"${readPath}" is a directory, not a file. Use list_directory to view directory contents.`,
-                        };
-                      }
-                    } catch { /* path doesn't exist — let normal flow handle */ }
-                  }
-                }
-
-                // NEW: Safe Guardrails validation
-                const guardrails = getGuardrails();
-                const agentId = getAgentIdForGuardrails(opts.toolContext);
-                const guardrailsCheck = await guardrails.validateBeforeExecution({
-                  toolId: resolvedToolKey || tool.name,
-                  toolName: tool.name,
-                  args,
-                  agentId,
-                  userId: (opts.toolContext.userContext as any)?.userId,
-                  sessionId: opts.toolContext.sessionId as string | undefined,
-                  workingDirectory: getAgentWorkspaceDirFromContext(opts.toolContext, agentId),
-                  tool: tool as any,
-                });
-
-                if (!guardrailsCheck.allowed) {
-                  // Attempt automatic permission escalation via HITL
-                  const deniedPaths = (guardrailsCheck.violations || [])
-                    .map(v => v.attemptedPath)
-                    .filter((p): p is string => !!p);
-                  const allEscalatable = deniedPaths.length > 0 && deniedPaths.every(p => guardrails.isEscalatable(p));
-
-                  if (allEscalatable) {
-                    const operation = deniedPaths.length > 0 ? (guardrailsCheck.violations?.[0]?.operation || tool.name) : tool.name;
-                    const isWrite = operation.includes('write') || operation.includes('delete') || operation.includes('append');
-
-                    // If user already approved this tool call at the HITL gate, auto-grant
-                    // folder access instead of prompting again (deduplication).
-                    const autoGrant = hitlApprovedThisCall || opts.dangerouslySkipPermissions;
-                    const approved = autoGrant || (opts.askPermission
-                      ? await opts.askPermission(
-                          { ...tool, name: `folder_access:${tool.name}`, description: `Grant ${isWrite ? 'write' : 'read'} access to: ${deniedPaths.join(', ')}` } as ToolInstance,
-                          { paths: deniedPaths, operation: isWrite ? 'write' : 'read', originalTool: tool.name },
-                        )
-                      : false);
-
-                    if (approved) {
-                      // Add rules for each denied path
-                      for (const p of deniedPaths) {
-                        const dir = p.endsWith('/') ? p : path.dirname(p);
-                        guardrails.addFolderRule(agentId, {
-                          pattern: `${dir}/**`,
-                          read: true,
-                          write: isWrite,
-                          description: `Granted at runtime for ${tool.name}`,
-                        });
-
-                        // Propagate to CLI executor's ShellService so its internal
-                        // assertFilesystemAllowed() also allows the approved path.
-                        const shellSvc = (tool as any).shellService;
-                        if (shellSvc && typeof shellSvc.addReadRoot === 'function') {
-                          shellSvc.addReadRoot(dir);
-                          if (isWrite) {
-                            shellSvc.addWriteRoot(dir);
-                          }
-                        }
-                      }
-                      // Retry the original tool execution
-                      return await tool.execute(args, callToolContext);
-                    }
-                  }
-
-                  return {
-                    success: false,
-                    error: guardrailsCheck.reason,
-                    output: {
-                      violations: guardrailsCheck.violations,
-                      canRequestAccess: allEscalatable,
-                    },
-                  };
-                }
-
-                // Original execution continues if guardrails pass
-                return await tool.execute(args, callToolContext);
-              },
-            );
-          } catch (err) {
-            const durationMs = Math.max(0, Date.now() - start);
-            emitOtelLog({
-              name: 'wunderland.runtime',
-              body: `tool_execute_error:${toolName}`,
-              severity: SeverityNumber.ERROR,
-              attributes: { tool_name: toolName, duration_ms: durationMs, round },
-            });
-            const errMsg = err instanceof Error ? err.message : String(err);
-            // Fire onToolResult for thrown errors
-            if (opts.onToolResult) {
-              try {
-                opts.onToolResult({ toolName, args, success: false, error: errMsg, durationMs });
-              } catch { /* ignore */ }
-            }
-            // Enrich with API key guidance when available
-            let apiKeyGuidance: string | undefined;
-            try {
-              const registry = await import('@framers/agentos-extensions-registry');
-              const getApiKeyGuidance = (registry as any).getApiKeyGuidance;
-              if (typeof getApiKeyGuidance === 'function') apiKeyGuidance = getApiKeyGuidance(errMsg, toolName) ?? undefined;
-            } catch { /* best-effort */ }
-            const fallbacks = TOOL_FALLBACK_MAP[toolName];
-            const availableFallbacks = fallbacks?.filter(f => opts.toolMap?.has(f));
-            opts.messages.push({
-              role: 'tool',
-              tool_call_id: call.id,
-              content: JSON.stringify({
-                error: `Tool threw: ${errMsg}`,
-                ...(apiKeyGuidance ? { apiKeyGuidance } : null),
-                ...(availableFallbacks?.length ? { suggestedFallbacks: availableFallbacks } : null),
-              }),
-            });
-            const failReply = maybeFailClosed(`Tool ${toolName} threw: ${errMsg}`);
-            if (failReply) return failReply;
-            continue;
-          }
-
-          const durationMs = Math.max(0, Date.now() - start);
-          emitOtelLog({
-            name: 'wunderland.runtime',
-            body: `tool_execute:${toolName}`,
-            severity: SeverityNumber.INFO,
-            attributes: { tool_name: toolName, success: result?.success === true, duration_ms: durationMs, round },
-          });
-
-          // Fire onToolResult callback
-          if (opts.onToolResult) {
-            try {
-              opts.onToolResult({
-                toolName,
-                args,
-                success: result?.success === true,
-                error: result?.success ? undefined : (result?.error || 'Tool failed'),
-                durationMs,
-              });
-            } catch { /* ignore callback errors */ }
-          }
-
-          let payload: unknown;
-          if (result?.success) {
-            payload = redactToolOutputForLLM(result.output);
-            // When a search tool succeeds but returns zero results, inject
-            // suggestedFallbacks so the LLM tries alternatives (e.g.
-            // browser_navigate) instead of giving up.
-            const emptyFallbacks = TOOL_FALLBACK_MAP[toolName];
-            const availableEmptyFallbacks = emptyFallbacks?.filter(f => opts.toolMap?.has(f));
-            if (availableEmptyFallbacks?.length && isEmptySearchResult(result.output)) {
-              payload = {
-                ...((typeof payload === 'object' && payload) || { output: payload }),
-                suggestedFallbacks: availableEmptyFallbacks,
-                hint: 'Search returned 0 results. Try the suggested fallback tools.',
-              };
-            }
-          } else {
-            const errorMsg = result?.error || 'Tool failed';
-            let apiKeyHint: string | undefined;
-            try {
-              const registry = await import('@framers/agentos-extensions-registry');
-              const getApiKeyGuidance = (registry as any).getApiKeyGuidance;
-              if (typeof getApiKeyGuidance === 'function') apiKeyHint = getApiKeyGuidance(errorMsg, toolName) ?? undefined;
-            } catch { /* best-effort */ }
-            const fallbacksOnFail = TOOL_FALLBACK_MAP[toolName];
-            const availableFallbacksOnFail = fallbacksOnFail?.filter(f => opts.toolMap?.has(f));
-            payload = {
-              error: errorMsg,
-              ...(apiKeyHint ? { apiKeyGuidance: apiKeyHint } : null),
-              ...(availableFallbacksOnFail?.length ? { suggestedFallbacks: availableFallbacksOnFail } : null),
-            };
-          }
-          const json = safeJsonStringify(payload, 20000);
-          if (debugMode) {
-            console.log(`[tool-calling] Tool ${toolName} result: success=${result?.success}, output=${json.slice(0, 300)}`);
-          }
-          const content = shouldWrapToolOutputs
-            ? wrapUntrustedToolOutput(json, { toolName, toolCallId: call.id, includeWarning: true })
-            : json;
-          opts.messages.push({ role: 'tool', tool_call_id: call.id, content });
-
-          if (!result?.success) {
-            const failReply = maybeFailClosed(`Tool ${toolName} failed: ${result?.error || 'Tool failed'}`);
-            if (failReply) return failReply;
+            // Non-fatal: if output evaluation fails, return the original content.
           }
         }
 
-        if (requireCheckpointAfterRound) {
-          const ok = await opts.askCheckpoint!({ round, toolCalls: roundToolCalls });
-          if (!ok) {
-            return '[HITL] Paused by operator.';
-          }
-        }
+        opts.messages.push({ role: 'assistant', content: content || '(no content)' });
+        return content || '';
+      }
 
-        return null;
-      },
-    );
+      case 'max_iterations_reached':
+        // Exceeded maxRounds without a natural stop.
+        return finalText || '';
 
-    if (turnResult !== null) return turnResult;
+      default:
+        break;
+    }
+
+    // Re-check earlyReturn after processing the event (executeTool may have set it).
+    if (earlyReturn !== null) {
+      return earlyReturn;
+    }
   }
 
-  return '';
+  return finalText || '';
 }
