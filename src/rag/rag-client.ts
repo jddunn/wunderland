@@ -122,8 +122,8 @@ export interface MediaIngestInput {
   userId?: string;
   agentId?: string;
   /**
-   * Optional precomputed text representation (caption/transcript).
-   * When provided, the backend skips captioning/transcription.
+   * Optional precomputed text representation (caption/transcript/document text).
+   * When provided, the backend skips captioning/transcription/parsing.
    */
   textRepresentation?: string;
 }
@@ -135,13 +135,13 @@ export interface MediaIngestResult {
   documentId: string;
   textRepresentation: string;
   chunksCreated: number;
-  modality: 'image' | 'audio';
+  modality: 'image' | 'audio' | 'document';
   error?: string;
 }
 
 export interface MediaQueryInput {
   query: string;
-  modalities?: ('image' | 'audio')[];
+  modalities?: ('image' | 'audio' | 'document')[];
   topK?: number;
   collectionIds?: string[];
   includeMetadata?: boolean;
@@ -162,13 +162,19 @@ export interface MediaQueryResult {
   }>;
   totalResults: number;
   processingTimeMs: number;
+  retrieval?: {
+    requestedMode: 'auto' | 'text' | 'native' | 'hybrid';
+    resolvedMode: 'text' | 'native' | 'hybrid';
+    textQueryUsed?: string;
+    fallbackReason?: string;
+  };
   error?: string;
 }
 
 export interface MediaAsset {
   assetId: string;
   collectionId: string;
-  modality: 'image' | 'audio';
+  modality: 'image' | 'audio' | 'document';
   mimeType: string;
   originalFileName?: string | null;
   sourceUrl?: string | null;
@@ -188,9 +194,10 @@ export interface MediaQueryByImageInput {
   /**
    * Optional precomputed text representation of the query image.
    * When provided, the backend skips captioning (no LLM vision call).
-   */
+  */
   textRepresentation?: string;
-  modalities?: ('image' | 'audio')[];
+  retrievalMode?: 'auto' | 'text' | 'native' | 'hybrid';
+  modalities?: ('image' | 'audio' | 'document')[];
   collectionIds?: string[];
   topK?: number;
   includeMetadata?: boolean;
@@ -202,9 +209,10 @@ export interface MediaQueryByAudioInput {
   /**
    * Optional precomputed text representation of the query audio.
    * When provided, the backend skips transcription (no Whisper call).
-   */
+  */
   textRepresentation?: string;
-  modalities?: ('image' | 'audio')[];
+  retrievalMode?: 'auto' | 'text' | 'native' | 'hybrid';
+  modalities?: ('image' | 'audio' | 'document')[];
   collectionIds?: string[];
   topK?: number;
   includeMetadata?: boolean;
@@ -273,6 +281,45 @@ export interface RAGAuditTrailData {
   };
 }
 
+function normalizeQueryInput(input: RAGQueryInput): RAGQueryInput {
+  if (input.strategy !== 'hybrid_search') return input;
+
+  const normalized: RAGQueryInput = { ...input };
+  delete normalized.strategy;
+
+  // The AgentOS HTTP wire protocol exposes `preset` for hybrid dense+lexical retrieval.
+  // Preserve explicit non-fast presets; otherwise promote to the default hybrid preset.
+  if (!normalized.preset || normalized.preset === 'fast') {
+    normalized.preset = 'balanced';
+  }
+
+  return normalized;
+}
+
+function guessMediaMimeType(filePath: string, fallback: string): string {
+  const lower = filePath.trim().toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  if (lower.endsWith('.m4a')) return 'audio/x-m4a';
+  if (lower.endsWith('.mp4')) return 'audio/mp4';
+  if (lower.endsWith('.webm')) return fallback.startsWith('audio/') ? 'audio/webm' : 'video/webm';
+  if (lower.endsWith('.ogg')) return 'audio/ogg';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.docx')) {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  if (lower.endsWith('.txt')) return 'text/plain';
+  if (lower.endsWith('.md')) return 'text/markdown';
+  if (lower.endsWith('.csv')) return 'text/csv';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.xml')) return 'application/xml';
+  return fallback;
+}
+
 export class WunderlandRAGClient {
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
@@ -308,6 +355,21 @@ export class WunderlandRAGClient {
     }
   }
 
+  private appendMediaIngestFields(formData: FormData, input?: MediaIngestInput): void {
+    if (input?.assetId) formData.append('assetId', input.assetId);
+    if (input?.collectionId) formData.append('collectionId', input.collectionId);
+    if (input?.sourceUrl) formData.append('sourceUrl', input.sourceUrl);
+    if (input?.category) formData.append('category', input.category);
+    if (input?.tags?.length) formData.append('tags', input.tags.join(','));
+    if (typeof input?.storePayload === 'boolean') {
+      formData.append('storePayload', input.storePayload ? 'true' : 'false');
+    }
+    if (input?.metadata) formData.append('metadata', JSON.stringify(input.metadata));
+    if (input?.userId) formData.append('userId', input.userId);
+    if (input?.agentId) formData.append('agentId', input.agentId);
+    if (input?.textRepresentation) formData.append('textRepresentation', input.textRepresentation);
+  }
+
   // -- Text RAG -------------------------------------------------------------
 
   async ingest(input: RAGIngestInput): Promise<RAGIngestResult> {
@@ -315,7 +377,7 @@ export class WunderlandRAGClient {
   }
 
   async query(input: RAGQueryInput): Promise<RAGQueryResult> {
-    return this.request('POST', '/query', input);
+    return this.request('POST', '/query', normalizeQueryInput(input));
   }
 
   async listDocuments(options?: { collectionId?: string; limit?: number; offset?: number }): Promise<{ documents: RAGDocument[]; total: number }> {
@@ -352,19 +414,8 @@ export class WunderlandRAGClient {
     const data = await readFile(filePath);
     const filename = filePath.split('/').pop() ?? 'image';
     const formData = new FormData();
-    formData.append('image', new Blob([data]), filename);
-    if (input?.assetId) formData.append('assetId', input.assetId);
-    if (input?.collectionId) formData.append('collectionId', input.collectionId);
-    if (input?.sourceUrl) formData.append('sourceUrl', input.sourceUrl);
-    if (input?.category) formData.append('category', input.category);
-    if (input?.tags?.length) formData.append('tags', input.tags.join(','));
-    if (typeof input?.storePayload === 'boolean') {
-      formData.append('storePayload', input.storePayload ? 'true' : 'false');
-    }
-    if (input?.metadata) formData.append('metadata', JSON.stringify(input.metadata));
-    if (input?.userId) formData.append('userId', input.userId);
-    if (input?.agentId) formData.append('agentId', input.agentId);
-    if (input?.textRepresentation) formData.append('textRepresentation', input.textRepresentation);
+    formData.append('image', new Blob([data], { type: guessMediaMimeType(filePath, 'image/*') }), filename);
+    this.appendMediaIngestFields(formData, input);
 
     const url = `${this.baseUrl}/multimodal/images/ingest`;
     const controller = new AbortController();
@@ -385,19 +436,8 @@ export class WunderlandRAGClient {
     const data = await readFile(filePath);
     const filename = filePath.split('/').pop() ?? 'audio';
     const formData = new FormData();
-    formData.append('audio', new Blob([data]), filename);
-    if (input?.assetId) formData.append('assetId', input.assetId);
-    if (input?.collectionId) formData.append('collectionId', input.collectionId);
-    if (input?.sourceUrl) formData.append('sourceUrl', input.sourceUrl);
-    if (input?.category) formData.append('category', input.category);
-    if (input?.tags?.length) formData.append('tags', input.tags.join(','));
-    if (typeof input?.storePayload === 'boolean') {
-      formData.append('storePayload', input.storePayload ? 'true' : 'false');
-    }
-    if (input?.metadata) formData.append('metadata', JSON.stringify(input.metadata));
-    if (input?.userId) formData.append('userId', input.userId);
-    if (input?.agentId) formData.append('agentId', input.agentId);
-    if (input?.textRepresentation) formData.append('textRepresentation', input.textRepresentation);
+    formData.append('audio', new Blob([data], { type: guessMediaMimeType(filePath, 'audio/*') }), filename);
+    this.appendMediaIngestFields(formData, input);
 
     const url = `${this.baseUrl}/multimodal/audio/ingest`;
     const controller = new AbortController();
@@ -413,15 +453,49 @@ export class WunderlandRAGClient {
     }
   }
 
+  async ingestDocumentAsset(
+    filePath: string,
+    input?: MediaIngestInput
+  ): Promise<MediaIngestResult> {
+    const { readFile } = await import('node:fs/promises');
+    const data = await readFile(filePath);
+    const filename = filePath.split('/').pop() ?? 'document';
+    const formData = new FormData();
+    formData.append(
+      'document',
+      new Blob([data], { type: guessMediaMimeType(filePath, 'application/octet-stream') }),
+      filename
+    );
+    this.appendMediaIngestFields(formData, input);
+
+    const url = `${this.baseUrl}/multimodal/documents/ingest`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout * 2);
+    try {
+      const headers: Record<string, string> = {};
+      if (this.headers['Authorization']) headers['Authorization'] = this.headers['Authorization'];
+      const res = await fetch(url, { method: 'POST', headers, body: formData, signal: controller.signal });
+      if (!res.ok) throw new Error(`RAG document ingest failed (${res.status})`);
+      return (await res.json()) as MediaIngestResult;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async queryByImage(input: MediaQueryByImageInput): Promise<MediaQueryResult> {
     const { readFile } = await import('node:fs/promises');
     const data = await readFile(input.filePath);
     const filename = input.filePath.split('/').pop() ?? 'image';
 
     const formData = new FormData();
-    formData.append('image', new Blob([data]), filename);
+    formData.append(
+      'image',
+      new Blob([data], { type: guessMediaMimeType(input.filePath, 'image/*') }),
+      filename
+    );
     if (input.sourceUrl) formData.append('sourceUrl', input.sourceUrl);
     if (input.textRepresentation) formData.append('textRepresentation', input.textRepresentation);
+    if (input.retrievalMode) formData.append('retrievalMode', input.retrievalMode);
     if (input.modalities?.length) formData.append('modalities', input.modalities.join(','));
     if (input.collectionIds?.length) formData.append('collectionIds', input.collectionIds.join(','));
     if (typeof input.topK === 'number') formData.append('topK', String(input.topK));
@@ -450,8 +524,13 @@ export class WunderlandRAGClient {
     const filename = input.filePath.split('/').pop() ?? 'audio';
 
     const formData = new FormData();
-    formData.append('audio', new Blob([data]), filename);
+    formData.append(
+      'audio',
+      new Blob([data], { type: guessMediaMimeType(input.filePath, 'audio/*') }),
+      filename
+    );
     if (input.textRepresentation) formData.append('textRepresentation', input.textRepresentation);
+    if (input.retrievalMode) formData.append('retrievalMode', input.retrievalMode);
     if (input.modalities?.length) formData.append('modalities', input.modalities.join(','));
     if (input.collectionIds?.length) formData.append('collectionIds', input.collectionIds.join(','));
     if (typeof input.topK === 'number') formData.append('topK', String(input.topK));
