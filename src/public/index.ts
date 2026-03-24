@@ -1281,3 +1281,10 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 export type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from '../api/types.js';
 export { WunderlandConfigError } from '../config/errors.js';
 export type { WunderlandConfigIssue } from '../config/errors.js';
+
+// Re-export AgentOS high-level API for direct access without createWunderland().
+export { generateText, streamText } from '@framers/agentos';
+export { generateImage } from '@framers/agentos';
+export type { GenerateTextOptions, GenerateTextResult } from '@framers/agentos';
+export type { StreamTextResult, StreamPart } from '@framers/agentos';
+export type { GenerateImageOptions, GenerateImageResult } from '@framers/agentos';
