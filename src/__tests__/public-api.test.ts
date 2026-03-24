@@ -64,6 +64,36 @@ describe('wunderland public API', () => {
     expect(msgs[4]?.content).toBe('second');
   });
 
+  it('streams graph-shaped events while preserving session history', async () => {
+    mockOpenAIChatCompletionSequence([
+      { model: 'gpt-test', usage: {}, choices: [{ message: { role: 'assistant', content: 'streamed response' } }] },
+    ]);
+
+    const app = await createWunderland({
+      llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
+      tools: 'none',
+      ...quietRuntimeOptions,
+    });
+
+    const session = app.session('stream-session');
+    const eventTypes: string[] = [];
+    let streamedText = '';
+
+    for await (const event of session.stream('hello')) {
+      eventTypes.push(event.type);
+      if (event.type === 'text_delta') {
+        streamedText += event.content;
+      }
+    }
+
+    expect(eventTypes).toEqual(
+      expect.arrayContaining(['run_start', 'node_start', 'text_delta', 'node_end', 'run_end']),
+    );
+    expect(streamedText.trim()).toBe('streamed response');
+    expect(session.messages().map((message) => message.role)).toEqual(['system', 'user', 'assistant']);
+    expect(session.messages()[2]?.content).toBe('streamed response');
+  });
+
   it('denies side-effect tools by default (deny-side-effects)', async () => {
     const sideEffectTool: ITool = {
       id: 'demo.side_effect',

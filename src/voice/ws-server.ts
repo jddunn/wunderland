@@ -9,6 +9,7 @@
  */
 
 import { WebSocketServer } from 'ws';
+import type { StreamingPipelineAgentSession, StreamingPipelineHandle } from './streaming-pipeline.js';
 
 // ── Option / result types ────────────────────────────────────────────────────
 
@@ -52,8 +53,8 @@ export interface VoiceServerHandle {
  * console.log(`Voice server listening at ${server.url}`);
  * ```
  *
- * @param pipeline - A `VoicePipelineOrchestrator` instance (typed as `any` to
- *   avoid a hard compile-time dependency on the voice-pipeline package).
+ * @param pipeline - A prewired streaming pipeline handle created by
+ *   {@link createStreamingPipeline}.
  * @param agentSessionFactory - Zero-arg factory called once per WebSocket
  *   connection. Must return an `IVoicePipelineAgentSession`-compatible object.
  * @param options - {@link VoiceServerOptions} for port/host binding.
@@ -61,8 +62,8 @@ export interface VoiceServerHandle {
  *   method for clean shutdown.
  */
 export async function startVoiceServer(
-  pipeline: any,
-  agentSessionFactory: () => any,
+  pipeline: StreamingPipelineHandle,
+  agentSessionFactory: () => StreamingPipelineAgentSession,
   options?: VoiceServerOptions,
 ): Promise<VoiceServerHandle> {
   // Dynamic import keeps ws-related voice transport optional at load time.

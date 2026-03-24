@@ -946,46 +946,50 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 
     /**
      * Thin streaming wrapper around {@link sendText}.
-     * Executes the turn normally then yields synthetic {@link GraphEvent} objects that mirror
-     * the run_start → node_start → text_delta → node_end → run_end lifecycle used by
-     * {@link WunderlandApp.streamGraph}, enabling uniform event-driven UI updates.
+     * Executes the same session turn path used by the non-streaming API, then
+     * replays a graph-shaped event stream so UIs can share one event contract.
      */
-    const stream: WunderlandSession['stream'] = async function* (text, opts) {
-      const { streamWunderlandGraph } = await import('../runtime/graph-runner.js');
-      const { AgentGraph, gmiNode, START, END } = await import('@framers/agentos/orchestration');
-      const { z } = await import('zod');
+    const stream: WunderlandSession['stream'] = async function* (text, sendOpts) {
+      const runId = `session-stream-${id}-${Date.now()}`;
+      const nodeId = 'respond';
+      const started = Date.now();
 
-      // Build a single-node graph for this turn
-      const turnGraph = new AgentGraph({
-        input: z.object({ text: z.string(), sessionId: z.string() }),
-        scratch: z.record(z.string(), z.unknown()),
-        artifacts: z.object({ response: z.string() }),
-      })
-        .addNode('respond', gmiNode({
-          instructions: systemPrompt,
-          executionMode: 'react_bounded' as const,
-          maxInternalIterations: policy.maxRounds ?? 5,
-        }))
-        .addEdge(START, 'respond')
-        .addEdge('respond', END)
-        .compile({ validate: false });
-
-      // Execute through real GraphRuntime with streaming events
-      yield* streamWunderlandGraph(turnGraph, { text, sessionId: id }, {
-        llm: {
-          providerId: llm.providerId,
-          apiKey: llm.apiKey,
-          model: llm.model,
-          baseUrl: llm.baseUrl,
-          fallback: llm.fallback as any,
+      yield { type: 'run_start', runId, graphId: `session-${id}` };
+      yield {
+        type: 'node_start',
+        nodeId,
+        state: {
+          input: { text, sessionId: id },
+          scratch: {},
+          artifacts: {},
         },
-        systemPrompt,
-        toolMap,
-        toolContext: { sessionId: id },
-        askPermission,
-        strictToolNames: policy.strictToolNames,
-        debug: policy.debug,
-      });
+      };
+
+      try {
+        const result = await sendText(text, sendOpts);
+        const chunks = result.text.match(/\S+\s*/g) ?? (result.text ? [result.text] : []);
+        for (const chunk of chunks) {
+          yield { type: 'text_delta', nodeId, content: chunk };
+        }
+
+        const durationMs = Math.max(0, Date.now() - started);
+        yield { type: 'node_end', nodeId, output: result.text, durationMs };
+        yield {
+          type: 'run_end',
+          runId,
+          finalOutput: result.text,
+          totalDurationMs: durationMs,
+        };
+      } catch (error) {
+        yield {
+          type: 'error',
+          nodeId,
+          error: {
+            code: 'SESSION_STREAM_FAILED',
+            message: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
     };
 
     /**

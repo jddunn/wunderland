@@ -266,7 +266,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`  ${bright('Missions describe a goal in natural language; a planner decomposes it into steps at runtime.')}`);
     console.log(`  ${dim('Missions compile to the same AgentGraph IR as workflow() — so Wunderland executes them identically.')}`);
     console.log();
-    console.log(`  ${iColor('1')} ${bright('Compile and preview a mission YAML file')}`);
+    console.log(`  ${iColor('1')} ${bright('Execute a mission YAML file')}`);
     console.log(`     ${muted('$')} ${accent('wunderland mission run examples/mission-deep-research.yaml --input topic="quantum computing"')}`);
     console.log();
     console.log(`  ${iColor('2')} ${bright('Explain a mission (dry-run planner decomposition)')}`);

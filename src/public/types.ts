@@ -224,8 +224,9 @@ export type WunderlandSession = {
   messages: () => WunderlandMessage[];
   sendText: (text: string, opts?: WunderlandSendTextOpts) => Promise<WunderlandTurnResult>;
   /**
-   * Execute a turn and yield graph-style {@link GraphEvent} objects in real time.
-   * Useful for streaming UI updates without wiring up a full AgentGraph.
+   * Execute a turn and yield graph-style {@link GraphEvent} objects.
+   * Useful for UI/event consumers that want the same event contract as graph runs
+   * without wiring up a full AgentGraph.
    */
   stream: (text: string, opts?: WunderlandSendTextOpts) => AsyncIterable<GraphEvent>;
   /**
