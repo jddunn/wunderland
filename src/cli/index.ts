@@ -85,6 +85,10 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('mission')}               Run and explain intent-driven missions
       ${w('agency')}                Multi-agent collectives
 
+    ${w('AI')}
+      ${w('image')}                 Image generation (generate from prompt)
+      ${w('structured')}            Structured data extraction from text
+
     ${w('Advanced')}
       ${w('rag')}                   RAG memory management
       ${w('evaluate')}              Evaluation suite
@@ -424,6 +428,24 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     usage: ['wunderland version'],
     examples: ['wunderland version'],
   },
+  image: {
+    summary: 'Generate images from text prompts via AgentOS providers.',
+    usage: ['wunderland image generate "<prompt>" [--provider <name>] [--model <id>] [--size <WxH>] [--output <path>]'],
+    examples: [
+      'wunderland image generate "A cyberpunk city at night"',
+      'wunderland image generate "Portrait of a robot" --provider openai --size 1024x1024 --output robot.png',
+    ],
+    notes: ['Supported providers: openai (default), stability, replicate, ollama.'],
+  },
+  structured: {
+    summary: 'Extract structured JSON data from unstructured text using an LLM.',
+    usage: ['wunderland structured extract "<text>" --schema \'{"field":"type",...}\''],
+    examples: [
+      'wunderland structured extract "John is 30 years old" --schema \'{"name":"string","age":"number"}\'',
+      'echo "Invoice #1234, total $99.99" | wunderland structured extract --schema \'{"invoice_number":"string","total":"number"}\'',
+    ],
+    notes: ['--schema: JSON object where keys are field names and values are type hints.'],
+  },
   connect: {
     summary: 'Connect external services (Gmail, WhatsApp, Slack, Signal) via OAuth or setup wizard.',
     usage: ['wunderland connect <service>'],
@@ -520,6 +542,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   quickstart:        () => import('./commands/quickstart.js'),
   new:               () => import('./commands/new.js'),
   connect:           () => import('./commands/connect.js'),
+  image:             () => import('./commands/image.js'),
+  structured:        () => import('./commands/structured.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
