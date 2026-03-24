@@ -37,7 +37,7 @@ export interface CliConfig {
   };
   /** Default provider preferences per capability category (global). */
   providerDefaults?: {
-    /** Image generation provider: 'openai' (DALL-E) | 'stability'. */
+    /** Image generation provider: 'openai' | 'openrouter' | 'stability' | 'replicate'. */
     imageGeneration?: string;
     /** Text-to-speech provider: 'openai' | 'elevenlabs'. */
     tts?: string;
