@@ -52,6 +52,10 @@ export type { StreamingPipelineOptions } from './streaming-pipeline.js';
 export { startVoiceServer } from './ws-server.js';
 export type { VoiceServerOptions, VoiceServerHandle } from './ws-server.js';
 
+// ── Telephony webhook server ──────────────────────────────────────────────────
+export { startTelephonyWebhookServer } from './telephony-webhook-server.js';
+export type { TelephonyWebhookServerOptions } from './telephony-webhook-server.js';
+
 export type {
   IVoiceCallProvider,
   InitiateCallInput,
