@@ -449,11 +449,7 @@ async function configureProviderDefaults(globals: GlobalFlags): Promise<void> {
 
   const imageGen = await p.select({
     message: 'Image generation provider:',
-    options: [
-      { value: 'openai', label: 'OpenAI (DALL-E 3)', hint: current.imageGeneration === 'openai' ? 'current' : undefined },
-      { value: 'stability', label: 'Stability AI (SDXL)', hint: current.imageGeneration === 'stability' ? 'current' : undefined },
-      { value: '_none', label: 'No preference (auto-detect)' },
-    ],
+    options: getImageGenerationProviderDefaultChoices(current.imageGeneration),
   });
   if (p.isCancel(imageGen)) return;
 
@@ -497,6 +493,36 @@ async function configureProviderDefaults(globals: GlobalFlags): Promise<void> {
   await updateConfig({ providerDefaults } as any, globals.config);
   fmt.blank();
   fmt.ok('Provider defaults saved to global config (~/.wunderland/config.json).');
+}
+
+export function getImageGenerationProviderDefaultChoices(currentProvider?: string): Array<{
+  value: string;
+  label: string;
+  hint?: string;
+}> {
+  return [
+    {
+      value: 'openai',
+      label: 'OpenAI (gpt-image-1 / DALL-E)',
+      hint: currentProvider === 'openai' ? 'current' : undefined,
+    },
+    {
+      value: 'openrouter',
+      label: 'OpenRouter (routed image models)',
+      hint: currentProvider === 'openrouter' ? 'current' : undefined,
+    },
+    {
+      value: 'stability',
+      label: 'Stability AI (Stable Image / SD3)',
+      hint: currentProvider === 'stability' ? 'current' : undefined,
+    },
+    {
+      value: 'replicate',
+      label: 'Replicate (Flux / SDXL / community models)',
+      hint: currentProvider === 'replicate' ? 'current' : undefined,
+    },
+    { value: '_none', label: 'No preference (auto-detect)' },
+  ];
 }
 
 async function configureExtension(name: string, globals: GlobalFlags): Promise<void> {
