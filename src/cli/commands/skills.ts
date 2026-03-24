@@ -95,34 +95,7 @@ function categorizeSkill(skill: SkillEntry): string {
   return 'Other';
 }
 
-// ── Search scoring ──────────────────────────────────────────────────────────
-
-function scoreSkill(skill: SkillEntry, query: string): number {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return 0;
-
-  const searchable = [
-    skill.id, skill.name, skill.description,
-    ...(skill.keywords || []),
-  ].join(' ').toLowerCase();
-
-  let score = 0;
-  for (const term of terms) {
-    // Exact ID/name match
-    if (skill.id.toLowerCase() === term || skill.name.toLowerCase() === term) { score += 50; continue; }
-    // ID/name contains
-    if (skill.id.toLowerCase().includes(term)) { score += 30; continue; }
-    if (skill.name.toLowerCase().includes(term)) { score += 25; continue; }
-    // Keyword exact match
-    if (skill.keywords?.some((k) => k.toLowerCase() === term)) { score += 20; continue; }
-    // Description contains
-    if (skill.description.toLowerCase().includes(term)) { score += 10; continue; }
-    // Partial keyword match
-    if (searchable.includes(term)) { score += 5; continue; }
-  }
-  // Normalize by number of terms for multi-word queries
-  return Math.round(score / terms.length);
-}
+import { scoreSearch } from '../utils/search-scoring.js';
 
 // ── Sub-commands ────────────────────────────────────────────────────────────
 
@@ -195,11 +168,8 @@ async function searchSkills(args: string[], flags: Record<string, string | boole
   const { entries } = await loadCatalog();
   const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
 
-  const scored = entries
-    .map((skill) => ({ skill, score: scoreSkill(skill, query) }))
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10);
+  const scored = scoreSearch(entries, query, 10)
+    .map(r => ({ skill: r.item, score: r.score }));
 
   if (format === 'json') {
     console.log(JSON.stringify({ query, results: scored.map((r) => ({ ...r.skill, relevance: r.score })) }, null, 2));
