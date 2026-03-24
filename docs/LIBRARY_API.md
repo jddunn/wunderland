@@ -18,6 +18,20 @@ const out = await session.sendText('Hello!');
 console.log(out.text);
 ```
 
+## Why Wunderland does not wrap AgentOS `agent()`
+
+`@framers/agentos` now exposes streamlined helpers like `generateText()`, `streamText()`, and `agent()` for lightweight app embedding.
+
+Wunderland intentionally keeps `createWunderland()` as its golden path because it layers additional runtime features on top:
+
+- curated tool loading
+- skills injection and discovery indexing
+- capability discovery and narrowed per-turn tool exposure
+- approvals and adaptive execution policy
+- extension loading, workspace policy, and preset-driven configuration
+
+So Wunderland should document the AgentOS high-level API, but it should not replace `createWunderland()` with `agent()` unless the helper reaches feature parity with Wunderland’s runtime needs.
+
 ## Tools
 
 ### No tools (default)

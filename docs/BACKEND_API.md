@@ -185,6 +185,7 @@ See [Multimodal RAG](../packages/agentos/docs/MULTIMODAL_RAG.md) for architectur
 | -------- | ------------------------------------------------- | ----------------------------------------------------------------- |
 | `POST`   | `/agentos/rag/multimodal/images/ingest`           | Ingest an image (multipart field: `image`).                       |
 | `POST`   | `/agentos/rag/multimodal/audio/ingest`            | Ingest an audio file (multipart field: `audio`).                  |
+| `POST`   | `/agentos/rag/multimodal/documents/ingest`        | Ingest a document file (multipart field: `document`).             |
 | `POST`   | `/agentos/rag/multimodal/images/query`            | Query assets using a query image (multipart field: `image`).      |
 | `POST`   | `/agentos/rag/multimodal/audio/query`             | Query assets using a query audio clip (multipart field: `audio`). |
 | `POST`   | `/agentos/rag/multimodal/query`                   | Query assets by searching their derived text representations.     |
@@ -194,9 +195,14 @@ See [Multimodal RAG](../packages/agentos/docs/MULTIMODAL_RAG.md) for architectur
 
 Notes:
 
-- `/agentos/rag/multimodal/images/query` prefers offline image-embedding retrieval when enabled (`AGENTOS_RAG_MEDIA_IMAGE_EMBEDDINGS_ENABLED=true` + Transformers.js installed). Otherwise it captions the query image first, then runs text retrieval.
-- `/agentos/rag/multimodal/audio/query` prefers offline audio-embedding retrieval when enabled (`AGENTOS_RAG_MEDIA_AUDIO_EMBEDDINGS_ENABLED=true` + Transformers.js + `wavefile` installed; WAV-only on Node). Otherwise it transcribes the query audio first, then runs text retrieval over indexed assets.
+- Both binary query endpoints accept `retrievalMode=auto|text|native|hybrid`.
+- `auto` is text-first by default and opportunistically adds native modality retrieval when available.
+- `native` uses image/audio embedding retrieval only. On Node, audio-native retrieval is still WAV-only (`wavefile` + Transformers.js).
 - Both endpoints accept an optional `textRepresentation` form field to bypass captioning/transcription (useful for offline tests).
+- Text queries over `/multimodal/query` can search `document` assets as well as image/audio assets.
+- Document ingest currently supports PDF, DOCX, TXT, Markdown, CSV, JSON, and XML. Scanned PDFs without embedded text still need a page-image OCR/vision pipeline and are rejected explicitly today.
+- Wunderland clients and CLI helpers may send `modalities` / `collectionIds` as comma-separated multipart fields; the router accepts that wire format.
+- Ollama image captioning is supported when the chosen model accepts vision input and the image is forwarded as inline bytes.
 
 **Identity / org enforcement (important):**
 
