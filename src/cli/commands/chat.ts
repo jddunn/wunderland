@@ -237,6 +237,38 @@ export default async function cmdChat(
       .filter(Boolean);
   }
 
+  // ── Voice pipeline CLI flags ──────────────────────────────────────────────
+  // --voice                Enable the local WebSocket voice pipeline server
+  // --voice-stt=<id>       STT provider override (e.g. deepgram, whisper-chunked)
+  // --voice-tts=<id>       TTS provider override (e.g. openai, elevenlabs)
+  // --voice-endpointing=X  Endpointing strategy: acoustic | heuristic | semantic
+  // --voice-diarization    Enable speaker diarization
+  // --voice-barge-in=X     Barge-in mode: hard-cut | soft-fade | disabled
+  // --voice-port=<n>       WebSocket server port (0 = OS-assigned)
+  const voiceEnabled = flags['voice'] === true;
+  const voiceStt =
+    typeof flags['voice-stt'] === 'string' ? String(flags['voice-stt']).trim() : undefined;
+  const voiceTts =
+    typeof flags['voice-tts'] === 'string' ? String(flags['voice-tts']).trim() : undefined;
+  const voiceEndpointing = (() => {
+    const raw =
+      typeof flags['voice-endpointing'] === 'string'
+        ? String(flags['voice-endpointing']).trim()
+        : '';
+    if (raw === 'acoustic' || raw === 'heuristic' || raw === 'semantic') return raw;
+    return undefined;
+  })();
+  const voiceDiarization = flags['voice-diarization'] === true;
+  const voiceBargeIn = (() => {
+    const raw =
+      typeof flags['voice-barge-in'] === 'string' ? String(flags['voice-barge-in']).trim() : '';
+    if (raw === 'hard-cut' || raw === 'soft-fade' || raw === 'disabled') return raw;
+    return undefined;
+  })();
+  const voicePortRaw =
+    typeof flags['voice-port'] === 'string' ? parseInt(String(flags['voice-port']), 10) : NaN;
+  const voicePort = Number.isFinite(voicePortRaw) ? voicePortRaw : undefined;
+
   const policy = normalizeRuntimePolicy({ ...cliDefaults, ...(cfg || {}) });
   const permissions = getPermissionsForSet(policy.permissionSet);
   const turnApprovalMode = (() => {
@@ -1221,6 +1253,38 @@ export default async function cmdChat(
         : 'none'
       : 'unavailable',
   });
+
+  // ── Voice pipeline server (optional, --voice flag) ───────────────────────
+  // When --voice is set, spin up a local WebSocket server wired to the voice
+  // pipeline orchestrator. The server URL is printed so the caller can connect
+  // a voice client. Failure is non-fatal — chat continues in text mode.
+  if (voiceEnabled) {
+    try {
+      const { createStreamingPipeline, startVoiceServer } = await import(
+        '../../voice/streaming-pipeline.js'
+      );
+      const pipeline = await createStreamingPipeline({
+        stt: voiceStt,
+        tts: voiceTts,
+        endpointing: voiceEndpointing,
+        diarization: voiceDiarization,
+        bargeIn: voiceBargeIn,
+        port: voicePort,
+      });
+      const voiceServer = await startVoiceServer(
+        pipeline,
+        // Agent session factory — placeholder; full wiring in follow-up task.
+        () => ({ agentId: seedId }),
+        { port: voicePort },
+      );
+      fmt.note(`Voice pipeline WebSocket server: ${voiceServer.url}`);
+      // Ensure clean shutdown on process exit.
+      process.once('SIGINT', () => void voiceServer.close());
+      process.once('SIGTERM', () => void voiceServer.close());
+    } catch (err) {
+      fmt.warn(`Voice pipeline unavailable: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   // ── Channel message queue (bridges async channel events into the REPL) ──
   type IncomingChannelMessage = {

@@ -127,6 +127,13 @@ const GLOBAL_FLAGS = [
   '--target',
   '--output',
   '--region',
+  '--voice',
+  '--voice-stt',
+  '--voice-tts',
+  '--voice-endpointing',
+  '--voice-diarization',
+  '--voice-barge-in',
+  '--voice-port',
 ];
 
 // ── Main handler ────────────────────────────────────────────────────────────
