@@ -1168,40 +1168,29 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
    * Read a workflow YAML file and return a compiled descriptor that can be executed with
    * {@link WunderlandApp.runGraph} or {@link WunderlandApp.streamGraph}.
    *
-   * The YAML is expected to follow the Wunderland workflow schema (nodes + edges).
-   * Requires `js-yaml` to be installed at runtime; throws a descriptive error if absent.
+   * The YAML is expected to follow the Wunderland workflow schema (`name`, `steps`,
+   * optional `input`, optional `returns`).
    */
   const loadWorkflow: WunderlandApp['loadWorkflow'] = async (yamlPath) => {
     const { readFile } = await import('node:fs/promises');
-    let jsYaml: { load: (s: string) => unknown };
-    try {
-      jsYaml = await import('js-yaml') as any;
-    } catch {
-      throw new Error('[wunderland] loadWorkflow requires "js-yaml" — run: npm install js-yaml');
-    }
+    const { compileWorkflowYaml } = await import('../orchestration/yaml-compiler.js');
     const content = await readFile(yamlPath, 'utf-8');
-    const raw = jsYaml.load(content) as Record<string, unknown>;
-    return { ...raw, __source: yamlPath, __type: 'workflow' };
+    return compileWorkflowYaml(content);
   };
 
   /**
    * Read a mission YAML file and return a compiled descriptor that can be executed with
    * {@link WunderlandApp.runGraph} or {@link WunderlandApp.streamGraph}.
    *
-   * Missions are multi-step goal definitions with sub-tasks; they share the same YAML
-   * loading pipeline as workflows but carry a different `__type` tag.
+   * Missions are goal-oriented YAML definitions (`name`, `goal`, `planner`, optional
+   * `input`, optional `returns`, optional `policy`) compiled through the same orchestration
+   * layer as builder-authored missions.
    */
   const loadMission: WunderlandApp['loadMission'] = async (yamlPath) => {
     const { readFile } = await import('node:fs/promises');
-    let jsYaml: { load: (s: string) => unknown };
-    try {
-      jsYaml = await import('js-yaml') as any;
-    } catch {
-      throw new Error('[wunderland] loadMission requires "js-yaml" — run: npm install js-yaml');
-    }
+    const { compileMissionYaml } = await import('../orchestration/yaml-compiler.js');
     const content = await readFile(yamlPath, 'utf-8');
-    const raw = jsYaml.load(content) as Record<string, unknown>;
-    return { ...raw, __source: yamlPath, __type: 'mission' };
+    return compileMissionYaml(content);
   };
 
   /**
