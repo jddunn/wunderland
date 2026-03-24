@@ -21,6 +21,30 @@ function arrow(): string {
   return getUiRuntime().ascii ? '->' : '→';
 }
 
+function guessMediaMimeType(filePath: string, fallback: string): string {
+  const lower = filePath.trim().toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  if (lower.endsWith('.m4a')) return 'audio/x-m4a';
+  if (lower.endsWith('.mp4')) return 'audio/mp4';
+  if (lower.endsWith('.webm')) return fallback.startsWith('audio/') ? 'audio/webm' : 'video/webm';
+  if (lower.endsWith('.ogg')) return 'audio/ogg';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.docx')) {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  if (lower.endsWith('.txt')) return 'text/plain';
+  if (lower.endsWith('.md')) return 'text/markdown';
+  if (lower.endsWith('.csv')) return 'text/csv';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.xml')) return 'application/xml';
+  return fallback;
+}
+
 async function ragFetch(urlPath: string, options?: { method?: string; body?: unknown }): Promise<any> {
   const base = getRagBaseUrl();
   const method = options?.method ?? 'GET';
@@ -34,6 +58,67 @@ async function ragFetch(urlPath: string, options?: { method?: string; body?: unk
     throw new Error(`${method} ${urlPath} ${arrow()} ${res.status}: ${text}`);
   }
   return res.json();
+}
+
+async function ragMultipartFetch(urlPath: string, formData: FormData): Promise<any> {
+  const base = getRagBaseUrl();
+  const res = await fetch(`${base}${urlPath}`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`POST ${urlPath} ${arrow()} ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+function appendMediaQueryFlags(formData: FormData, flags: Record<string, string | boolean>): void {
+  const modality = typeof flags['modality'] === 'string' ? flags['modality'] : undefined;
+  const collection = typeof flags['collection'] === 'string' ? flags['collection'] : undefined;
+  const topK = typeof flags['top-k'] === 'string' ? flags['top-k'] : undefined;
+  const textRepresentation = typeof flags['text'] === 'string' ? flags['text'] : undefined;
+  const retrievalMode =
+    typeof flags['retrieval-mode'] === 'string' ? flags['retrieval-mode'] : undefined;
+
+  if (modality) formData.append('modalities', modality);
+  if (collection) formData.append('collectionIds', collection);
+  if (topK) formData.append('topK', topK);
+  if (flags['include-metadata'] === true) formData.append('includeMetadata', 'true');
+  if (textRepresentation) formData.append('textRepresentation', textRepresentation);
+  if (retrievalMode) formData.append('retrievalMode', retrievalMode);
+}
+
+function renderMediaQueryResult(title: string, result: any, format: string): void {
+  if (format === 'json') {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  fmt.section(title);
+  if (result.retrieval) {
+    fmt.kvPair(
+      'Retrieval',
+      `${result.retrieval.resolvedMode} (requested ${result.retrieval.requestedMode})`
+    );
+    if (result.retrieval.fallbackReason) {
+      fmt.kvPair('Fallback', result.retrieval.fallbackReason);
+    }
+  }
+  if (!result.assets?.length) {
+    fmt.note('No media assets found.');
+    return;
+  }
+
+  for (const item of result.assets) {
+    const score =
+      typeof item.bestChunk?.score === 'number' ? ` (${(item.bestChunk.score * 100).toFixed(1)}%)` : '';
+    fmt.kvPair(
+      `[${item.asset.modality}] ${item.asset.assetId}${score}`,
+      item.bestChunk?.content?.slice(0, 150) ?? ''
+    );
+  }
+  fmt.blank();
 }
 
 // -- Sub-commands -----------------------------------------------------------
@@ -73,14 +158,15 @@ async function cmdIngestImage(args: string[]): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const base = getRagBaseUrl();
   const data = await readFile(filePath);
   const formData = new FormData();
-  formData.append('file', new Blob([data]), path.basename(filePath));
+  formData.append(
+    'image',
+    new Blob([data], { type: guessMediaMimeType(filePath, 'image/*') }),
+    path.basename(filePath)
+  );
 
-  const res = await fetch(`${base}/multimodal/images/ingest`, { method: 'POST', body: formData });
-  if (!res.ok) throw new Error(`Image ingest failed (${res.status})`);
-  const result = await res.json() as any;
+  const result = (await ragMultipartFetch('/multimodal/images/ingest', formData)) as any;
   fmt.ok(`Image ingested ${arrow()} asset ${dim(result.assetId)} (${result.chunksCreated} chunks)`);
 }
 
@@ -91,15 +177,35 @@ async function cmdIngestAudio(args: string[]): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const base = getRagBaseUrl();
   const data = await readFile(filePath);
   const formData = new FormData();
-  formData.append('file', new Blob([data]), path.basename(filePath));
+  formData.append(
+    'audio',
+    new Blob([data], { type: guessMediaMimeType(filePath, 'audio/*') }),
+    path.basename(filePath)
+  );
 
-  const res = await fetch(`${base}/multimodal/audio/ingest`, { method: 'POST', body: formData });
-  if (!res.ok) throw new Error(`Audio ingest failed (${res.status})`);
-  const result = await res.json() as any;
+  const result = (await ragMultipartFetch('/multimodal/audio/ingest', formData)) as any;
   fmt.ok(`Audio ingested ${arrow()} asset ${dim(result.assetId)} (${result.chunksCreated} chunks)`);
+}
+
+async function cmdIngestDocument(args: string[]): Promise<void> {
+  const filePath = args[0];
+  if (!filePath) {
+    fmt.errorBlock('Missing argument', 'Usage: wunderland rag ingest-document <file>');
+    process.exitCode = 1;
+    return;
+  }
+  const data = await readFile(filePath);
+  const formData = new FormData();
+  formData.append(
+    'document',
+    new Blob([data], { type: guessMediaMimeType(filePath, 'application/octet-stream') }),
+    path.basename(filePath)
+  );
+
+  const result = (await ragMultipartFetch('/multimodal/documents/ingest', formData)) as any;
+  fmt.ok(`Document ingested ${arrow()} asset ${dim(result.assetId)} (${result.chunksCreated} chunks)`);
 }
 
 async function cmdQuery(args: string[], flags: Record<string, string | boolean>): Promise<void> {
@@ -225,21 +331,57 @@ async function cmdQueryMedia(args: string[], flags: Record<string, string | bool
   const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
 
   const result = await ragFetch('/multimodal/query', { method: 'POST', body: { query, modalities: modality } });
+  renderMediaQueryResult(`Media Query: "${query}"`, result, format);
+}
 
-  if (format === 'json') {
-    console.log(JSON.stringify(result, null, 2));
+async function cmdQueryImage(args: string[], flags: Record<string, string | boolean>): Promise<void> {
+  const filePath = args[0];
+  if (!filePath) {
+    fmt.errorBlock('Missing argument', 'Usage: wunderland rag query-image <file>');
+    process.exitCode = 1;
     return;
   }
 
-  fmt.section(`Media Query: "${query}"`);
-  if (!result.assets?.length) {
-    fmt.note('No media assets found.');
+  const data = await readFile(filePath);
+  const formData = new FormData();
+  formData.append(
+    'image',
+    new Blob([data], { type: guessMediaMimeType(filePath, 'image/*') }),
+    path.basename(filePath)
+  );
+  appendMediaQueryFlags(formData, flags);
+
+  const sourceUrl = typeof flags['source-url'] === 'string' ? flags['source-url'] : undefined;
+  if (sourceUrl) formData.append('sourceUrl', sourceUrl);
+
+  const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+  const result = await ragMultipartFetch('/multimodal/images/query', formData);
+  renderMediaQueryResult(`Image Query: ${path.basename(filePath)}`, result, format);
+}
+
+async function cmdQueryAudio(args: string[], flags: Record<string, string | boolean>): Promise<void> {
+  const filePath = args[0];
+  if (!filePath) {
+    fmt.errorBlock('Missing argument', 'Usage: wunderland rag query-audio <file>');
+    process.exitCode = 1;
     return;
   }
-  for (const item of result.assets) {
-    fmt.kvPair(`[${item.asset.modality}] ${item.asset.assetId}`, item.bestChunk?.content?.slice(0, 150) ?? '');
-  }
-  fmt.blank();
+
+  const data = await readFile(filePath);
+  const formData = new FormData();
+  formData.append(
+    'audio',
+    new Blob([data], { type: guessMediaMimeType(filePath, 'audio/*') }),
+    path.basename(filePath)
+  );
+  appendMediaQueryFlags(formData, flags);
+
+  const userId = typeof flags['user-id'] === 'string' ? flags['user-id'] : undefined;
+  if (userId) formData.append('userId', userId);
+
+  const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+  const result = await ragMultipartFetch('/multimodal/audio/query', formData);
+  renderMediaQueryResult(`Audio Query: ${path.basename(filePath)}`, result, format);
 }
 
 async function cmdCollections(args: string[], flags: Record<string, string | boolean>): Promise<void> {
@@ -521,8 +663,11 @@ export default async function cmdRag(
     ${dim('ingest <file|text>')}       Ingest a document
     ${dim('ingest-image <file>')}      Ingest an image (LLM captioning)
     ${dim('ingest-audio <file>')}      Ingest audio (Whisper transcription)
+    ${dim('ingest-document <file>')}   Ingest a document file (PDF/DOCX/TXT/MD/CSV/JSON/XML)
     ${dim('query <text>')}             Search RAG memory
     ${dim('query-media <text>')}       Search media assets
+    ${dim('query-image <file>')}       Search assets using a query image
+    ${dim('query-audio <file>')}       Search assets using a query audio clip
     ${dim('collections [list|create|delete]')}  Manage collections
     ${dim('documents [list|delete]')}  Manage documents
     ${dim('graph [local-search|global-search|stats]')}  GraphRAG
@@ -537,7 +682,12 @@ export default async function cmdRag(
     ${dim('--preset <p>')}       Retrieval preset (fast|balanced|accurate)
     ${dim('--graph')}             Include GraphRAG context in query results
     ${dim('--debug')}             Show pipeline debug trace (query)
-    ${dim('--modality <m>')}     Media filter (image|audio)
+    ${dim('--modality <m>')}     Media filter (image|audio|document)
+    ${dim('--text <text>')}       Precomputed caption/transcript for multimodal query
+    ${dim('--retrieval-mode <m>')} Retrieval mode (auto|text|native|hybrid)
+    ${dim('--include-metadata')}  Include asset metadata in multimodal query results
+    ${dim('--source-url <url>')}  Source URL hint for image query attribution
+    ${dim('--user-id <id>')}      User ID hint for hosted audio transcription
     ${dim('--category <c>')}     Document category
     ${dim('--verbose, -v')}      Show audit trail (query) / per-op details (audit)
     ${dim('--seed-id <id>')}     Filter by seed ID (audit)
@@ -551,8 +701,11 @@ export default async function cmdRag(
     if (sub === 'ingest') await cmdIngest(args.slice(1), flags);
     else if (sub === 'ingest-image') await cmdIngestImage(args.slice(1));
     else if (sub === 'ingest-audio') await cmdIngestAudio(args.slice(1));
+    else if (sub === 'ingest-document') await cmdIngestDocument(args.slice(1));
     else if (sub === 'query') await cmdQuery(args.slice(1), flags);
     else if (sub === 'query-media') await cmdQueryMedia(args.slice(1), flags);
+    else if (sub === 'query-image') await cmdQueryImage(args.slice(1), flags);
+    else if (sub === 'query-audio') await cmdQueryAudio(args.slice(1), flags);
     else if (sub === 'collections') await cmdCollections(args.slice(1), flags);
     else if (sub === 'documents') await cmdDocuments(args.slice(1), flags);
     else if (sub === 'graph') await cmdGraph(args.slice(1), flags);
