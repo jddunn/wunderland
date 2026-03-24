@@ -59,7 +59,7 @@ export interface TelephonyWebhookServerOptions {
  *   `processNormalizedEvent()` method receives parsed events.
  * @param providers - Map from provider name (e.g. `'twilio'`, `'telnyx'`) to a
  *   provider instance implementing `verifyWebhook()` and `parseWebhookEvent()`.
- * @param pipeline - Streaming pipeline handle (reserved for future use; passed
+ * @param _pipeline - Streaming pipeline handle (reserved for future use; passed
  *   for API symmetry with other factory functions).
  * @param options - Optional server configuration overrides.
  * @returns Resolves to a handle with the bound `port`, the full `url` prefix,
@@ -68,7 +68,7 @@ export interface TelephonyWebhookServerOptions {
 export async function startTelephonyWebhookServer(
   callManager: any,
   providers: Map<string, any>,
-  pipeline: any,
+  _pipeline: unknown,
   options?: TelephonyWebhookServerOptions,
 ): Promise<{ port: number; url: string; close: () => Promise<void> }> {
   // ── Config ────────────────────────────────────────────────────────────────

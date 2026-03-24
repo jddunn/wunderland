@@ -126,7 +126,7 @@ Run, explain, and list orchestration definitions from the CLI.
 ### Workflows (deterministic DAGs)
 
 ```bash
-# Compile and preview a workflow YAML file
+# Execute a workflow YAML file
 wunderland workflows run examples/workflow-research.yaml --input topic="AI agents"
 
 # List all available prebuilt workflow templates
@@ -142,7 +142,7 @@ wunderland help workflows
 ### Missions (intent-driven / planner)
 
 ```bash
-# Compile and preview a mission YAML file
+# Execute a mission YAML file
 wunderland mission run examples/mission-deep-research.yaml --input topic="quantum computing"
 
 # Explain a mission: show the planner's step decomposition without executing
