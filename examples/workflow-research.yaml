@@ -1,0 +1,20 @@
+# Example: Research Pipeline Workflow
+# Run: wunderland workflows run examples/workflow-research.yaml
+name: research-pipeline
+input:
+  topic: { type: string, required: true }
+returns:
+  summary: { type: string }
+  sources: { type: array, items: { type: string } }
+steps:
+  - id: search
+    tool: web_search
+    effectClass: external
+  - id: evaluate
+    gmi:
+      instructions: "Evaluate source quality and assign confidence score"
+      executionMode: single_turn
+  - id: summarize
+    gmi:
+      instructions: "Write a cited summary from evaluated sources"
+      executionMode: single_turn
