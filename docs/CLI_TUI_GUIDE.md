@@ -4,13 +4,14 @@ This guide covers the terminal UX: onboarding, keybindings, presets, and exports
 
 ## Quickstart (first run)
 
-1. Open the dashboard (TUI): `wunderland`
+1. Use the one-shot path if you want the fastest route to a runnable agent: `wunderland quickstart`
+2. Open the dashboard (TUI): `wunderland`
    - First run shows a short onboarding tour (skip / never show again). Re-open anytime with `t`.
    - Reset tour auto-launch: `wunderland config set ui.tour.status unseen`
-2. Run setup: `wunderland setup`
-3. Verify your environment: `wunderland doctor`
-4. Chat in the terminal: `wunderland chat`
-5. Start the server: `wunderland start`
+3. Run setup: `wunderland setup`
+4. Verify your environment: `wunderland doctor`
+5. Chat in the terminal: `wunderland chat`
+6. Start the server: `wunderland start`
 
 If you prefer scaffolding a project:
 
@@ -19,6 +20,13 @@ wunderland init my-agent --preset research-assistant
 ```
 
 For short guides: `wunderland help` and `wunderland help <topic>`.
+
+Useful help topics:
+
+- `wunderland help getting-started`
+- `wunderland help tui`
+- `wunderland help llm`
+- `wunderland help faq`
 
 ## TUI dashboard
 
@@ -56,6 +64,27 @@ For short guides: `wunderland help` and `wunderland help <topic>`.
 - Browse presets: `wunderland list-presets`
 - Scaffold with a preset: `wunderland init my-agent --preset research-assistant`
 - Override security tier: `wunderland init my-agent --security-tier strict`
+
+## Provider defaults
+
+Set global defaults once when you want image generation, voice, speech recognition, or web search to prefer a specific provider:
+
+```bash
+wunderland extensions configure
+```
+
+For image generation specifically, inspect required keys and current readiness with:
+
+```bash
+wunderland extensions info image-generation
+```
+
+Supported image-generation defaults in the CLI are:
+
+- `openai`
+- `openrouter`
+- `stability`
+- `replicate`
 
 ## Export PNG screenshots
 
