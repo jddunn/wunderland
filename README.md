@@ -135,6 +135,15 @@ const out = await session.sendText('Hello!');
 console.log(out.text);
 ```
 
+### Why `createWunderland()` instead of AgentOS `agent()`
+
+Wunderland intentionally keeps `createWunderland()` as its public library entrypoint.
+
+- `@framers/agentos` now exposes streamlined helpers like `generateText()`, `streamText()`, and `agent()` for lightweight in-process usage.
+- Wunderland layers additional runtime behavior on top: curated tool loading, skills, capability discovery, approvals, extension loading, adaptive execution, workspace policies, and preset-driven configuration.
+
+That means Wunderland should document the AgentOS high-level API, but it should not replace its own runtime with `agent()` until that helper covers the same operational surface.
+
 ### With skills + extensions + discovery
 
 ```ts
@@ -254,8 +263,23 @@ await session.sendText('Investigate recent SQL adapter changes', {
 pnpm add -g wunderland
 # or: npm install -g wunderland (requires Node 22 LTS)
 
+# Fastest first run
+wunderland quickstart
+
 # Interactive setup wizard
 wunderland setup
+
+# Open the dashboard + guided onboarding tour
+wunderland
+
+# Health check + operator help
+wunderland doctor
+wunderland help getting-started
+wunderland help tui
+
+# Configure shared provider defaults (image gen, TTS, STT, web search)
+wunderland extensions configure
+wunderland extensions info image-generation
 
 # UI / accessibility
 wunderland --theme cyberpunk
@@ -270,6 +294,15 @@ wunderland chat
 # Health check
 wunderland doctor
 ```
+
+### Example files
+
+- `examples/library-chat-basic.mjs` — minimal in-process chat
+- `examples/library-chat-with-tools-and-approvals.mjs` — curated tools + safe approvals
+- `examples/library-chat-image-generation.mjs` — image generation extension with provider defaults
+- `examples/chat-runtime.mjs` — lower-level runtime helper
+
+See `docs/CLI_TUI_GUIDE.md` for the first-run checklist, TUI keybindings, help topics, troubleshooting pointers, and provider-default setup.
 
 ---
 
