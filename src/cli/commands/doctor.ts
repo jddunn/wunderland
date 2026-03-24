@@ -93,6 +93,21 @@ export default async function cmdDoctor(
     const jsonConfig = await loadConfig();
     const gmailConnected = !!(process.env['GOOGLE_REFRESH_TOKEN'] || jsonConfig?.google?.refreshToken);
 
+    const voiceChecks = [
+      { name: 'OpenAI TTS/STT',      envVars: ['OPENAI_API_KEY'],                                  configured: Boolean(process.env['OPENAI_API_KEY']) },
+      { name: 'ElevenLabs TTS',      envVars: ['ELEVENLABS_API_KEY'],                               configured: Boolean(process.env['ELEVENLABS_API_KEY']) },
+      { name: 'Deepgram STT',        envVars: ['DEEPGRAM_API_KEY'],                                 configured: Boolean(process.env['DEEPGRAM_API_KEY']) },
+      { name: 'AssemblyAI STT',      envVars: ['ASSEMBLYAI_API_KEY'],                               configured: Boolean(process.env['ASSEMBLYAI_API_KEY']) },
+      { name: 'Azure Speech',        envVars: ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION'],          configured: Boolean(process.env['AZURE_SPEECH_KEY'] && process.env['AZURE_SPEECH_REGION']) },
+      { name: 'Google Cloud STT',    envVars: ['GOOGLE_STT_CREDENTIALS'],                           configured: Boolean(process.env['GOOGLE_STT_CREDENTIALS']) },
+      { name: 'Google Cloud TTS',    envVars: ['GOOGLE_TTS_CREDENTIALS'],                           configured: Boolean(process.env['GOOGLE_TTS_CREDENTIALS']) },
+      { name: 'Amazon Polly',        envVars: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'],       configured: Boolean(process.env['AWS_ACCESS_KEY_ID'] && process.env['AWS_SECRET_ACCESS_KEY']) },
+      { name: 'Twilio',              envVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'],          configured: Boolean(process.env['TWILIO_ACCOUNT_SID'] && process.env['TWILIO_AUTH_TOKEN']) },
+      { name: 'Telnyx',              envVars: ['TELNYX_API_KEY', 'TELNYX_CONNECTION_ID'],           configured: Boolean(process.env['TELNYX_API_KEY'] && process.env['TELNYX_CONNECTION_ID']) },
+      { name: 'Plivo',               envVars: ['PLIVO_AUTH_ID', 'PLIVO_AUTH_TOKEN'],                configured: Boolean(process.env['PLIVO_AUTH_ID'] && process.env['PLIVO_AUTH_TOKEN']) },
+      { name: 'Porcupine Wake-Word', envVars: ['PICOVOICE_ACCESS_KEY'],                             configured: Boolean(process.env['PICOVOICE_ACCESS_KEY']) },
+    ];
+
     const output = {
       configuration: {
         configJson: { path: configPath, exists: existsSync(configPath) },
@@ -116,6 +131,11 @@ export default async function cmdDoctor(
         },
       },
       connectivity,
+      voiceProviders: voiceChecks.map((vc) => ({
+        name: vc.name,
+        envVars: vc.envVars,
+        configured: vc.configured,
+      })),
     };
 
     console.log(JSON.stringify(output, null, 2));
@@ -288,6 +308,39 @@ export default async function cmdDoctor(
     }
     stepIdx++;
   }
+
+  // 9. Voice & Telephony Providers
+  console.log();
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('Voice & Telephony Providers')}`);
+  {
+    const env = process.env;
+
+    /** @type {Array<{ name: string; envVars: string[]; configured: boolean }>} */
+    const voiceChecks = [
+      { name: 'OpenAI TTS/STT',      envVars: ['OPENAI_API_KEY'],                                  configured: Boolean(env['OPENAI_API_KEY']) },
+      { name: 'ElevenLabs TTS',      envVars: ['ELEVENLABS_API_KEY'],                               configured: Boolean(env['ELEVENLABS_API_KEY']) },
+      { name: 'Deepgram STT',        envVars: ['DEEPGRAM_API_KEY'],                                 configured: Boolean(env['DEEPGRAM_API_KEY']) },
+      { name: 'AssemblyAI STT',      envVars: ['ASSEMBLYAI_API_KEY'],                               configured: Boolean(env['ASSEMBLYAI_API_KEY']) },
+      { name: 'Azure Speech',        envVars: ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION'],          configured: Boolean(env['AZURE_SPEECH_KEY'] && env['AZURE_SPEECH_REGION']) },
+      { name: 'Google Cloud STT',    envVars: ['GOOGLE_STT_CREDENTIALS'],                           configured: Boolean(env['GOOGLE_STT_CREDENTIALS']) },
+      { name: 'Google Cloud TTS',    envVars: ['GOOGLE_TTS_CREDENTIALS'],                           configured: Boolean(env['GOOGLE_TTS_CREDENTIALS']) },
+      { name: 'Amazon Polly',        envVars: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'],       configured: Boolean(env['AWS_ACCESS_KEY_ID'] && env['AWS_SECRET_ACCESS_KEY']) },
+      { name: 'Twilio',              envVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'],          configured: Boolean(env['TWILIO_ACCOUNT_SID'] && env['TWILIO_AUTH_TOKEN']) },
+      { name: 'Telnyx',              envVars: ['TELNYX_API_KEY', 'TELNYX_CONNECTION_ID'],           configured: Boolean(env['TELNYX_API_KEY'] && env['TELNYX_CONNECTION_ID']) },
+      { name: 'Plivo',               envVars: ['PLIVO_AUTH_ID', 'PLIVO_AUTH_TOKEN'],                configured: Boolean(env['PLIVO_AUTH_ID'] && env['PLIVO_AUTH_TOKEN']) },
+      { name: 'Porcupine Wake-Word', envVars: ['PICOVOICE_ACCESS_KEY'],                             configured: Boolean(env['PICOVOICE_ACCESS_KEY']) },
+    ];
+
+    for (const vc of voiceChecks) {
+      const envLabel = vc.envVars.join(', ');
+      if (vc.configured) {
+        console.log(`    ${sColor(g.ok)} ${vc.name.padEnd(24)} ${dim(envLabel)}`);
+      } else {
+        console.log(`    ${wColor(g.warn)} ${vc.name.padEnd(24)} ${muted(envLabel + ' (not set)')}`);
+      }
+    }
+  }
+  console.log();
 
   // Summary
   progress.complete();
