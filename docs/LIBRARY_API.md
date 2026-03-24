@@ -32,6 +32,57 @@ Wunderland intentionally keeps `createWunderland()` as its golden path because i
 
 So Wunderland should document the AgentOS high-level API, but it should not replace `createWunderland()` with `agent()` unless the helper reaches feature parity with Wunderland’s runtime needs.
 
+## Orchestration
+
+Author graphs with the AgentOS builders exposed at `wunderland/workflows`, then execute them through Wunderland with `app.runGraph(...)` or `app.streamGraph(...)`.
+
+```ts
+import { createWunderland } from 'wunderland';
+import { workflow } from 'wunderland/workflows';
+
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  tools: 'curated',
+});
+
+const compiled = workflow('content-pipeline')
+  .input({
+    type: 'object',
+    required: ['topic'],
+    properties: { topic: { type: 'string' } },
+  })
+  .returns({
+    type: 'object',
+    properties: { finalSummary: { type: 'string' } },
+  })
+  .step('research', {
+    gmi: {
+      instructions: 'Research the topic and return JSON like {"scratch":{"research":{...}}}.',
+    },
+  })
+  .then('judge', {
+    gmi: {
+      instructions: 'Return JSON like {"scratch":{"judge":{"score":8,"verdict":"ship","reasoning":"..."}}}.',
+    },
+  })
+  .compile();
+
+const result = await app.runGraph(compiled, { topic: 'AgentOS orchestration' });
+console.log(result);
+```
+
+Use these layers intentionally:
+
+- `workflow()` for deterministic DAGs and explicit step order
+- `AgentGraph` for loops, routers, and custom graph control
+- `mission()` for planner-driven orchestration that still compiles to the same graph IR
+
+Judge pattern:
+
+- Keep judge outputs structured in `scratch.judge`
+- Branch on `state.scratch.judge.score` or `state.scratch.judge.verdict`
+- Prefer concise rationale fields, not requests for raw hidden chain-of-thought
+
 ## Tools
 
 ### No tools (default)
