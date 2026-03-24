@@ -1310,8 +1310,105 @@ export default async function cmdChat(
       });
       const voiceServer = await startVoiceServer(
         pipeline,
-        // Agent session factory — placeholder; full wiring in follow-up task.
-        () => ({ agentId: seedId }),
+        () => {
+          const voiceSessionId = `voice-${seedId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const voiceMessages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
+          let aborted = false;
+
+          return {
+            async *sendText(text: string): AsyncIterable<string> {
+              aborted = false;
+              voiceMessages.push({ role: 'user', content: text });
+
+              const adaptiveDecision = adaptiveRuntime.resolveTurnDecision({
+                scope: {
+                  sessionId: voiceSessionId,
+                  userId: localUserId,
+                  personaId: activePersonaId,
+                  tenantId,
+                },
+              });
+
+              const voiceToolContext = {
+                ...toolContext,
+                gmiId: voiceSessionId,
+                sessionId: voiceSessionId,
+                interactiveSession: false,
+                toolFailureMode: adaptiveDecision.toolFailureMode,
+                adaptiveExecution: {
+                  degraded: adaptiveDecision.degraded,
+                  reason: adaptiveDecision.reason,
+                  actions: adaptiveDecision.actions,
+                  kpi: adaptiveDecision.kpi ?? undefined,
+                },
+              };
+
+              let reply = '';
+              let fallbackTriggered = false;
+              let turnFailed = false;
+              let toolCallCount = 0;
+
+              try {
+                reply = await runToolCallingTurn({
+                  providerId,
+                  apiKey: llmApiKey,
+                  model,
+                  messages: voiceMessages,
+                  toolMap,
+                  toolContext: voiceToolContext,
+                  maxRounds: 8,
+                  dangerouslySkipPermissions,
+                  stepUpAuthConfig: createStepUpAuthConfigFromTier(policy.securityTier ?? 'balanced'),
+                  strictToolNames,
+                  askPermission,
+                  toolFailureMode: adaptiveDecision.toolFailureMode,
+                  baseUrl: llmBaseUrl,
+                  ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
+                  fallback: providerId === 'openai' ? openrouterFallback : undefined,
+                  getApiKey: oauthGetApiKey,
+                  onFallback: () => {
+                    fallbackTriggered = true;
+                  },
+                  onToolCall: () => {
+                    toolCallCount += 1;
+                  },
+                });
+              } catch (error) {
+                turnFailed = true;
+                throw error;
+              } finally {
+                try {
+                  await adaptiveRuntime.recordTurnOutcome({
+                    scope: {
+                      sessionId: voiceSessionId,
+                      userId: localUserId,
+                      personaId: activePersonaId,
+                      tenantId,
+                    },
+                    degraded: adaptiveDecision.degraded || fallbackTriggered,
+                    replyText: reply,
+                    didFail: turnFailed,
+                    toolCallCount,
+                  });
+                } catch {
+                  // Voice transport should continue even if telemetry write fails.
+                }
+              }
+
+              if (reply) {
+                voiceMessages.push({ role: 'assistant', content: reply });
+                const chunks = reply.match(/\S+\s*/g) ?? [reply];
+                for (const chunk of chunks) {
+                  if (aborted) break;
+                  yield chunk;
+                }
+              }
+            },
+            abort() {
+              aborted = true;
+            },
+          };
+        },
         { port: voicePort },
       );
       fmt.note(`Voice pipeline WebSocket server: ${voiceServer.url}`);
