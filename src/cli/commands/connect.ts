@@ -53,21 +53,9 @@ async function connectGmail(): Promise<void> {
 
   const { verifier, challenge } = generatePKCE();
 
-  // Find a free port by binding to 0 and reading back the assigned port.
-  const port = await new Promise<number>((resolve, reject) => {
-    const tmp = createServer();
-    tmp.listen(0, '127.0.0.1', () => {
-      const addr = tmp.address();
-      if (!addr || typeof addr === 'string') {
-        tmp.close();
-        reject(new Error('Could not determine a free port'));
-        return;
-      }
-      const p = addr.port;
-      tmp.close(() => resolve(p));
-    });
-  });
-
+  // Fixed port for OAuth callback — must match Google Cloud Console redirect URI.
+  // Port 19832 chosen to avoid conflicts with common services.
+  const port = 19832;
   const redirectUri = `http://localhost:${port}/callback`;
 
   console.log(`\n  ${accent('Connecting Gmail...')}`);
