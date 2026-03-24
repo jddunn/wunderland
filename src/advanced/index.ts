@@ -13,7 +13,48 @@ import { createRequire } from 'node:module';
 export * from '../core/index.js';
 
 // Security exports
-export * from '../security/index.js';
+export * from '../security/types.js';
+export {
+  PreLLMClassifier,
+  type PreLLMClassifierConfig,
+} from '../security/PreLLMClassifier.js';
+export { DualLLMAuditor } from '../security/DualLLMAuditor.js';
+export {
+  SignedOutputVerifier,
+  IntentChainTracker,
+} from '../security/SignedOutputVerifier.js';
+export {
+  type SecurityTierName,
+  type SecurityTierConfig,
+  type EnhancedSecurityTierConfig,
+  SECURITY_TIERS,
+  getSecurityTier,
+  createPipelineFromTier,
+  isValidSecurityTier,
+} from '../security/SecurityTiers.js';
+export { SafeGuardrails, type SafeGuardrailsConfig } from '../security/SafeGuardrails.js';
+export {
+  AuditLogger,
+  type AuditLoggerConfig,
+  type ViolationFilter,
+  type ViolationStats,
+} from '../security/AuditLogger.js';
+export {
+  type FolderAccessRule,
+  type FolderPermissionConfig,
+  type FolderPermissionResult,
+  type ValidationResult as FolderValidationResult,
+  checkFolderAccess,
+  createDefaultFolderConfig,
+  validateFolderConfig,
+  isContainedPath,
+  validatePluginPath,
+} from '../security/FolderPermissions.js';
+export {
+  ToolLoopDetector,
+  type ToolLoopDetectorConfig,
+  type LoopDetectionResult,
+} from '../security/ToolLoopDetector.js';
 
 // Inference exports
 export * from '../inference/index.js';
@@ -129,4 +170,3 @@ const require = createRequire(import.meta.url);
 const pkg = require('../../package.json') as { name: string; version: string };
 export const VERSION = pkg.version;
 export const PACKAGE_NAME = pkg.name;
-
