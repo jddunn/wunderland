@@ -97,7 +97,7 @@ export default async function cmdWorkflows(
   ${accent('Subcommands:')}
     ${dim('list')}                 List local workflow/mission definition files
     ${dim('examples')}             Show bundled orchestration examples
-    ${dim('run <file>')}            Compile and preview a workflow YAML file
+    ${dim('run <file>')}            Execute a workflow YAML file
     ${dim('explain <file>')}       Show the compiled node/edge graph for a workflow
     ${dim('status <id>')}          Check workflow instance status
     ${dim('cancel <id>')}          Cancel a running workflow

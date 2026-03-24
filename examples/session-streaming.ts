@@ -7,7 +7,7 @@ import { createWunderland } from '../src/public/index.js';
 
 async function main() {
   const app = await createWunderland({
-    llm: { provider: 'openai', model: 'gpt-4o', apiKey: process.env.OPENAI_API_KEY! },
+    llm: { providerId: 'openai', model: 'gpt-4o', apiKey: process.env.OPENAI_API_KEY! },
     tools: 'none',
   });
 

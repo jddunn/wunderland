@@ -380,7 +380,7 @@ steps:
 ```
 
 ```bash
-# Compile and preview a workflow YAML file
+# Execute a workflow YAML file
 wunderland workflows run research-pipeline.workflow.yaml
 
 # Print the compiled node/edge graph
@@ -390,7 +390,7 @@ wunderland workflows explain research-pipeline.workflow.yaml
 ### YAML Missions (Intent-Driven)
 
 ```bash
-# Compile and preview a mission YAML file
+# Execute a mission YAML file
 wunderland mission run deep-research.mission.yaml
 
 # Show the planner-derived mission graph
@@ -402,7 +402,7 @@ wunderland mission explain deep-research.mission.yaml
 ```typescript
 import { createWunderland } from 'wunderland';
 
-const app = await createWunderland({ llm: { provider: 'openai', model: 'gpt-4o' } });
+const app = await createWunderland({ llm: { providerId: 'openai', model: 'gpt-4o' } });
 
 // Load and compile a workflow
 const flow = await app.loadWorkflow('./research-pipeline.workflow.yaml');

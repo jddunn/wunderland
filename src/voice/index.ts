@@ -46,7 +46,7 @@ export {
 
 // ── Streaming pipeline (voice-pipeline orchestrator factory) ─────────────────
 export { createStreamingPipeline } from './streaming-pipeline.js';
-export type { StreamingPipelineOptions } from './streaming-pipeline.js';
+export type { StreamingPipelineOptions, StreamingPipelineHandle } from './streaming-pipeline.js';
 
 // ── WebSocket voice server ────────────────────────────────────────────────────
 export { startVoiceServer } from './ws-server.js';
