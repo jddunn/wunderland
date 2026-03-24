@@ -147,12 +147,16 @@ export function printHelpTopic(topicRaw: string): void {
 
   if (resolved === 'getting-started') {
     printTitle('Getting Started');
-    console.log(`  ${iColor('0')} ${bright('Open the dashboard (recommended)')}`);
+    console.log(`  ${iColor('0')} ${bright('Use the one-shot quickstart if you want the fastest path')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland quickstart')}`);
+    console.log(`     ${dim('Auto-detects your environment, scaffolds config, and gets you to a runnable agent fast.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('Open the dashboard (recommended)')}`);
     console.log(`     ${muted('$')} ${accent('wunderland')}`);
     console.log(`     ${dim('Interactive TUI: search, drilldowns, and quick actions.')}`);
     console.log(`     ${dim('First run: a short onboarding tour appears (skip/disable, reopen with "t").')}`);
     console.log();
-    console.log(`  ${iColor('1')} ${bright('Run setup (recommended)')}`);
+    console.log(`  ${iColor('2')} ${bright('Run setup (recommended)')}`);
     console.log(`     ${muted('$')} ${accent('wunderland setup')}`);
     console.log(`     ${dim('Interactive wizard: LLM provider, personality, channels, RAG memory, and voice/TTS/STT.')}`);
     console.log();
@@ -160,18 +164,28 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${muted('$')} ${accent('wunderland login')}`);
     console.log(`     ${dim('See:')} ${accent('wunderland help auth')}`);
     console.log();
-    console.log(`  ${iColor('2')} ${bright('Verify your environment')}`);
+    console.log(`  ${iColor('3')} ${bright('Verify your environment')}`);
     console.log(`     ${muted('$')} ${accent('wunderland doctor')}`);
     console.log(`     ${dim('Checks config, keys, and connectivity.')}`);
     console.log();
-    console.log(`  ${iColor('3')} ${bright('Chat locally (interactive)')}`);
+    console.log(`  ${iColor('4')} ${bright('Chat locally (interactive)')}`);
     console.log(`     ${muted('$')} ${accent('wunderland chat')}`);
     console.log(`     ${dim('Tool calling + approvals. Type /help inside chat.')}`);
     console.log();
-    console.log(`  ${iColor('4')} ${bright('Start the server')}`);
+    console.log(`  ${iColor('5')} ${bright('Configure provider defaults when you need shared image/voice/search preferences')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland extensions configure')}`);
+    console.log(`     ${dim('Set global defaults for image generation, TTS, STT, and web search.')}`);
+    console.log(`     ${dim('Inspect a specific extension:')} ${accent('wunderland extensions info image-generation')}`);
+    console.log();
+    console.log(`  ${iColor('6')} ${bright('Start the server')}`);
     console.log(`     ${muted('$')} ${accent('wunderland start')}`);
     console.log();
     console.log(`  ${hr()}`);
+    console.log(`  ${dim('Need short operator guides?')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland help getting-started')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland help tui')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland help faq')}`);
+    console.log();
     console.log(`  ${dim('Prefer scaffolding a project?')}`);
     console.log(`     ${muted('$')} ${accent('wunderland init my-agent --preset research-assistant')}`);
     console.log();
@@ -573,6 +587,15 @@ export function printHelpTopic(topicRaw: string): void {
 
     console.log(`  ${bright('Q: Can I use my ChatGPT subscription instead of an API key?')}`);
     console.log(`  ${dim('A: Yes — run')} ${accent('wunderland login')} ${dim('to authenticate with OAuth. See')} ${accent('wunderland help auth')} ${dim('for details.')}`);
+    console.log();
+
+    console.log(`  ${bright('Q: How do I change the default image generation provider?')}`);
+    console.log(`  ${dim('A: Run')} ${accent('wunderland extensions configure')} ${dim('and choose OpenAI, OpenRouter, Stability AI, or Replicate.')}`);
+    console.log(`     ${dim('Inspect current requirements with')} ${accent('wunderland extensions info image-generation')} ${dim('or override per-agent in')} ${accent('agent.config.json')}.`);
+    console.log();
+
+    console.log(`  ${bright('Q: How do I reopen onboarding or find the quick guides again?')}`);
+    console.log(`  ${dim('A: Press')} ${accent('t')} ${dim('inside the TUI to reopen the tour, or use')} ${accent('wunderland help getting-started')} ${dim('and')} ${accent('wunderland help tui')}.`);
     console.log();
 
     console.log(`  ${hr()}`);
