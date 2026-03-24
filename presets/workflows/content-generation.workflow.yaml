@@ -1,0 +1,21 @@
+name: content-generation
+description: "Draft, evaluate, and revise content"
+input:
+  topic: { type: string, required: true }
+  tone: { type: string, default: "professional" }
+returns:
+  content: { type: string }
+  score: { type: number }
+steps:
+  - id: draft
+    gmi:
+      instructions: "Write a first draft about {topic} in a {tone} tone"
+      executionMode: single_turn
+  - id: judge
+    gmi:
+      instructions: "Score this draft 1-10 on clarity, accuracy, and engagement. Output JSON: {clarity, accuracy, engagement}"
+      executionMode: single_turn
+  - id: revise
+    gmi:
+      instructions: "Revise the draft based on the judge's feedback to improve weak areas"
+      executionMode: single_turn
