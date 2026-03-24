@@ -8,6 +8,8 @@
  * @module wunderland/cli/commands/mission
  */
 
+import { resolveRuntimeConfig } from './workflows.js';
+
 export default async function missionCommand(args: string[], flags?: Record<string, string | boolean>): Promise<void> {
   const subcommand = args[0] ?? 'help';
 
@@ -15,10 +17,15 @@ export default async function missionCommand(args: string[], flags?: Record<stri
     case 'run': {
       const target = args[1];
       if (!target) { console.error('Usage: wunderland mission run <file> [--input \'{"key":"val"}\']'); return; }
+      if (/\.(mjs|js|ts)$/i.test(target)) {
+        console.error('wunderland mission run executes YAML/JSON mission definitions. Run code-authored graphs with node/tsx and createWunderland().runGraph(...).');
+        process.exitCode = 1;
+        return;
+      }
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
       const { compileMissionYaml } = await import('../../orchestration/yaml-compiler.js');
-      const { streamWunderlandGraph } = await import('../../runtime/graph-runner.js');
+      const { createWunderland } = await import('../../public/index.js');
 
       const yamlPath = resolve(process.cwd(), target);
       const content = await readFile(yamlPath, 'utf-8');
@@ -29,37 +36,29 @@ export default async function missionCommand(args: string[], flags?: Record<stri
       const inputFlag = flags?.['input'] as string | undefined;
       const input = inputFlag ? JSON.parse(inputFlag) : {};
 
-      // Resolve LLM config from environment
-      const openrouterKey = process.env['OPENROUTER_API_KEY'];
-      const openaiKey = process.env['OPENAI_API_KEY'];
-      const anthropicKey = process.env['ANTHROPIC_API_KEY'];
-      let providerId = 'openai';
-      let apiKey = openaiKey ?? '';
-      let model = 'gpt-4o';
-      if (openrouterKey) { providerId = 'openrouter'; apiKey = openrouterKey; model = 'openai/gpt-4o'; }
-      else if (anthropicKey) { providerId = 'anthropic'; apiKey = anthropicKey; model = 'claude-sonnet-4-20250514'; }
-
-      if (!apiKey) {
-        console.error('No LLM API key found. Set OPENAI_API_KEY, OPENROUTER_API_KEY, or ANTHROPIC_API_KEY.');
-        process.exitCode = 1;
-        return;
-      }
-
-      const runtimeConfig = {
-        llm: { providerId, apiKey, model },
-        systemPrompt: 'You are executing a mission step.',
-        toolMap: new Map(),
-        toolContext: {},
-        askPermission: async () => true as const,
-      };
+      const baseRuntime = resolveRuntimeConfig();
+      const app = await createWunderland({
+        llm: {
+          providerId: baseRuntime.llm.providerId as any,
+          apiKey: baseRuntime.llm.apiKey as any,
+          model: baseRuntime.llm.model,
+          baseUrl: baseRuntime.llm.baseUrl,
+        },
+        tools: 'curated',
+        approvals: { mode: 'auto-all' },
+      });
 
       console.log(`\n  ● Mission: ${ir.name}`);
       const startTime = Date.now();
 
-      for await (const event of streamWunderlandGraph(compiled, input, runtimeConfig)) {
-        if (event.type === 'node_start') process.stdout.write(`  ├── running ${event.nodeId}...`);
-        if (event.type === 'node_end') process.stdout.write(` [${event.durationMs}ms]\n`);
-        if (event.type === 'error') console.error(`  ├── error: ${event.error.message}`);
+      try {
+        for await (const event of app.streamGraph(compiled, input)) {
+          if (event.type === 'node_start') process.stdout.write(`  ├── running ${event.nodeId}...`);
+          if (event.type === 'node_end') process.stdout.write(` [${event.durationMs}ms]\n`);
+          if (event.type === 'error') console.error(`  ├── error: ${event.error.message}`);
+        }
+      } finally {
+        await app.close();
       }
 
       console.log(`  └── ✓ complete [${Date.now() - startTime}ms]\n`);

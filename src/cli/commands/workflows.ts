@@ -14,40 +14,49 @@ import type { WunderlandGraphRunConfig } from '../../runtime/graph-runner.js';
 
 /**
  * Resolves LLM runtime config from environment variables.
- * Checks OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY in order.
+ * Checks OpenRouter, OpenAI, Anthropic, Gemini, then Ollama.
  */
-function resolveRuntimeConfig(): WunderlandGraphRunConfig {
+export function resolveRuntimeConfig(): WunderlandGraphRunConfig {
   const openrouterKey = process.env['OPENROUTER_API_KEY'];
   const openaiKey = process.env['OPENAI_API_KEY'];
   const anthropicKey = process.env['ANTHROPIC_API_KEY'];
   const geminiKey = process.env['GEMINI_API_KEY'];
+  const ollamaBaseUrl = process.env['OLLAMA_BASE_URL'];
 
   let providerId = 'openai';
   let apiKey = openaiKey ?? '';
   let model = 'gpt-4o';
+  let baseUrl: string | undefined;
 
   if (openrouterKey) {
     providerId = 'openrouter';
     apiKey = openrouterKey;
     model = 'openai/gpt-4o';
+    baseUrl = 'https://openrouter.ai/api/v1';
   } else if (anthropicKey) {
     providerId = 'anthropic';
     apiKey = anthropicKey;
     model = 'claude-sonnet-4-20250514';
   } else if (geminiKey) {
-    providerId = 'google';
+    providerId = 'gemini';
     apiKey = geminiKey;
-    model = 'gemini-2.0-flash';
+    model = 'gemini-2.5-flash';
+    baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai';
+  } else if (ollamaBaseUrl) {
+    providerId = 'ollama';
+    apiKey = '';
+    model = process.env['OLLAMA_MODEL'] || 'llama3.2';
+    baseUrl = ollamaBaseUrl;
   }
 
-  if (!apiKey) {
+  if (!apiKey && providerId !== 'ollama') {
     throw new Error(
-      'No LLM API key found. Set OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY.'
+      'No LLM runtime found. Set OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or OLLAMA_BASE_URL.'
     );
   }
 
   return {
-    llm: { providerId, apiKey, model },
+    llm: { providerId, apiKey, model, baseUrl },
     systemPrompt: 'You are a helpful assistant executing a workflow step.',
     toolMap: new Map(),
     toolContext: {},
@@ -56,7 +65,7 @@ function resolveRuntimeConfig(): WunderlandGraphRunConfig {
 }
 
 const LOCAL_WORKFLOW_DIRS = ['workflows', 'missions', 'orchestration'];
-const WORKFLOW_FILE_EXTENSIONS = ['.mjs', '.js', '.ts', '.workflow.json', '.mission.json', '.workflow.yaml', '.workflow.yml', '.mission.yaml', '.mission.yml'];
+const WORKFLOW_FILE_EXTENSIONS = ['.workflow.json', '.mission.json', '.workflow.yaml', '.workflow.yml', '.mission.yaml', '.mission.yml'];
 const BUNDLED_EXAMPLES = [
   'examples/workflow-orchestration.mjs',
   'examples/agent-graph-orchestration.mjs',
@@ -133,10 +142,18 @@ export default async function cmdWorkflows(
     } else if (sub === 'run') {
       const target = args[1];
       if (!target) { fmt.errorBlock('Missing file', 'Usage: wunderland workflows run <file>'); process.exitCode = 1; return; }
+      if (/\.(mjs|js|ts)$/i.test(target)) {
+        fmt.errorBlock(
+          'Unsupported file type',
+          'wunderland workflows run currently executes YAML/JSON workflow definitions. Run code-authored graphs with node/tsx and createWunderland().runGraph(...).',
+        );
+        process.exitCode = 1;
+        return;
+      }
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
       const { compileWorkflowYaml } = await import('../../orchestration/yaml-compiler.js');
-      const { streamWunderlandGraph } = await import('../../runtime/graph-runner.js');
+      const { createWunderland } = await import('../../public/index.js');
 
       const yamlPath = resolve(process.cwd(), target);
       const content = await readFile(yamlPath, 'utf-8');
@@ -149,26 +166,40 @@ export default async function cmdWorkflows(
 
       // Resolve LLM config from environment
       const runtimeConfig = resolveRuntimeConfig();
+      const app = await createWunderland({
+        llm: {
+          providerId: runtimeConfig.llm.providerId as any,
+          apiKey: runtimeConfig.llm.apiKey as any,
+          model: runtimeConfig.llm.model,
+          baseUrl: runtimeConfig.llm.baseUrl,
+        },
+        tools: 'curated',
+        approvals: { mode: 'auto-all' },
+      });
 
       console.log(`\n  ${accent('●')} ${ir.name}`);
 
       // Execute through GraphRuntime with streaming events
       const startTime = Date.now();
-      for await (const event of streamWunderlandGraph(compiled, input, runtimeConfig)) {
-        switch (event.type) {
-          case 'node_start':
-            process.stdout.write(`  ├── ${dim('running')} ${accent(event.nodeId)}...`);
-            break;
-          case 'node_end':
-            process.stdout.write(` ${dim(`[${event.durationMs}ms]`)}\n`);
-            break;
-          case 'text_delta':
-            // Accumulate text output silently during execution
-            break;
-          case 'error':
-            console.error(`  ├── ${dim('error')} ${event.error.message}`);
-            break;
+      try {
+        for await (const event of app.streamGraph(compiled, input)) {
+          switch (event.type) {
+            case 'node_start':
+              process.stdout.write(`  ├── ${dim('running')} ${accent(event.nodeId)}...`);
+              break;
+            case 'node_end':
+              process.stdout.write(` ${dim(`[${event.durationMs}ms]`)}\n`);
+              break;
+            case 'text_delta':
+              // Accumulate text output silently during execution
+              break;
+            case 'error':
+              console.error(`  ├── ${dim('error')} ${event.error.message}`);
+              break;
+          }
         }
+      } finally {
+        await app.close();
       }
       console.log(`  └── ${accent('✓')} complete ${dim(`[${Date.now() - startTime}ms]`)}\n`);
     } else if (sub === 'explain') {
