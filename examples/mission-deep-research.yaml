@@ -1,0 +1,12 @@
+# Example: Intent-driven deep research
+# Run: wunderland mission run examples/mission-deep-research.yaml
+name: deep-research
+goal: "Research {topic} thoroughly and produce a cited summary"
+input:
+  topic: { type: string, required: true }
+returns:
+  summary: { type: string }
+  confidence: { type: number }
+planner:
+  strategy: linear
+  maxSteps: 5

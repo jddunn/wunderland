@@ -76,7 +76,7 @@
 - **Tool registry** -- Loads curated AgentOS tools via `@framers/agentos-extensions-registry`
 - **Memory hooks** -- Optional `memory_read` tool with pluggable storage (SQL, vector, graph)
 - **Immutability** -- Seal agent configuration after setup; rotate operational secrets without changing the sealed spec
-- **Streamlined library API** -- `createWunderland()` + sessions from the root import; advanced modules under `wunderland/advanced/*`
+- **Streamlined library API** -- `createWunderland()` + sessions from the root import, plus `app.runGraph(...)` / `app.streamGraph(...)` for orchestrated execution
 - **RAG memory** -- Multimodal retrieval-augmented generation with vector, graph, and hybrid search
 - **Multi-agent collectives** -- Agency registry, communication bus, and shared memory
 - **Knowledge graph** -- Entity extraction, semantic search, and graph traversal
@@ -100,7 +100,7 @@ wunderland/
     browser/        BrowserClient, BrowserSession, BrowserInteractions
     scheduling/     CronScheduler (one-shot, interval, cron expression)
     agency/         AgencyRegistry, AgentCommunicationBus, AgencyMemoryManager
-    workflows/      WorkflowEngine, InMemoryWorkflowStore
+    workflows/      AgentGraph, workflow(), mission(), WorkflowEngine, graph execution bridge
     planning/       PlanningEngine, task decomposition, autonomous loops
     evaluation/     Evaluator, LLMJudge, criteria presets
     knowledge/      KnowledgeGraph, entity extraction, semantic search
@@ -143,6 +143,51 @@ Wunderland intentionally keeps `createWunderland()` as its public library entryp
 - Wunderland layers additional runtime behavior on top: curated tool loading, skills, capability discovery, approvals, extension loading, adaptive execution, workspace policies, and preset-driven configuration.
 
 That means Wunderland should document the AgentOS high-level API, but it should not replace its own runtime with `agent()` until that helper covers the same operational surface.
+
+### Orchestrated execution with `wunderland/workflows`
+
+Use the AgentOS orchestration builders for authoring, then execute the compiled graph through Wunderland so you keep its tools, approvals, extension loading, and runtime policies.
+
+```ts
+import { createWunderland } from 'wunderland';
+import { workflow } from 'wunderland/workflows';
+
+const app = await createWunderland({
+  llm: { providerId: 'openai' },
+  tools: 'curated',
+});
+
+const compiled = workflow('research-pipeline')
+  .input({
+    type: 'object',
+    required: ['topic'],
+    properties: { topic: { type: 'string' } },
+  })
+  .returns({
+    type: 'object',
+    properties: { finalSummary: { type: 'string' } },
+  })
+  .step('research', {
+    gmi: {
+      instructions: 'Research the topic and return JSON under scratch.research.',
+    },
+  })
+  .then('judge', {
+    gmi: {
+      instructions: 'Score the research and return JSON under scratch.judge.',
+    },
+  })
+  .compile();
+
+const result = await app.runGraph(compiled, { topic: 'graph-based agent runtimes' });
+console.log(result);
+```
+
+Use:
+
+- `workflow()` for deterministic DAGs and explicit step ordering
+- `AgentGraph` for loops, routers, and custom control flow
+- `mission()` for planner-driven orchestration that compiles to the same graph IR
 
 ### With skills + extensions + discovery
 
@@ -275,6 +320,7 @@ wunderland
 # Health check + operator help
 wunderland doctor
 wunderland help getting-started
+wunderland help workflows
 wunderland help tui
 
 # Configure shared provider defaults (image gen, TTS, STT, web search)
@@ -300,9 +346,84 @@ wunderland doctor
 - `examples/library-chat-basic.mjs` — minimal in-process chat
 - `examples/library-chat-with-tools-and-approvals.mjs` — curated tools + safe approvals
 - `examples/library-chat-image-generation.mjs` — image generation extension with provider defaults
+- `examples/workflow-orchestration.mjs` — deterministic `workflow()` with an LLM-as-judge step
+- `examples/agent-graph-orchestration.mjs` — explicit `AgentGraph` routing with a judge loop
+- `examples/mission-orchestration.mjs` — planner-driven `mission()` plus `explain()` and execution
 - `examples/chat-runtime.mjs` — lower-level runtime helper
+- `examples/workflow-research.yaml` — runnable research-pipeline workflow (search → evaluate → summarize)
+- `examples/mission-deep-research.yaml` — intent-driven deep research mission definition
+- `examples/graph-research-loop.ts` — AgentGraph with conditional retry cycle
+- `examples/graph-judge-pipeline.ts` — LLM-as-judge evaluation pipeline using judgeNode
+- `examples/session-streaming.ts` — streaming session events with `session.stream()`
+- `examples/checkpoint-resume.ts` — checkpoint and resume across session turns
 
 See `docs/CLI_TUI_GUIDE.md` for the first-run checklist, TUI keybindings, help topics, troubleshooting pointers, and provider-default setup.
+
+---
+
+## Graph-Based Orchestration
+
+Wunderland supports three levels of workflow orchestration powered by the AgentOS unified orchestration layer:
+
+### YAML Workflows (Deterministic DAGs)
+
+```yaml
+# research-pipeline.workflow.yaml
+name: research-pipeline
+steps:
+  - id: search
+    tool: web_search
+  - id: evaluate
+    gmi: { instructions: "Evaluate results" }
+  - id: summarize
+    gmi: { instructions: "Write summary" }
+```
+
+```bash
+wunderland workflows run research-pipeline.workflow.yaml
+wunderland workflows explain research-pipeline.workflow.yaml
+```
+
+### YAML Missions (Intent-Driven)
+
+```bash
+wunderland mission run deep-research.mission.yaml
+wunderland mission explain deep-research.mission.yaml
+```
+
+### Library API
+
+```typescript
+import { createWunderland } from 'wunderland';
+
+const app = await createWunderland({ llm: { provider: 'openai', model: 'gpt-4o' } });
+
+// Load and run a workflow
+const flow = await app.loadWorkflow('./research-pipeline.workflow.yaml');
+
+// Stream session events
+const session = app.session();
+for await (const event of session.stream('Hello')) {
+  if (event.type === 'text_delta') process.stdout.write(event.content);
+}
+
+// Checkpoint and resume
+const cpId = await session.checkpoint();
+await session.resume(cpId);
+```
+
+### Prebuilt Templates
+
+| Template | Type | Description |
+|----------|------|-------------|
+| `research-pipeline` | workflow | Search → evaluate → summarize |
+| `content-generation` | workflow | Draft → judge → revise |
+| `data-extraction` | workflow | Fetch → extract → validate |
+| `evaluation` | workflow | Multi-judge scoring |
+| `deep-research` | mission | Planner-driven research |
+| `report-writer` | mission | Structured report generation |
+
+See `presets/workflows/` and `presets/missions/` for all templates.
 
 ---
 
