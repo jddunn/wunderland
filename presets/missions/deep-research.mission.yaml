@@ -8,7 +8,7 @@ returns:
   sources: { type: array, items: { type: object } }
   confidence: { type: number }
 planner:
-  strategy: linear
+  strategy: plan_and_execute
   maxSteps: 8
   maxIterations: 3
 policy:
