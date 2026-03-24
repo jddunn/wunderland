@@ -31,6 +31,16 @@ describe('CLI subcommand help', () => {
     expect(output).toContain('wunderland skills [list|info|enable|disable] [options]');
   });
 
+  it('prints command-specific help for extensions', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['extensions', '--help', '--quiet']);
+
+    const output = stripAnsi(log.mock.calls.flat().join('\n'));
+    expect(output).toContain('Command: extensions');
+    expect(output).toContain('wunderland extensions <list|info|enable|disable|configure|set-default> [options]');
+  });
+
   it('prints command-specific help for voice', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -39,6 +49,16 @@ describe('CLI subcommand help', () => {
     const output = stripAnsi(log.mock.calls.flat().join('\n'));
     expect(output).toContain('Command: voice');
     expect(output).toContain('wunderland voice [status|tts|stt|test <text>|clone]');
+  });
+
+  it('prints command-specific help for setup', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['setup', '--help', '--quiet']);
+
+    const output = stripAnsi(log.mock.calls.flat().join('\n'));
+    expect(output).toContain('Command: setup');
+    expect(output).toContain('wunderland setup');
   });
 
   it('prints the voice help topic', async () => {

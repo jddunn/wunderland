@@ -35,6 +35,14 @@ describe('CLI help topics', () => {
     expect(out).toContain('--preset research-assistant');
   });
 
+  it('prints the getting started guide with quickstart, doctor, and provider default guidance', () => {
+    const out = captureLogs(() => printHelpTopic('getting-started'));
+    expect(out).toContain('wunderland quickstart');
+    expect(out).toContain('wunderland doctor');
+    expect(out).toContain('wunderland extensions configure');
+    expect(out).toContain('wunderland help tui');
+  });
+
   it('prints the TUI guide with drilldown details/help modals', () => {
     const out = captureLogs(() => printHelpTopic('tui'));
     expect(out.toLowerCase()).toContain('drilldowns');
@@ -42,9 +50,15 @@ describe('CLI help topics', () => {
     expect(out).toContain('?');
   });
 
+  it('prints the FAQ with image generation provider guidance', () => {
+    const out = captureLogs(() => printHelpTopic('faq'));
+    expect(out).toContain('wunderland extensions configure');
+    expect(out).toContain('image generation provider');
+    expect(out).toContain('wunderland extensions info image-generation');
+  });
+
   it('prints a warning for unknown topics', () => {
     const out = captureLogs(() => printHelpTopic('does-not-exist'));
     expect(out.toLowerCase()).toContain('unknown help topic');
   });
 });
-
