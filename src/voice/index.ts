@@ -44,6 +44,14 @@ export {
   getSpeechProviderKinds,
 } from './call-client.js';
 
+// ── Streaming pipeline (voice-pipeline orchestrator factory) ─────────────────
+export { createStreamingPipeline } from './streaming-pipeline.js';
+export type { StreamingPipelineOptions } from './streaming-pipeline.js';
+
+// ── WebSocket voice server ────────────────────────────────────────────────────
+export { startVoiceServer } from './ws-server.js';
+export type { VoiceServerOptions, VoiceServerHandle } from './ws-server.js';
+
 export type {
   IVoiceCallProvider,
   InitiateCallInput,
