@@ -6,6 +6,16 @@
 import type { ITool, AgentMemory } from '@framers/agentos';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 import type {
+  AgentGraph as AgentGraphBuilder,
+  CompiledExecutionGraph,
+  GraphEvent,
+  GraphState,
+  MemoryConsistencyMode,
+  StateReducers,
+  WorkflowBuilder as AgentWorkflowBuilder,
+  MissionBuilder as AgentMissionBuilder,
+} from '@framers/agentos/orchestration';
+import type {
   WunderlandAgentConfig,
   WunderlandProviderId,
   WunderlandToolFailureMode,
@@ -201,23 +211,95 @@ export type WunderlandOptions = {
   adaptiveExecution?: WunderlandAdaptiveExecutionConfig;
 };
 
+/** Options accepted by {@link WunderlandSession.sendText} and {@link WunderlandSession.stream}. */
+export type WunderlandSendTextOpts = {
+  userId?: string;
+  tenantId?: string;
+  toolFailureMode?: WunderlandToolFailureMode;
+  toolSelectionMode?: TurnToolSelectionMode;
+};
+
 export type WunderlandSession = {
   readonly id: string;
   messages: () => WunderlandMessage[];
-  sendText: (
-    text: string,
-    opts?: {
-      userId?: string;
-      tenantId?: string;
-      toolFailureMode?: WunderlandToolFailureMode;
-      toolSelectionMode?: TurnToolSelectionMode;
-    },
-  ) => Promise<WunderlandTurnResult>;
+  sendText: (text: string, opts?: WunderlandSendTextOpts) => Promise<WunderlandTurnResult>;
+  /**
+   * Execute a turn and yield graph-style {@link GraphEvent} objects in real time.
+   * Useful for streaming UI updates without wiring up a full AgentGraph.
+   */
+  stream: (text: string, opts?: WunderlandSendTextOpts) => AsyncIterable<GraphEvent>;
+  /**
+   * Persist the current session message history as a named checkpoint.
+   * Returns an opaque checkpoint ID that can be passed to {@link WunderlandSession.resume}.
+   */
+  checkpoint: () => Promise<string>;
+  /**
+   * Restore this session's message history from a previously saved checkpoint.
+   * Throws if the checkpoint ID is not found.
+   */
+  resume: (checkpointId: string) => Promise<void>;
 };
+
+export type WunderlandGraphLike =
+  | CompiledExecutionGraph
+  | {
+      toIR: () => CompiledExecutionGraph;
+    };
 
 export type WunderlandApp = {
   session: (sessionId?: string) => WunderlandSession;
   diagnostics: () => WunderlandDiagnostics;
+  agentGraph: <TState extends GraphState = GraphState>(
+    stateSchema: {
+      input: any;
+      scratch: any;
+      artifacts: any;
+    },
+    config?: {
+      reducers?: StateReducers;
+      memoryConsistency?: MemoryConsistencyMode;
+      checkpointPolicy?: 'every_node' | 'explicit' | 'none';
+    },
+  ) => AgentGraphBuilder<TState>;
+  workflow: (name: string) => AgentWorkflowBuilder;
+  mission: (name: string) => AgentMissionBuilder;
+  runGraph: (
+    graph: WunderlandGraphLike,
+    input: unknown,
+    opts?: {
+      sessionId?: string;
+      userId?: string;
+      tenantId?: string;
+      toolFailureMode?: WunderlandToolFailureMode;
+      debug?: boolean;
+    },
+  ) => Promise<unknown>;
+  streamGraph: (
+    graph: WunderlandGraphLike,
+    input: unknown,
+    opts?: {
+      sessionId?: string;
+      userId?: string;
+      tenantId?: string;
+      toolFailureMode?: WunderlandToolFailureMode;
+      debug?: boolean;
+    },
+  ) => AsyncIterable<GraphEvent>;
+  /**
+   * Load and compile a workflow definition from a YAML file.
+   * Returns the compiled workflow descriptor that can be passed to {@link WunderlandApp.runGraph}.
+   */
+  loadWorkflow: (yamlPath: string) => Promise<any>;
+  /**
+   * Load and compile a mission definition from a YAML file.
+   * Returns the compiled mission descriptor that can be passed to {@link WunderlandApp.runGraph}.
+   */
+  loadMission: (yamlPath: string) => Promise<any>;
+  /**
+   * List all workflow and mission YAML files discovered under the working directory
+   * (`./workflows/` and `./missions/` subdirectories).
+   */
+  listWorkflows: () => Array<{ name: string; path: string; type: 'workflow' | 'mission' }>;
   memory?: AgentMemory;
   close: () => Promise<void>;
 };
