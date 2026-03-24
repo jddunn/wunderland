@@ -134,6 +134,10 @@ const GLOBAL_FLAGS = [
   '--voice-diarization',
   '--voice-barge-in',
   '--voice-port',
+  '--telephony-provider',
+  '--telephony-webhook-port',
+  '--telephony-webhook-host',
+  '--telephony-webhook-path',
 ];
 
 // ── Main handler ────────────────────────────────────────────────────────────
