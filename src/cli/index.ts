@@ -80,10 +80,13 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${w('Deploy')}
       ${w('deploy')}               Generate deployment artifacts (Docker, Railway, Fly)
 
+    ${w('Orchestration')}
+      ${w('workflows')}             Run, explain, and list YAML workflows
+      ${w('mission')}               Run and explain intent-driven missions
+      ${w('agency')}                Multi-agent collectives
+
     ${w('Advanced')}
       ${w('rag')}                   RAG memory management
-      ${w('agency')}                Multi-agent collectives
-      ${w('workflows')}             Workflow engine
       ${w('evaluate')}              Evaluation suite
       ${w('knowledge')}             Knowledge graph
       ${w('provenance')}            Audit trail & provenance
