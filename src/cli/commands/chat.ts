@@ -1260,9 +1260,10 @@ export default async function cmdChat(
   // a voice client. Failure is non-fatal — chat continues in text mode.
   if (voiceEnabled) {
     try {
-      const { createStreamingPipeline, startVoiceServer } = await import(
-        '../../voice/streaming-pipeline.js'
-      );
+      const [{ createStreamingPipeline }, { startVoiceServer }] = await Promise.all([
+        import('../../voice/streaming-pipeline.js'),
+        import('../../voice/ws-server.js'),
+      ]);
       const pipeline = await createStreamingPipeline({
         stt: voiceStt,
         tts: voiceTts,
@@ -1282,7 +1283,7 @@ export default async function cmdChat(
       process.once('SIGINT', () => void voiceServer.close());
       process.once('SIGTERM', () => void voiceServer.close());
     } catch (err) {
-      fmt.warn(`Voice pipeline unavailable: ${err instanceof Error ? err.message : String(err)}`);
+      fmt.warning(`Voice pipeline unavailable: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

@@ -86,7 +86,7 @@ const SUBCOMMANDS: Record<string, string[]> = {
     'audit',
   ],
   agency: ['list', 'create', 'status'],
-  workflows: ['list', 'run', 'status', 'cancel'],
+  workflows: ['list', 'examples', 'run', 'status', 'cancel'],
   completions: ['bash', 'zsh', 'fish'],
 };
 
