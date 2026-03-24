@@ -10,6 +10,50 @@ import type { GlobalFlags } from '../types.js';
 import { accent, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+import type { WunderlandGraphRunConfig } from '../../runtime/graph-runner.js';
+
+/**
+ * Resolves LLM runtime config from environment variables.
+ * Checks OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY in order.
+ */
+function resolveRuntimeConfig(): WunderlandGraphRunConfig {
+  const openrouterKey = process.env['OPENROUTER_API_KEY'];
+  const openaiKey = process.env['OPENAI_API_KEY'];
+  const anthropicKey = process.env['ANTHROPIC_API_KEY'];
+  const geminiKey = process.env['GEMINI_API_KEY'];
+
+  let providerId = 'openai';
+  let apiKey = openaiKey ?? '';
+  let model = 'gpt-4o';
+
+  if (openrouterKey) {
+    providerId = 'openrouter';
+    apiKey = openrouterKey;
+    model = 'openai/gpt-4o';
+  } else if (anthropicKey) {
+    providerId = 'anthropic';
+    apiKey = anthropicKey;
+    model = 'claude-sonnet-4-20250514';
+  } else if (geminiKey) {
+    providerId = 'google';
+    apiKey = geminiKey;
+    model = 'gemini-2.0-flash';
+  }
+
+  if (!apiKey) {
+    throw new Error(
+      'No LLM API key found. Set OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY.'
+    );
+  }
+
+  return {
+    llm: { providerId, apiKey, model },
+    systemPrompt: 'You are a helpful assistant executing a workflow step.',
+    toolMap: new Map(),
+    toolContext: {},
+    askPermission: async () => true,
+  };
+}
 
 const LOCAL_WORKFLOW_DIRS = ['workflows', 'missions', 'orchestration'];
 const WORKFLOW_FILE_EXTENSIONS = ['.mjs', '.js', '.ts', '.workflow.json', '.mission.json', '.workflow.yaml', '.workflow.yml', '.mission.yaml', '.mission.yml'];
@@ -92,15 +136,41 @@ export default async function cmdWorkflows(
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
       const { compileWorkflowYaml } = await import('../../orchestration/yaml-compiler.js');
+      const { streamWunderlandGraph } = await import('../../runtime/graph-runner.js');
 
       const yamlPath = resolve(process.cwd(), target);
       const content = await readFile(yamlPath, 'utf-8');
       const compiled = compileWorkflowYaml(content);
       const ir = compiled.toIR();
-      console.log(`\n  Workflow: ${ir.name}`);
-      console.log(`  Nodes: ${ir.nodes.length}, Edges: ${ir.edges.length}`);
-      console.log(`  Status: compiled successfully\n`);
-      // Full execution would need runtime config — for now show the compiled graph
+
+      // Parse --input flag as JSON
+      const inputFlag = _flags['input'] as string | undefined;
+      const input = inputFlag ? JSON.parse(inputFlag) : {};
+
+      // Resolve LLM config from environment
+      const runtimeConfig = resolveRuntimeConfig();
+
+      console.log(`\n  ${accent('●')} ${ir.name}`);
+
+      // Execute through GraphRuntime with streaming events
+      const startTime = Date.now();
+      for await (const event of streamWunderlandGraph(compiled, input, runtimeConfig)) {
+        switch (event.type) {
+          case 'node_start':
+            process.stdout.write(`  ├── ${dim('running')} ${accent(event.nodeId)}...`);
+            break;
+          case 'node_end':
+            process.stdout.write(` ${dim(`[${event.durationMs}ms]`)}\n`);
+            break;
+          case 'text_delta':
+            // Accumulate text output silently during execution
+            break;
+          case 'error':
+            console.error(`  ├── ${dim('error')} ${event.error.message}`);
+            break;
+        }
+      }
+      console.log(`  └── ${accent('✓')} complete ${dim(`[${Date.now() - startTime}ms]`)}\n`);
     } else if (sub === 'explain') {
       const target = args[1];
       if (!target) { fmt.errorBlock('Missing file', 'Usage: wunderland workflows explain <file>'); process.exitCode = 1; return; }
