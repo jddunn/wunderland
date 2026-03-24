@@ -11,6 +11,7 @@ import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
 import { wrapInFrame } from '../layout.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
+import { filterSearch } from '../../utils/search-scoring.js';
 
 interface SkillEntry {
   id: string;
@@ -242,12 +243,9 @@ export class SkillsView {
   }
 
   private getFilteredSkills(): SkillEntry[] {
-    const q = this.filter.trim().toLowerCase();
+    const q = this.filter.trim();
     if (!q) return this.skills;
-    return this.skills.filter((s) => {
-      const hay = `${s.id} ${s.name} ${s.description}`.toLowerCase();
-      return hay.includes(q);
-    });
+    return filterSearch(this.skills, q);
   }
 
   private modalWidth(cols: number): number {
@@ -279,7 +277,7 @@ export class SkillsView {
       `${accent('/')} start search  ${accent('esc')} exit search`,
       '',
       `${bright('Tips')}`,
-      `${dim('-')} Search matches id, name, and description.`,
+      `${dim('-')} Search matches id, name, description, and keywords (with fuzzy matching).`,
       `${dim('-')} Details shows the CLI command to inspect a skill.`,
     ];
   }

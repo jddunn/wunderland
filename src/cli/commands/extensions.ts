@@ -12,25 +12,7 @@ import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { normalizeExtensionName } from '../extensions/aliases.js';
 
-// ── Extension search scoring ────────────────────────────────────────────────
-
-function scoreExtension(ext: { name: string; displayName: string; description: string; category: string }, query: string): number {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return 0;
-
-  const searchable = [ext.name, ext.displayName, ext.description, ext.category].join(' ').toLowerCase();
-
-  let score = 0;
-  for (const term of terms) {
-    if (ext.name.toLowerCase() === term) { score += 50; continue; }
-    if (ext.name.toLowerCase().includes(term)) { score += 30; continue; }
-    if (ext.displayName.toLowerCase().includes(term)) { score += 25; continue; }
-    if (ext.category.toLowerCase() === term) { score += 20; continue; }
-    if (ext.description.toLowerCase().includes(term)) { score += 10; continue; }
-    if (searchable.includes(term)) { score += 5; continue; }
-  }
-  return Math.round(score / terms.length);
-}
+import { scoreSearch } from '../utils/search-scoring.js';
 
 // ── Config helpers ──────────────────────────────────────────────────────────
 
@@ -245,11 +227,8 @@ async function searchExtensions(args: string[], flags: Record<string, string | b
     const available = await getAvailableExtensions();
     const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
 
-    const scored = available
-      .map((ext: any) => ({ ext, score: scoreExtension(ext, query) }))
-      .filter((r: any) => r.score > 0)
-      .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 10);
+    const scored = scoreSearch(available, query, 10)
+      .map(r => ({ ext: r.item, score: r.score }));
 
     if (format === 'json') {
       console.log(JSON.stringify({ query, results: scored.map((r: any) => ({ ...r.ext, relevance: r.score })) }, null, 2));

@@ -11,6 +11,7 @@ import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
 import { wrapInFrame } from '../layout.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
+import { filterSearch } from '../../utils/search-scoring.js';
 
 interface ExtEntry {
   name: string;
@@ -214,12 +215,9 @@ export class ExtensionsView {
   }
 
   private getFilteredExtensions(): ExtEntry[] {
-    const q = this.filter.trim().toLowerCase();
+    const q = this.filter.trim();
     if (!q) return this.extensions;
-    return this.extensions.filter((e) => {
-      const hay = `${e.name} ${e.displayName} ${e.category}`.toLowerCase();
-      return hay.includes(q);
-    });
+    return filterSearch(this.extensions, q);
   }
 
   private openDetails(): void {
@@ -276,7 +274,7 @@ export class ExtensionsView {
       `${accent('/')} start search  ${accent('esc')} exit search`,
       '',
       `${bright('Tips')}`,
-      `${dim('-')} Search matches id, name, and category.`,
+      `${dim('-')} Search matches id, name, category, and description (with fuzzy matching).`,
       `${dim('-')} Details shows the CLI commands to manage an extension.`,
     ];
   }
