@@ -36,4 +36,11 @@ describe('CLI help topic rendering', () => {
     expect(output).toContain('image generation provider');
     expect(output).toContain('wunderland extensions info image-generation');
   });
+
+  it('renders the workflows topic with orchestration guidance', () => {
+    const output = captureLogs(() => printHelpTopic('workflows'));
+    expect(output).toContain(`wunderland/workflows`);
+    expect(output).toContain('app.runGraph');
+    expect(output).toContain('scratch.judge');
+  });
 });

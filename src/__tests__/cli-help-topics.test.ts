@@ -57,6 +57,13 @@ describe('CLI help topics', () => {
     expect(out).toContain('wunderland extensions info image-generation');
   });
 
+  it('prints the workflows guide with orchestration guidance', () => {
+    const out = captureLogs(() => printHelpTopic('workflows'));
+    expect(out).toContain(`wunderland/workflows`);
+    expect(out).toContain('app.runGraph');
+    expect(out).toContain('judge');
+  });
+
   it('prints a warning for unknown topics', () => {
     const out = captureLogs(() => printHelpTopic('does-not-exist'));
     expect(out.toLowerCase()).toContain('unknown help topic');
