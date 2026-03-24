@@ -38,6 +38,7 @@ import {
   workflow,
   mission,
 } from '@framers/agentos/orchestration';
+import { schemaFromYaml, type YamlFieldDef } from './yaml-schema.js';
 
 /**
  * Fallback input schema used when the YAML document does not declare an `input` field.
@@ -45,6 +46,16 @@ import {
  * authors to spell out a schema for every automation.
  */
 const OPEN_INPUT_SCHEMA = z.record(z.string(), z.unknown());
+
+function resolveYamlSchema(
+  schema: Record<string, YamlFieldDef> | undefined,
+  fallback: z.ZodTypeAny = OPEN_INPUT_SCHEMA,
+): z.ZodTypeAny {
+  if (!schema || Object.keys(schema).length === 0) {
+    return fallback;
+  }
+  return schemaFromYaml(schema);
+}
 
 // ---------------------------------------------------------------------------
 // Internal: safe condition expression evaluator
@@ -186,10 +197,8 @@ export function compileWorkflowYaml(yamlContent: string): any {
   if (!Array.isArray(doc.steps)) throw new Error('YAML workflow must have a `steps` array');
 
   let builder = workflow(doc.name)
-    // When the YAML document omits `input` or `returns`, fall back to an open
-    // schema so authors are not forced to spell out schemas for simple automations.
-    .input(doc.input ?? OPEN_INPUT_SCHEMA)
-    .returns(doc.returns ?? OPEN_INPUT_SCHEMA);
+    .input(resolveYamlSchema(doc.input))
+    .returns(resolveYamlSchema(doc.returns));
 
   for (const stepDef of doc.steps as YamlStepDef[]) {
     if (!stepDef.id) throw new Error(`Each YAML step must have an \`id\` field: ${JSON.stringify(stepDef)}`);
@@ -230,7 +239,15 @@ interface YamlMissionDef {
   /** Planner configuration for step decomposition. */
   planner: {
     /** Decomposition strategy for the planner. */
-    strategy: 'linear' | 'tree' | 'react';
+    strategy:
+      | 'linear'
+      | 'tree'
+      | 'react'
+      | 'plan_and_execute'
+      | 'tree_of_thought'
+      | 'least_to_most'
+      | 'self_consistency'
+      | 'reflexion';
     /** Maximum number of steps the planner may emit. */
     maxSteps?: number;
     /** Maximum internal iterations for ReAct-style planners. */
@@ -240,6 +257,8 @@ interface YamlMissionDef {
   policy?: {
     guardrails?: string[];
   };
+  input?: Record<string, YamlFieldDef>;
+  returns?: Record<string, YamlFieldDef>;
 }
 
 /**
@@ -273,14 +292,13 @@ export function compileMissionYaml(yamlContent: string): any {
   if (!doc.planner.strategy) throw new Error('YAML mission `planner` must have a `strategy`');
 
   let builder = mission(doc.name)
-    // When the YAML document omits `input` or `returns`, fall back to open schemas.
-    .input((doc as any).input ?? OPEN_INPUT_SCHEMA)
-    .returns((doc as any).returns ?? OPEN_INPUT_SCHEMA)
+    .input(resolveYamlSchema(doc.input))
+    .returns(resolveYamlSchema(doc.returns))
     .goal(doc.goal)
     .planner({
       strategy: doc.planner.strategy,
-      maxSteps: doc.planner.maxSteps,
-      maxIterations: doc.planner.maxIterations,
+      maxSteps: doc.planner.maxSteps ?? 8,
+      maxIterationsPerNode: doc.planner.maxIterations,
     });
 
   if (doc.policy) {
