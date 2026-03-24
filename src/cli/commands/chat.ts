@@ -336,10 +336,31 @@ export default async function cmdChat(
   }
 
   const modelFromConfig = typeof cfg?.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
+
+  // When --provider is set without --model, resolve the provider's default text model so the
+  // caller doesn't have to remember provider-specific model names.
+  const providerDefaultModel = (() => {
+    if (typeof flags['model'] === 'string') return undefined; // explicit --model takes priority
+    if (!providerFlag) return undefined; // no provider flag; fall through to other defaults
+    try {
+      // Inline the defaults to avoid an async import at module load time.
+      const DEFAULTS: Record<string, string> = {
+        openai: 'gpt-4o',
+        anthropic: 'claude-sonnet-4-20250514',
+        ollama: 'llama3.2',
+        openrouter: 'openai/gpt-4o',
+        gemini: 'gemini-2.5-flash',
+      };
+      return DEFAULTS[providerFlag.toLowerCase()];
+    } catch {
+      return undefined;
+    }
+  })();
+
   const model =
     typeof flags['model'] === 'string'
       ? String(flags['model'])
-      : modelFromConfig || process.env['OPENAI_MODEL'] || 'gpt-4o';
+      : modelFromConfig || providerDefaultModel || process.env['OPENAI_MODEL'] || 'gpt-4o';
 
   // OpenRouter fallback (OpenAI provider only)
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
