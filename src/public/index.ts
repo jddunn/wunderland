@@ -73,12 +73,15 @@ import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
 import { invokeWunderlandGraph, streamWunderlandGraph, type WunderlandGraphLike } from '../runtime/graph-runner.js';
+import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../observability/token-usage.js';
+import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../observability/session-text-log.js';
 
 // Public types extracted to types.ts
 export type {
   WunderlandMessage,
   ToolCallRecord,
   WunderlandTurnResult,
+  WunderlandUsageSummary,
   WunderlandDiagnostics,
   ToolApprovalRequest,
   WunderlandApprovalsMode,
@@ -502,6 +505,16 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     agentId: sanitizeAgentWorkspaceId(opts.workspace?.agentId ?? String(agentConfig.seedId || 'seed_local_agent')),
     baseDir: opts.workspace?.baseDir ?? resolveAgentWorkspaceBaseDir(),
   };
+  const sessionTextLogger = new WunderlandSessionTextLogger(
+    resolveWunderlandTextLogConfig({
+      agentConfig,
+      workingDirectory,
+      workspace,
+      defaultAgentId: workspace.agentId,
+      configBacked: Boolean(opts.agentConfig || opts.configPath),
+    }),
+    logger,
+  );
 
   const llm = await resolveLlmConfig({ agentConfig, llm: opts.llm });
   if (!llm.canUseLLM) {
@@ -658,6 +671,9 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     executionMode: 'human-all',
     wrapToolOutputs: policy.wrapToolOutputs,
     strictToolNames,
+    ...(typeof opts.configDirOverride === 'string' && opts.configDirOverride.trim()
+      ? { wunderlandConfigDir: opts.configDirOverride.trim() }
+      : null),
     ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
     agentWorkspace: { agentId: workspace.agentId, baseDir: workspace.baseDir },
     workingDirectory,
@@ -704,6 +720,13 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     discovery: discoveryManager.getStats(),
   });
 
+  const usage: WunderlandApp['usage'] = async (usageOpts) => {
+    if (usageOpts?.sessionId) {
+      return getRecordedWunderlandSessionUsage(usageOpts.sessionId, opts.configDirOverride);
+    }
+    return getRecordedWunderlandTokenUsage(opts.configDirOverride);
+  };
+
   const session = (sessionId?: string): WunderlandSession => {
     const id = sessionId && sessionId.trim() ? sessionId.trim() : randomUUID();
 
@@ -716,6 +739,8 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     };
 
     const messages = () => toPublicMessages(getRawHistory());
+    const usageForSession: WunderlandSession['usage'] = () =>
+      getRecordedWunderlandSessionUsage(id, opts.configDirOverride);
 
     const sendText: WunderlandSession['sendText'] = async (text, sendOpts) => {
       const started = Date.now();
@@ -903,6 +928,28 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         });
       } catch (error) {
         turnFailed = true;
+        await sessionTextLogger.logTurn({
+          meta: {
+            agentId: workspace.agentId,
+            seedId: String(agentConfig.seedId || workspace.agentId),
+            displayName: resolveAgentDisplayName({
+              displayName: agentConfig.displayName,
+              agentName: agentConfig.agentName,
+              seedId: String(agentConfig.seedId || workspace.agentId),
+              fallback: String(agentConfig.seedId || workspace.agentId),
+            }),
+            providerId: llm.providerId,
+            model: llm.model,
+            personaId: activePersonaId,
+          },
+          sessionId: id,
+          userText,
+          error,
+          toolCalls,
+          toolCallCount: toolCalls.length,
+          durationMs: Math.max(0, Date.now() - started),
+          fallbackTriggered,
+        });
         throw error;
       } finally {
         try {
@@ -930,6 +977,29 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       for (let i = 0; i < toolCalls.length && i < newToolMsgs.length; i += 1) {
         toolCalls[i]!.toolResult = typeof newToolMsgs[i]?.content === 'string' ? newToolMsgs[i].content : String(newToolMsgs[i]?.content ?? '');
       }
+
+      await sessionTextLogger.logTurn({
+        meta: {
+          agentId: workspace.agentId,
+          seedId: String(agentConfig.seedId || workspace.agentId),
+          displayName: resolveAgentDisplayName({
+            displayName: agentConfig.displayName,
+            agentName: agentConfig.agentName,
+            seedId: String(agentConfig.seedId || workspace.agentId),
+            fallback: String(agentConfig.seedId || workspace.agentId),
+          }),
+          providerId: llm.providerId,
+          model: llm.model,
+          personaId: activePersonaId,
+        },
+        sessionId: id,
+        userText,
+        reply,
+        toolCalls,
+        toolCallCount: toolCalls.length,
+        durationMs: Math.max(0, Date.now() - started),
+        fallbackTriggered,
+      });
 
       return {
         text: reply,
@@ -1011,7 +1081,11 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         timestamp: Date.now(),
         state: {
           input: { sessionId: id },
-          scratch: { messageCount: history.length },
+          scratch: {
+            messageCount: history.length,
+            // Store full conversation history in graph state for complete restore
+            conversationHistory: history.map((m) => ({ ...m })),
+          },
           artifacts: {},
           diagnostics: { totalTokensUsed: 0, totalDurationMs: 0, nodeTimings: {}, discoveryResults: {}, guardrailResults: {}, checkpointsSaved: 0, memoryReads: 0, memoryWrites: 0 },
         },
@@ -1025,6 +1099,23 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         messages: history.map((m) => ({ ...m })),
         timestamp: Date.now(),
       });
+      await sessionTextLogger.logEvent(
+        id,
+        {
+          agentId: workspace.agentId,
+          seedId: String(agentConfig.seedId || workspace.agentId),
+          displayName: resolveAgentDisplayName({
+            displayName: agentConfig.displayName,
+            agentName: agentConfig.agentName,
+            seedId: String(agentConfig.seedId || workspace.agentId),
+            fallback: String(agentConfig.seedId || workspace.agentId),
+          }),
+          providerId: llm.providerId,
+          model: llm.model,
+          personaId: activePersonaId,
+        },
+        { type: 'checkpoint', checkpointId: cpId },
+      );
       return cpId;
     };
 
@@ -1034,7 +1125,19 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
      * Throws a descriptive error if the checkpoint ID is not found.
      */
     const resume: WunderlandSession['resume'] = async (checkpointId) => {
-      const cp = sessionCheckpoints.get(checkpointId);
+      let cp = sessionCheckpoints.get(checkpointId);
+
+      // Fallback: try restoring from ICheckpointStore if in-memory map misses
+      if (!cp && checkpointStore) {
+        const stored = await checkpointStore.load(id, 'session');
+        if (stored?.state?.scratch && Array.isArray((stored.state.scratch as any).conversationHistory)) {
+          cp = {
+            messages: (stored.state.scratch as any).conversationHistory,
+            timestamp: stored.timestamp,
+          };
+        }
+      }
+
       if (!cp) {
         throw new Error(
           `[wunderland] Checkpoint "${checkpointId}" not found. ` +
@@ -1042,11 +1145,28 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
         );
       }
       // Replace the live history with a mutable copy of the saved snapshot.
-      const restored = cp.messages.map((m) => ({ ...m }));
+      const restored = cp.messages.map((m: Record<string, unknown>) => ({ ...m }));
       sessions.set(id, restored);
+      await sessionTextLogger.logEvent(
+        id,
+        {
+          agentId: workspace.agentId,
+          seedId: String(agentConfig.seedId || workspace.agentId),
+          displayName: resolveAgentDisplayName({
+            displayName: agentConfig.displayName,
+            agentName: agentConfig.agentName,
+            seedId: String(agentConfig.seedId || workspace.agentId),
+            fallback: String(agentConfig.seedId || workspace.agentId),
+          }),
+          providerId: llm.providerId,
+          model: llm.model,
+          personaId: activePersonaId,
+        },
+        { type: 'resume', checkpointId },
+      );
     };
 
-    return { id, messages, sendText, stream, checkpoint, resume };
+    return { id, messages, usage: usageForSession, sendText, stream, checkpoint, resume };
   };
 
   const close = async () => {
@@ -1274,7 +1394,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     }
   };
 
-  return { session, diagnostics, agentGraph, workflow, mission, runGraph, streamGraph, loadWorkflow, loadMission, listWorkflows, memory, close };
+  return { session, diagnostics, usage, agentGraph, workflow, mission, runGraph, streamGraph, loadWorkflow, loadMission, listWorkflows, memory, close };
 }
 
 // Convenience re-exports for library consumers (types only).
