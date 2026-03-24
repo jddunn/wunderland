@@ -38,6 +38,10 @@
       "import": "./dist/runtime/index.js",
       "types": "./dist/runtime/index.d.ts"
     },
+    "./workflows": {
+      "import": "./dist/workflows/index.js",
+      "types": "./dist/workflows/index.d.ts"
+    },
     "./storage": {
       "import": "./dist/storage/index.js",
       "types": "./dist/storage/index.d.ts"
@@ -150,14 +154,15 @@
     "minimatch": "^9.0.3",
     "nanospinner": "^1.2.2",
     "playwright-core": "^1.58.1",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@framers/agentos-ext-pii-redaction": ">=0.1.0",
-    "@framers/agentos-ext-ml-classifiers": ">=0.1.0",
-    "@framers/agentos-ext-topicality": ">=0.1.0",
     "@framers/agentos-ext-code-safety": ">=0.1.0",
-    "@framers/agentos-ext-grounding-guard": ">=0.1.0"
+    "@framers/agentos-ext-grounding-guard": ">=0.1.0",
+    "@framers/agentos-ext-ml-classifiers": ">=0.1.0",
+    "@framers/agentos-ext-pii-redaction": ">=0.1.0",
+    "@framers/agentos-ext-topicality": ">=0.1.0"
   },
   "peerDependenciesMeta": {
     "@framers/agentos-ext-pii-redaction": {
