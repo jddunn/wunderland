@@ -269,6 +269,42 @@ export default async function cmdChat(
     typeof flags['voice-port'] === 'string' ? parseInt(String(flags['voice-port']), 10) : NaN;
   const voicePort = Number.isFinite(voicePortRaw) ? voicePortRaw : undefined;
 
+  // ── Telephony webhook CLI flags ───────────────────────────────────────────
+  // --telephony-provider=<name>   Telephony provider: twilio | telnyx | plivo
+  // --telephony-webhook-port=<n>  HTTP port for the webhook server (0 = OS-assigned)
+  // --telephony-webhook-host=X    Bind address for the webhook server
+  // --telephony-webhook-path=X    URL base path (default: /api/voice)
+  const telephonyProvider = (() => {
+    const raw =
+      typeof flags['telephony-provider'] === 'string'
+        ? String(flags['telephony-provider']).trim().toLowerCase()
+        : '';
+    if (raw === 'twilio' || raw === 'telnyx' || raw === 'plivo') return raw;
+    return undefined;
+  })();
+  const telephonyWebhookPortRaw =
+    typeof flags['telephony-webhook-port'] === 'string'
+      ? parseInt(String(flags['telephony-webhook-port']), 10)
+      : NaN;
+  const telephonyWebhookPort = Number.isFinite(telephonyWebhookPortRaw)
+    ? telephonyWebhookPortRaw
+    : undefined;
+  const telephonyWebhookHost =
+    typeof flags['telephony-webhook-host'] === 'string'
+      ? String(flags['telephony-webhook-host']).trim()
+      : undefined;
+  const telephonyWebhookPath =
+    typeof flags['telephony-webhook-path'] === 'string'
+      ? String(flags['telephony-webhook-path']).trim()
+      : undefined;
+
+  // Suppress "unused variable" lint warnings for flags resolved but not yet wired
+  // to the server bootstrap — they will be consumed when telephony is fully integrated.
+  void telephonyProvider;
+  void telephonyWebhookPort;
+  void telephonyWebhookHost;
+  void telephonyWebhookPath;
+
   const policy = normalizeRuntimePolicy({ ...cliDefaults, ...(cfg || {}) });
   const permissions = getPermissionsForSet(policy.permissionSet);
   const turnApprovalMode = (() => {
