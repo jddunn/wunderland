@@ -8,5 +8,5 @@ returns:
   summary: { type: string }
   confidence: { type: number }
 planner:
-  strategy: linear
+  strategy: plan_and_execute
   maxSteps: 5
