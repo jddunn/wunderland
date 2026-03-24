@@ -1,0 +1,15 @@
+name: deep-research
+description: "Intent-driven research with automatic planning"
+goal: "Research {topic} thoroughly and produce a cited summary with confidence score"
+input:
+  topic: { type: string, required: true }
+returns:
+  summary: { type: string }
+  sources: { type: array, items: { type: object } }
+  confidence: { type: number }
+planner:
+  strategy: linear
+  maxSteps: 8
+  maxIterations: 3
+policy:
+  guardrails: [grounding-guard]

@@ -1,0 +1,20 @@
+name: data-extraction
+description: "Fetch, parse, and validate structured data"
+input:
+  url: { type: string, required: true }
+  schema_description: { type: string, required: true }
+returns:
+  data: { type: object }
+  validation: { type: object }
+steps:
+  - id: fetch
+    tool: web_browser
+    effectClass: external
+  - id: extract
+    gmi:
+      instructions: "Extract structured data matching: {schema_description}. Output as JSON."
+      executionMode: single_turn
+  - id: validate
+    gmi:
+      instructions: "Validate the extracted data for completeness and accuracy. Report any issues."
+      executionMode: single_turn
