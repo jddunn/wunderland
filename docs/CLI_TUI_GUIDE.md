@@ -24,9 +24,12 @@ For short guides: `wunderland help` and `wunderland help <topic>`.
 Useful help topics:
 
 - `wunderland help getting-started`
+- `wunderland help workflows`
 - `wunderland help tui`
 - `wunderland help llm`
 - `wunderland help faq`
+
+If you are authoring orchestration definitions, keep them under `./workflows/`, `./missions/`, or `./orchestration/`, import builders from `wunderland/workflows`, and execute them through `createWunderland().runGraph(...)`.
 
 ## TUI dashboard
 
@@ -115,3 +118,68 @@ Notes:
   - `wunderland config set ui.ascii true`
   - `wunderland config set ui.tour.status unseen`
   - `wunderland config set ui.tour.status never`
+
+## Workflow and Mission commands
+
+Run, explain, and list orchestration definitions from the CLI.
+
+### Workflows (deterministic DAGs)
+
+```bash
+# Run a workflow YAML file with required inputs
+wunderland workflows run examples/workflow-research.yaml --input topic="AI agents"
+
+# List all available prebuilt workflow templates
+wunderland workflows list
+
+# Explain a workflow: print step graph without executing
+wunderland workflows explain examples/workflow-research.yaml
+
+# Open the workflows help topic
+wunderland help workflows
+```
+
+### Missions (intent-driven / planner)
+
+```bash
+# Run a mission YAML file
+wunderland mission run examples/mission-deep-research.yaml --input topic="quantum computing"
+
+# Explain a mission: show the planner's step decomposition without executing
+wunderland mission explain examples/mission-deep-research.yaml
+```
+
+### AgentGraph (TypeScript API)
+
+For loops, conditional branches, and custom routing, use `AgentGraph` directly in TypeScript. YAML workflows are acyclic DAGs — any graph that requires cycles must be authored in code.
+
+```bash
+# Run a TypeScript graph example
+npx tsx examples/graph-research-loop.ts
+npx tsx examples/graph-judge-pipeline.ts
+```
+
+See `docs/AGENT_GRAPH.md` for the full AgentGraph API.
+
+### Session streaming and checkpoints
+
+```bash
+# Run the streaming example
+npx tsx examples/session-streaming.ts
+
+# Run the checkpoint/resume example
+npx tsx examples/checkpoint-resume.ts
+```
+
+These cover `session.stream()` (async iterator of typed events) and `session.checkpoint()` / `session.resume(cpId)` for mid-conversation rollback.
+
+### Authoring conventions
+
+Keep orchestration definitions in predictable directories so the CLI can auto-discover them:
+
+| Directory | Purpose |
+|-----------|---------|
+| `./workflows/` | Deterministic workflow YAML files |
+| `./missions/` | Goal-driven mission YAML files |
+| `./orchestration/` | Shared routers, judges, and graph helpers |
+| `./examples/` | Runnable examples (YAML + TypeScript) |

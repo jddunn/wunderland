@@ -13,6 +13,11 @@ export type HelpTopicId =
   | 'getting-started'
   | 'auth'
   | 'tui'
+  | 'workflows'
+  | 'missions'
+  | 'agent-graph'
+  | 'streaming'
+  | 'checkpoints'
   | 'voice'
   | 'ui'
   | 'presets'
@@ -40,6 +45,31 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     id: 'tui',
     title: 'TUI Dashboard',
     summary: 'Keyboard-driven dashboard (search, drilldowns, tour).',
+  },
+  {
+    id: 'workflows',
+    title: 'Workflows & Graphs',
+    summary: 'How to author deterministic workflows, graphs, missions, and judge nodes.',
+  },
+  {
+    id: 'missions',
+    title: 'Missions (Intent-Driven)',
+    summary: 'Goal-driven planner orchestration: run, explain, and author mission YAML files.',
+  },
+  {
+    id: 'agent-graph',
+    title: 'AgentGraph API',
+    summary: 'TypeScript AgentGraph for loops, conditional routing, and custom control flow.',
+  },
+  {
+    id: 'streaming',
+    title: 'Session Streaming',
+    summary: 'stream() async iterator: text_delta, node_end, run_end event types.',
+  },
+  {
+    id: 'checkpoints',
+    title: 'Checkpoints & Resume',
+    summary: 'Save and restore session state mid-conversation with checkpoint() / resume().',
   },
   {
     id: 'voice',
@@ -123,6 +153,11 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'getting-started' || topic === 'gettingstarted' || topic === 'quickstart') return 'getting-started';
     if (topic === 'auth' || topic === 'login' || topic === 'oauth' || topic === 'subscription') return 'auth';
     if (topic === 'tui' || topic === 'dashboard') return 'tui';
+    if (topic === 'workflows' || topic === 'workflow' || topic === 'orchestration') return 'workflows';
+    if (topic === 'missions' || topic === 'mission' || topic === 'planner' || topic === 'intent') return 'missions';
+    if (topic === 'agent-graph' || topic === 'agentgraph' || topic === 'graph' || topic === 'graphs') return 'agent-graph';
+    if (topic === 'streaming' || topic === 'stream' || topic === 'events') return 'streaming';
+    if (topic === 'checkpoints' || topic === 'checkpoint' || topic === 'resume' || topic === 'rollback') return 'checkpoints';
     if (topic === 'voice' || topic === 'speech' || topic === 'stt' || topic === 'tts') return 'voice';
     if (topic === 'ui' || topic === 'theme' || topic === 'themes' || topic === 'style' || topic === 'ascii') return 'ui';
     if (topic === 'presets' || topic === 'preset') return 'presets';
@@ -183,11 +218,151 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`  ${hr()}`);
     console.log(`  ${dim('Need short operator guides?')}`);
     console.log(`     ${muted('$')} ${accent('wunderland help getting-started')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland help workflows')}`);
     console.log(`     ${muted('$')} ${accent('wunderland help tui')}`);
     console.log(`     ${muted('$')} ${accent('wunderland help faq')}`);
     console.log();
     console.log(`  ${dim('Prefer scaffolding a project?')}`);
     console.log(`     ${muted('$')} ${accent('wunderland init my-agent --preset research-assistant')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'workflows') {
+    printTitle('Workflows & Graphs');
+    console.log(`  ${bright('Author with the AgentOS orchestration builders, execute through Wunderland.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('Choose the right authoring style')}`);
+    console.log(`     ${accent('workflow()')} ${dim('for deterministic DAGs and explicit step order')}`);
+    console.log(`     ${accent('AgentGraph')} ${dim('for loops, routers, and custom control flow')}`);
+    console.log(`     ${accent('mission()')} ${dim('for goal-driven planning that compiles to the same graph IR')}`);
+    console.log();
+    console.log(`  ${iColor('2')} ${bright('Keep definitions in predictable places')}`);
+    console.log(`     ${dim('./workflows/')} ${dim('deterministic workflow definitions')}`);
+    console.log(`     ${dim('./missions/')} ${dim('goal-driven orchestration definitions')}`);
+    console.log(`     ${dim('./orchestration/')} ${dim('shared routers, judges, and reusable graph helpers')}`);
+    console.log();
+    console.log(`  ${iColor('3')} ${bright('Import the builders from Wunderland')}`);
+    console.log(`     ${muted('$')} ${accent(`import { workflow, mission, AgentGraph } from 'wunderland/workflows';`)}`);
+    console.log(`     ${muted('$')} ${accent(`import { createWunderland } from 'wunderland';`)}`);
+    console.log(`     ${dim('Compile with the builder, then execute through')} ${accent('app.runGraph(...)')}${dim(' or ')}${accent('app.streamGraph(...)')}`);
+    console.log();
+    console.log(`  ${iColor('4')} ${bright('Use judge nodes for scoring, not raw hidden chain-of-thought')}`);
+    console.log(`     ${dim('Have the judge node return structured JSON like:')}`);
+    console.log(`     ${accent('{"scratch":{"judge":{"score":8,"verdict":"ship","reasoning":"..."}}}')}`);
+    console.log(`     ${dim('Then branch on')} ${accent("state.scratch.judge?.score")}${dim(' or ')}${accent("state.scratch.judge?.verdict")}`);
+    console.log(`     ${dim('Prefer concise rationale fields over asking the model to reveal private internal reasoning.')}`);
+    console.log();
+    console.log(`  ${iColor('5')} ${bright('Examples')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland workflows list')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland workflows examples')}`);
+    console.log(`     ${dim('Bundled examples live under')} ${accent('packages/wunderland/examples/')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'missions') {
+    printTitle('Missions (Intent-Driven Orchestration)');
+    console.log(`  ${bright('Missions describe a goal in natural language; a planner decomposes it into steps at runtime.')}`);
+    console.log(`  ${dim('Missions compile to the same AgentGraph IR as workflow() — so Wunderland executes them identically.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('Run a mission YAML file')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland mission run examples/mission-deep-research.yaml --input topic="quantum computing"')}`);
+    console.log();
+    console.log(`  ${iColor('2')} ${bright('Explain a mission (dry-run planner decomposition)')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland mission explain examples/mission-deep-research.yaml')}`);
+    console.log();
+    console.log(`  ${iColor('3')} ${bright('Author a mission YAML')}`);
+    console.log(`     ${dim('Minimal structure:')}`);
+    console.log(`     ${accent('name: deep-research')}`);
+    console.log(`     ${accent('goal: "Research {topic} and produce a cited summary"')}`);
+    console.log(`     ${accent('planner: { strategy: linear, maxSteps: 5 }')}`);
+    console.log();
+    console.log(`  ${iColor('4')} ${bright('Use mission() in TypeScript')}`);
+    console.log(`     ${muted('$')} ${accent(`import { mission } from 'wunderland/workflows';`)}`);
+    console.log(`     ${muted('$')} ${accent(`const compiled = mission('deep-research').goal('Research ...').compile();`)}`);
+    console.log(`     ${muted('$')} ${accent(`await app.runGraph(compiled, { topic: 'AI agents' });`)}`);
+    console.log();
+    console.log(`  ${dim('Bundled example:')} ${accent('examples/mission-deep-research.yaml')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'agent-graph') {
+    printTitle('AgentGraph API');
+    console.log(`  ${bright('AgentGraph gives you full control: loops, conditional edges, and multi-step routing.')}`);
+    console.log(`  ${dim('Use AgentGraph when YAML workflows are insufficient — e.g. retry cycles or dynamic branching.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('Import and build a graph')}`);
+    console.log(`     ${muted('$')} ${accent(`import { AgentGraph } from 'wunderland/workflows';`)}`);
+    console.log(`     ${dim('Add nodes with')} ${accent('.addNode(id, handler)')} ${dim('and edges with')} ${accent('.addEdge(from, to, condition?)')}`);
+    console.log();
+    console.log(`  ${iColor('2')} ${bright('Compile and execute through Wunderland')}`);
+    console.log(`     ${muted('$')} ${accent('const compiled = graph.compile();')}`);
+    console.log(`     ${muted('$')} ${accent('await app.runGraph(compiled, input);')}`);
+    console.log(`     ${muted('$')} ${accent('await app.streamGraph(compiled, input);')}`);
+    console.log();
+    console.log(`  ${iColor('3')} ${bright('Cycles (not supported in workflow YAML)')}`);
+    console.log(`     ${dim('Only AgentGraph supports cycles. Use a conditional edge back to an earlier node.')}`);
+    console.log(`     ${dim('Guard all cycles with a counter or confidence threshold to prevent infinite loops.')}`);
+    console.log();
+    console.log(`  ${iColor('4')} ${bright('Judge nodes')}`);
+    console.log(`     ${dim('Have the judge node return structured JSON:')}`);
+    console.log(`     ${accent('{"scratch":{"judge":{"score":8,"verdict":"ship","reasoning":"..."}}}')}`);
+    console.log(`     ${dim('Branch on')} ${accent("state.scratch.judge?.verdict")} ${dim('or')} ${accent("state.scratch.judge?.score")}`);
+    console.log();
+    console.log(`  ${dim('Bundled examples:')}`);
+    console.log(`     ${accent('examples/graph-research-loop.ts')}  ${dim('— conditional retry cycle')}`);
+    console.log(`     ${accent('examples/graph-judge-pipeline.ts')} ${dim('— LLM-as-judge evaluation')}`);
+    console.log(`  ${dim('Full API reference:')} ${accent('docs/AGENT_GRAPH.md')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'streaming') {
+    printTitle('Session Streaming');
+    console.log(`  ${bright('session.stream(prompt) returns an async iterator of typed events.')}`);
+    console.log(`  ${dim('Use this for real-time output in UIs, CLIs, or server-sent events.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('Basic usage')}`);
+    console.log(`     ${muted('$')} ${accent("for await (const event of session.stream('Hello')) {")}`);
+    console.log(`     ${muted('$')} ${accent("  if (event.type === 'text_delta') process.stdout.write(event.content);")}`);
+    console.log(`     ${muted('$')} ${accent('}')}`);
+    console.log();
+    console.log(`  ${iColor('2')} ${bright('Event types')}`);
+    console.log(`     ${accent('run_start')}   ${dim('— emitted once when the turn begins')}`);
+    console.log(`     ${accent('text_delta')}  ${dim('— partial text chunk (event.content: string)')}`);
+    console.log(`     ${accent('node_end')}    ${dim('— node completion (event.durationMs: number)')}`);
+    console.log(`     ${accent('run_end')}     ${dim('— turn complete (event.totalDurationMs: number)')}`);
+    console.log();
+    console.log(`  ${iColor('3')} ${bright('Stream a graph')}`);
+    console.log(`     ${muted('$')} ${accent('await app.streamGraph(compiled, input);')}`);
+    console.log(`     ${dim('Same event types, emitted per-node across the full graph execution.')}`);
+    console.log();
+    console.log(`  ${dim('Bundled example:')} ${accent('examples/session-streaming.ts')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'checkpoints') {
+    printTitle('Checkpoints & Resume');
+    console.log(`  ${bright('Checkpoints snapshot session state so you can roll back mid-conversation.')}`);
+    console.log(`  ${dim('Useful for branching explorations, automated testing, and agentic retry logic.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('Save a checkpoint')}`);
+    console.log(`     ${muted('$')} ${accent('const cpId = await session.checkpoint();')}`);
+    console.log(`     ${dim('Returns a string checkpoint ID. Store it to resume later.')}`);
+    console.log();
+    console.log(`  ${iColor('2')} ${bright('Resume from a checkpoint')}`);
+    console.log(`     ${muted('$')} ${accent('await session.resume(cpId);')}`);
+    console.log(`     ${dim('Rolls back messages and state to the point the checkpoint was saved.')}`);
+    console.log();
+    console.log(`  ${iColor('3')} ${bright('Typical pattern')}`);
+    console.log(`     ${dim('1. Send initial turn → save checkpoint → continue conversation')}`);
+    console.log(`     ${dim('2. If the agent goes off-track, resume from the checkpoint and retry')}`);
+    console.log(`     ${dim('3. Use in test suites to branch from a known good state')}`);
+    console.log();
+    console.log(`  ${dim('Bundled example:')} ${accent('examples/checkpoint-resume.ts')}`);
     console.log();
     return;
   }
