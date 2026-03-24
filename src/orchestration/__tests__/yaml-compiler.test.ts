@@ -86,6 +86,25 @@ steps:
     expect(edgeCount).toBeGreaterThanOrEqual(2);
   });
 
+  it('lowers YAML input and return schemas through schemaFromYaml()', () => {
+    const yaml = `
+name: schema-test
+input:
+  topic: { type: string, required: true }
+returns:
+  summary: { type: string }
+steps:
+  - id: summarise
+    gmi:
+      instructions: Summarise the topic.
+`;
+    const compiled = compileWorkflowYaml(yaml);
+    const graph: any = compiled.toIR();
+    expect(graph.stateSchema.input?.properties?.topic?.type).toBe('string');
+    expect(graph.stateSchema.input?.required).toContain('topic');
+    expect(graph.stateSchema.artifacts?.properties?.summary?.type).toBe('string');
+  });
+
   it('throws when steps array is missing', () => {
     const yaml = `name: no-steps`;
     expect(() => compileWorkflowYaml(yaml)).toThrow();
@@ -128,6 +147,18 @@ planner:
 `;
     const compiled = compileMissionYaml(yaml);
     expect(typeof compiled.explain).toBe('function');
+  });
+
+  it('accepts richer planner strategies such as plan_and_execute', () => {
+    const yaml = `
+name: strategy-test
+goal: Research {{topic}} thoroughly
+planner:
+  strategy: plan_and_execute
+  maxSteps: 6
+`;
+    const compiled = compileMissionYaml(yaml);
+    expect(compiled).toBeDefined();
   });
 
   it('throws when goal is missing', () => {
