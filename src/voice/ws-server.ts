@@ -18,6 +18,7 @@
  * @module wunderland/voice/ws-server
  */
 
+// @ts-ignore — ws types may not be installed in all environments
 import { WebSocketServer } from 'ws';
 import type { StreamingPipelineAgentSession, StreamingPipelineHandle } from './streaming-pipeline.js';
 
@@ -178,14 +179,14 @@ export async function startVoiceServer(
   const actualPort = (wss.address() as { port?: number } | null)?.port ?? port;
   const url = `ws://${host}:${actualPort}`;
 
-  wss.on('connection', async (ws) => {
+  wss.on('connection', async (ws: any) => {
     try {
       // ── Step 1: read first message to determine connection type ────────────
       //
       // We must not attach a permanent `message` listener yet; the first frame
       // decides the transport type. A one-time listener avoids double-delivery.
       const firstMessage = await new Promise<unknown>((resolve) => {
-        ws.once('message', (data) => resolve(data));
+        ws.once('message', (data: any) => resolve(data));
       });
 
       const { isTelephony, providerName } = detectTelephonyProvider(firstMessage);
