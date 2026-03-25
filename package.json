@@ -127,7 +127,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@framers/agentos": ">=0.1.0",
+    "@framers/agentos": ">=0.1.80",
     "@framers/agentos-ext-cli-executor": "^1.2.0",
     "@framers/agentos-ext-giphy": "^1.0.0",
     "@framers/agentos-ext-image-search": "^1.0.0",
@@ -183,7 +183,20 @@
     }
   },
   "optionalDependencies": {
-    "@framers/agentos-skills-registry": ">=0.1.0"
+    "@framers/agentos-skills-registry": ">=0.1.0",
+    "@framers/agentos-ext-streaming-stt-deepgram": ">=0.1.0",
+    "@framers/agentos-ext-streaming-stt-whisper": ">=0.1.0",
+    "@framers/agentos-ext-streaming-tts-openai": ">=0.1.0",
+    "@framers/agentos-ext-streaming-tts-elevenlabs": ">=0.1.0",
+    "@framers/agentos-ext-diarization": ">=0.1.0",
+    "@framers/agentos-ext-endpoint-semantic": ">=0.1.0",
+    "@framers/agentos-ext-google-cloud-stt": ">=0.1.0",
+    "@framers/agentos-ext-google-cloud-tts": ">=0.1.0",
+    "@framers/agentos-ext-amazon-polly": ">=0.1.0",
+    "@framers/agentos-ext-vosk": ">=0.1.0",
+    "@framers/agentos-ext-piper": ">=0.1.0",
+    "@framers/agentos-ext-porcupine": ">=0.1.0",
+    "@framers/agentos-ext-openwakeword": ">=0.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
