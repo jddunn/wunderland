@@ -28,6 +28,7 @@ import type { NormalizedRuntimePolicy } from '../runtime/policy.js';
 import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../discovery/index.js';
 import type { ToolInstance, LLMProviderConfig } from '../runtime/tool-calling.js';
 import type { ToolRegistryConfig } from '../tools/ToolRegistry.js';
+import type { TokenUsageSummary } from '../core/TokenUsageTracker.js';
 
 // =============================================================================
 // Public Types
@@ -59,6 +60,8 @@ export type WunderlandTurnResult = {
     elapsedMs: number;
   };
 };
+
+export type WunderlandUsageSummary = TokenUsageSummary;
 
 export type WunderlandDiagnostics = {
   llm: {
@@ -111,6 +114,8 @@ export type WunderlandOptions = {
   configPath?: string;
   /** Defaults to `process.cwd()` */
   workingDirectory?: string;
+  /** Override the global Wunderland config directory used for env/config/usage storage. */
+  configDirOverride?: string;
   /** Workspace location for tool execution state. */
   workspace?: Partial<WunderlandWorkspace>;
   /** LLM configuration (apiKey/model default from env when omitted). */
@@ -223,6 +228,8 @@ export type WunderlandSession = {
   readonly id: string;
   messages: () => WunderlandMessage[];
   sendText: (text: string, opts?: WunderlandSendTextOpts) => Promise<WunderlandTurnResult>;
+  /** Read durable token/cost usage aggregated for this session ID. */
+  usage: () => Promise<WunderlandUsageSummary>;
   /**
    * Execute a turn and yield graph-style {@link GraphEvent} objects.
    * Useful for UI/event consumers that want the same event contract as graph runs
@@ -250,6 +257,8 @@ export type WunderlandGraphLike =
 export type WunderlandApp = {
   session: (sessionId?: string) => WunderlandSession;
   diagnostics: () => WunderlandDiagnostics;
+  /** Read durable token/cost usage aggregated across all runs or a single session. */
+  usage: (opts?: { sessionId?: string }) => Promise<WunderlandUsageSummary>;
   agentGraph: <TState extends GraphState = GraphState>(
     stateSchema: {
       input: any;
