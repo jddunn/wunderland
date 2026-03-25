@@ -1177,7 +1177,6 @@ export async function* streamToolCallingTurn(
   // --- True streaming path (OpenAI / OpenRouter) ---
 
   const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
-  const debugMode = opts.debug ?? (process.env.DEBUG === '1' || process.env.DEBUG === 'true' || process.env.WUNDERLAND_DEBUG === '1');
   const strictToolNames = resolveStrictToolNames(
     opts.strictToolNames ?? getBooleanProp(opts.toolContext, 'strictToolNames'),
   );
