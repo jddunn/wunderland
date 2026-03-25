@@ -74,7 +74,7 @@ function resolveUsageLedgerPath(configDirOverride?: string): string {
 
 function estimateFallbackCost(event: WunderlandUsageEvent): number | undefined {
   if (!event.modelId) return undefined;
-  const pricing = MODEL_PRICING[event.modelId];
+  const pricing = MODEL_PRICING[event.modelId as string];
   if (!pricing) return undefined;
 
   const promptTokens = event.promptTokens ?? 0;
@@ -97,12 +97,12 @@ function createEmptyUsageSummary(timestamp = new Date()): TokenUsageSummary {
 }
 
 function modelKeyForEvent(event: WunderlandUsageEvent): string {
-  return event.modelId || event.providerId || 'unknown';
+  return (event.modelId as string) || (event.providerId as string) || 'unknown';
 }
 
 function hasKnownCost(event: WunderlandUsageEvent): boolean {
   if (typeof event.costUSD === 'number') return true;
-  return !!(event.modelId && MODEL_PRICING[event.modelId]);
+  return !!(event.modelId && MODEL_PRICING[event.modelId as string]);
 }
 
 function bucketKey(event: WunderlandUsageEvent): string {
@@ -115,7 +115,7 @@ function bucketKey(event: WunderlandUsageEvent): string {
 }
 
 export async function readWunderlandUsageEvents(configDirOverride?: string): Promise<WunderlandUsageEvent[]> {
-  return readRecordedAgentOSUsageEvents({ path: resolveUsageLedgerPath(configDirOverride) });
+  return readRecordedAgentOSUsageEvents(resolveUsageLedgerPath(configDirOverride));
 }
 
 export async function listWunderlandUsageSummaries(opts?: {
@@ -152,10 +152,10 @@ export async function listWunderlandUsageSummaries(opts?: {
     }
 
     buckets.set(key, {
-      sessionId: event.sessionId,
-      personaId: event.personaId,
-      providerId: event.providerId,
-      modelId: event.modelId,
+      sessionId: event.sessionId as string,
+      personaId: event.personaId as string | undefined,
+      providerId: event.providerId as string | undefined,
+      modelId: event.modelId as string | undefined,
       promptTokens,
       completionTokens,
       totalTokens,
@@ -233,7 +233,7 @@ export async function getWunderlandTokenUsageSummary(opts?: {
   }
 
   const timestamps = relevantEvents
-    .map((event) => Date.parse(event.recordedAt))
+    .map((event) => Date.parse(event.recordedAt as string))
     .filter((value) => Number.isFinite(value));
   const startedAt =
     timestamps.length > 0 ? new Date(Math.min(...timestamps)) : new Date();
@@ -304,5 +304,5 @@ export async function recordWunderlandUsage(input: RecordWunderlandUsageInput): 
 }
 
 export async function clearWunderlandUsageLedger(configDirOverride?: string): Promise<void> {
-  await clearRecordedAgentOSUsage({ path: resolveUsageLedgerPath(configDirOverride) });
+  await clearRecordedAgentOSUsage(resolveUsageLedgerPath(configDirOverride));
 }
