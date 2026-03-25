@@ -11,6 +11,9 @@
  * 4. Parses the event payload and forwards each normalised event to
  *    {@link CallManager.processNormalizedEvent}.
  * 5. Returns the provider-specific XML/JSON response (e.g. TwiML `<Response/>`).
+ *    When the provider does not supply response XML and {@link TelephonyWebhookServerOptions.wsServerUrl}
+ *    is configured, the server auto-generates the appropriate media-stream
+ *    connection TwiML/XML so the provider opens a WebSocket to the voice server.
  *
  * @module wunderland/voice/telephony-webhook-server
  */
@@ -41,6 +44,21 @@ export interface TelephonyWebhookServerOptions {
    * @defaultValue '/api/voice'
    */
   basePath?: string;
+
+  /**
+   * WebSocket server URL for media stream connections.
+   *
+   * When set, and when the telephony provider does not supply its own XML
+   * response body, the webhook handler will auto-generate provider-specific
+   * TwiML/XML that instructs the provider to open a bidirectional media stream
+   * WebSocket to this URL.
+   *
+   * Must be a full WebSocket URL, e.g. `ws://localhost:8765` or
+   * `wss://voice.example.com/stream`.
+   *
+   * @example 'ws://localhost:8765'
+   */
+  wsServerUrl?: string;
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -152,10 +170,43 @@ export async function startTelephonyWebhookServer(
 
     // ── Send provider-specific response ─────────────────────────────────────
 
-    res.writeHead(200, {
-      'Content-Type': parseResult?.responseContentType ?? 'text/xml',
-    });
-    res.end(parseResult?.responseBody ?? '');
+    if (parseResult?.responseBody) {
+      // The provider adapter has already prepared a full response body.
+      res.writeHead(200, {
+        'Content-Type': parseResult.responseContentType ?? 'text/xml',
+      });
+      res.end(parseResult.responseBody);
+      return;
+    }
+
+    if (options?.wsServerUrl) {
+      // No provider-supplied body — auto-generate media-stream XML so the
+      // telephony provider opens a WebSocket to the voice pipeline server.
+      // Dynamic import keeps the TwiML helpers optional at load time and
+      // avoids a hard dependency in environments that don't use this feature.
+      const twimlMod = await import('@framers/agentos/voice');
+
+      let xml = '';
+      if (providerName === 'twilio') {
+        xml = twimlMod.twilioConversationTwiml(options.wsServerUrl);
+      } else if (providerName === 'plivo') {
+        xml = twimlMod.plivoStreamXml(options.wsServerUrl);
+      } else if (providerName === 'telnyx') {
+        // Telnyx uses a REST call-control API for media streaming rather than
+        // XML webhooks; return a minimal XML acknowledgment with the stream URL
+        // embedded so any XML-expecting Telnyx webhook flow still works.
+        xml = twimlMod.telnyxStreamXml(options.wsServerUrl);
+      }
+      // Unknown providers fall through with an empty body (no-op acknowledgment).
+
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(xml);
+      return;
+    }
+
+    // No provider body and no wsServerUrl — return a minimal empty acknowledgment.
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end('');
   });
 
   // ── Listen ────────────────────────────────────────────────────────────────
