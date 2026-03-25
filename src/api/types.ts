@@ -354,6 +354,11 @@ export type WunderlandAgentConfig = {
       enabled: boolean;
       exportLogs: boolean;
     }>;
+    textLogs?: Partial<{
+      enabled: boolean;
+      directory: string;
+      includeToolCalls: boolean;
+    }>;
   }>;
   /**
    * Rolling task-outcome KPI telemetry.

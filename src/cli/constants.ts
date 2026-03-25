@@ -25,6 +25,7 @@ export const URLS = {
 export const CONFIG_DIR_NAME = '.wunderland';
 export const CONFIG_FILE_NAME = 'config.json';
 export const ENV_FILE_NAME = '.env';
+export const USAGE_LEDGER_FILE_NAME = 'usage-ledger.jsonl';
 export const CREDENTIALS_DIR_NAME = 'credentials';
 
 // ── LLM Providers ───────────────────────────────────────────────────────────

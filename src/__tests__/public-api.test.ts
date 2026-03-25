@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import { AgentMemory, type ITool } from '@framers/agentos';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 import { createWunderland, WunderlandConfigError } from '../index.js';
+import { resetRecordedWunderlandTokenUsage } from '../observability/token-usage.js';
 
 function mockOpenAIChatCompletionSequence(responses: Array<Record<string, unknown>>) {
   const queue = responses.slice();
@@ -27,9 +32,19 @@ const quietRuntimeOptions = {
 } as const;
 
 describe('wunderland public API', () => {
+  let configDir: string | undefined;
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  afterEach(async () => {
+    if (configDir) {
+      await resetRecordedWunderlandTokenUsage(configDir);
+      await rm(configDir, { recursive: true, force: true });
+      configDir = undefined;
+    }
   });
 
   it('throws a config error when no usable LLM credentials are provided', async () => {
@@ -92,6 +107,35 @@ describe('wunderland public API', () => {
     expect(streamedText.trim()).toBe('streamed response');
     expect(session.messages().map((message) => message.role)).toEqual(['system', 'user', 'assistant']);
     expect(session.messages()[2]?.content).toBe('streamed response');
+  });
+
+  it('exposes durable usage totals at the app and session level', async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), 'wunderland-public-usage-'));
+    mockOpenAIChatCompletionSequence([
+      {
+        model: 'gpt-4o-mini',
+        usage: { prompt_tokens: 42, completion_tokens: 8, total_tokens: 50 },
+        choices: [{ message: { role: 'assistant', content: 'usage test' } }],
+      },
+    ]);
+
+    const app = await createWunderland({
+      configDirOverride: configDir,
+      llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-4o-mini' },
+      tools: 'none',
+      ...quietRuntimeOptions,
+    });
+
+    const session = app.session('usage-session');
+    await session.sendText('track usage');
+
+    const appUsage = await app.usage();
+    const sessionUsage = await session.usage();
+
+    expect(appUsage.totalTokens).toBe(50);
+    expect(appUsage.totalCalls).toBe(1);
+    expect(sessionUsage.totalTokens).toBe(50);
+    expect(sessionUsage.perModel[0]?.model).toBe('gpt-4o-mini');
   });
 
   it('denies side-effect tools by default (deny-side-effects)', async () => {
@@ -229,6 +273,62 @@ describe('wunderland public API', () => {
     });
 
     expect(app.memory).toBe(memory);
+  });
+
+  it('writes per-session text logs in the working directory for config-backed apps by default', async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), 'wunderland-public-logs-'));
+    mockOpenAIChatCompletionSequence([
+      { model: 'gpt-test', usage: {}, choices: [{ message: { role: 'assistant', content: 'logged reply' } }] },
+    ]);
+
+    const app = await createWunderland({
+      workingDirectory: configDir,
+      agentConfig: {
+        seedId: 'seed_logged_app',
+        discovery: { enabled: false },
+      } as any,
+      llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
+      tools: 'none',
+      ...quietRuntimeOptions,
+    });
+
+    await app.session('log-session').sendText('log this turn');
+
+    const datedDir = join(configDir, 'logs', new Date().toISOString().slice(0, 10));
+    const files = await readdir(datedDir);
+    expect(files).toContain('log-session.log');
+
+    const logText = await readFile(join(datedDir, 'log-session.log'), 'utf8');
+    expect(logText).toContain('USER');
+    expect(logText).toContain('ASSISTANT');
+    expect(logText).toContain('log this turn');
+    expect(logText).toContain('logged reply');
+  });
+
+  it('supports opting out of per-session text logs', async () => {
+    configDir = await mkdtemp(path.join(tmpdir(), 'wunderland-public-no-logs-'));
+    mockOpenAIChatCompletionSequence([
+      { model: 'gpt-test', usage: {}, choices: [{ message: { role: 'assistant', content: 'no log reply' } }] },
+    ]);
+
+    const app = await createWunderland({
+      workingDirectory: configDir,
+      agentConfig: {
+        seedId: 'seed_no_logs',
+        discovery: { enabled: false },
+        observability: {
+          textLogs: { enabled: false },
+        },
+      } as any,
+      llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
+      tools: 'none',
+      ...quietRuntimeOptions,
+    });
+
+    await app.session('disabled-log-session').sendText('skip logging');
+
+    const datedDir = join(configDir, 'logs', new Date().toISOString().slice(0, 10));
+    expect(existsSync(datedDir)).toBe(false);
   });
 
   it('loads and compiles workflow and mission YAML files', async () => {

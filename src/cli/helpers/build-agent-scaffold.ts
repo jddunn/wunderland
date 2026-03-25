@@ -177,6 +177,7 @@ export function buildAgentConfig(opts: BuildAgentConfigOptions): AgentConfigResu
     executionMode,
     observability: {
       otel: { enabled: false, exportLogs: false },
+      textLogs: { enabled: true, directory: './logs', includeToolCalls: true },
     },
     skills: agentPreset?.suggestedSkills ?? [],
     suggestedChannels: agentPreset?.suggestedChannels ?? [],
@@ -273,6 +274,14 @@ export async function writeAgentScaffold(opts: WriteScaffoldOptions): Promise<vo
   const keepPath = path.join(skillsDir, '.gitkeep');
   if (shouldWrite(keepPath)) {
     await writeFile(keepPath, '', 'utf8');
+  }
+
+  // logs/ directory for session text logs
+  const logsDir = path.join(targetDir, 'logs');
+  await mkdir(logsDir, { recursive: true });
+  const logsIgnorePath = path.join(logsDir, '.gitignore');
+  if (shouldWrite(logsIgnorePath)) {
+    await writeFile(logsIgnorePath, '*\n!.gitignore\n', 'utf8');
   }
 
   // PERSONA.md (optional, from preset)

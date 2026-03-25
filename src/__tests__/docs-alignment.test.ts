@@ -14,6 +14,7 @@ describe('Wunderland docs alignment', () => {
     expect(readme).toContain('wunderland extensions configure');
     expect(readme).toContain('examples/library-chat-image-generation.mjs');
     expect(readme).toContain('examples/workflow-orchestration.mjs');
+    expect(readme).toContain('./logs/YYYY-MM-DD/*.log');
   });
 
   it('keeps the CLI/TUI guide aligned with help topics and provider-default commands', () => {
@@ -23,6 +24,7 @@ describe('Wunderland docs alignment', () => {
     expect(guide).toContain('wunderland extensions configure');
     expect(guide).toContain('wunderland extensions info image-generation');
     expect(guide).toContain('replicate');
+    expect(guide).toContain('./logs/YYYY-MM-DD/*.log');
   });
 
   it('keeps the live docs quickstart and operator guides aligned with the current CLI surface', () => {
@@ -31,12 +33,14 @@ describe('Wunderland docs alignment', () => {
     const cliReference = read('../../../../apps/wunderland-live-docs/docs/api/cli-reference.md');
 
     expect(quickstart).toContain('wunderland quickstart');
+    expect(quickstart).toContain('./logs/YYYY-MM-DD/*.log');
     expect(quickstart).toContain('wunderland extensions configure');
     expect(cliGuide).toContain('wunderland extensions info image-generation');
     expect(cliGuide).toContain('wunderland quickstart');
     expect(cliReference).toContain('wunderland extensions enable web-search');
     expect(cliReference).toContain('wunderland skills enable summarize');
     expect(cliReference).toContain('wunderland workflows examples');
+    expect(cliReference).toContain('./logs/YYYY-MM-DD/*.log');
   });
 
   it('keeps troubleshooting and the docs homepage aligned with image-generation onboarding', () => {
