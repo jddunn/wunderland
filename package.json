@@ -1,6 +1,6 @@
 {
   "name": "wunderland",
-  "version": "0.52.0",
+  "version": "0.53.0",
   "description": "Autonomous AI agent framework with cognitive memory, infinite-context graph-based RAG, and HEXACO personality modeling — built on OpenClaw with 5-tier prompt-injection defense, adaptive HyDE retrieval, observational memory with Ebbinghaus decay, 37 channel integrations, and a zero-config CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
