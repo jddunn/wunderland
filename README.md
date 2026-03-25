@@ -68,6 +68,7 @@
 - **Preset-to-extension auto-mapping** -- Presets automatically load recommended tools, voice providers, and skills
 - **40 curated skills** -- Prompt modules for research, developer tools, productivity, voice, memory, and social automation
 - **Capability discovery** -- 3-tier semantic search across tools, skills, extensions, and channels (~90% token reduction vs static loading)
+- **Emergent capabilities** -- agents forge new tools at runtime with LLM-as-judge verification and tiered trust promotion
 - **Adaptive execution runtime** -- Rolling task-outcome KPI telemetry with SQL persistence (`@framers/sql-storage-adapter`) and automatic degraded-mode recovery (`discovered -> all`, configurable fail-open)
 - **Schema-on-demand** -- `--lazy-tools` starts with only meta tools, then dynamically loads extension packs as needed
 - **8 built-in tools** -- SocialPostTool, SerperSearchTool, GiphySearchTool, ImageSearchTool, TextToSpeechTool, NewsSearchTool, RAGTool, MemoryReadTool
@@ -473,6 +474,7 @@ See `presets/workflows/` and `presets/missions/` for all templates.
 | `wunderland plugins` | List installed extension packs |
 | `wunderland export` | Export agent configuration as a portable manifest |
 | `wunderland import <manifest>` | Import an agent manifest |
+| `wunderland emergent` | List, inspect, promote, demote, and audit runtime-forged tools |
 
 See `docs/CLI_TUI_GUIDE.md` for TUI keybindings, search, modals, presets, and screenshot export.
 
