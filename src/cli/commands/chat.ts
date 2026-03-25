@@ -25,6 +25,7 @@ import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../confi
 import { resolveDefaultSkillsDirs } from '../../skills/index.js';
 import {
   runToolCallingTurn,
+  streamToolCallingTurn,
   safeJsonStringify,
   truncateString,
   getGuardrailsInstance,
@@ -41,6 +42,7 @@ import {
   type ResearchDepth,
 } from '../../runtime/research-classifier.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
+import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../observability/session-text-log.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
 import { resolveStrictToolNames } from '../../runtime/tool-function-names.js';
 import {
@@ -1223,11 +1225,15 @@ export default async function cmdChat(
   const sessionId = `wunderland-cli-${Date.now()}`;
   const toolContext = {
     gmiId: sessionId,
+    sessionId,
     personaId: activePersonaId,
     userContext: { userId: process.env['USER'] || 'local-user' },
     agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
     interactiveSession: true,
     strictToolNames,
+    ...(typeof globals.config === 'string' && globals.config.trim()
+      ? { wunderlandConfigDir: globals.config.trim() }
+      : null),
     ...(cfg
       ? {
           permissionSet: policy.permissionSet,
@@ -1245,6 +1251,15 @@ export default async function cmdChat(
     typeof (cfg as any)?.organizationId === 'string' && String((cfg as any).organizationId).trim()
       ? String((cfg as any).organizationId).trim()
       : undefined;
+  const sessionTextLogger = new WunderlandSessionTextLogger(
+    resolveWunderlandTextLogConfig({
+      agentConfig: cfg,
+      workingDirectory: process.cwd(),
+      workspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
+      defaultAgentId: workspaceAgentId,
+      configBacked: !!cfg,
+    }),
+  );
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
@@ -1335,10 +1350,13 @@ export default async function cmdChat(
           const voiceSessionId = `voice-${seedId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           const voiceMessages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
           let aborted = false;
+          /** AbortController for the in-flight streaming LLM request. */
+          let streamController: AbortController | null = null;
 
           return {
             async *sendText(text: string): AsyncIterable<string> {
               aborted = false;
+              streamController = new AbortController();
               voiceMessages.push({ role: 'user', content: text });
 
               const adaptiveDecision = adaptiveRuntime.resolveTurnDecision({
@@ -1370,7 +1388,10 @@ export default async function cmdChat(
               let toolCallCount = 0;
 
               try {
-                reply = await runToolCallingTurn({
+                // Use the streaming variant to yield tokens incrementally
+                // as they arrive from the LLM, enabling real-time TTS
+                // playback instead of waiting for the full response.
+                const tokenStream = streamToolCallingTurn({
                   providerId,
                   apiKey: llmApiKey,
                   model,
@@ -1387,6 +1408,7 @@ export default async function cmdChat(
                   ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
                   fallback: providerId === 'openai' ? openrouterFallback : undefined,
                   getApiKey: oauthGetApiKey,
+                  signal: streamController.signal,
                   onFallback: () => {
                     fallbackTriggered = true;
                   },
@@ -1394,10 +1416,33 @@ export default async function cmdChat(
                     toolCallCount += 1;
                   },
                 });
+
+                // Yield each token immediately as it arrives from the LLM.
+                // The voice pipeline orchestrator feeds these directly into
+                // the TTS session for real-time audio synthesis.
+                let iterResult = await tokenStream.next();
+                while (!iterResult.done) {
+                  if (aborted) break;
+                  reply += iterResult.value;
+                  yield iterResult.value;
+                  iterResult = await tokenStream.next();
+                }
+                // If the generator returned a full reply (after all rounds),
+                // use it as the canonical reply text.
+                if (iterResult.done && iterResult.value) {
+                  reply = iterResult.value;
+                }
               } catch (error) {
-                turnFailed = true;
-                throw error;
+                // Abort errors during barge-in are expected — not a failure.
+                if (error instanceof DOMException && error.name === 'AbortError') {
+                  // Barge-in cancelled the stream; reply is whatever was
+                  // accumulated so far.
+                } else {
+                  turnFailed = true;
+                  throw error;
+                }
               } finally {
+                streamController = null;
                 try {
                   await adaptiveRuntime.recordTurnOutcome({
                     scope: {
@@ -1416,17 +1461,22 @@ export default async function cmdChat(
                 }
               }
 
-              if (reply) {
+              // Push the final reply into conversation history. Note: the
+              // streaming variant already pushes into messages internally,
+              // but only if the stream completed naturally. If aborted
+              // mid-stream, we record the partial reply here.
+              if (reply && !voiceMessages.some(
+                (m) => m.role === 'assistant' && m.content === reply,
+              )) {
                 voiceMessages.push({ role: 'assistant', content: reply });
-                const chunks = reply.match(/\S+\s*/g) ?? [reply];
-                for (const chunk of chunks) {
-                  if (aborted) break;
-                  yield chunk;
-                }
               }
             },
             abort() {
               aborted = true;
+              // Cancel the in-flight streaming LLM request immediately.
+              // This stops token generation at the provider, saving both
+              // latency and tokens.
+              streamController?.abort();
             },
           };
         },
@@ -1668,6 +1718,7 @@ export default async function cmdChat(
     let turnFailed = false;
     let fallbackTriggered = false;
     let toolCallCount = 0;
+    let turnError: unknown;
     try {
       reply = await runToolCallingTurn({
         providerId,
@@ -1718,6 +1769,7 @@ export default async function cmdChat(
       });
     } catch (error) {
       turnFailed = true;
+      turnError = error;
       throw error;
     } finally {
       try {
@@ -1740,6 +1792,24 @@ export default async function cmdChat(
       // Flush tool failure lessons to RAG even if the turn produced no reply
       // or the tool-calling loop threw after recording failures.
       toolFailureLearner.flush().catch(() => {});
+
+      await sessionTextLogger.logTurn({
+        meta: {
+          agentId: workspaceAgentId,
+          seedId,
+          displayName,
+          providerId: String(providerId),
+          model,
+          personaId: activePersonaId,
+        },
+        sessionId,
+        userText: input,
+        reply,
+        error: turnError,
+        toolCallCount,
+        durationMs: 0,
+        fallbackTriggered,
+      });
     }
 
     if (reply) {

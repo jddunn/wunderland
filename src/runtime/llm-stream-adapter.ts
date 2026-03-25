@@ -137,3 +137,140 @@ export async function* wrapLLMAsGenerator(
 
   return { responseText: text, toolCalls, finishReason };
 }
+
+// ---------------------------------------------------------------------------
+// Streaming SSE adapter
+// ---------------------------------------------------------------------------
+
+/**
+ * Represents a single SSE chunk from the OpenAI streaming API.
+ * Each chunk contains a delta with partial content and/or tool call fragments.
+ */
+interface StreamDelta {
+  content?: string | null;
+  tool_calls?: Array<{
+    index: number;
+    id?: string;
+    function?: {
+      name?: string;
+      arguments?: string;
+    };
+  }>;
+}
+
+interface StreamChoice {
+  delta?: StreamDelta;
+  finish_reason?: string | null;
+}
+
+interface StreamChunk {
+  choices?: StreamChoice[];
+  model?: string;
+  usage?: unknown;
+}
+
+/**
+ * Parses a single `data:` line from an SSE stream into a typed chunk.
+ * Returns `null` for `[DONE]` sentinels, empty lines, and parse failures.
+ */
+function parseSSELine(line: string): StreamChunk | null {
+  const trimmed = line.trim();
+  if (!trimmed || !trimmed.startsWith('data:')) return null;
+  const payload = trimmed.slice(5).trim();
+  if (payload === '[DONE]') return null;
+  try {
+    return JSON.parse(payload) as StreamChunk;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Wraps a streaming (SSE) LLM response as an async generator compatible with
+ * `LoopController`. Unlike {@link wrapLLMAsGenerator}, this adapter yields
+ * **individual text tokens** as they arrive from the SSE stream, enabling
+ * real-time TTS playback before the full LLM response completes.
+ *
+ * **Generator protocol**
+ * 1. Accepts an async iterable of raw SSE lines from the streaming HTTP response.
+ * 2. For each text delta, yields a `text_delta` chunk immediately.
+ * 3. Accumulates tool-call fragments across deltas and yields a single
+ *    `tool_call_request` chunk once the stream ends with tool calls.
+ * 4. Returns a {@link LoopOutput} summary as the generator return value.
+ *
+ * @param sseLines - Async iterable that produces raw SSE lines (including
+ *   the `data: ` prefix). Typically created by splitting the streaming
+ *   response body on newline boundaries.
+ */
+export async function* wrapStreamingLLMAsGenerator(
+  sseLines: AsyncIterable<string>,
+): AsyncGenerator<LoopChunk, LoopOutput, undefined> {
+  let fullText = '';
+  let finishReason = 'stop';
+
+  // Accumulate tool call fragments keyed by index.
+  const toolCallAccumulators = new Map<number, {
+    id: string;
+    name: string;
+    argumentsJson: string;
+  }>();
+
+  for await (const line of sseLines) {
+    const chunk = parseSSELine(line);
+    if (!chunk?.choices?.length) continue;
+
+    const choice = chunk.choices[0];
+    if (choice.finish_reason) {
+      finishReason = choice.finish_reason;
+    }
+
+    const delta = choice.delta;
+    if (!delta) continue;
+
+    // --- Streaming text content ---
+    if (delta.content) {
+      fullText += delta.content;
+      yield { type: 'text_delta', content: delta.content };
+    }
+
+    // --- Streaming tool call fragments ---
+    if (delta.tool_calls) {
+      for (const tc of delta.tool_calls) {
+        const idx = tc.index;
+        let acc = toolCallAccumulators.get(idx);
+        if (!acc) {
+          acc = { id: '', name: '', argumentsJson: '' };
+          toolCallAccumulators.set(idx, acc);
+        }
+        if (tc.id) acc.id = tc.id;
+        if (tc.function?.name) acc.name += tc.function.name;
+        if (tc.function?.arguments) acc.argumentsJson += tc.function.arguments;
+      }
+    }
+  }
+
+  // --- Assemble final tool calls from accumulated fragments ---
+  const toolCalls: ToolCallRequest[] = [];
+  const sortedEntries = [...toolCallAccumulators.entries()].sort(
+    ([a], [b]) => a - b,
+  );
+  for (const [, acc] of sortedEntries) {
+    let parsedArgs: Record<string, unknown>;
+    try {
+      parsedArgs = JSON.parse(acc.argumentsJson) as Record<string, unknown>;
+    } catch {
+      parsedArgs = {};
+    }
+    toolCalls.push({
+      id: acc.id || `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: acc.name || 'unknown',
+      arguments: parsedArgs,
+    });
+  }
+
+  if (toolCalls.length > 0) {
+    yield { type: 'tool_call_request', toolCalls };
+  }
+
+  return { responseText: fullText, toolCalls, finishReason };
+}
