@@ -31,6 +31,12 @@ Useful help topics:
 
 If you are authoring orchestration definitions, keep them under `./workflows/`, `./missions/`, or `./orchestration/`, import builders from `wunderland/workflows`, and execute them through `createWunderland().runGraph(...)`.
 
+If `WUNDERLAND_OTEL_ENABLED=true` is set, the main runtime commands bootstrap OTEL automatically: `chat`, `start`, `workflows run`, `mission run`, `image generate`, and `structured extract`.
+
+`wunderland status` reads the shared durable usage ledger at `~/.framers/usage-ledger.jsonl` by default, so token and cost totals persist across separate CLI runs instead of resetting with each process. Set `AGENTOS_USAGE_LEDGER_PATH` or `WUNDERLAND_USAGE_LEDGER_PATH` if you want a different shared file, or use an explicit config override when you want Wunderland-only isolation.
+
+For scaffolded agents, `wunderland chat` and `wunderland start` also write dated plain-text session logs under `./logs/YYYY-MM-DD/*.log` by default. That is separate from daemon `stdout.log` / `stderr.log`, which still live under the daemon state directory and are what `wunderland logs` tails. Disable session text logs with `observability.textLogs.enabled=false`.
+
 ## TUI dashboard
 
 - `↑/↓` navigate, `⏎` select

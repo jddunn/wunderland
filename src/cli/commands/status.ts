@@ -17,7 +17,8 @@ import { loadConfig } from '../config/config-manager.js';
 import { loadEnv, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
-import { TokenUsageTracker, type TokenUsageSummary } from '../../core/TokenUsageTracker.js';
+import type { TokenUsageSummary } from '../../core/TokenUsageTracker.js';
+import { getRecordedWunderlandTokenUsage } from '../../observability/token-usage.js';
 import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 import { resolveEffectiveAgentConfig } from '../../config/effective-agent-config.js';
 
@@ -85,7 +86,7 @@ export default async function cmdStatus(
       return { id: chId, ready };
     });
 
-    const usage = globalTokenTracker.getUsage();
+    const usage = await getRecordedWunderlandTokenUsage(globals.config);
 
     console.log(JSON.stringify({
       agent,
@@ -93,7 +94,7 @@ export default async function cmdStatus(
       llmKeys: llmKeys.map((s) => ({ envVar: s.envVar, isSet: s.isSet })),
       toolKeys: toolKeys.map((s) => ({ envVar: s.envVar, isSet: s.isSet })),
       channels,
-      tokenUsage: globalTokenTracker.hasUsage() ? usage : null,
+      tokenUsage: usage.totalCalls > 0 ? usage : null,
     }, null, 2));
     return;
   }
@@ -203,7 +204,7 @@ export default async function cmdStatus(
   console.log();
 
   // ── Token Usage Panel ──────────────────────────────────────────────────
-  displayTokenUsage();
+  await displayTokenUsage(globals.config);
 
   fmt.blank();
 }
@@ -211,11 +212,11 @@ export default async function cmdStatus(
 // ── Token Usage Display ──────────────────────────────────────────────────────
 
 /**
- * Global token usage tracker instance.
- * Other modules (e.g., chat, start) can import and record usage against this
- * singleton so that `wunderland status` reflects cumulative session usage.
+ * In-process token tracker bridge.
+ * Runtime writers still update this singleton for fast local state, but
+ * `wunderland status` reads from the durable usage ledger on disk.
  */
-export const globalTokenTracker = new TokenUsageTracker();
+export { globalTokenTracker } from '../../observability/token-usage.js';
 
 function formatCost(usd: number | null): string {
   if (usd === null) return muted('unknown');
@@ -227,14 +228,14 @@ function formatTokenCount(count: number): string {
   return count.toLocaleString('en-US');
 }
 
-function displayTokenUsage(): void {
-  const usage: TokenUsageSummary = globalTokenTracker.getUsage();
+async function displayTokenUsage(configDirOverride?: string): Promise<void> {
+  const usage: TokenUsageSummary = await getRecordedWunderlandTokenUsage(configDirOverride);
   const g = glyphs();
 
-  if (!globalTokenTracker.hasUsage()) {
+  if (usage.totalCalls === 0) {
     const content = [
-      `${muted(g.circle)} No token usage recorded this session`,
-      `${dim('Token tracking activates when chat or start commands make LLM calls')}`,
+      `${muted(g.circle)} No LLM usage recorded yet`,
+      `${dim('Usage appears here after chat, workflows, missions, image, or structured commands make model calls')}`,
     ].join('\n');
     printPanel({ title: 'Token Usage', content, style: 'brand' });
     return;
@@ -246,14 +247,14 @@ function displayTokenUsage(): void {
       `${muted(model.model.padEnd(24))} ${accent(formatTokenCount(model.totalTokens))} tokens ${dim(`(${formatTokenCount(model.promptTokens)} in + ${formatTokenCount(model.completionTokens)} out)`)}`,
     );
     lines.push(
-      `${''.padEnd(24)} ${dim(`${model.callCount} call${model.callCount !== 1 ? 's' : ''}`)} ${dim('|')} est. ${formatCost(model.estimatedCostUSD)}`,
+      `${''.padEnd(24)} ${dim(`${model.callCount} call${model.callCount !== 1 ? 's' : ''}`)} ${dim('|')} cost ${formatCost(model.estimatedCostUSD)}`,
     );
   }
 
   if (usage.perModel.length > 1) {
     lines.push(dim(g.hr.repeat(56)));
     lines.push(`${muted('Total'.padEnd(24))} ${accent(formatTokenCount(usage.totalTokens))} tokens`);
-    lines.push(`${''.padEnd(24)} ${dim(`${usage.totalCalls} calls`)} ${dim('|')} est. ${formatCost(usage.estimatedCostUSD)}`);
+    lines.push(`${''.padEnd(24)} ${dim(`${usage.totalCalls} calls`)} ${dim('|')} cost ${formatCost(usage.estimatedCostUSD)}`);
   }
 
   printPanel({ title: 'Token Usage', content: lines.join('\n'), style: 'brand' });

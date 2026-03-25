@@ -16,7 +16,19 @@ const session = app.session();
 const out = await session.sendText('Hello!');
 
 console.log(out.text);
+console.log(await session.usage());
 ```
+
+You can inspect durable usage totals at either level:
+
+```ts
+const appUsage = await app.usage();
+const sessionUsage = await session.usage();
+```
+
+These totals come from the shared append-only usage ledger at `~/.framers/usage-ledger.jsonl` by default, so they survive across separate CLI commands and server processes. Set `AGENTOS_USAGE_LEDGER_PATH` or `WUNDERLAND_USAGE_LEDGER_PATH` when you want a different shared file, or pass an explicit config-dir override when you want Wunderland-specific isolation.
+
+When the app is running from a config-backed agent directory, Wunderland also writes dated plain-text session logs under `./logs/YYYY-MM-DD/*.log` by default. Disable that with `observability.textLogs.enabled=false`, or move it with `observability.textLogs.directory`.
 
 ## Why Wunderland does not wrap AgentOS `agent()`
 

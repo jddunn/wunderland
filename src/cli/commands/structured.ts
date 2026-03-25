@@ -8,6 +8,7 @@ import type { GlobalFlags } from '../types.js';
 import { accent, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
 
 /**
  * Handles the `wunderland structured` CLI command.
@@ -83,22 +84,50 @@ export default async function cmdStructured(
       return;
     }
 
-    try {
-      const { generateText } = await import('@framers/agentos');
-      const provider = flags.provider as string | undefined;
+	    try {
+	      const { generateText } = await import('@framers/agentos');
+        const { recordWunderlandTokenUsage } = await import('../../observability/token-usage.js');
+	      const provider = flags.provider as string | undefined;
 
-      const prompt = [
+	      const prompt = [
         'Extract structured data from the following text.',
         `Schema: ${JSON.stringify(schema)}`,
         'Respond with ONLY a valid JSON object matching the schema. No other text.',
         '',
         `Text: ${inputText}`,
-      ].join('\n');
+	      ].join('\n');
 
-      const result = await generateText({
-        provider: provider,
-        prompt,
-      });
+	      await startWunderlandOtel({ serviceName: 'wunderland-structured' });
+	      const request: Record<string, unknown> = { prompt };
+	      if (provider) request['provider'] = provider;
+	      const result = await generateText(request as any);
+        const resultUsage = result.usage as {
+          promptTokens?: number;
+          completionTokens?: number;
+          totalTokens?: number;
+          costUSD?: number;
+        };
+        const resultProvider =
+          typeof (result as any).provider === 'string'
+            ? (result as any).provider
+            : provider;
+        const resultModel =
+          typeof (result as any).model === 'string'
+            ? (result as any).model
+            : undefined;
+        await recordWunderlandTokenUsage({
+          sessionId: `wunderland-structured-${Date.now()}`,
+          providerId: resultProvider,
+          model: resultModel,
+          source: 'structured',
+          configDirOverride: globals.config,
+          usage: {
+            prompt_tokens: resultUsage.promptTokens,
+            completion_tokens: resultUsage.completionTokens,
+            total_tokens: resultUsage.totalTokens,
+            costUSD: resultUsage.costUSD,
+          },
+        });
 
       // Pretty-print parsed JSON; fall back to raw text if the LLM emits markdown fences.
       try {
@@ -112,11 +141,13 @@ export default async function cmdStructured(
         // Not valid JSON — print the raw response so the caller can inspect it.
         console.log(result.text);
       }
-    } catch (err) {
-      fmt.errorBlock('Extraction failed', err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    }
-  } else {
+	    } catch (err) {
+	      fmt.errorBlock('Extraction failed', err instanceof Error ? err.message : String(err));
+	      process.exitCode = 1;
+	    } finally {
+	      await shutdownWunderlandOtel();
+	    }
+	  } else {
     fmt.errorBlock('Unknown subcommand', `"${sub}". Run ${accent('wunderland structured')} for help.`);
     process.exitCode = 1;
   }

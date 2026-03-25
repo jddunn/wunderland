@@ -133,7 +133,12 @@ const session = app.session();
 const out = await session.sendText('Hello!');
 
 console.log(out.text);
+console.log(await session.usage());
 ```
+
+Usage and cost totals are persisted in the shared home ledger at `~/.framers/usage-ledger.jsonl` by default, so `wunderland status`, `app.usage()`, and `session.usage()` can all inspect cumulative model usage across separate runs. If you want a different shared file, set `AGENTOS_USAGE_LEDGER_PATH` or `WUNDERLAND_USAGE_LEDGER_PATH`. If you want Wunderland-only isolation, pass an explicit config-dir override.
+
+For config-backed agent runs, Wunderland also writes dated plain-text session logs under `./logs/YYYY-MM-DD/*.log` by default. Disable that with `observability.textLogs.enabled=false`, or move it with `observability.textLogs.directory`.
 
 ### Why `createWunderland()` instead of AgentOS `agent()`
 

@@ -20,6 +20,7 @@ import {
   shouldInjectResearch,
   type ResearchDepth,
 } from '../../../runtime/research-classifier.js';
+import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../../observability/session-text-log.js';
 import {
   buildPersonaSessionKey,
   createRequestScopedToolMap,
@@ -174,6 +175,15 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
     typeof cfg?.selectedPersonaId === 'string' && cfg.selectedPersonaId.trim()
       ? cfg.selectedPersonaId.trim()
       : seed.seedId;
+  const sessionTextLogger = new WunderlandSessionTextLogger(
+    resolveWunderlandTextLogConfig({
+      agentConfig: cfg,
+      workingDirectory: process.cwd(),
+      workspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
+      defaultAgentId: workspaceAgentId,
+      configBacked: true,
+    }),
+  );
 
   const server = createServer(async (req, res) => {
     try {
@@ -1100,6 +1110,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
         let turnFailed = false;
         let fallbackTriggered = false;
         let toolCallCount = 0;
+        let turnError: unknown;
         const sessionId = typeof parsed.sessionId === 'string' && parsed.sessionId.trim()
           ? parsed.sessionId.trim().slice(0, 128)
           : 'default';
@@ -1386,6 +1397,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           sessions.set(internalSessionId, workingMessages);
         } catch (error) {
           turnFailed = true;
+          turnError = error;
           if (streamMode) {
             try {
               const errChunk = JSON.stringify({
@@ -1414,6 +1426,23 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
           } catch (error) {
             console.warn('[wunderland/start][api] failed to record adaptive outcome', error);
           }
+          await sessionTextLogger.logTurn({
+            meta: {
+              agentId: workspaceAgentId,
+              seedId,
+              displayName,
+              providerId: String(providerId),
+              model,
+              personaId: requestActivePersonaId,
+            },
+            sessionId,
+            userText: message,
+            reply,
+            error: turnError,
+            toolCallCount,
+            durationMs: 0,
+            fallbackTriggered,
+          });
         }
 
         // Strip <think>...</think> blocks from models like qwen3.
