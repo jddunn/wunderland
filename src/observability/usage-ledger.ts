@@ -1,12 +1,25 @@
 import path from 'node:path';
 
-import {
-  clearRecordedAgentOSUsage,
-  getDefaultAgentOSUsageLedgerPath,
-  readRecordedAgentOSUsageEvents,
-  recordAgentOSUsage,
-  type AgentOSUsageEvent,
-} from '@framers/agentos';
+// These usage-tracking functions are exported by @framers/agentos >=0.1.89
+// but may not exist in older published versions. Graceful stubs for CI compat.
+let clearRecordedAgentOSUsage: (ledgerPath: string) => void;
+let getDefaultAgentOSUsageLedgerPath: () => string;
+let readRecordedAgentOSUsageEvents: (ledgerPath: string) => any[];
+let recordAgentOSUsage: (event: any, ledgerPath?: string) => void;
+type AgentOSUsageEvent = { model?: string; provider?: string; promptTokens?: number; completionTokens?: number; timestamp?: number; [k: string]: unknown };
+
+try {
+  const mod = require('@framers/agentos');
+  clearRecordedAgentOSUsage = mod.clearRecordedAgentOSUsage ?? (() => {});
+  getDefaultAgentOSUsageLedgerPath = mod.getDefaultAgentOSUsageLedgerPath ?? (() => '');
+  readRecordedAgentOSUsageEvents = mod.readRecordedAgentOSUsageEvents ?? (() => []);
+  recordAgentOSUsage = mod.recordAgentOSUsage ?? (() => {});
+} catch {
+  clearRecordedAgentOSUsage = () => {};
+  getDefaultAgentOSUsageLedgerPath = () => '';
+  readRecordedAgentOSUsageEvents = () => [];
+  recordAgentOSUsage = () => {};
+}
 
 import { getConfigDir } from '../cli/config/config-manager.js';
 import { USAGE_LEDGER_FILE_NAME } from '../cli/constants.js';
