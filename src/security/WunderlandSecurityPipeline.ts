@@ -346,6 +346,7 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
 
     if (enabled.piiRedaction) {
       try {
+        // @ts-ignore — optional peer dependency; not installed in all environments
         const mod = await import('@framers/agentos-ext-pii-redaction');
         const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
         if (typeof factory === 'function') {
@@ -360,6 +361,7 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
 
     if (enabled.mlClassifiers) {
       try {
+        // @ts-ignore — optional peer dependency; not installed in all environments
         const mod = await import('@framers/agentos-ext-ml-classifiers');
         const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
         if (typeof factory === 'function') {
@@ -374,6 +376,7 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
 
     if (enabled.topicality) {
       try {
+        // @ts-ignore — optional peer dependency; not installed in all environments
         const mod = await import('@framers/agentos-ext-topicality');
         const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
         if (typeof factory === 'function') {
@@ -388,6 +391,7 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
 
     if (enabled.codeSafety) {
       try {
+        // @ts-ignore — optional peer dependency; not installed in all environments
         const mod = await import('@framers/agentos-ext-code-safety');
         const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
         if (typeof factory === 'function') {
@@ -402,6 +406,7 @@ export class WunderlandSecurityPipeline implements IGuardrailService {
 
     if (enabled.groundingGuard) {
       try {
+        // @ts-ignore — optional peer dependency; not installed in all environments
         const mod = await import('@framers/agentos-ext-grounding-guard');
         const factory = (mod as Record<string, unknown>).createExtensionPack ?? (mod as Record<string, unknown>).default;
         if (typeof factory === 'function') {
