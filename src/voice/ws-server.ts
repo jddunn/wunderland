@@ -119,7 +119,9 @@ function detectTelephonyProvider(data: unknown): { isTelephony: boolean; provide
  * @param providerName - Lower-case provider identifier (`'twilio'`, `'telnyx'`, `'plivo'`).
  * @returns A `MediaStreamParser` instance ready to use with {@link TelephonyStreamTransport}.
  */
-async function resolveMediaStreamParser(providerName: string): Promise<import('@framers/agentos/voice').MediaStreamParser> {
+// @ts-ignore — @framers/agentos/voice subpath resolves at runtime after agentos build
+async function resolveMediaStreamParser(providerName: string): Promise<any> {
+  // @ts-ignore
   const mod = await import('@framers/agentos/voice');
   switch (providerName) {
     case 'telnyx':
@@ -195,6 +197,7 @@ export async function startVoiceServer(
         // We create the transport first, then re-emit the message so the
         // transport's internal `ws.on('message')` handler can process it
         // (it handles the `start` event to transition state to 'open').
+        // @ts-ignore — subpath resolves at runtime
         const { TelephonyStreamTransport } = await import('@framers/agentos/voice');
         const parser = await resolveMediaStreamParser(providerName);
 
