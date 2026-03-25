@@ -107,23 +107,81 @@ function createConditionFn(expr: string): (state: any) => string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Voice pipeline configuration for a YAML step.
+ *
+ * When present on a step definition, the step is compiled to a `voice`
+ * {@link NodeExecutorConfig} and dispatched to {@link VoiceNodeExecutor}.
+ */
+interface YamlVoiceStepConfig {
+  /**
+   * Voice session mode.
+   * - `conversation`  — bidirectional STT + TTS (default call flow).
+   * - `listen-only`   — STT only; agent never speaks during this step.
+   * - `speak-only`    — TTS only; user speech is ignored.
+   */
+  mode: 'conversation' | 'listen-only' | 'speak-only';
+  /** STT provider override (e.g. `'deepgram'`, `'openai'`). Defaults to agent config value. */
+  stt?: string;
+  /** TTS provider override (e.g. `'openai'`, `'elevenlabs'`). Defaults to agent config value. */
+  tts?: string;
+  /** TTS voice name forwarded to the TTS provider. */
+  voice?: string;
+  /**
+   * Endpoint detection mode.
+   * - `acoustic`   — energy/VAD + silence timeout.
+   * - `heuristic`  — punctuation + silence heuristics.
+   * - `semantic`   — LLM-assisted turn boundary detection.
+   */
+  endpointing?: string;
+  /**
+   * Barge-in handling strategy.
+   * - `hard-cut`  — interrupt TTS immediately on user speech.
+   * - `soft-fade` — ramp TTS down before cutting.
+   * - `disabled`  — ignore user speech while agent is speaking.
+   */
+  bargeIn?: string;
+  /** Enable speaker diarization for multi-speaker sessions. */
+  diarization?: boolean;
+  /** BCP-47 language tag forwarded to STT (e.g. `'en-US'`). */
+  language?: string;
+  /** Maximum number of turns before the node exits with `turns-exhausted`. `0` = unlimited. */
+  maxTurns?: number;
+  /**
+   * Primary exit condition.
+   * - `hangup`          — exit when the caller disconnects.
+   * - `silence-timeout` — exit after 30 s of no speech.
+   * - `keyword`         — exit when an {@link exitKeywords} phrase is detected.
+   * - `turns-exhausted` — exit when {@link maxTurns} is reached.
+   * - `manual`          — exit only when triggered programmatically.
+   */
+  exitOn?: string;
+  /** Phrases that trigger exit when `exitOn` is `'keyword'`. Case-insensitive substring match. */
+  exitKeywords?: string[];
+}
+
+/**
  * Represents a single step declaration in a YAML workflow definition.
  * Maps to {@link StepConfig} accepted by `WorkflowBuilder.step()`.
  */
 interface YamlStepDef {
   /** Unique step identifier within the workflow. */
   id: string;
-  /** Registered tool name to invoke. Mutually exclusive with `gmi` and `human`. */
+  /** Registered tool name to invoke. Mutually exclusive with `gmi`, `human`, and `voice`. */
   tool?: string;
-  /** GMI (General Model Invocation) configuration. Mutually exclusive with `tool` and `human`. */
+  /** GMI (General Model Invocation) configuration. Mutually exclusive with `tool`, `human`, and `voice`. */
   gmi?: { instructions: string; maxTokens?: number };
-  /** Human-in-the-loop prompt. Mutually exclusive with `tool` and `gmi`. */
+  /** Human-in-the-loop prompt. Mutually exclusive with `tool`, `gmi`, and `voice`. */
   human?: { prompt: string };
+  /**
+   * Voice pipeline configuration. When present, the step runs as a voice node.
+   * Mutually exclusive with `tool`, `gmi`, and `human`.
+   */
+  voice?: YamlVoiceStepConfig;
   /** Optional branch condition expression (e.g. `scratch.decision`). */
   condition?: string;
   /**
    * When `condition` is set, maps route label → step config for each branch arm.
-   * Each value follows the same `tool`/`gmi`/`human` shape as a regular step.
+   * Each value follows the same `tool`/`gmi`/`human`/`voice` shape as a regular step.
    */
   routes?: Record<string, Omit<YamlStepDef, 'id' | 'condition' | 'routes'>>;
   /** Maximum wall-clock execution time in milliseconds. */
@@ -154,8 +212,20 @@ function yamlStepToConfig(def: Omit<YamlStepDef, 'id' | 'condition' | 'routes'>)
   if (def.human) {
     return { human: { prompt: def.human.prompt }, timeout: def.timeout };
   }
+  if (def.voice) {
+    if (!def.voice.mode) {
+      throw new Error(
+        `YAML voice step must specify a \`mode\` (conversation|listen-only|speak-only). Got: ${JSON.stringify(def.voice)}`,
+      );
+    }
+    // Return a StepConfig shape with `voice` set — WorkflowBuilder.configToNode()
+    // handles voice steps and lowers them to a NodeExecutorConfig of type 'voice'.
+    return {
+      voice: def.voice,
+    };
+  }
   throw new Error(
-    `YAML step must specify one of: tool, gmi, or human. Got: ${JSON.stringify(def)}`,
+    `YAML step must specify one of: tool, gmi, human, or voice. Got: ${JSON.stringify(def)}`,
   );
 }
 
@@ -164,22 +234,54 @@ function yamlStepToConfig(def: Omit<YamlStepDef, 'id' | 'condition' | 'routes'>)
 // ---------------------------------------------------------------------------
 
 /**
+ * Top-level transport configuration in a YAML workflow document.
+ *
+ * When `type` is `'voice'`, the compiled workflow is expected to be driven by a
+ * {@link VoiceTransportAdapter} that bridges graph I/O to the voice pipeline for
+ * the duration of the entire call rather than just a single node.
+ */
+interface YamlTransportDef {
+  /**
+   * Transport type. Currently only `'voice'` is supported.
+   * Future values may include `'websocket'` or `'telephony'`.
+   */
+  type: 'voice';
+  /** STT provider identifier (e.g. `'deepgram'`, `'openai'`). */
+  stt?: string;
+  /** TTS provider identifier (e.g. `'openai'`, `'elevenlabs'`). */
+  tts?: string;
+  /** TTS voice name forwarded to the provider. */
+  voice?: string;
+  /** Barge-in handling mode (`'hard-cut'` | `'soft-fade'` | `'disabled'`). */
+  bargeIn?: string;
+  /** Endpoint detection mode (`'acoustic'` | `'heuristic'` | `'semantic'`). */
+  endpointing?: string;
+}
+
+/**
  * Parses a YAML string describing a workflow and compiles it to a `CompiledWorkflow`.
  *
  * The YAML document must contain:
  * - `name` (string) — workflow identifier.
  * - `steps` (array)  — ordered list of step definitions.
  *
- * Each step requires an `id` and exactly one of `tool`, `gmi`, or `human`.  A step may
- * also carry a `condition` (string expression) and `routes` (map of route key → step)
- * to declare a conditional branch.
+ * Each step requires an `id` and exactly one of `tool`, `gmi`, `human`, or `voice`.  A step
+ * may also carry a `condition` (string expression) and `routes` (map of route key → step) to
+ * declare a conditional branch.
+ *
+ * An optional top-level `transport` field configures the I/O layer used to drive the whole
+ * workflow.  When `transport.type` is `'voice'`, the workflow is intended to be executed inside
+ * a phone call or real-time voice session; every node receives input from STT and delivers
+ * output to TTS via a {@link VoiceTransportAdapter}.
  *
  * @param yamlContent - Raw YAML string to parse and compile.
  * @returns A `CompiledWorkflow` ready to be invoked or streamed.
+ *          The compiled graph carries `transport` metadata at `compiled._transport` when
+ *          a transport block is present in the YAML.
  *
  * @throws {Error} When required fields are missing or a step has an invalid shape.
  *
- * @example
+ * @example Basic workflow
  * ```yaml
  * name: fetch-and-summarise
  * steps:
@@ -189,12 +291,40 @@ function yamlStepToConfig(def: Omit<YamlStepDef, 'id' | 'condition' | 'routes'>)
  *     gmi:
  *       instructions: Summarise the fetched content in 3 sentences.
  * ```
+ *
+ * @example Voice transport workflow
+ * ```yaml
+ * name: phone-intake
+ * transport:
+ *   type: voice
+ *   stt: deepgram
+ *   tts: elevenlabs
+ *   bargeIn: hard-cut
+ * steps:
+ *   - id: greet
+ *     voice:
+ *       mode: conversation
+ *       maxTurns: 1
+ *   - id: collect-info
+ *     voice:
+ *       mode: conversation
+ *       exitOn: keyword
+ *       exitKeywords: [confirmed, done]
+ * ```
  */
 export function compileWorkflowYaml(yamlContent: string): any {
   const doc = parse(yamlContent) as any;
 
   if (!doc.name) throw new Error('YAML workflow must have a `name` field');
   if (!Array.isArray(doc.steps)) throw new Error('YAML workflow must have a `steps` array');
+
+  // Validate transport block if present.
+  const transport: YamlTransportDef | undefined = doc.transport;
+  if (transport !== undefined && transport.type !== 'voice') {
+    throw new Error(
+      `YAML workflow \`transport.type\` must be \`voice\`. Got: ${JSON.stringify(transport.type)}`,
+    );
+  }
 
   let builder = workflow(doc.name)
     .input(resolveYamlSchema(doc.input))
@@ -221,7 +351,16 @@ export function compileWorkflowYaml(yamlContent: string): any {
     }
   }
 
-  return builder.compile();
+  const compiled = builder.compile();
+
+  // Attach transport metadata as a non-enumerable shadow property so that the
+  // graph runtime can detect that this workflow was authored for voice transport
+  // without polluting the standard CompiledExecutionGraph shape.
+  if (transport) {
+    (compiled as any)._transport = transport;
+  }
+
+  return compiled;
 }
 
 // ---------------------------------------------------------------------------
