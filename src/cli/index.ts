@@ -95,6 +95,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('knowledge')}             Knowledge graph
       ${w('provenance')}            Audit trail & provenance
       ${w('marketplace')}           Marketplace search/install
+      ${w('emergent')}              Runtime-forged tool management
 
     ${w('Utilities')}
       ${w('seal')}                  Seal agent config (integrity hash)
@@ -446,6 +447,22 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     ],
     notes: ['--schema: JSON object where keys are field names and values are type hints.'],
   },
+  emergent: {
+    summary: 'Manage runtime-forged emergent tools (list, inspect, promote, demote, audit).',
+    usage: ['wunderland emergent <list|inspect|promote|demote|audit> [name]'],
+    examples: [
+      'wunderland emergent list',
+      'wunderland emergent inspect fetch_github_pr_summary',
+      'wunderland emergent promote fetch_github_pr_summary',
+      'wunderland emergent demote csv_column_stats',
+      'wunderland emergent audit csv_column_stats',
+    ],
+    notes: [
+      'Emergent tools are created at runtime by agents and subject to LLM-as-judge verification.',
+      'Enable emergent mode: set "emergent": true in agent.config.json.',
+      'Tools progress through tiers: session -> agent -> shared.',
+    ],
+  },
   connect: {
     summary: 'Connect external services (Gmail, WhatsApp, Slack, Signal) via OAuth or setup wizard.',
     usage: ['wunderland connect <service>'],
@@ -523,6 +540,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   'import':       () => import('./commands/import-agent.js'),
   'ollama-setup':    () => import('./commands/ollama-setup.js'),
   'export-session':  () => import('./commands/export-session.js'),
+  emergent:          () => import('./commands/emergent.js'),
   deploy:            () => import('./commands/deploy.js'),
   serve:             () => import('./commands/serve.js'),
   agents:            () => import('./commands/agents.js'),
