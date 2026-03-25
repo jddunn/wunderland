@@ -25,6 +25,7 @@ import {
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
 import { isWunderlandOtelEnabled } from '../observability/otel.js';
+import { recordWunderlandTokenUsage } from '../observability/token-usage.js';
 import * as path from 'node:path';
 import { resolveApiKeyInput } from './api-key-resolver.js';
 import {
@@ -40,7 +41,7 @@ import {
   type LoopConfig,
   type LoopContext,
 } from '@framers/agentos/orchestration';
-import { wrapLLMAsGenerator } from './llm-stream-adapter.js';
+import { wrapLLMAsGenerator, wrapStreamingLLMAsGenerator } from './llm-stream-adapter.js';
 
 type LoopToolCallRequest = {
   id: string;
@@ -113,6 +114,7 @@ import {
   anthropicMessagesRequest,
   toAnthropicTools,
   openaiChatWithTools,
+  streamingOpenaiChatWithTools,
   redactToolOutputForLLM,
   getStringProp,
   getBooleanProp,
@@ -371,30 +373,57 @@ export async function runToolCallingTurn(opts: {
             try {
               const res = await invoke();
 
-              try {
-                span.setAttribute('provider', res.provider);
-                span.setAttribute('model', res.model);
-                span.setAttribute('llm.fallback.used', fallbackTriggered);
-                if (fallbackTriggered) span.setAttribute('llm.fallback.provider', fallbackProvider);
+	              try {
+	                span.setAttribute('provider', res.provider);
+	                span.setAttribute('model', res.model);
+	                span.setAttribute('llm.fallback.used', fallbackTriggered);
+	                if (fallbackTriggered) span.setAttribute('llm.fallback.provider', fallbackProvider);
               } catch {
                 // ignore
               }
 
               // Best-effort: attach token usage as safe span attributes (no content).
               try {
-                const u: any = res.usage && typeof res.usage === 'object' ? res.usage : null;
-                const total = typeof u?.total_tokens === 'number' ? u.total_tokens : undefined;
-                const prompt = typeof u?.prompt_tokens === 'number' ? u.prompt_tokens : undefined;
-                const completion = typeof u?.completion_tokens === 'number' ? u.completion_tokens : undefined;
-                if (typeof total === 'number') span.setAttribute('llm.usage.total_tokens', total);
-                if (typeof prompt === 'number') span.setAttribute('llm.usage.prompt_tokens', prompt);
-                if (typeof completion === 'number') span.setAttribute('llm.usage.completion_tokens', completion);
-              } catch {
-                // ignore
-              }
+	                const u: any = res.usage && typeof res.usage === 'object' ? res.usage : null;
+	                const total = typeof u?.total_tokens === 'number' ? u.total_tokens : undefined;
+	                const prompt = typeof u?.prompt_tokens === 'number' ? u.prompt_tokens : undefined;
+	                const completion = typeof u?.completion_tokens === 'number' ? u.completion_tokens : undefined;
+	                const costUsd = typeof u?.costUSD === 'number' ? u.costUSD : undefined;
+	                if (typeof total === 'number') span.setAttribute('llm.usage.total_tokens', total);
+	                if (typeof prompt === 'number') span.setAttribute('llm.usage.prompt_tokens', prompt);
+	                if (typeof completion === 'number') span.setAttribute('llm.usage.completion_tokens', completion);
+	                if (typeof costUsd === 'number') span.setAttribute('llm.usage.cost_usd', costUsd);
+	              } catch {
+	                // ignore
+	              }
 
-              return res;
-            } catch (error) {
+	              await recordWunderlandTokenUsage({
+	                sessionId: typeof opts.toolContext?.['sessionId'] === 'string' ? opts.toolContext['sessionId'] as string : undefined,
+	                personaId: typeof opts.toolContext?.['personaId'] === 'string' ? opts.toolContext['personaId'] as string : undefined,
+	                providerId,
+	                model: typeof res.model === 'string' ? res.model : opts.model,
+	                userId:
+                    opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
+                      ? String((opts.toolContext['userContext'] as Record<string, unknown>)['userId'] ?? '')
+                      : undefined,
+	                tenantId:
+                    opts.toolContext?.['tenantId'] && typeof opts.toolContext['tenantId'] === 'string'
+                      ? opts.toolContext['tenantId'] as string
+                      : opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
+                        ? typeof (opts.toolContext['userContext'] as Record<string, unknown>)['organizationId'] === 'string'
+                          ? (opts.toolContext['userContext'] as Record<string, unknown>)['organizationId'] as string
+                          : undefined
+                        : undefined,
+	                source: 'tool-calling',
+	                configDirOverride:
+                    typeof opts.toolContext?.['wunderlandConfigDir'] === 'string'
+                      ? opts.toolContext['wunderlandConfigDir'] as string
+                      : undefined,
+	                usage: res.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; costUSD?: number } | null,
+	              });
+
+	              return res;
+	            } catch (error) {
               try {
                 span.recordException(error as any);
               } catch {
@@ -412,10 +441,37 @@ export async function runToolCallingTurn(opts: {
             } finally {
               span.end();
             }
-          },
-        );
+	          },
+	        );
 
-    // Re-wrap into standard { choices: [{ message, finish_reason }] } shape
+	    if (!isWunderlandOtelEnabled()) {
+	      await recordWunderlandTokenUsage({
+	        sessionId: typeof opts.toolContext?.['sessionId'] === 'string' ? opts.toolContext['sessionId'] as string : undefined,
+	        personaId: typeof opts.toolContext?.['personaId'] === 'string' ? opts.toolContext['personaId'] as string : undefined,
+	        providerId,
+	        model: typeof (llmResult as any)?.model === 'string' ? (llmResult as any).model : opts.model,
+	        userId:
+            opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
+              ? String((opts.toolContext['userContext'] as Record<string, unknown>)['userId'] ?? '')
+              : undefined,
+	        tenantId:
+            opts.toolContext?.['tenantId'] && typeof opts.toolContext['tenantId'] === 'string'
+              ? opts.toolContext['tenantId'] as string
+              : opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
+                ? typeof (opts.toolContext['userContext'] as Record<string, unknown>)['organizationId'] === 'string'
+                  ? (opts.toolContext['userContext'] as Record<string, unknown>)['organizationId'] as string
+                  : undefined
+                : undefined,
+	        source: 'tool-calling',
+	        configDirOverride:
+            typeof opts.toolContext?.['wunderlandConfigDir'] === 'string'
+              ? opts.toolContext['wunderlandConfigDir'] as string
+              : undefined,
+	        usage: (llmResult as any)?.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; costUSD?: number } | null,
+	      });
+	    }
+
+	    // Re-wrap into standard { choices: [{ message, finish_reason }] } shape
     // so wrapLLMAsGenerator can consume it uniformly.
     return {
       choices: [{
@@ -1006,4 +1062,479 @@ export async function runToolCallingTurn(opts: {
   }
 
   return finalText || '';
+}
+
+// =============================================================================
+// Streaming variant — yields text tokens incrementally for real-time TTS
+// =============================================================================
+
+/**
+ * Options for {@link streamToolCallingTurn}.
+ *
+ * Identical to `runToolCallingTurn` options, plus an optional `signal` for
+ * aborting the in-flight LLM streaming request (e.g. on barge-in).
+ */
+export interface StreamToolCallingTurnOpts {
+  providerId?: string;
+  apiKey: string | Promise<string>;
+  model: string;
+  messages: Array<Record<string, unknown>>;
+  toolMap: Map<string, ToolInstance>;
+  toolDefs?: Array<Record<string, unknown>>;
+  getToolDefs?: () => Array<Record<string, unknown>>;
+  toolContext: Record<string, unknown>;
+  maxRounds: number;
+  dangerouslySkipPermissions: boolean;
+  stepUpAuthConfig?: import('../core/types.js').StepUpAuthorizationConfig;
+  askPermission: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
+  askCheckpoint?: (info: {
+    round: number;
+    toolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }>;
+  }) => Promise<boolean>;
+  onToolCall?: (tool: ToolInstance, args: Record<string, unknown>) => void;
+  onToolResult?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    success: boolean;
+    error?: string;
+    durationMs: number;
+  }) => void;
+  authorizationManager?: import('../authorization/StepUpAuthorizationManager.js').StepUpAuthorizationManager;
+  baseUrl?: string;
+  fallback?: import('./tool-helpers.js').LLMProviderConfig;
+  onFallback?: (primaryError: Error, fallbackProvider: string) => void;
+  getApiKey?: () => string | Promise<string>;
+  ollamaOptions?: Record<string, unknown>;
+  toolFailureMode?: 'fail_open' | 'fail_closed';
+  strictToolNames?: boolean;
+  debug?: boolean;
+  onToolProgress?: (info: {
+    toolName: string;
+    phase: string;
+    message: string;
+    progress?: number;
+  }) => void;
+  /**
+   * External abort signal. When aborted, the in-flight streaming LLM request
+   * is cancelled immediately (saves tokens, reduces latency on barge-in).
+   */
+  signal?: AbortSignal;
+}
+
+/**
+ * Streaming variant of {@link runToolCallingTurn}.
+ *
+ * Yields individual text tokens as they arrive from the LLM streaming API,
+ * enabling real-time TTS playback (~500ms first-token latency instead of
+ * waiting for the full LLM response). Tool-call rounds are handled
+ * identically to the non-streaming variant: tool execution blocks, then
+ * the next LLM round resumes streaming.
+ *
+ * **Protocol:**
+ * - Each `yield` emits a small text token string (typically 1-4 words).
+ * - The generator returns the full accumulated reply text when done.
+ * - If the signal is aborted mid-stream, iteration stops gracefully.
+ *
+ * **Fallback:** For providers that do not support streaming (Ollama,
+ * Anthropic via the Messages API), this automatically falls back to the
+ * non-streaming `runToolCallingTurn` and post-splits the complete response
+ * into word-boundary chunks.
+ *
+ * @param opts - Same options as `runToolCallingTurn`, plus an optional
+ *   `signal` for cancellation.
+ * @yields Individual text token strings as they arrive from the LLM.
+ * @returns The full accumulated reply text.
+ */
+export async function* streamToolCallingTurn(
+  opts: StreamToolCallingTurnOpts,
+): AsyncGenerator<string, string, undefined> {
+  // Determine whether we can use true streaming for this provider.
+  const providerIdRaw = typeof opts.providerId === 'string' ? opts.providerId.trim() : '';
+  const providerIdParsed = parseProviderId(providerIdRaw);
+  const providerId = providerIdParsed ?? 'openai';
+
+  // Only OpenAI-compatible endpoints support SSE streaming in our stack.
+  // Ollama, Anthropic, and Gemini use different protocols — fall back to
+  // non-streaming with post-split chunking for those providers.
+  const canStream = providerId === 'openai' || providerId === 'openrouter';
+
+  if (!canStream) {
+    // Fallback: run the blocking variant, then post-split into word chunks.
+    const fullReply = await runToolCallingTurn({
+      ...opts,
+      // Strip the signal — runToolCallingTurn does not support it.
+    });
+    if (fullReply) {
+      const chunks = fullReply.match(/\S+\s*/g) ?? [fullReply];
+      for (const chunk of chunks) {
+        if (opts.signal?.aborted) break;
+        yield chunk;
+      }
+    }
+    return fullReply;
+  }
+
+  // --- True streaming path (OpenAI / OpenRouter) ---
+
+  const rounds = opts.maxRounds > 0 ? opts.maxRounds : 8;
+  const debugMode = opts.debug ?? (process.env.DEBUG === '1' || process.env.DEBUG === 'true' || process.env.WUNDERLAND_DEBUG === '1');
+  const strictToolNames = resolveStrictToolNames(
+    opts.strictToolNames ?? getBooleanProp(opts.toolContext, 'strictToolNames'),
+  );
+  const loggedRewriteEvents = new Set<string>();
+
+  const shouldWrapToolOutputs = (() => {
+    const v = getBooleanProp(opts.toolContext, 'wrapToolOutputs');
+    return typeof v === 'boolean' ? v : true;
+  })();
+  const toolFailureMode = normalizeToolFailureMode(
+    opts.toolFailureMode ?? getStringProp(opts.toolContext, 'toolFailureMode'),
+    'fail_open',
+  );
+  const failClosedOnToolFailure = toolFailureMode === 'fail_closed';
+
+  // Ensure folder-level sandboxing is always configured.
+  try { maybeConfigureGuardrailsForAgent(opts.toolContext); } catch { /* non-fatal */ }
+
+  // Content security pipeline (pre-LLM input check).
+  const contentPipeline = getSecurityPipeline();
+  if (contentPipeline) {
+    try {
+      const lastMsg = opts.messages[opts.messages.length - 1];
+      const userText =
+        lastMsg?.role === 'user' && typeof lastMsg.content === 'string'
+          ? lastMsg.content
+          : undefined;
+      if (userText) {
+        contentPipeline.reset();
+        const inputResult = await contentPipeline.evaluateInput({
+          input: { textInput: userText },
+        } as any);
+        if (inputResult?.action === 'block') {
+          const blockReason =
+            inputResult.metadata?.reason ??
+            inputResult.metadata?.explanation ??
+            'Input blocked by security pipeline.';
+          const blockMsg = `I'm unable to process that request. ${blockReason}`;
+          opts.messages.push({ role: 'assistant', content: blockMsg });
+          yield blockMsg;
+          return blockMsg;
+        }
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  const authManager = opts.authorizationManager ?? createAuthorizationManager({
+    dangerouslySkipPermissions: opts.dangerouslySkipPermissions,
+    stepUpAuthConfig: opts.stepUpAuthConfig,
+    askPermission: opts.askPermission,
+  });
+
+  let fullText = '';
+
+  /**
+   * Performs one LLM round with streaming, yielding text tokens as they
+   * arrive. Returns the collected tool calls (empty if the model finished
+   * with text only) and the finish reason.
+   */
+  async function* streamOneRound(
+    toolDefs: Array<Record<string, unknown>>,
+    signal: AbortSignal | undefined,
+  ): AsyncGenerator<string, { toolCalls: import('./llm-stream-adapter.js').ToolCallRequest[]; finishReason: string }, undefined> {
+    let sseLines: AsyncIterable<string>;
+    try {
+      sseLines = await streamingOpenaiChatWithTools({
+        apiKey: opts.apiKey,
+        model: opts.model,
+        messages: opts.messages,
+        tools: toolDefs,
+        temperature: 0.2,
+        maxTokens: 1400,
+        baseUrl: opts.baseUrl,
+        fallback: opts.fallback,
+        onFallback: (primaryError, providerName) => {
+          opts.onFallback?.(primaryError, providerName);
+        },
+        getApiKey: opts.getApiKey,
+        signal,
+      });
+    } catch (err) {
+      // If aborted, return empty result gracefully.
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return { toolCalls: [], finishReason: 'abort' };
+      }
+      throw err;
+    }
+
+    const gen = wrapStreamingLLMAsGenerator(sseLines);
+    let iterResult = await gen.next();
+    while (!iterResult.done) {
+      const chunk = iterResult.value;
+      if (chunk.type === 'text_delta' && chunk.content) {
+        yield chunk.content;
+      }
+      // tool_call_request chunks are handled after the loop via the return value.
+      iterResult = await gen.next();
+    }
+    return iterResult.value;
+  }
+
+  // --- Main multi-round loop ---
+  for (let round = 0; round < rounds; round++) {
+    if (opts.signal?.aborted) break;
+
+    // Build tool name mapping and defs for this round.
+    const nameMapping = buildToolFunctionNameMapping(opts.toolMap);
+    if (nameMapping.rewrites.length > 0) {
+      const summary = formatToolNameRewriteSummary(nameMapping.rewrites);
+      if (strictToolNames) {
+        throw buildStrictToolNameError('[stream-tool-calling]', summary);
+      }
+      const eventKey = `mapping:${summary}`;
+      if (shouldLogRewrite(loggedRewriteEvents, eventKey)) {
+        console.warn(`[stream-tool-calling] Sanitized tool map function names: ${summary}`);
+      }
+    }
+
+    const rawToolDefs = opts.getToolDefs
+      ? opts.getToolDefs()
+      : opts.toolDefs ?? buildToolDefsFromMapping(opts.toolMap, nameMapping);
+    const sanitizedDefs = sanitizeToolDefsForProvider(rawToolDefs);
+    if (sanitizedDefs.rewrites.length > 0 && strictToolNames) {
+      const summary = formatToolNameRewriteSummary(
+        sanitizedDefs.rewrites.map((r) => ({
+          sourceName: r.originalName,
+          rewrittenName: r.sanitizedName,
+          reason: r.reason,
+        })),
+      );
+      throw buildStrictToolNameError('[stream-tool-calling]', summary);
+    }
+    const toolDefs = sanitizedDefs.toolDefs;
+
+    // Stream the LLM response, yielding tokens as they arrive.
+    let roundText = '';
+    const roundGen = streamOneRound(toolDefs, opts.signal);
+    let roundResult = await roundGen.next();
+    while (!roundResult.done) {
+      const token = roundResult.value;
+      roundText += token;
+      fullText += token;
+      yield token;
+      roundResult = await roundGen.next();
+    }
+    const { toolCalls, finishReason } = roundResult.value;
+
+    if (opts.signal?.aborted) break;
+
+    // No tool calls — model is done generating text.
+    if (toolCalls.length === 0 || finishReason === 'stop' || finishReason === 'abort') {
+      // Strip think tags.
+      let content = fullText.trim();
+      content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+      content = content.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
+
+      // Content security (post-LLM output check).
+      if (contentPipeline && content) {
+        try {
+          const outputResult = await contentPipeline.evaluateOutput({
+            chunk: { finalResponseText: content },
+          } as any);
+          if (outputResult?.action === 'block') {
+            const safeMsg =
+              'I generated a response but it was blocked by the security pipeline. Please try rephrasing your request.';
+            opts.messages.push({ role: 'assistant', content: safeMsg });
+            return safeMsg;
+          }
+        } catch { /* non-fatal */ }
+      }
+
+      opts.messages.push({ role: 'assistant', content: content || '(no content)' });
+      return content || '';
+    }
+
+    // --- Tool calls: push assistant message, execute tools, loop ---
+    const rawToolCallMessages = toolCalls.map((tc) => ({
+      id: tc.id,
+      type: 'function' as const,
+      function: {
+        name: tc.name,
+        arguments: JSON.stringify(tc.arguments),
+      },
+    }));
+
+    opts.messages.push({
+      role: 'assistant',
+      content: roundText || null,
+      tool_calls: rawToolCallMessages,
+    });
+
+    // Execute each tool call (blocking — tool execution is not streamed).
+    let earlyReturn: string | null = null;
+    for (const tc of toolCalls) {
+      if (opts.signal?.aborted) break;
+
+      const resolvedToolKey = resolveToolMapKeyFromFunctionName({
+        functionName: tc.name,
+        toolMap: opts.toolMap,
+        mapping: nameMapping,
+        sanitizedAliasByName: sanitizedDefs.aliasBySanitizedName,
+      });
+      const tool = resolvedToolKey ? opts.toolMap.get(resolvedToolKey) : undefined;
+
+      if (!tool) {
+        opts.messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: JSON.stringify({ error: `Tool not found: ${tc.name}` }),
+        });
+        if (failClosedOnToolFailure) {
+          earlyReturn = `[tool_failure_mode=fail_closed] Tool not found: ${tc.name}.`;
+          break;
+        }
+        continue;
+      }
+
+      const toolName = tool.name || resolvedToolKey || tc.name;
+      const args = tc.arguments;
+
+      if (opts.onToolCall) {
+        try { opts.onToolCall(tool, args); } catch { /* ignore */ }
+      }
+
+      // Step-up authorization.
+      const authResult = await authManager.authorize({
+        tool: toAuthorizableTool(tool),
+        args,
+        context: {
+          userId: String(opts.toolContext?.['userContext'] && typeof opts.toolContext['userContext'] === 'object'
+            ? (opts.toolContext['userContext'] as Record<string, unknown>)?.['userId'] ?? 'cli-user'
+            : 'cli-user'),
+          sessionId: String(opts.toolContext?.['gmiId'] ?? 'cli'),
+          gmiId: String(opts.toolContext?.['personaId'] ?? 'cli'),
+        },
+        timestamp: new Date(),
+      });
+
+      if (!authResult.authorized && !opts.dangerouslySkipPermissions) {
+        if (authResult.tier === ToolRiskTier.TIER_3_SYNC_HITL) {
+          const ok = await opts.askPermission(tool, args);
+          if (!ok) {
+            const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
+            opts.messages.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: shouldWrapToolOutputs
+                ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: tc.id, includeWarning: false })
+                : denial,
+            });
+            if (failClosedOnToolFailure) {
+              earlyReturn = `[tool_failure_mode=fail_closed] Permission denied for tool: ${toolName}.`;
+              break;
+            }
+            continue;
+          }
+        } else {
+          const denial = JSON.stringify({ error: `Permission denied for tool: ${toolName}` });
+          opts.messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: shouldWrapToolOutputs
+              ? wrapUntrustedToolOutput(denial, { toolName, toolCallId: tc.id, includeWarning: false })
+              : denial,
+          });
+          if (failClosedOnToolFailure) {
+            earlyReturn = `[tool_failure_mode=fail_closed] Permission denied for tool: ${toolName}.`;
+            break;
+          }
+          continue;
+        }
+      }
+
+      // Execute the tool.
+      const callToolContext: Record<string, unknown> = opts.onToolProgress
+        ? { ...opts.toolContext, onToolProgress: (info: { phase: string; message: string; progress?: number }) => {
+            try { opts.onToolProgress!({ toolName, ...info }); } catch { /* ignore */ }
+          } }
+        : opts.toolContext;
+
+      const start = Date.now();
+      let result: { success: boolean; output?: unknown; error?: string };
+      try {
+        // Guardrails check.
+        const guardrails = getGuardrails();
+        const agentId = getAgentIdForGuardrails(opts.toolContext);
+        const guardrailsCheck = await guardrails.validateBeforeExecution({
+          toolId: resolvedToolKey || tool.name,
+          toolName: tool.name,
+          args,
+          agentId,
+          userId: (opts.toolContext.userContext as any)?.userId,
+          sessionId: opts.toolContext.sessionId as string | undefined,
+          workingDirectory: getAgentWorkspaceDirFromContext(opts.toolContext, agentId),
+          tool: tool as any,
+        });
+        if (!guardrailsCheck.allowed) {
+          result = {
+            success: false,
+            error: guardrailsCheck.reason,
+          };
+        } else {
+          result = await tool.execute(args, callToolContext);
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        result = { success: false, error: `Tool threw: ${errMsg}` };
+      }
+
+      const durationMs = Math.max(0, Date.now() - start);
+      if (opts.onToolResult) {
+        try {
+          opts.onToolResult({
+            toolName,
+            args,
+            success: result?.success === true,
+            error: result?.success ? undefined : (result?.error || 'Tool failed'),
+            durationMs,
+          });
+        } catch { /* ignore */ }
+      }
+
+      let payload: unknown;
+      if (result?.success) {
+        payload = redactToolOutputForLLM(result.output);
+      } else {
+        const errorMsg = result?.error || 'Tool failed';
+        const fallbacks = TOOL_FALLBACK_MAP[toolName];
+        const availableFallbacks = fallbacks?.filter(f => opts.toolMap?.has(f));
+        payload = {
+          error: errorMsg,
+          ...(availableFallbacks?.length ? { suggestedFallbacks: availableFallbacks } : null),
+        };
+      }
+
+      const json = safeJsonStringify(payload, 20000);
+      const content = shouldWrapToolOutputs
+        ? wrapUntrustedToolOutput(json, { toolName, toolCallId: tc.id, includeWarning: true })
+        : json;
+      opts.messages.push({ role: 'tool', tool_call_id: tc.id, content });
+
+      if (!result?.success && failClosedOnToolFailure) {
+        earlyReturn = `[tool_failure_mode=fail_closed] Tool ${toolName} failed: ${result?.error || 'Tool failed'}`;
+        break;
+      }
+    }
+
+    if (earlyReturn !== null) {
+      opts.messages.push({ role: 'assistant', content: earlyReturn });
+      return earlyReturn;
+    }
+
+    // Reset per-round text — the next round's text delta will accumulate freshly.
+    roundText = '';
+    // Continue to the next round (tool results are now in messages).
+  }
+
+  // Exceeded max rounds without a natural stop.
+  return fullText || '';
 }

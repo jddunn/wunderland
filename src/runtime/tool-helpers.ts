@@ -840,6 +840,206 @@ export async function openaiChatWithTools(opts: {
   }
 }
 
+/**
+ * Streaming variant of {@link chatCompletionsRequest}.
+ *
+ * Sends the request with `stream: true` and returns an async iterable of raw
+ * SSE `data:` lines. The caller is responsible for parsing individual lines
+ * via the adapter in `llm-stream-adapter.ts`.
+ *
+ * When an external `AbortSignal` is supplied it is wired into the fetch call
+ * so that barge-in (or any other cancellation) immediately terminates the
+ * HTTP stream and saves tokens.
+ *
+ * @param provider  - LLM provider config (API key, model, base URL).
+ * @param messages  - OpenAI-compatible message array.
+ * @param tools     - OpenAI-compatible tool definitions.
+ * @param temperature - Sampling temperature.
+ * @param maxTokens - Max completion tokens.
+ * @param signal    - Optional external abort signal for cancellation.
+ * @returns An async iterable yielding individual SSE `data: ...` lines.
+ */
+export async function streamingChatCompletionsRequest(
+  provider: LLMProviderConfig,
+  messages: Array<Record<string, unknown>>,
+  tools: Array<Record<string, unknown>>,
+  temperature: number,
+  maxTokens: number,
+  signal?: AbortSignal,
+): Promise<AsyncIterable<string>> {
+  const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
+  const providerName = baseUrl.includes('openrouter') ? 'OpenRouter'
+    : baseUrl.includes('generativelanguage.googleapis.com') ? 'Gemini'
+    : baseUrl.includes('anthropic') ? 'Anthropic'
+    : 'OpenAI';
+  const apiKey = await resolveApiKeyInput(
+    provider.getApiKey ? provider.getApiKey : provider.apiKey,
+    { source: `${providerName} streaming chat completions` },
+  );
+
+  const isGemini = baseUrl.includes('generativelanguage.googleapis.com');
+  const fetchUrl = isGemini
+    ? `${baseUrl}/chat/completions?key=${encodeURIComponent(apiKey)}`
+    : `${baseUrl}/chat/completions`;
+
+  // Combine an internal timeout controller with any external abort signal.
+  const internalController = new AbortController();
+  const fetchTimeout = setTimeout(() => internalController.abort(), 10 * 60_000);
+
+  // If an external signal is supplied, forward its abort to the internal controller.
+  const onExternalAbort = () => internalController.abort();
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(fetchTimeout);
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    signal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+
+  if (process.env.DEBUG === '1' || process.env.DEBUG === 'true' || process.env.WUNDERLAND_DEBUG === '1') {
+    console.log(`[tool-calling] STREAM POST ${fetchUrl.replace(/key=[^&]+/, 'key=***')} (model=${provider.model}, tools=${tools.length})`);
+  }
+
+  const isLocalLLM = /localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\./.test(fetchUrl);
+  const authHeaders: Record<string, string> = isGemini
+    ? {}
+    : { Authorization: `Bearer ${apiKey}` };
+  const fetchOpts: RequestInit & Record<string, unknown> = {
+    method: 'POST',
+    headers: {
+      ...authHeaders,
+      'Content-Type': 'application/json',
+      ...(provider.extraHeaders || {}),
+    },
+    body: JSON.stringify({
+      model: provider.model,
+      messages,
+      stream: true,
+      tools: tools.length > 0 ? tools : undefined,
+      tool_choice: tools.length > 0 ? 'auto' : undefined,
+      temperature,
+      max_tokens: maxTokens,
+    }),
+    signal: internalController.signal,
+  };
+
+  if (isLocalLLM) {
+    try {
+      const { Agent } = await import('undici');
+      (fetchOpts as any).dispatcher = new Agent({
+        headersTimeout: 10 * 60_000,
+        bodyTimeout: 10 * 60_000,
+        connectTimeout: 30_000,
+      });
+    } catch {
+      // undici not available
+    }
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(fetchUrl, fetchOpts as RequestInit);
+  } catch (fetchErr) {
+    clearTimeout(fetchTimeout);
+    signal?.removeEventListener('abort', onExternalAbort);
+    throw fetchErr;
+  }
+
+  if (!res.ok) {
+    clearTimeout(fetchTimeout);
+    signal?.removeEventListener('abort', onExternalAbort);
+    const text = await res.text();
+    throw new Error(`${providerName} streaming error (${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  if (!res.body) {
+    clearTimeout(fetchTimeout);
+    signal?.removeEventListener('abort', onExternalAbort);
+    throw new Error(`${providerName} streaming response has no body.`);
+  }
+
+  // Return an async iterable that reads the SSE stream line by line.
+  // Cleanup (timeout + signal listener) happens when iteration completes.
+  const body = res.body;
+  const decoder = new TextDecoder();
+
+  async function* iterateSSELines(): AsyncIterable<string> {
+    let buffer = '';
+    try {
+      const reader = body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          // Keep the last (potentially incomplete) line in the buffer.
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed) yield trimmed;
+          }
+        }
+        // Flush any remaining data in the buffer.
+        if (buffer.trim()) yield buffer.trim();
+      } finally {
+        reader.releaseLock();
+      }
+    } finally {
+      clearTimeout(fetchTimeout);
+      signal?.removeEventListener('abort', onExternalAbort);
+    }
+  }
+
+  return iterateSSELines();
+}
+
+/**
+ * Streaming variant of {@link openaiChatWithTools}.
+ *
+ * Returns an async iterable of SSE lines from the primary provider, falling
+ * back to the secondary provider if the primary fails with a retryable error.
+ *
+ * @param opts - Same shape as `openaiChatWithTools` plus an optional `signal`.
+ * @returns Async iterable of raw SSE `data: ...` lines.
+ */
+export async function streamingOpenaiChatWithTools(opts: {
+  apiKey: string | Promise<string>;
+  model: string;
+  messages: Array<Record<string, unknown>>;
+  tools: Array<Record<string, unknown>>;
+  temperature: number;
+  maxTokens: number;
+  baseUrl?: string;
+  fallback?: LLMProviderConfig;
+  onFallback?: (primaryError: Error, fallbackProvider: string) => void;
+  getApiKey?: () => string | Promise<string>;
+  signal?: AbortSignal;
+}): Promise<AsyncIterable<string>> {
+  const primary: LLMProviderConfig = {
+    apiKey: opts.apiKey,
+    model: opts.model,
+    baseUrl: opts.baseUrl,
+    getApiKey: opts.getApiKey,
+  };
+
+  try {
+    return await streamingChatCompletionsRequest(
+      primary, opts.messages, opts.tools, opts.temperature, opts.maxTokens, opts.signal,
+    );
+  } catch (err) {
+    if (!opts.fallback || !shouldFallback(err)) throw err;
+
+    const primaryError = err instanceof Error ? err : new Error(String(err));
+    const fallbackName = opts.fallback.baseUrl?.includes('openrouter') ? 'OpenRouter' : 'fallback';
+    opts.onFallback?.(primaryError, fallbackName);
+
+    return await streamingChatCompletionsRequest(
+      opts.fallback, opts.messages, opts.tools, opts.temperature, opts.maxTokens, opts.signal,
+    );
+  }
+}
+
 type AnthropicContentBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
