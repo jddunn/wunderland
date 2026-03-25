@@ -9,8 +9,14 @@
  */
 
 import { resolveRuntimeConfig } from './workflows.js';
+import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
+import type { GlobalFlags } from '../types.js';
 
-export default async function missionCommand(args: string[], flags?: Record<string, string | boolean>): Promise<void> {
+export default async function missionCommand(
+  args: string[],
+  flags?: Record<string, string | boolean>,
+  globals?: GlobalFlags,
+): Promise<void> {
   const subcommand = args[0] ?? 'help';
 
   switch (subcommand) {
@@ -36,9 +42,11 @@ export default async function missionCommand(args: string[], flags?: Record<stri
       const inputFlag = flags?.['input'] as string | undefined;
       const input = inputFlag ? JSON.parse(inputFlag) : {};
 
-      const baseRuntime = resolveRuntimeConfig();
-      const app = await createWunderland({
-        llm: {
+	      const baseRuntime = resolveRuntimeConfig();
+	      await startWunderlandOtel({ serviceName: 'wunderland-mission' });
+	      const app = await createWunderland({
+          configDirOverride: globals?.config,
+	        llm: {
           providerId: baseRuntime.llm.providerId as any,
           apiKey: baseRuntime.llm.apiKey as any,
           model: baseRuntime.llm.model,
@@ -57,9 +65,10 @@ export default async function missionCommand(args: string[], flags?: Record<stri
           if (event.type === 'node_end') process.stdout.write(` [${event.durationMs}ms]\n`);
           if (event.type === 'error') console.error(`  ├── error: ${event.error.message}`);
         }
-      } finally {
-        await app.close();
-      }
+	      } finally {
+	        await app.close();
+	        await shutdownWunderlandOtel();
+	      }
 
       console.log(`  └── ✓ complete [${Date.now() - startTime}ms]\n`);
       break;

@@ -10,6 +10,7 @@ import type { GlobalFlags } from '../types.js';
 import { accent, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
 import type { WunderlandGraphRunConfig } from '../../runtime/graph-runner.js';
 
 /**
@@ -165,10 +166,12 @@ export default async function cmdWorkflows(
       const input = inputFlag ? JSON.parse(inputFlag) : {};
 
       // Resolve LLM config from environment
-      const runtimeConfig = resolveRuntimeConfig();
-      const app = await createWunderland({
-        llm: {
-          providerId: runtimeConfig.llm.providerId as any,
+	      const runtimeConfig = resolveRuntimeConfig();
+	      await startWunderlandOtel({ serviceName: 'wunderland-workflows' });
+	      const app = await createWunderland({
+          configDirOverride: globals.config,
+	        llm: {
+	          providerId: runtimeConfig.llm.providerId as any,
           apiKey: runtimeConfig.llm.apiKey as any,
           model: runtimeConfig.llm.model,
           baseUrl: runtimeConfig.llm.baseUrl,
@@ -198,9 +201,10 @@ export default async function cmdWorkflows(
               break;
           }
         }
-      } finally {
-        await app.close();
-      }
+	      } finally {
+	        await app.close();
+	        await shutdownWunderlandOtel();
+	      }
       console.log(`  └── ${accent('✓')} complete ${dim(`[${Date.now() - startTime}ms]`)}\n`);
     } else if (sub === 'explain') {
       const target = args[1];

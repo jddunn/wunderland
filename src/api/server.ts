@@ -70,6 +70,9 @@ import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
 } from '../voice/speech-catalog.js';
+import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../observability/token-usage.js';
+import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../observability/session-text-log.js';
+import type { TokenUsageSummary } from '../core/TokenUsageTracker.js';
 
 import type {
   WunderlandAdaptiveExecutionConfig,
@@ -132,6 +135,7 @@ export type WunderlandServerHandle = {
   autoApproveToolCalls: boolean;
   turnApprovalMode: 'off' | 'after-each-turn' | 'after-each-round';
   openaiFallbackEnabled: boolean;
+  usage: (opts?: { sessionId?: string }) => Promise<TokenUsageSummary>;
   close: () => Promise<void>;
 };
 
@@ -306,6 +310,16 @@ export async function createWunderlandServer(opts?: {
 
   const workspaceBaseDir = opts?.workspace?.baseDir ?? resolveAgentWorkspaceBaseDir();
   const workspaceAgentId = sanitizeAgentWorkspaceId(opts?.workspace?.agentId ?? seedId);
+  const sessionTextLogger = new WunderlandSessionTextLogger(
+    resolveWunderlandTextLogConfig({
+      agentConfig: cfg,
+      workingDirectory,
+      workspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
+      defaultAgentId: workspaceAgentId,
+      configBacked: true,
+    }),
+    logger,
+  );
 
   const ollamaBaseUrl = (() => {
     if (opts?.llm?.baseUrl) return opts.llm.baseUrl;
@@ -958,6 +972,7 @@ export async function createWunderlandServer(opts?: {
       if (canUseLLM) {
         const toolContext: Record<string, unknown> = {
           gmiId: `wunderland-channel-${sessionKey}`,
+          sessionId: sessionKey,
           personaId: activePersonaId,
           userContext: {
             userId: senderId,
@@ -965,6 +980,7 @@ export async function createWunderlandServer(opts?: {
             conversationId,
             ...(tenantId ? { organizationId: tenantId } : null),
           },
+          ...(opts?.configDirOverride ? { wunderlandConfigDir: opts.configDirOverride } : null),
           agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
           permissionSet: policy.permissionSet,
           securityTier: policy.securityTier,
@@ -1380,6 +1396,7 @@ export async function createWunderlandServer(opts?: {
         let turnFailed = false;
         let fallbackTriggered = false;
         let toolCallCount = 0;
+        let turnError: unknown;
         const sessionId =
           typeof parsed.sessionId === 'string' && parsed.sessionId.trim() ? parsed.sessionId.trim().slice(0, 128) : 'default';
         const requestedPersonaId = extractRequestedPersonaId(parsed);
@@ -1457,11 +1474,13 @@ export async function createWunderlandServer(opts?: {
           if (canUseLLM) {
             const toolContext: Record<string, unknown> = {
               gmiId: `wunderland-server-${internalSessionId}`,
+              sessionId,
               personaId: requestActivePersonaId,
               userContext: {
                 userId: sessionId,
                 ...(tenantId ? { organizationId: tenantId } : null),
               },
+              ...(opts?.configDirOverride ? { wunderlandConfigDir: opts.configDirOverride } : null),
               agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
               permissionSet: policy.permissionSet,
               securityTier: policy.securityTier,
@@ -1567,6 +1586,7 @@ export async function createWunderlandServer(opts?: {
           }
         } catch (error) {
           turnFailed = true;
+          turnError = error;
           throw error;
         } finally {
           try {
@@ -1587,6 +1607,23 @@ export async function createWunderlandServer(opts?: {
               error: error instanceof Error ? error.message : String(error),
             });
           }
+          await sessionTextLogger.logTurn({
+            meta: {
+              agentId: workspaceAgentId,
+              seedId,
+              displayName,
+              providerId: String(providerId),
+              model,
+              personaId: requestActivePersonaId,
+            },
+            sessionId,
+            userText: message,
+            reply,
+            error: turnError,
+            toolCallCount,
+            durationMs: 0,
+            fallbackTriggered,
+          });
         }
 
         sendJson(res, 200, { reply, personaId: requestActivePersonaId });
@@ -1706,6 +1743,13 @@ export async function createWunderlandServer(opts?: {
     pairingEnabled,
   });
 
+  const usage = async (usageOpts?: { sessionId?: string }): Promise<TokenUsageSummary> => {
+    if (usageOpts?.sessionId) {
+      return getRecordedWunderlandSessionUsage(usageOpts.sessionId, opts?.configDirOverride);
+    }
+    return getRecordedWunderlandTokenUsage(opts?.configDirOverride);
+  };
+
   return {
     server,
     url,
@@ -1726,6 +1770,7 @@ export async function createWunderlandServer(opts?: {
     autoApproveToolCalls,
     turnApprovalMode,
     openaiFallbackEnabled,
+    usage,
     close,
   };
 }
