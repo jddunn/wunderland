@@ -28,7 +28,8 @@ export type HelpTopicId =
   | 'email'
   | 'whatsapp'
   | 'slack'
-  | 'signal';
+  | 'signal'
+  | 'emergent';
 
 export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: string }> = [
   {
@@ -122,6 +123,11 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     summary: 'Connect your Wunderbot to Signal via signal-cli daemon.',
   },
   {
+    id: 'emergent',
+    title: 'Emergent Tools',
+    summary: 'Runtime tool forging: lifecycle, safety, LLM-as-judge, and CLI commands.',
+  },
+  {
     id: 'faq',
     title: 'FAQ',
     summary: 'Frequently asked questions about setup, voice, LLMs, and more.',
@@ -168,6 +174,7 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'whatsapp' || topic === 'wa') return 'whatsapp';
     if (topic === 'slack') return 'slack';
     if (topic === 'signal') return 'signal';
+    if (topic === 'emergent' || topic === 'emergent-tools' || topic === 'forge' || topic === 'forged-tools') return 'emergent';
     if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
   })();
@@ -714,6 +721,57 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${accent('http://localhost:{port}/wunderland/channels/inbound/signal/{seedId}')}`);
     console.log();
     console.log(`  ${dim('Full guide:')} ${accent('docs/CHANNEL_INTEGRATIONS.md')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'emergent') {
+    printTitle('Emergent Tools — Runtime Tool Forging');
+    console.log(`  ${bright('Agents can forge new tools at runtime — composed from existing tools or written as sandboxed code.')}`);
+    console.log(`  ${dim('All forged tools pass through an LLM-as-judge gate before registration.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('What emergent mode does')}`);
+    console.log(`     ${dim('When enabled, agents can create new tools on the fly to solve problems')}`);
+    console.log(`     ${dim('that existing tools cannot handle. Two creation modes:')}`);
+    console.log(`     ${accent('compose')}   ${dim('Pipeline of existing tool calls with input/output mapping')}`);
+    console.log(`     ${accent('sandbox')}   ${dim('Arbitrary code in a memory/time-bounded sandbox')}`);
+    console.log();
+    console.log(`  ${iColor('2')} ${bright('How to enable')}`);
+    console.log(`     ${dim('Set in your agent.config.json:')}`);
+    console.log(`     ${accent('{ "emergent": true }')}`);
+    console.log(`     ${dim('Or pass to the agent config programmatically:')}`);
+    console.log(`     ${accent('emergentConfig: { enabled: true }')}`);
+    console.log();
+    console.log(`  ${iColor('3')} ${bright('Tool lifecycle: session -> agent -> shared')}`);
+    console.log(`     ${accent('session')}   ${dim('Exists only for the current session; discarded on shutdown')}`);
+    console.log(`     ${accent('agent')}     ${dim('Persisted for the agent that created it; not shared globally')}`);
+    console.log(`     ${accent('shared')}    ${dim('Promoted to the shared registry; available to all agents')}`);
+    console.log();
+    console.log(`     ${dim('Promotion requires accumulated usage + passing confidence thresholds.')}`);
+    console.log(`     ${dim('Shared promotion requires multi-reviewer sign-off (safety + correctness).')}`);
+    console.log();
+    console.log(`  ${iColor('4')} ${bright('Safety')}`);
+    console.log(`     ${dim('Every forged tool passes through:')}`);
+    console.log(`     ${sColor(g.ok)} ${dim('LLM-as-judge evaluation (safety, correctness, determinism, bounded execution)')}`);
+    console.log(`     ${sColor(g.ok)} ${dim('Sandbox isolation with memory/time limits and API allowlists')}`);
+    console.log(`     ${sColor(g.ok)} ${dim('Human-in-the-loop (HITL) confirmation for shared-tier promotion')}`);
+    console.log(`     ${sColor(g.ok)} ${dim('Full audit trail with judge verdicts and promotion history')}`);
+    console.log();
+    console.log(`  ${iColor('5')} ${bright('CLI commands')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent list')}               ${dim('List all emergent tools')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent inspect <name>')}     ${dim('Full details + verdicts')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent promote <name>')}     ${dim('Promote to shared tier')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent demote <name>')}      ${dim('Deactivate a tool')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent audit <name>')}       ${dim('View audit trail')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${dim('Configuration:')}`);
+    console.log(`     ${accent('maxSessionTools')}     ${dim('Max session-scoped tools per agent (default: 10)')}`);
+    console.log(`     ${accent('maxAgentTools')}       ${dim('Max agent-scoped tools per agent (default: 50)')}`);
+    console.log(`     ${accent('sandboxMemoryMB')}     ${dim('Sandbox memory limit (default: 128 MB)')}`);
+    console.log(`     ${accent('sandboxTimeoutMs')}    ${dim('Sandbox time limit (default: 5000 ms)')}`);
+    console.log(`     ${accent('judgeModel')}          ${dim('LLM model for forge-time evaluation (default: gpt-4o-mini)')}`);
+    console.log(`     ${accent('promotionJudgeModel')} ${dim('LLM model for promotion reviews (default: gpt-4o)')}`);
     console.log();
     return;
   }
