@@ -86,7 +86,8 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('agency')}                Multi-agent collectives
 
     ${w('AI')}
-      ${w('image')}                 Image generation (generate from prompt)
+      ${w('image')}                 Image generation, editing, upscaling, variations
+      ${w('vision')}                Vision pipeline: OCR, describe, CLIP embeddings
       ${w('structured')}            Structured data extraction from text
 
     ${w('Advanced')}
@@ -430,13 +431,38 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     examples: ['wunderland version'],
   },
   image: {
-    summary: 'Generate images from text prompts via AgentOS providers.',
-    usage: ['wunderland image generate "<prompt>" [--provider <name>] [--model <id>] [--size <WxH>] [--output <path>]'],
+    summary: 'Image generation, editing, upscaling, and variations via AgentOS providers.',
+    usage: [
+      'wunderland image generate "<prompt>" [--provider <name>] [--model <id>] [--size <WxH>] [--output <path>]',
+      'wunderland image edit <image> --prompt "..." [--mask <mask>] [--strength 0.75] [--output <path>]',
+      'wunderland image upscale <image> [--scale 4] [--output <path>]',
+      'wunderland image variate <image> [--n 3] [--output <path>]',
+    ],
     examples: [
       'wunderland image generate "A cyberpunk city at night"',
-      'wunderland image generate "Portrait of a robot" --provider openai --size 1024x1024 --output robot.png',
+      'wunderland image edit photo.jpg --prompt "Make it sunset" --output edited.png',
+      'wunderland image upscale thumbnail.jpg --scale 4 --output hires.png',
+      'wunderland image variate photo.jpg --n 3 --output variations/',
     ],
-    notes: ['Supported providers: openai (default), stability, replicate, ollama.'],
+    notes: ['Supported providers: openai (default), stability, replicate, ollama, stable-diffusion-local.'],
+  },
+  vision: {
+    summary: 'Vision pipeline: OCR text extraction, image description, and CLIP embeddings.',
+    usage: [
+      'wunderland vision ocr <image> [--strategy <name>] [--output <path>] [--format json]',
+      'wunderland vision describe <image> [--provider <name>] [--output <path>]',
+      'wunderland vision embed <image> [--output <path>]',
+    ],
+    examples: [
+      'wunderland vision ocr document.png',
+      'wunderland vision ocr receipt.jpg --format json --output result.json',
+      'wunderland vision describe photo.jpg',
+      'wunderland vision embed image.png --output embedding.json',
+    ],
+    notes: [
+      'Strategies: progressive (default), local-only, cloud-only, parallel.',
+      'Install ppu-paddle-ocr for best local OCR. Cloud needs OPENAI_API_KEY or GOOGLE_CLOUD_VISION_KEY.',
+    ],
   },
   structured: {
     summary: 'Extract structured JSON data from unstructured text using an LLM.',
@@ -448,19 +474,23 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     notes: ['--schema: JSON object where keys are field names and values are type hints.'],
   },
   emergent: {
-    summary: 'Manage runtime-forged emergent tools (list, inspect, promote, demote, audit).',
-    usage: ['wunderland emergent <list|inspect|promote|demote|audit> [name]'],
+    summary: 'Manage runtime-forged emergent tools (list, inspect, export, import, promote, demote, audit).',
+    usage: ['wunderland emergent <list|inspect|export|import|promote|demote|audit> [name|id|file] [--seed <seedId>]'],
     examples: [
       'wunderland emergent list',
-      'wunderland emergent inspect fetch_github_pr_summary',
-      'wunderland emergent promote fetch_github_pr_summary',
-      'wunderland emergent demote csv_column_stats',
-      'wunderland emergent audit csv_column_stats',
+      'wunderland emergent list --seed seed_cipher_7f3a',
+      'wunderland emergent inspect fetch_github_pr_summary --seed seed_cipher_7f3a',
+      'wunderland emergent export fetch_github_pr_summary --seed seed_cipher_7f3a',
+      'wunderland emergent import ./fetch_github_pr_summary.emergent-tool.yaml --seed seed_other',
+      'wunderland emergent promote fetch_github_pr_summary --seed seed_cipher_7f3a',
+      'wunderland emergent demote csv_column_stats --seed seed_cipher_7f3a',
+      'wunderland emergent audit csv_column_stats --seed seed_cipher_7f3a',
     ],
     notes: [
       'Emergent tools are created at runtime by agents and subject to LLM-as-judge verification.',
       'Enable emergent mode: set "emergent": true in agent.config.json.',
       'Tools progress through tiers: session -> agent -> shared.',
+      'Without --seed the command falls back to preview/demo output.',
     ],
   },
   connect: {
@@ -561,6 +591,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   new:               () => import('./commands/new.js'),
   connect:           () => import('./commands/connect.js'),
   image:             () => import('./commands/image.js'),
+  vision:            () => import('./commands/vision.js'),
   structured:        () => import('./commands/structured.js'),
 };
 
