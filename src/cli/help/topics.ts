@@ -19,6 +19,8 @@ export type HelpTopicId =
   | 'streaming'
   | 'checkpoints'
   | 'voice'
+  | 'vision'
+  | 'image-editing'
   | 'ui'
   | 'presets'
   | 'security'
@@ -123,6 +125,16 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     summary: 'Connect your Wunderbot to Signal via signal-cli daemon.',
   },
   {
+    id: 'vision',
+    title: 'Vision & OCR Pipeline',
+    summary: 'Progressive 3-tier vision pipeline: PaddleOCR, TrOCR/Florence-2/CLIP, Cloud Vision.',
+  },
+  {
+    id: 'image-editing',
+    title: 'Image Editing',
+    summary: 'editImage(), upscaleImage(), variateImage() — img2img, inpainting, upscaling.',
+  },
+  {
     id: 'emergent',
     title: 'Emergent Tools',
     summary: 'Runtime tool forging: lifecycle, safety, LLM-as-judge, and CLI commands.',
@@ -174,6 +186,8 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'whatsapp' || topic === 'wa') return 'whatsapp';
     if (topic === 'slack') return 'slack';
     if (topic === 'signal') return 'signal';
+    if (topic === 'vision' || topic === 'ocr' || topic === 'paddle-ocr' || topic === 'trocr' || topic === 'florence' || topic === 'clip') return 'vision';
+    if (topic === 'image-editing' || topic === 'img2img' || topic === 'inpainting' || topic === 'upscale' || topic === 'upscaling') return 'image-editing';
     if (topic === 'emergent' || topic === 'emergent-tools' || topic === 'forge' || topic === 'forged-tools') return 'emergent';
     if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
@@ -536,13 +550,21 @@ export function printHelpTopic(topicRaw: string): void {
 
   if (resolved === 'llm') {
     printTitle('LLM Providers');
-    console.log(`  ${bright('Wunderland supports 5 LLM providers out of the box:')}`);
+    console.log(`  ${bright('9 providers supported. Set the API key to auto-detect:')}`);
     console.log();
-    console.log(`     ${accent('openai')}       ${dim('GPT-4o, GPT-4o-mini, o1, o3-mini')}`);
-    console.log(`     ${accent('anthropic')}    ${dim('Claude Opus 4, Sonnet 4, Haiku 3.5')}`);
-    console.log(`     ${accent('gemini')}       ${dim('Gemini 2.0 Flash, 2.5 Pro, 2.5 Flash')}`);
-    console.log(`     ${accent('ollama')}       ${dim('Local models — Llama 3, Dolphin, Mixtral (free, private)')}`);
-    console.log(`     ${accent('openrouter')}   ${dim('200+ models, automatic fallback, single API key')}`);
+    console.log(`     ${accent('OPENAI_API_KEY')}          ${dim('OpenAI (GPT-4o, o1)')}`);
+    console.log(`     ${accent('ANTHROPIC_API_KEY')}       ${dim('Anthropic (Claude Opus, Sonnet, Haiku)')}`);
+    console.log(`     ${accent('GEMINI_API_KEY')}          ${dim('Google Gemini (2.5 Flash, Pro)')}`);
+    console.log(`     ${accent('GROQ_API_KEY')}            ${dim('Groq (Llama 3.3, Mixtral)')}`);
+    console.log(`     ${accent('TOGETHER_API_KEY')}        ${dim('Together (Llama, Mixtral)')}`);
+    console.log(`     ${accent('MISTRAL_API_KEY')}         ${dim('Mistral (Large, Codestral)')}`);
+    console.log(`     ${accent('XAI_API_KEY')}             ${dim('xAI (Grok-2)')}`);
+    console.log(`     ${accent('OPENROUTER_API_KEY')}      ${dim('OpenRouter (multi-provider proxy)')}`);
+    console.log(`     ${accent('OLLAMA_BASE_URL')}         ${dim('Ollama (any local model)')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Auto-detection:')} First key found wins (in order above).`);
+    console.log(`  ${bright('Override:')} ${accent('--provider anthropic --model claude-sonnet-4-20250514')}`);
     console.log();
     console.log(`  ${hr()}`);
     console.log(`  ${bright('Setup:')}`);
@@ -550,16 +572,9 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${muted('$')} ${accent('wunderland init my-agent --provider openai')}    ${dim('scaffold with a specific provider')}`);
     console.log(`     ${muted('$')} ${accent('wunderland ollama-setup')}                       ${dim('auto-detect hardware, pull models')}`);
     console.log();
-    console.log(`  ${bright('Environment Variables:')}`);
-    console.log(`     ${accent('OPENAI_API_KEY')}       ${dim('sk-...')}`);
-    console.log(`     ${accent('ANTHROPIC_API_KEY')}    ${dim('sk-ant-...')}`);
-    console.log(`     ${accent('GEMINI_API_KEY')}       ${dim('AIza...')}`);
-    console.log(`     ${accent('OPENROUTER_API_KEY')}   ${dim('sk-or-... (also used as automatic fallback)')}`);
-    console.log(`     ${accent('OLLAMA_BASE_URL')}      ${dim('http://localhost:11434 (or remote URL)')}`);
-    console.log();
     console.log(`  ${bright('Switch provider:')}`);
     console.log(`     ${muted('$')} ${accent('wunderland config set llmProvider anthropic')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland config set llmModel claude-sonnet-4-6')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland config set llmModel claude-sonnet-4-20250514')}`);
     console.log();
     console.log(`  ${bright('OAuth (ChatGPT subscription):')}`);
     console.log(`     ${muted('$')} ${accent('wunderland login')}   ${dim('use ChatGPT Plus/Pro credits — no API key needed')}`);
@@ -569,6 +584,63 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`  ${dim('Config file:')} ${accent('~/.wunderland/config.json')} ${dim('→ llmProvider, llmModel')}`);
     console.log(`  ${dim('Per-agent:')} ${accent('agent.config.json')} ${dim('→ overrides global config')}`);
     console.log(`  ${dim('Full docs:')} ${accent(`${URLS.docs}/guides/llm-providers`)}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'vision') {
+    printTitle('Vision & OCR Pipeline');
+    console.log(`  ${bright('AgentOS includes a progressive vision pipeline for extracting text and')}`);
+    console.log(`  ${bright('understanding images. Install optional providers for better results:')}`);
+    console.log();
+    console.log(`     ${muted('$')} ${accent('npm install ppu-paddle-ocr')}          ${dim('SOTA OCR for printed text')}`);
+    console.log(`     ${muted('$')} ${accent('npm install tesseract.js')}             ${dim('Fallback OCR (100+ languages)')}`);
+    console.log();
+    console.log(`  ${dim('@huggingface/transformers (already included) enables:')}`);
+    console.log(`     ${accent('TrOCR')}       ${dim('Handwriting recognition')}`);
+    console.log(`     ${accent('Florence-2')}  ${dim('Document layout understanding')}`);
+    console.log(`     ${accent('CLIP')}        ${dim('Image embeddings for search')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Strategies:')} ${accent('progressive')} ${dim('|')} ${accent('local-only')} ${dim('|')} ${accent('cloud-only')} ${dim('|')} ${accent('parallel')}`);
+    console.log();
+    console.log(`  ${bright('CLI Commands:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland vision ocr <image>')}       ${dim('extract text from image')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland vision describe <image>')}  ${dim('describe image content')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland vision embed <image>')}     ${dim('generate CLIP embedding vector')}`);
+    console.log();
+    console.log(`  ${bright('Example:')}`);
+    console.log(`     ${accent("import { createVisionPipeline } from '@framers/agentos';")}`);
+    console.log(`     ${accent("const vision = await createVisionPipeline({ strategy: 'progressive' });")}`);
+    console.log(`     ${accent('const result = await vision.process(imageBuffer);')}`);
+    console.log();
+    console.log(`  ${dim('Full docs:')} ${accent(`${URLS.docs}/features/vision-pipeline`)}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'image-editing') {
+    printTitle('Image Editing APIs');
+    console.log(`  ${bright('Three APIs for modifying existing images:')}`);
+    console.log();
+    console.log(`     ${accent('editImage()')}      ${dim('img2img, inpainting, outpainting')}`);
+    console.log(`     ${accent('upscaleImage()')}   ${dim('2x/4x super resolution')}`);
+    console.log(`     ${accent('variateImage()')}   ${dim('create variations of an image')}`);
+    console.log();
+    console.log(`  ${bright('Providers:')} ${dim('OpenAI, Stability AI, Local SD (A1111/ComfyUI), Replicate')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('CLI Commands:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland image edit <image> --prompt "..."')}  ${dim('img2img / inpaint')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland image upscale <image> --scale 4')}    ${dim('super resolution')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland image variate <image> --n 3')}        ${dim('create variations')}`);
+    console.log();
+    console.log(`  ${bright('Example:')}`);
+    console.log(`     ${accent("import { editImage, upscaleImage } from '@framers/agentos';")}`);
+    console.log(`     ${accent("const edited = await editImage({ image: buffer, prompt: 'Make it sunset' });")}`);
+    console.log(`     ${accent('const upscaled = await upscaleImage({ image: buffer, scale: 4 });')}`);
+    console.log();
+    console.log(`  ${dim('Full docs:')} ${accent(`${URLS.docs}/features/image-editing`)}`);
     console.log();
     return;
   }
@@ -727,47 +799,57 @@ export function printHelpTopic(topicRaw: string): void {
 
   if (resolved === 'emergent') {
     printTitle('Emergent Tools — Runtime Tool Forging');
-    console.log(`  ${bright('Agents can forge new tools at runtime — composed from existing tools or written as sandboxed code.')}`);
+    console.log(`  ${bright('Agents can forge new tools at runtime — primarily by composing existing tools, with sandboxed code as an explicit opt-in.')}`);
     console.log(`  ${dim('All forged tools pass through an LLM-as-judge gate before registration.')}`);
     console.log();
     console.log(`  ${iColor('1')} ${bright('What emergent mode does')}`);
     console.log(`     ${dim('When enabled, agents can create new tools on the fly to solve problems')}`);
     console.log(`     ${dim('that existing tools cannot handle. Two creation modes:')}`);
     console.log(`     ${accent('compose')}   ${dim('Pipeline of existing tool calls with input/output mapping')}`);
-    console.log(`     ${accent('sandbox')}   ${dim('Arbitrary code in a memory/time-bounded sandbox')}`);
+    console.log(`     ${accent('sandbox')}   ${dim('Arbitrary code in a memory/time-bounded sandbox (disabled by default)')}`);
     console.log();
     console.log(`  ${iColor('2')} ${bright('How to enable')}`);
     console.log(`     ${dim('Set in your agent.config.json:')}`);
     console.log(`     ${accent('{ "emergent": true }')}`);
     console.log(`     ${dim('Or pass to the agent config programmatically:')}`);
-    console.log(`     ${accent('emergentConfig: { enabled: true }')}`);
+    console.log(`     ${accent('emergentConfig: { allowSandboxTools: false }')}`);
     console.log();
     console.log(`  ${iColor('3')} ${bright('Tool lifecycle: session -> agent -> shared')}`);
     console.log(`     ${accent('session')}   ${dim('Exists only for the current session; discarded on shutdown')}`);
     console.log(`     ${accent('agent')}     ${dim('Persisted for the agent that created it; not shared globally')}`);
-    console.log(`     ${accent('shared')}    ${dim('Promoted to the shared registry; available to all agents')}`);
+    console.log(`     ${accent('shared')}    ${dim('Promoted to broader runtime visibility after explicit admin/internal approval')}`);
     console.log();
     console.log(`     ${dim('Promotion requires accumulated usage + passing confidence thresholds.')}`);
-    console.log(`     ${dim('Shared promotion requires multi-reviewer sign-off (safety + correctness).')}`);
+    console.log(`     ${dim('Shared promotion requires multi-reviewer sign-off plus admin/internal approval.')}`);
     console.log();
     console.log(`  ${iColor('4')} ${bright('Safety')}`);
     console.log(`     ${dim('Every forged tool passes through:')}`);
     console.log(`     ${sColor(g.ok)} ${dim('LLM-as-judge evaluation (safety, correctness, determinism, bounded execution)')}`);
-    console.log(`     ${sColor(g.ok)} ${dim('Sandbox isolation with memory/time limits and API allowlists')}`);
+    console.log(`     ${sColor(g.ok)} ${dim('Sandbox isolation with memory/time limits and API allowlists when sandbox mode is enabled')}`);
     console.log(`     ${sColor(g.ok)} ${dim('Human-in-the-loop (HITL) confirmation for shared-tier promotion')}`);
     console.log(`     ${sColor(g.ok)} ${dim('Full audit trail with judge verdicts and promotion history')}`);
     console.log();
     console.log(`  ${iColor('5')} ${bright('CLI commands')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland emergent list')}               ${dim('List all emergent tools')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland emergent inspect <name>')}     ${dim('Full details + verdicts')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland emergent promote <name>')}     ${dim('Promote to shared tier')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland emergent demote <name>')}      ${dim('Deactivate a tool')}`);
-    console.log(`     ${muted('$')} ${accent('wunderland emergent audit <name>')}       ${dim('View audit trail')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent list --seed <seedId>')}          ${dim('List live emergent tools')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent inspect <name> --seed <seedId>')} ${dim('Full details + verdicts')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent export <name> --seed <seedId>')}  ${dim('Export a portable emergent-tool YAML package')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent import ./tool.yaml --seed <seedId>')} ${dim('Import a package into another agent')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent promote <name> --seed <seedId>')} ${dim('Request shared-tier promotion (admin/internal path)')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent demote <name> --seed <seedId>')}  ${dim('Deactivate a tool')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent audit <name> --seed <seedId>')}   ${dim('View audit trail')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland emergent list')}                           ${dim('Preview/demo mode when no seed is set')}`);
+    console.log();
+    console.log(`  ${dim('Export format:')} ${accent('agentos.emergent-tool.v1')} ${dim('YAML/JSON package suitable for review, Git storage, and agent-to-agent import.')}`);
+    console.log(`  ${dim('Note:')} ${dim('sandbox packages without persisted source can still be exported for audit, but they are not portable for import.')}`);
+    console.log();
+    console.log(`  ${dim('Live mode auth:')} ${accent('WUNDERLAND_AUTH_TOKEN')} ${dim('for Bearer auth, or')} ${accent('WUNDERLAND_INTERNAL_API_SECRET')} ${dim('for local/internal access')}`);
     console.log();
     console.log(`  ${hr()}`);
     console.log(`  ${dim('Configuration:')}`);
     console.log(`     ${accent('maxSessionTools')}     ${dim('Max session-scoped tools per agent (default: 10)')}`);
     console.log(`     ${accent('maxAgentTools')}       ${dim('Max agent-scoped tools per agent (default: 50)')}`);
+    console.log(`     ${accent('allowSandboxTools')}  ${dim('Allow sandboxed code-forged tools (default: false)')}`);
+    console.log(`     ${accent('persistSandboxSource')} ${dim('Persist raw sandbox source at rest (default: false)')}`);
     console.log(`     ${accent('sandboxMemoryMB')}     ${dim('Sandbox memory limit (default: 128 MB)')}`);
     console.log(`     ${accent('sandboxTimeoutMs')}    ${dim('Sandbox time limit (default: 5000 ms)')}`);
     console.log(`     ${accent('judgeModel')}          ${dim('LLM model for forge-time evaluation (default: gpt-4o-mini)')}`);
