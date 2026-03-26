@@ -69,8 +69,7 @@ const DEMO_AGENCIES: AgencyEntry[] = [
 // ---------------------------------------------------------------------------
 
 /** @internal Resolve the backend API base URL from environment. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _getBackendBaseUrl(): string {
+export function _getBackendBaseUrl(): string {
   const raw =
     process.env.WUNDERLAND_BACKEND_URL ??
     process.env.NEXT_PUBLIC_API_URL ??

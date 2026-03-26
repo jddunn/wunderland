@@ -16,7 +16,7 @@
  */
 
 import * as path from 'node:path';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import YAML from 'yaml';
 import type { GlobalFlags } from '../types.js';

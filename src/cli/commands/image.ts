@@ -240,7 +240,7 @@ export default async function cmdImage(
     const output = flags.output as string | undefined;
 
     try {
-      const { readFile, writeFile } = await import('node:fs/promises');
+      const { readFile } = await import('node:fs/promises');
       const { variateImage } = await import('@framers/agentos');
       await startWunderlandOtel({ serviceName: 'wunderland-image' });
 

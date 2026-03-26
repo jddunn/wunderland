@@ -216,7 +216,7 @@ export default async function cmdVision(
         // Print a preview of the first 8 dimensions
         const preview = Array.from(result.embedding || [])
           .slice(0, 8)
-          .map((v: number) => v.toFixed(4))
+          .map((v) => Number(v).toFixed(4))
           .join(', ');
         console.log(`  ${dim('Preview:')} [${preview}, ...]`);
         console.log(`  ${dim('Use --output <file> to save the full vector as JSON.')}`);

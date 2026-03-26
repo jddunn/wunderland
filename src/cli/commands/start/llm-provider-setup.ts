@@ -13,6 +13,10 @@ import {
   startOllama,
   detectOllamaInstall,
 } from '../../ollama/ollama-manager.js';
+import {
+  resolveWunderlandProviderId,
+  resolveWunderlandTextModel,
+} from '../../../config/provider-defaults.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../config/workspace.js';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
@@ -21,20 +25,25 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   // Resolve provider/model from config (fallbacks preserve legacy env behavior).
   const providerFlag = typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
   const providerFromConfig = typeof cfg.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
-  const providerId = (flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai')).toLowerCase();
-  if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic', 'gemini']).has(providerId)) {
+  let providerId;
+  try {
+    providerId = resolveWunderlandProviderId(
+      flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai'),
+    );
+  } catch {
     fmt.errorBlock(
       'Unsupported LLM provider',
-      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic, gemini`,
+      `Provider "${flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai')}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic, gemini`,
     );
     process.exitCode = 1;
     return false;
   }
 
   const modelFromConfig = typeof cfg.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
-  const model = typeof flags['model'] === 'string'
-    ? String(flags['model'])
-    : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
+  const model = resolveWunderlandTextModel({
+    providerId: providerId as any,
+    model: typeof flags['model'] === 'string' ? String(flags['model']) : modelFromConfig,
+  });
 
   const ollamaBaseUrl = (() => {
     const configBaseUrl = typeof cfg?.ollama?.baseUrl === 'string' ? cfg.ollama.baseUrl.trim() : '';
