@@ -45,6 +45,33 @@ describe('resolveLlmConfig', () => {
     expect(anthropic.canUseLLM).toBe(true);
   });
 
+  it('uses provider-specific default models instead of leaking the OpenAI fallback', async () => {
+    process.env['OPENAI_MODEL'] = 'gpt-4o-mini';
+    process.env['ANTHROPIC_API_KEY'] = 'anthropic-test-key';
+
+    const result = await resolveLlmConfig({
+      agentConfig: {
+        llmProvider: 'anthropic',
+      },
+    });
+
+    expect(result.providerId).toBe('anthropic');
+    expect(result.model).toBe('claude-sonnet-4-20250514');
+  });
+
+  it('honors provider-specific model env overrides', async () => {
+    process.env['ANTHROPIC_MODEL'] = 'claude-custom';
+    process.env['ANTHROPIC_API_KEY'] = 'anthropic-test-key';
+
+    const result = await resolveLlmConfig({
+      agentConfig: {
+        llmProvider: 'anthropic',
+      },
+    });
+
+    expect(result.model).toBe('claude-custom');
+  });
+
   it('normalizes trailing slashes on explicit baseUrl overrides', async () => {
     const result = await resolveLlmConfig({
       agentConfig: {
