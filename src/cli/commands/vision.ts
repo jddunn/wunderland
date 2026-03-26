@@ -79,9 +79,10 @@ export default async function cmdVision(
         const json = JSON.stringify({
           text: result.text,
           confidence: result.confidence,
-          contentType: result.contentType,
+          category: result.category,
           regions: result.regions,
-          tierBreakdown: result.tierBreakdown,
+          tiers: result.tiers,
+          durationMs: result.durationMs,
         }, null, 2);
 
         if (outputPath) {
@@ -99,10 +100,9 @@ export default async function cmdVision(
         }
         console.log();
         console.log(`  ${dim('Confidence:')} ${(result.confidence * 100).toFixed(1)}%`);
-        console.log(`  ${dim('Content type:')} ${result.contentType}`);
-        if (result.tierBreakdown?.length) {
-          const tiers = result.tierBreakdown
-            .filter((t: any) => !t.skipped)
+        console.log(`  ${dim('Category:')} ${result.category}`);
+        if (result.tierResults?.length) {
+          const tiers = result.tierResults
             .map((t: any) => `T${t.tier}:${t.durationMs}ms`)
             .join(', ');
           console.log(`  ${dim('Tiers:')} ${tiers}`);
@@ -152,9 +152,7 @@ export default async function cmdVision(
       const result = await vision.process(imageBuffer);
 
       console.log();
-      if (result.description) {
-        console.log(result.description);
-      } else if (result.text) {
+      if (result.text) {
         console.log(result.text);
       } else {
         console.log(`  ${dim('(no description available — ensure a cloud provider is configured)')}`);
@@ -162,7 +160,7 @@ export default async function cmdVision(
       console.log();
 
       if (outputPath) {
-        await writeFile(outputPath, result.description || result.text || '', 'utf8');
+        await writeFile(outputPath, result.text || '', 'utf8');
         console.log(`  └── ${accent('✓')} Saved description to ${outputPath}\n`);
       }
 
@@ -200,23 +198,24 @@ export default async function cmdVision(
       } as any);
       const result = await vision.embed(imageBuffer);
 
+      const embedding = result;
       console.log();
-      console.log(`  ${dim('Model:')} ${result.model || 'clip-vit-base-patch32'}`);
-      console.log(`  ${dim('Dimensions:')} ${result.embedding?.length ?? 512}`);
+      console.log(`  ${dim('Model:')} clip-vit-base-patch32`);
+      console.log(`  ${dim('Dimensions:')} ${embedding.length}`);
 
       if (outputPath) {
         const json = JSON.stringify({
-          model: result.model || 'clip-vit-base-patch32',
-          dimensions: result.embedding?.length ?? 512,
-          embedding: Array.from(result.embedding || []),
+          model: 'clip-vit-base-patch32',
+          dimensions: embedding.length,
+          embedding: Array.from(embedding),
         }, null, 2);
         await writeFile(outputPath, json, 'utf8');
         console.log(`  └── ${accent('✓')} Saved embedding to ${outputPath}\n`);
       } else {
         // Print a preview of the first 8 dimensions
-        const preview = Array.from(result.embedding || [])
+        const preview = embedding
           .slice(0, 8)
-          .map((v) => Number(v).toFixed(4))
+          .map((v) => v.toFixed(4))
           .join(', ');
         console.log(`  ${dim('Preview:')} [${preview}, ...]`);
         console.log(`  ${dim('Use --output <file> to save the full vector as JSON.')}`);
