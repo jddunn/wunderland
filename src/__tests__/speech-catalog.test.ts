@@ -1,3 +1,19 @@
+/**
+ * @fileoverview Tests for the speech provider catalog utility functions.
+ *
+ * Validates three core catalog behaviors:
+ * - **Alias normalization**: User-facing provider names (e.g. `'openai'`) are
+ *   mapped to the canonical runtime provider IDs (e.g. `'openai-tts'` for TTS,
+ *   `'openai-whisper'` for STT).
+ * - **Extension env overrides**: The `createSpeechExtensionEnvOverrides` helper
+ *   correctly populates both `speech-runtime` and `voice-synthesis` extension
+ *   option blocks from provider defaults and environment variables.
+ * - **Preferred provider resolution**: `getPreferredRuntimeTtsProviderId` honors
+ *   an explicit preference before falling back to env-based provider detection.
+ *
+ * @module wunderland/__tests__/speech-catalog
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import {
