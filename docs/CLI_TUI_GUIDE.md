@@ -179,6 +179,22 @@ npx tsx examples/checkpoint-resume.ts
 
 These cover `session.stream()` (async iterator of typed events) and `session.checkpoint()` / `session.resume(cpId)` for mid-conversation rollback.
 
+## Emergent tools
+
+Use emergent commands to inspect and manage runtime-forged tools:
+
+```bash
+wunderland emergent list --seed <seedId>
+wunderland emergent inspect <name|id> --seed <seedId>
+wunderland emergent audit <name|id> --seed <seedId>
+wunderland emergent export <name|id> --seed <seedId> --output ./my-tool.emergent-tool.yaml
+wunderland emergent import ./my-tool.emergent-tool.yaml --seed <seedId>
+```
+
+Without `--seed`, the command falls back to preview/demo output so the surface remains explorable locally. For authenticated backends, set `WUNDERLAND_AUTH_TOKEN`. For trusted local backends, `WUNDERLAND_INTERNAL_API_SECRET` is also supported.
+
+Emergent export/import uses the portable `agentos.emergent-tool.v1` YAML or JSON package format. `compose` tools round-trip cleanly between agents. `sandbox` tools only round-trip when the package contains source code. If sandbox source was redacted at rest, export still works for audit or Git review, but import is intentionally rejected because the runtime cannot safely rehydrate the tool.
+
 ### Authoring conventions
 
 Keep orchestration definitions in predictable directories so the CLI can auto-discover them:

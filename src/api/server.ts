@@ -34,6 +34,7 @@ import {
   buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
 } from '../config/effective-agent-config.js';
+import { resolveWunderlandProviderId, resolveWunderlandTextModel } from '../config/provider-defaults.js';
 import { loadDotEnvIntoProcessUpward } from '../cli/config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 import {
@@ -273,18 +274,23 @@ export async function createWunderlandServer(opts?: {
 
   const providerFromConfig = typeof (cfg as any).llmProvider === 'string' ? String((cfg as any).llmProvider).trim() : '';
   const providerIdRaw = String(opts?.llm?.providerId ?? providerFromConfig ?? 'openai').trim().toLowerCase();
-  const providerId = providerIdRaw as WunderlandProviderId | string;
-  if (!new Set<string>(['openai', 'openrouter', 'ollama', 'anthropic', 'gemini']).has(providerId)) {
+  let providerId: WunderlandProviderId;
+  try {
+    providerId = resolveWunderlandProviderId(providerIdRaw);
+  } catch {
     throw new Error(
       `createWunderlandServer: unsupported LLM provider "${providerIdRaw}". Supported: openai, openrouter, ollama, anthropic, gemini`,
     );
   }
 
   const modelFromConfig = typeof (cfg as any).llmModel === 'string' ? String((cfg as any).llmModel).trim() : '';
-  const model =
-    typeof opts?.llm?.model === 'string' && opts.llm.model.trim()
-      ? opts.llm.model.trim()
-      : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
+  const model = resolveWunderlandTextModel({
+    providerId,
+    model:
+      typeof opts?.llm?.model === 'string' && opts.llm.model.trim()
+        ? opts.llm.model.trim()
+        : modelFromConfig,
+  });
 
   const port = Number.isFinite(opts?.port) ? Number(opts?.port) : (Number(process.env['PORT'] || '') || 3777);
   const host = typeof opts?.host === 'string' && opts.host.trim() ? opts.host.trim() : '0.0.0.0';

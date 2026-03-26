@@ -474,9 +474,13 @@ See `presets/workflows/` and `presets/missions/` for all templates.
 | `wunderland plugins` | List installed extension packs |
 | `wunderland export` | Export agent configuration as a portable manifest |
 | `wunderland import <manifest>` | Import an agent manifest |
-| `wunderland emergent` | List, inspect, promote, demote, and audit runtime-forged tools |
+| `wunderland emergent` | List, inspect, export, import, promote, demote, and audit runtime-forged tools |
 
 See `docs/CLI_TUI_GUIDE.md` for TUI keybindings, search, modals, presets, and screenshot export.
+
+Live emergent-tool management is seed-scoped: use `wunderland emergent list --seed <seedId>` against a running backend. Without `--seed`, the command stays browsable in preview/demo mode. For authenticated backends, set `WUNDERLAND_AUTH_TOKEN`; for local/internal backends, set `WUNDERLAND_INTERNAL_API_SECRET`.
+
+Emergent tools can also be exported and reused across agents. Use `wunderland emergent export <name|id> --seed <seedId> --output my-tool.emergent-tool.yaml` to write a portable `agentos.emergent-tool.v1` package, then `wunderland emergent import <file> --seed <seedId>` to load it into another agent catalog. `compose` tools are portable by default. `sandbox` tools are portable only when the package includes source code. Redacted sandbox exports remain useful for audit and Git review, but they are intentionally not importable into another runtime.
 
 ---
 

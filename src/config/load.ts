@@ -6,6 +6,10 @@ import type { WunderlandAgentConfig, WunderlandProviderId } from '../api/types.j
 import type { LLMProviderConfig } from '../runtime/tool-calling.js';
 import { WunderlandConfigError } from './errors.js';
 import { resolveEffectiveAgentConfig } from './effective-agent-config.js';
+import {
+  resolveWunderlandProviderId,
+  resolveWunderlandTextModel,
+} from './provider-defaults.js';
 import { validateWunderlandAgentConfig } from './schema.js';
 
 function normalizeBaseUrl(value: string | undefined): string | undefined {
@@ -65,11 +69,13 @@ export async function loadAgentConfig(opts: {
 }
 
 export function resolveProviderId(raw: unknown): WunderlandProviderId {
-  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  if (v === 'openai' || v === 'openrouter' || v === 'ollama' || v === 'anthropic' || v === 'gemini') return v;
-  throw new WunderlandConfigError('Unsupported LLM provider.', [
-    { path: 'llm.providerId', message: `Unsupported providerId "${String(raw)}".`, hint: 'Supported: openai, openrouter, ollama, anthropic, gemini.' },
-  ]);
+  try {
+    return resolveWunderlandProviderId(raw);
+  } catch {
+    throw new WunderlandConfigError('Unsupported LLM provider.', [
+      { path: 'llm.providerId', message: `Unsupported providerId "${String(raw)}".`, hint: 'Supported: openai, openrouter, ollama, anthropic, gemini.' },
+    ]);
+  }
 }
 
 export type ResolvedLlmConfig = {
@@ -103,10 +109,13 @@ export async function resolveLlmConfig(opts: {
     : resolveProviderId(providerIdRaw);
 
   const modelFromConfig = typeof (opts.agentConfig as any).llmModel === 'string' ? String((opts.agentConfig as any).llmModel).trim() : '';
-  const model =
-    typeof opts.llm?.model === 'string' && opts.llm.model.trim()
-      ? opts.llm.model.trim()
-      : (modelFromConfig || (process.env['OPENAI_MODEL'] || 'gpt-4o'));
+  const model = resolveWunderlandTextModel({
+    providerId,
+    model:
+      typeof opts.llm?.model === 'string' && opts.llm.model.trim()
+        ? opts.llm.model.trim()
+        : modelFromConfig,
+  });
 
   const ollamaBaseUrl = (() => {
     if (opts.llm?.baseUrl) return opts.llm.baseUrl;
