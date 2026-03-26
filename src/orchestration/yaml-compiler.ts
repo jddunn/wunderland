@@ -80,26 +80,131 @@ function resolveYamlSchema(
  * fn({ scratch: { decision: 'yes' } }); // → 'yes'
  * ```
  */
-function createConditionFn(expr: string): (state: any) => string {
-  return (state: any) => {
+/**
+ * Creates a safe condition evaluator function from a DSL expression string.
+ *
+ * Replaces the previous `new Function()` approach that was vulnerable to
+ * arbitrary code injection from YAML inputs. Now resolves partition references
+ * directly against state and supports only simple comparisons and boolean
+ * connectives — no arbitrary JS execution.
+ *
+ * @param expr - The condition expression (e.g. `'scratch.decision === "yes"'`).
+ * @returns A function that evaluates the expression against graph state.
+ */
+function createConditionFn(expr: string): (state: Record<string, unknown>) => string {
+  return (state: Record<string, unknown>) => {
     try {
-      // Rewrite `partition.a.b.c` → `state.partition?.["a"]?.["b"]?.["c"]`
-      const rewritten = expr.replace(
-        /\b(scratch|input|artifacts)\b\.(\w+(?:\.\w+)*)/g,
-        (_: string, partition: string, path: string) => {
-          const parts = path.split('.');
-          let access = `state.${partition}`;
-          for (const p of parts) access += `?.["${p}"]`;
-          return access;
-        },
-      );
-      // eslint-disable-next-line no-new-func
-      const fn = new Function('state', `return String(${rewritten});`);
-      return fn(state) as string;
+      return safeEvalCondition(expr, state);
     } catch {
       return 'false';
     }
   };
+}
+
+/** Allowed partitions that can be referenced in YAML condition expressions. */
+const ALLOWED_PARTITIONS = new Set(['scratch', 'input', 'artifacts', 'memory', 'diagnostics']);
+
+/** Pattern matching `partition.path.to.value` references. */
+const PARTITION_REF = /\b(scratch|input|artifacts|memory|diagnostics)(?:\.(\w+(?:\.\w+)*))?/g;
+
+/**
+ * Resolve a dot-separated path against a nested object.
+ *
+ * @param root - The root object to traverse.
+ * @param path - Dot-separated field path.
+ * @returns The resolved value, or `undefined` if any segment is missing.
+ */
+function resolveDotPath(root: unknown, path: string): unknown {
+  let current = root;
+  for (const key of path.split('.')) {
+    if (current == null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+/**
+ * Parse a value token from a condition expression.
+ *
+ * @param token - The token string.
+ * @param refs  - Resolved partition references.
+ * @returns The parsed value.
+ */
+function parseCondToken(token: string, refs: Map<string, unknown>): unknown {
+  const t = token.trim();
+  if (refs.has(t)) return refs.get(t);
+  // String literal (single or double quotes)
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    return t.slice(1, -1);
+  }
+  if (t === 'true') return true;
+  if (t === 'false') return false;
+  if (t === 'null') return null;
+  if (t === 'undefined') return undefined;
+  const num = Number(t);
+  if (!isNaN(num) && t !== '') return num;
+  return t;
+}
+
+/** Comparison operators ordered longest-first to avoid partial matches. */
+const CMP_OPS = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'] as const;
+
+/**
+ * Safely evaluate a YAML condition expression against state.
+ * Supports partition references, comparisons, and `&&`/`||` connectives.
+ * No `new Function()` or `eval()` — zero code execution risk.
+ *
+ * @param expr  - The condition expression.
+ * @param state - Graph state object.
+ * @returns The result as a string.
+ */
+function safeEvalCondition(expr: string, state: Record<string, unknown>): string {
+  // Resolve all partition references to their actual values
+  const refs = new Map<string, unknown>();
+  const pattern = new RegExp(PARTITION_REF.source, 'g');
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(expr)) !== null) {
+    const [fullMatch, partition, path] = match;
+    if (!ALLOWED_PARTITIONS.has(partition)) continue;
+    const partitionObj = state[partition];
+    refs.set(fullMatch, path ? resolveDotPath(partitionObj, path) : partitionObj);
+  }
+
+  // Evaluate a single comparison (no boolean connectives)
+  const evalSingle = (part: string): unknown => {
+    const trimmed = part.trim();
+    for (const op of CMP_OPS) {
+      const idx = trimmed.indexOf(op);
+      if (idx === -1) continue;
+      const left = parseCondToken(trimmed.slice(0, idx), refs);
+      const right = parseCondToken(trimmed.slice(idx + op.length), refs);
+      switch (op) {
+        case '===': return left === right;
+        case '!==': return left !== right;
+        case '==': return left == right;  // eslint-disable-line eqeqeq
+        case '!=': return left != right;  // eslint-disable-line eqeqeq
+        case '>=': return Number(left) >= Number(right);
+        case '<=': return Number(left) <= Number(right);
+        case '>':  return Number(left) > Number(right);
+        case '<':  return Number(left) < Number(right);
+      }
+    }
+    return parseCondToken(trimmed, refs);
+  };
+
+  // Split on || (lower precedence) then && (higher precedence)
+  const orParts = expr.split('||').map(s => s.trim());
+  for (const orPart of orParts) {
+    const andParts = orPart.split('&&').map(s => s.trim());
+    const allTrue = andParts.every(p => Boolean(evalSingle(p)));
+    if (allTrue) {
+      if (orParts.length === 1 && andParts.length === 1) {
+        return String(evalSingle(expr) ?? 'false');
+      }
+      return 'true';
+    }
+  }
+  return 'false';
 }
 
 // ---------------------------------------------------------------------------
