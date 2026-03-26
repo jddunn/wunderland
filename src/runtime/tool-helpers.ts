@@ -845,19 +845,44 @@ export async function openaiChatWithTools(opts: {
  *
  * Sends the request with `stream: true` and returns an async iterable of raw
  * SSE `data:` lines. The caller is responsible for parsing individual lines
- * via the adapter in `llm-stream-adapter.ts`.
+ * via {@link wrapStreamingLLMAsGenerator} in `llm-stream-adapter.ts`.
  *
- * When an external `AbortSignal` is supplied it is wired into the fetch call
- * so that barge-in (or any other cancellation) immediately terminates the
- * HTTP stream and saves tokens.
+ * ## `stream: true` usage
+ *
+ * The `stream` field in the request body instructs the OpenAI-compatible
+ * endpoint to use HTTP chunked transfer encoding with Server-Sent Events.
+ * Each SSE event contains a single `data:` line with a JSON chunk. The
+ * final event is `data: [DONE]`. This function reads those chunks via
+ * `ReadableStream.getReader()` and yields complete lines to the caller.
+ *
+ * ## AbortSignal wiring
+ *
+ * Cancellation is handled through a two-layer `AbortController` pattern:
+ *
+ * 1. **Internal timeout controller** -- A 10-minute safety timeout that
+ *    prevents hung connections from leaking resources.
+ * 2. **External signal forwarding** -- When the caller supplies a signal
+ *    (e.g. from voice barge-in), its `abort` event is forwarded to the
+ *    internal controller. This immediately tears down the TCP connection
+ *    via `fetch()`, stopping token generation at the provider.
+ *
+ * Cleanup (clearing the timeout, removing the signal listener) is
+ * guaranteed by a `finally` block in the returned async generator,
+ * regardless of whether iteration completes normally or is abandoned.
  *
  * @param provider  - LLM provider config (API key, model, base URL).
  * @param messages  - OpenAI-compatible message array.
- * @param tools     - OpenAI-compatible tool definitions.
- * @param temperature - Sampling temperature.
- * @param maxTokens - Max completion tokens.
+ * @param tools     - OpenAI-compatible tool definitions (empty array disables tools).
+ * @param temperature - Sampling temperature (0.0-2.0).
+ * @param maxTokens - Maximum completion tokens to generate.
  * @param signal    - Optional external abort signal for cancellation.
  * @returns An async iterable yielding individual SSE `data: ...` lines.
+ * @throws {DOMException} With name `'AbortError'` if the signal is already aborted.
+ * @throws {Error} If the HTTP response status is not 2xx.
+ * @throws {Error} If the response body is missing (no streaming support).
+ *
+ * @see {@link wrapStreamingLLMAsGenerator} for parsing the returned SSE lines.
+ * @see {@link streamingOpenaiChatWithTools} for the fallback-aware wrapper.
  */
 export async function streamingChatCompletionsRequest(
   provider: LLMProviderConfig,
@@ -959,7 +984,10 @@ export async function streamingChatCompletionsRequest(
   }
 
   // Return an async iterable that reads the SSE stream line by line.
-  // Cleanup (timeout + signal listener) happens when iteration completes.
+  // The generator uses a ReadableStream reader internally, and cleanup
+  // (timeout + signal listener removal) is guaranteed by the outer
+  // `finally` block regardless of how iteration ends (normal completion,
+  // abort, or thrown error).
   const body = res.body;
   const decoder = new TextDecoder();
 
@@ -971,16 +999,22 @@ export async function streamingChatCompletionsRequest(
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          // `stream: true` tells TextDecoder not to flush incomplete
+          // multi-byte characters — important for non-ASCII model output.
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          // Keep the last (potentially incomplete) line in the buffer.
+          // The last element may be an incomplete line (no trailing newline
+          // yet), so we keep it in the buffer for the next read cycle.
           buffer = lines.pop() ?? '';
           for (const line of lines) {
             const trimmed = line.trim();
+            // Skip empty lines (SSE event boundaries) — the caller's
+            // parseSSELine already handles them, but filtering here
+            // avoids unnecessary generator suspension/resumption.
             if (trimmed) yield trimmed;
           }
         }
-        // Flush any remaining data in the buffer.
+        // Flush any remaining data in the buffer after the stream ends.
         if (buffer.trim()) yield buffer.trim();
       } finally {
         reader.releaseLock();
@@ -998,10 +1032,32 @@ export async function streamingChatCompletionsRequest(
  * Streaming variant of {@link openaiChatWithTools}.
  *
  * Returns an async iterable of SSE lines from the primary provider, falling
- * back to the secondary provider if the primary fails with a retryable error.
+ * back to the secondary provider if the primary fails with a retryable error
+ * (rate limit, server error, connection timeout). The fallback decision is
+ * made by `shouldFallback()` which inspects the error type and HTTP status.
  *
- * @param opts - Same shape as `openaiChatWithTools` plus an optional `signal`.
+ * The `signal` parameter is forwarded to both the primary and fallback
+ * requests, ensuring that barge-in cancellation works regardless of which
+ * provider is active.
+ *
+ * @param opts - Provider credentials, model, messages, tools, and optional
+ *   AbortSignal for cancellation.
+ * @param opts.apiKey - API key for the primary provider.
+ * @param opts.model - Model identifier (e.g. `'gpt-4o-mini'`).
+ * @param opts.messages - OpenAI-compatible conversation history.
+ * @param opts.tools - OpenAI-compatible tool definitions.
+ * @param opts.temperature - Sampling temperature.
+ * @param opts.maxTokens - Maximum tokens to generate.
+ * @param opts.baseUrl - Custom API base URL (optional).
+ * @param opts.fallback - Secondary provider config for automatic retry.
+ * @param opts.onFallback - Notification callback when fallback is triggered.
+ * @param opts.getApiKey - Lazy API key supplier (alternative to static apiKey).
+ * @param opts.signal - External abort signal (e.g. from voice barge-in).
  * @returns Async iterable of raw SSE `data: ...` lines.
+ * @throws {Error} If both primary and fallback fail (or no fallback configured).
+ *
+ * @see {@link streamingChatCompletionsRequest} for the underlying HTTP layer.
+ * @see {@link openaiChatWithTools} for the non-streaming variant.
  */
 export async function streamingOpenaiChatWithTools(opts: {
   apiKey: string | Promise<string>;

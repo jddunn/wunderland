@@ -143,26 +143,59 @@ export async function* wrapLLMAsGenerator(
 // ---------------------------------------------------------------------------
 
 /**
- * Represents a single SSE chunk from the OpenAI streaming API.
- * Each chunk contains a delta with partial content and/or tool call fragments.
+ * The incremental delta object inside a single SSE chunk.
+ *
+ * OpenAI's streaming API (`stream: true`) sends these deltas as partial
+ * updates. Text content arrives token-by-token in `content`, while tool
+ * calls arrive as fragments that must be accumulated across multiple
+ * deltas by matching on `tool_calls[].index`.
+ *
+ * @see https://platform.openai.com/docs/api-reference/chat/streaming
  */
 interface StreamDelta {
+  /** Partial text token (may be `null` when only tool call fragments arrive). */
   content?: string | null;
+  /**
+   * Partial tool call fragments. Each fragment carries an `index` that
+   * identifies which tool call it belongs to. The `id` and `function.name`
+   * fields appear only in the first fragment for a given index; subsequent
+   * fragments for the same index append to `function.arguments`.
+   */
   tool_calls?: Array<{
+    /** Zero-based index identifying which parallel tool call this fragment belongs to. */
     index: number;
+    /** Tool call identifier — present only in the first fragment for this index. */
     id?: string;
     function?: {
+      /** Tool/function name — present only in the first fragment for this index. */
       name?: string;
+      /** JSON argument fragment to be concatenated across deltas. */
       arguments?: string;
     };
   }>;
 }
 
+/**
+ * A single choice inside a streaming chunk. Mirrors the non-streaming
+ * `ChatCompletionChoice` but uses `delta` instead of `message`.
+ */
 interface StreamChoice {
+  /** Incremental content/tool-call fragment for this choice. */
   delta?: StreamDelta;
+  /**
+   * Non-null only on the final chunk for this choice.
+   * Values: `'stop'`, `'tool_calls'`, `'length'`, `'content_filter'`.
+   */
   finish_reason?: string | null;
 }
 
+/**
+ * Top-level object decoded from a single SSE `data:` line.
+ *
+ * The OpenAI streaming protocol sends one of these per SSE event.
+ * The stream terminates with a sentinel `data: [DONE]` line that is
+ * handled separately in {@link parseSSELine}.
+ */
 interface StreamChunk {
   choices?: StreamChoice[];
   model?: string;
@@ -171,7 +204,22 @@ interface StreamChunk {
 
 /**
  * Parses a single `data:` line from an SSE stream into a typed chunk.
- * Returns `null` for `[DONE]` sentinels, empty lines, and parse failures.
+ *
+ * Returns `null` for any line that does not contain actionable data:
+ * - Empty or whitespace-only lines (SSE comment/keepalive boundaries).
+ * - Lines that do not start with `data:` (SSE field names like `event:`).
+ * - The `[DONE]` sentinel that signals end-of-stream.
+ * - Lines whose `data:` payload is malformed JSON.
+ *
+ * Malformed JSON lines are silently skipped rather than throwing because
+ * some proxy/CDN layers may inject non-JSON keepalive lines into the SSE
+ * stream (e.g. Cloudflare edge keepalives). Throwing would abort the
+ * entire stream for a single corrupt line, which is too aggressive given
+ * that the LLM response may still be recoverable from subsequent chunks.
+ *
+ * @param line - A single line from the SSE stream (may include the
+ *   `data: ` prefix and surrounding whitespace).
+ * @returns The parsed chunk, or `null` if the line should be skipped.
  */
 function parseSSELine(line: string): StreamChunk | null {
   const trimmed = line.trim();
@@ -181,6 +229,7 @@ function parseSSELine(line: string): StreamChunk | null {
   try {
     return JSON.parse(payload) as StreamChunk;
   } catch {
+    // Silently skip malformed lines — see JSDoc above for rationale.
     return null;
   }
 }
@@ -191,16 +240,55 @@ function parseSSELine(line: string): StreamChunk | null {
  * **individual text tokens** as they arrive from the SSE stream, enabling
  * real-time TTS playback before the full LLM response completes.
  *
- * **Generator protocol**
+ * ## Generator protocol
+ *
  * 1. Accepts an async iterable of raw SSE lines from the streaming HTTP response.
  * 2. For each text delta, yields a `text_delta` chunk immediately.
  * 3. Accumulates tool-call fragments across deltas and yields a single
  *    `tool_call_request` chunk once the stream ends with tool calls.
  * 4. Returns a {@link LoopOutput} summary as the generator return value.
  *
+ * ## Tool-call fragment accumulation
+ *
+ * The OpenAI streaming API splits tool calls across multiple SSE events.
+ * Each fragment carries an `index` field identifying which parallel tool
+ * call it belongs to. The first fragment for an index contains the `id`
+ * and `function.name`; subsequent fragments append to `function.arguments`.
+ * This generator accumulates fragments in a `Map<index, accumulator>` and
+ * assembles the final {@link ToolCallRequest} array only after the stream
+ * ends, sorted by index to preserve the model's intended call order.
+ *
+ * ## Why tool calls are yielded at the end (not incrementally)
+ *
+ * Text tokens are useful mid-stream (for TTS), but tool call fragments
+ * are not actionable until the full JSON arguments string is complete.
+ * Yielding partial tool calls would force callers to re-assemble fragments
+ * themselves, adding complexity with no latency benefit.
+ *
  * @param sseLines - Async iterable that produces raw SSE lines (including
  *   the `data: ` prefix). Typically created by splitting the streaming
  *   response body on newline boundaries.
+ * @yields {LoopChunk} Individual `text_delta` chunks for each token, then
+ *   a single `tool_call_request` chunk if the model requested tool calls.
+ * @returns {LoopOutput} Summary of the full response (accumulated text,
+ *   assembled tool calls, finish reason).
+ *
+ * @example
+ * ```ts
+ * const sseLines = streamingChatCompletionsRequest(provider, messages, tools, 0.2, 1400);
+ * const gen = wrapStreamingLLMAsGenerator(sseLines);
+ * let result = await gen.next();
+ * while (!result.done) {
+ *   if (result.value.type === 'text_delta') {
+ *     process.stdout.write(result.value.content ?? '');
+ *   }
+ *   result = await gen.next();
+ * }
+ * const { responseText, toolCalls, finishReason } = result.value;
+ * ```
+ *
+ * @see {@link wrapLLMAsGenerator} for the non-streaming single-shot adapter.
+ * @see {@link parseSSELine} for the per-line SSE parser.
  */
 export async function* wrapStreamingLLMAsGenerator(
   sseLines: AsyncIterable<string>,
@@ -208,7 +296,9 @@ export async function* wrapStreamingLLMAsGenerator(
   let fullText = '';
   let finishReason = 'stop';
 
-  // Accumulate tool call fragments keyed by index.
+  // Accumulate tool-call fragments keyed by their index. The index is
+  // stable across deltas for the same tool call, so we can concatenate
+  // the `function.arguments` JSON fragments in order.
   const toolCallAccumulators = new Map<number, {
     id: string;
     name: string;
@@ -217,6 +307,7 @@ export async function* wrapStreamingLLMAsGenerator(
 
   for await (const line of sseLines) {
     const chunk = parseSSELine(line);
+    // Skip non-actionable lines (comments, keepalives, malformed JSON).
     if (!chunk?.choices?.length) continue;
 
     const choice = chunk.choices[0];
@@ -228,12 +319,16 @@ export async function* wrapStreamingLLMAsGenerator(
     if (!delta) continue;
 
     // --- Streaming text content ---
+    // Yield each text token immediately so the TTS engine can begin
+    // synthesizing audio with minimal latency.
     if (delta.content) {
       fullText += delta.content;
       yield { type: 'text_delta', content: delta.content };
     }
 
     // --- Streaming tool call fragments ---
+    // Accumulate fragments by index; do NOT yield them yet because the
+    // arguments JSON is incomplete until the stream finishes.
     if (delta.tool_calls) {
       for (const tc of delta.tool_calls) {
         const idx = tc.index;
@@ -243,6 +338,8 @@ export async function* wrapStreamingLLMAsGenerator(
           toolCallAccumulators.set(idx, acc);
         }
         if (tc.id) acc.id = tc.id;
+        // Name fragments are concatenated — in practice the name arrives
+        // in a single delta, but the protocol does not guarantee this.
         if (tc.function?.name) acc.name += tc.function.name;
         if (tc.function?.arguments) acc.argumentsJson += tc.function.arguments;
       }
@@ -250,6 +347,7 @@ export async function* wrapStreamingLLMAsGenerator(
   }
 
   // --- Assemble final tool calls from accumulated fragments ---
+  // Sort by index to preserve the model's intended invocation order.
   const toolCalls: ToolCallRequest[] = [];
   const sortedEntries = [...toolCallAccumulators.entries()].sort(
     ([a], [b]) => a - b,
@@ -259,6 +357,8 @@ export async function* wrapStreamingLLMAsGenerator(
     try {
       parsedArgs = JSON.parse(acc.argumentsJson) as Record<string, unknown>;
     } catch {
+      // Malformed arguments JSON — surface as empty object rather than
+      // crashing the entire turn.
       parsedArgs = {};
     }
     toolCalls.push({

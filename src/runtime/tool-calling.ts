@@ -1071,27 +1071,51 @@ export async function runToolCallingTurn(opts: {
 /**
  * Options for {@link streamToolCallingTurn}.
  *
- * Identical to `runToolCallingTurn` options, plus an optional `signal` for
- * aborting the in-flight LLM streaming request (e.g. on barge-in).
+ * Mirrors `runToolCallingTurn` options with the addition of an `AbortSignal`
+ * that enables external cancellation of the in-flight streaming LLM request.
+ * This is critical for the voice pipeline's barge-in flow: when the user
+ * starts speaking while the agent is mid-response, the pipeline aborts the
+ * signal to immediately stop token generation at the provider, saving both
+ * latency and tokens.
+ *
+ * @see {@link streamToolCallingTurn}
  */
 export interface StreamToolCallingTurnOpts {
+  /** LLM provider identifier (e.g. `'openai'`, `'openrouter'`, `'ollama'`). */
   providerId?: string;
+  /** API key (or promise resolving to one) for the LLM provider. */
   apiKey: string | Promise<string>;
+  /** Model name/ID (e.g. `'gpt-4o-mini'`, `'llama3'`). */
   model: string;
+  /**
+   * Mutable conversation history. The streaming function appends assistant
+   * and tool messages to this array as the conversation progresses.
+   */
   messages: Array<Record<string, unknown>>;
+  /** Map of tool name -> tool instance for tool execution. */
   toolMap: Map<string, ToolInstance>;
+  /** Pre-built tool definitions (overrides auto-generation from toolMap). */
   toolDefs?: Array<Record<string, unknown>>;
+  /** Lazy tool definition supplier (called per round; overrides toolDefs). */
   getToolDefs?: () => Array<Record<string, unknown>>;
+  /** Shared context object passed to every tool `execute()` call. */
   toolContext: Record<string, unknown>;
+  /** Maximum number of LLM round-trips before forcibly stopping. */
   maxRounds: number;
+  /** When `true`, bypasses all step-up authorization checks. */
   dangerouslySkipPermissions: boolean;
+  /** Custom step-up authorization tier configuration. */
   stepUpAuthConfig?: import('../core/types.js').StepUpAuthorizationConfig;
+  /** Interactive permission callback for Tier 3 (sync HITL) tools. */
   askPermission: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
+  /** Optional checkpoint callback invoked before executing a batch of tool calls. */
   askCheckpoint?: (info: {
     round: number;
     toolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }>;
   }) => Promise<boolean>;
+  /** Notification callback fired when a tool call is about to execute. */
   onToolCall?: (tool: ToolInstance, args: Record<string, unknown>) => void;
+  /** Notification callback fired after each tool call completes. */
   onToolResult?: (info: {
     toolName: string;
     args: Record<string, unknown>;
@@ -1099,15 +1123,29 @@ export interface StreamToolCallingTurnOpts {
     error?: string;
     durationMs: number;
   }) => void;
+  /** Pre-configured authorization manager (skips internal creation). */
   authorizationManager?: import('../authorization/StepUpAuthorizationManager.js').StepUpAuthorizationManager;
+  /** Custom base URL for the LLM API endpoint. */
   baseUrl?: string;
+  /** Fallback LLM provider config for automatic retry on transient errors. */
   fallback?: import('./tool-helpers.js').LLMProviderConfig;
+  /** Callback fired when the primary provider fails and we fall back. */
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
+  /** Lazy API key supplier (alternative to static `apiKey`). */
   getApiKey?: () => string | Promise<string>;
+  /** Ollama-specific runtime options (e.g. num_ctx, num_gpu). */
   ollamaOptions?: Record<string, unknown>;
+  /**
+   * Behavior when a tool execution fails.
+   * - `'fail_open'` — report the error to the LLM and let it continue.
+   * - `'fail_closed'` — immediately abort the turn.
+   */
   toolFailureMode?: 'fail_open' | 'fail_closed';
+  /** When `true`, tool names that require sanitization cause an error instead. */
   strictToolNames?: boolean;
+  /** Enable verbose debug logging for the streaming loop. */
   debug?: boolean;
+  /** Progress callback for long-running tool executions. */
   onToolProgress?: (info: {
     toolName: string;
     phase: string;
@@ -1115,8 +1153,15 @@ export interface StreamToolCallingTurnOpts {
     progress?: number;
   }) => void;
   /**
-   * External abort signal. When aborted, the in-flight streaming LLM request
-   * is cancelled immediately (saves tokens, reduces latency on barge-in).
+   * External abort signal for cancelling the in-flight streaming LLM request.
+   *
+   * When aborted, the HTTP stream is terminated immediately via the
+   * `AbortController` wired into `fetch()`. This is the primary mechanism
+   * for voice pipeline barge-in: the orchestrator calls `abort()` on the
+   * agent session, which triggers this signal, stopping token generation
+   * at the provider.
+   *
+   * @see {@link StreamingPipelineAgentSession.abort}
    */
   signal?: AbortSignal;
 }
@@ -1130,20 +1175,75 @@ export interface StreamToolCallingTurnOpts {
  * identically to the non-streaming variant: tool execution blocks, then
  * the next LLM round resumes streaming.
  *
- * **Protocol:**
- * - Each `yield` emits a small text token string (typically 1-4 words).
- * - The generator returns the full accumulated reply text when done.
- * - If the signal is aborted mid-stream, iteration stops gracefully.
+ * ## Multi-round streaming + blocking tool execution
  *
- * **Fallback:** For providers that do not support streaming (Ollama,
- * Anthropic via the Messages API), this automatically falls back to the
- * non-streaming `runToolCallingTurn` and post-splits the complete response
- * into word-boundary chunks.
+ * The outer loop runs up to `opts.maxRounds` LLM round-trips:
  *
- * @param opts - Same options as `runToolCallingTurn`, plus an optional
- *   `signal` for cancellation.
- * @yields Individual text token strings as they arrive from the LLM.
- * @returns The full accumulated reply text.
+ * 1. **Stream phase** -- Send the conversation to the LLM with
+ *    `stream: true` and yield text tokens as they arrive via SSE. Tool-call
+ *    fragments are accumulated silently by `wrapStreamingLLMAsGenerator`.
+ * 2. **Tool phase** (blocking) -- If the model's `finish_reason` is
+ *    `'tool_calls'`, execute each requested tool synchronously. Tool
+ *    results are appended to `opts.messages` as `role: 'tool'` messages.
+ * 3. **Next round** -- Loop back to step 1 with the updated conversation
+ *    history, allowing the model to incorporate tool results and stream
+ *    more text or request additional tools.
+ *
+ * The generator terminates when the model finishes with text only
+ * (`finish_reason: 'stop'`), the abort signal fires, or the round limit
+ * is reached.
+ *
+ * ## AbortSignal integration
+ *
+ * The optional `opts.signal` is wired through three layers:
+ * - **Outer loop**: checked at the start of each round and after tool execution.
+ * - **SSE fetch**: passed to `fetch()` so the HTTP connection is torn down
+ *   immediately on abort, stopping token generation at the provider.
+ * - **Token iteration**: checked between each yielded token so the generator
+ *   exits promptly after abort.
+ *
+ * This triple-layer cancellation ensures that voice pipeline barge-in stops
+ * the LLM within one event-loop tick of the abort signal.
+ *
+ * ## Provider fallback
+ *
+ * For providers that do not support SSE streaming (Ollama, Anthropic via
+ * the Messages API), this automatically falls back to the non-streaming
+ * `runToolCallingTurn` and post-splits the complete response into
+ * word-boundary chunks so the caller still receives an incremental token
+ * stream.
+ *
+ * @param opts - Configuration for the streaming tool-calling turn.
+ * @yields Individual text token strings (typically 1-4 words each).
+ * @returns The full accumulated reply text after all rounds complete.
+ *
+ * @example
+ * ```ts
+ * const controller = new AbortController();
+ * const gen = streamToolCallingTurn({
+ *   providerId: 'openai',
+ *   apiKey: process.env.OPENAI_API_KEY!,
+ *   model: 'gpt-4o-mini',
+ *   messages: [{ role: 'user', content: 'Hello' }],
+ *   toolMap: myToolMap,
+ *   toolContext: {},
+ *   maxRounds: 8,
+ *   dangerouslySkipPermissions: true,
+ *   askPermission: async () => true,
+ *   signal: controller.signal,
+ * });
+ *
+ * let result = await gen.next();
+ * while (!result.done) {
+ *   ttsEngine.feed(result.value); // stream to TTS immediately
+ *   result = await gen.next();
+ * }
+ * const fullReply = result.value;
+ * ```
+ *
+ * @see {@link runToolCallingTurn} for the non-streaming variant.
+ * @see {@link wrapStreamingLLMAsGenerator} for the SSE-to-generator adapter.
+ * @see {@link streamingOpenaiChatWithTools} for the HTTP streaming layer.
  */
 export async function* streamToolCallingTurn(
   opts: StreamToolCallingTurnOpts,
