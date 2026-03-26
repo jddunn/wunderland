@@ -202,9 +202,9 @@ export default async function cmdImage(
 
       console.log(`\n  ${accent('●')} Upscaling image (${scale}x)...`);
       const result = await upscaleImage(request as any);
+      const img = result.image;
 
-      if (output && result.images?.[0]) {
-        const img = result.images[0];
+      if (output && img) {
         if (img.base64) {
           await writeFile(output, Buffer.from(img.base64, 'base64'));
           console.log(`  └── ${accent('✓')} Saved to ${output}\n`);
@@ -212,7 +212,6 @@ export default async function cmdImage(
           console.log(`  └── ${accent('✓')} URL: ${img.url}\n`);
         }
       } else {
-        const img = result.images?.[0];
         if (img?.url) {
           console.log(`  └── ${accent('✓')} URL: ${img.url}\n`);
         } else if (img?.base64) {
