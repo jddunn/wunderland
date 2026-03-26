@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
+import type { WunderlandProviderId } from '../../api/types.js';
 import chalk from 'chalk';
 import {
   accent,
@@ -78,6 +79,10 @@ import { resolveHydeFromAgentConfig } from '../../rag/hyde-integration.js';
 import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
 import { buildOllamaRuntimeOptions } from '../../runtime/ollama-options.js';
 import { createRequestFolderAccessTool } from '../../tools/RequestFolderAccessTool.js';
+import {
+  resolveWunderlandProviderId,
+  resolveWunderlandTextModel,
+} from '../../config/provider-defaults.js';
 import {
   AgentStorageManager,
   resolveAgentStorageConfig,
@@ -240,13 +245,21 @@ export default async function cmdChat(
   }
 
   // ── Voice pipeline CLI flags ──────────────────────────────────────────────
-  // --voice                Enable the local WebSocket voice pipeline server
-  // --voice-stt=<id>       STT provider override (e.g. deepgram, whisper-chunked)
-  // --voice-tts=<id>       TTS provider override (e.g. openai, elevenlabs)
-  // --voice-endpointing=X  Endpointing strategy: acoustic | heuristic | semantic
-  // --voice-diarization    Enable speaker diarization
-  // --voice-barge-in=X     Barge-in mode: hard-cut | soft-fade | disabled
-  // --voice-port=<n>       WebSocket server port (0 = OS-assigned)
+  //
+  // These flags configure the optional local WebSocket voice pipeline server.
+  // When `--voice` is set, the chat command spins up a WebSocket server
+  // alongside the text REPL. Browser or telephony clients connect to the
+  // WebSocket URL and exchange bidirectional audio/text streams. Each
+  // inbound connection gets its own isolated agent session with independent
+  // conversation history and AbortController.
+  //
+  //   --voice                Enable the local WebSocket voice pipeline server
+  //   --voice-stt=<id>       STT provider override (e.g. deepgram, whisper-chunked)
+  //   --voice-tts=<id>       TTS provider override (e.g. openai, elevenlabs)
+  //   --voice-endpointing=X  Endpointing strategy: acoustic | heuristic | semantic
+  //   --voice-diarization    Enable speaker diarization
+  //   --voice-barge-in=X     Barge-in mode: hard-cut | soft-fade | disabled
+  //   --voice-port=<n>       WebSocket server port (0 = OS-assigned)
   const voiceEnabled = flags['voice'] === true;
   const voiceStt =
     typeof flags['voice-stt'] === 'string' ? String(flags['voice-stt']).trim() : undefined;
@@ -272,10 +285,17 @@ export default async function cmdChat(
   const voicePort = Number.isFinite(voicePortRaw) ? voicePortRaw : undefined;
 
   // ── Telephony webhook CLI flags ───────────────────────────────────────────
-  // --telephony-provider=<name>   Telephony provider: twilio | telnyx | plivo
-  // --telephony-webhook-port=<n>  HTTP port for the webhook server (0 = OS-assigned)
-  // --telephony-webhook-host=X    Bind address for the webhook server
-  // --telephony-webhook-path=X    URL base path (default: /api/voice)
+  //
+  // These flags configure the telephony webhook HTTP server that receives
+  // inbound call events from providers like Twilio, Telnyx, and Plivo.
+  // The webhook server verifies request signatures, parses events, and
+  // auto-generates the appropriate TwiML/XML response to open a media
+  // stream WebSocket back to the voice pipeline server.
+  //
+  //   --telephony-provider=<name>   Telephony provider: twilio | telnyx | plivo
+  //   --telephony-webhook-port=<n>  HTTP port for the webhook server (0 = OS-assigned)
+  //   --telephony-webhook-host=X    Bind address for the webhook server
+  //   --telephony-webhook-path=X    URL base path (default: /api/voice)
   const telephonyProvider = (() => {
     const raw =
       typeof flags['telephony-provider'] === 'string'
@@ -325,44 +345,25 @@ export default async function cmdChat(
     typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
   const providerFromConfig =
     typeof cfg?.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
-  const providerId = (
-    flags['ollama'] === true ? 'ollama' : providerFlag || providerFromConfig || 'openai'
-  ).toLowerCase();
-  if (!new Set(['openai', 'openrouter', 'ollama', 'anthropic', 'gemini']).has(providerId)) {
+  let providerId: WunderlandProviderId;
+  try {
+    providerId = resolveWunderlandProviderId(
+      flags['ollama'] === true ? 'ollama' : providerFlag || providerFromConfig || 'openai',
+    );
+  } catch {
     fmt.errorBlock(
       'Unsupported LLM provider',
-      `Provider "${providerId}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic, gemini`
+      `Provider "${flags['ollama'] === true ? 'ollama' : providerFlag || providerFromConfig || 'openai'}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic, gemini`
     );
     process.exitCode = 1;
     return;
   }
 
   const modelFromConfig = typeof cfg?.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
-
-  // When --provider is set without --model, resolve the provider's default text model so the
-  // caller doesn't have to remember provider-specific model names.
-  const providerDefaultModel = (() => {
-    if (typeof flags['model'] === 'string') return undefined; // explicit --model takes priority
-    if (!providerFlag) return undefined; // no provider flag; fall through to other defaults
-    try {
-      // Inline the defaults to avoid an async import at module load time.
-      const DEFAULTS: Record<string, string> = {
-        openai: 'gpt-4o',
-        anthropic: 'claude-sonnet-4-20250514',
-        ollama: 'llama3.2',
-        openrouter: 'openai/gpt-4o',
-        gemini: 'gemini-2.5-flash',
-      };
-      return DEFAULTS[providerFlag.toLowerCase()];
-    } catch {
-      return undefined;
-    }
-  })();
-
-  const model =
-    typeof flags['model'] === 'string'
-      ? String(flags['model'])
-      : modelFromConfig || providerDefaultModel || process.env['OPENAI_MODEL'] || 'gpt-4o';
+  const model = resolveWunderlandTextModel({
+    providerId,
+    model: typeof flags['model'] === 'string' ? String(flags['model']) : modelFromConfig,
+  });
 
   // OpenRouter fallback (OpenAI provider only)
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
@@ -1327,9 +1328,18 @@ export default async function cmdChat(
   });
 
   // ── Voice pipeline server (optional, --voice flag) ───────────────────────
+  //
   // When --voice is set, spin up a local WebSocket server wired to the voice
   // pipeline orchestrator. The server URL is printed so the caller can connect
-  // a voice client. Failure is non-fatal — chat continues in text mode.
+  // a voice client (browser WebSocket or telephony media stream).
+  //
+  // Each inbound WebSocket connection receives a fresh agent session via the
+  // factory callback below. The session implements `sendText()` as an async
+  // generator that streams LLM tokens via `streamToolCallingTurn`, and
+  // `abort()` which cancels the in-flight HTTP request on barge-in.
+  //
+  // Failure is non-fatal — if pipeline creation or server startup throws
+  // (e.g. missing API key), chat continues in text-only mode.
   if (voiceEnabled) {
     try {
       const [{ createStreamingPipeline }, { startVoiceServer }] = await Promise.all([
@@ -1347,14 +1357,25 @@ export default async function cmdChat(
       const voiceServer = await startVoiceServer(
         pipeline,
         () => {
+          // Each WebSocket connection gets its own session ID, conversation
+          // history, and AbortController. This ensures concurrent voice
+          // calls do not share state.
           const voiceSessionId = `voice-${seedId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           const voiceMessages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
           let aborted = false;
-          /** AbortController for the in-flight streaming LLM request. */
+          /**
+           * AbortController for the in-flight streaming LLM request.
+           * Created fresh on each `sendText()` call and nulled in the
+           * `finally` block. The `abort()` method below signals this
+           * controller to cancel the HTTP stream on barge-in.
+           */
           let streamController: AbortController | null = null;
 
           return {
             async *sendText(text: string): AsyncIterable<string> {
+              // Reset abort state for the new utterance and create a fresh
+              // AbortController so the signal is not pre-aborted from a
+              // previous barge-in.
               aborted = false;
               streamController = new AbortController();
               voiceMessages.push({ role: 'user', content: text });
@@ -1472,10 +1493,15 @@ export default async function cmdChat(
               }
             },
             abort() {
+              // Mark as aborted so the sendText generator's inner loop
+              // exits on its next iteration check.
               aborted = true;
-              // Cancel the in-flight streaming LLM request immediately.
-              // This stops token generation at the provider, saving both
-              // latency and tokens.
+              // Cancel the in-flight streaming LLM HTTP request immediately.
+              // The abort signal propagates through streamToolCallingTurn ->
+              // streamingOpenaiChatWithTools -> streamingChatCompletionsRequest
+              // -> fetch(), tearing down the TCP connection and stopping token
+              // generation at the provider. This saves both latency and tokens
+              // when the user barges in mid-response.
               streamController?.abort();
             },
           };

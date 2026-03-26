@@ -1,11 +1,26 @@
 /**
  * @fileoverview Tests for incremental LLM streaming in the voice pipeline.
  *
- * Validates that:
- * 1. `streamToolCallingTurn` yields tokens incrementally (not all at once).
- * 2. AbortSignal cancels the stream mid-flight.
- * 3. Tool calls still work between streaming text rounds.
- * 4. `wrapStreamingLLMAsGenerator` correctly parses SSE lines.
+ * These tests validate the two key streaming abstractions used by the voice
+ * pipeline to achieve real-time TTS playback:
+ *
+ * 1. **`wrapStreamingLLMAsGenerator`** (SSE adapter) — Parses raw SSE lines
+ *    into typed `LoopChunk` events, yielding text tokens individually and
+ *    accumulating tool-call fragments across deltas. Tests cover:
+ *    - Individual token yielding (not batched).
+ *    - Tool-call fragment accumulation from split SSE events.
+ *    - Mixed text + tool call streams.
+ *    - Graceful handling of malformed/empty SSE lines.
+ *
+ * 2. **`streamToolCallingTurn`** (multi-round streaming loop) — Orchestrates
+ *    streaming LLM calls with interleaved blocking tool execution. Tests cover:
+ *    - Incremental token delivery (verifies tokens arrive one-by-one).
+ *    - AbortSignal cancellation mid-stream (simulates voice barge-in).
+ *    - Multi-round tool call + text streaming (tool results feed the next round).
+ *    - Fallback behavior for non-streaming providers.
+ *
+ * All tests mock the network layer (`streamingOpenaiChatWithTools`) to avoid
+ * hitting real LLM APIs, using pre-crafted SSE line arrays as fixtures.
  *
  * @module wunderland/__tests__/voice-streaming
  */
@@ -26,7 +41,11 @@ import {
 
 describe('wrapStreamingLLMAsGenerator', () => {
   /**
-   * Helper: creates an async iterable from an array of SSE lines.
+   * Creates an async iterable from a static array of SSE lines.
+   * Used as a test fixture to simulate the streaming HTTP response body.
+   *
+   * @param lines - Pre-crafted SSE data lines (including `data: ` prefix).
+   * @returns An async iterable that yields each line in sequence.
    */
   async function* linesFrom(lines: string[]): AsyncIterable<string> {
     for (const line of lines) yield line;
@@ -153,12 +172,16 @@ describe('wrapStreamingLLMAsGenerator', () => {
 // ---------------------------------------------------------------------------
 
 describe('streamToolCallingTurn', () => {
-  // Mock dependencies that streamToolCallingTurn needs.
+  /**
+   * No-op permission callback that auto-approves all tool calls.
+   * Used by all streaming tests since permission logic is orthogonal
+   * to the streaming behavior under test.
+   */
   const noopAskPermission = async () => true;
 
-  // We mock at the module level to avoid hitting real LLM APIs.
-  // The streaming path calls streamingOpenaiChatWithTools which we
-  // intercept via a spy on the tool-helpers module.
+  // We mock `streamingOpenaiChatWithTools` at the module level to avoid
+  // hitting real LLM APIs. Each test provides its own SSE fixture via
+  // the mock's return value.
 
   beforeEach(() => {
     vi.restoreAllMocks();
