@@ -40,7 +40,16 @@ export default async function missionCommand(
 
       // Parse --input flag
       const inputFlag = flags?.['input'] as string | undefined;
-      const input = inputFlag ? JSON.parse(inputFlag) : {};
+      let input: Record<string, unknown> = {};
+      if (inputFlag) {
+        try {
+          input = JSON.parse(inputFlag);
+        } catch (e: any) {
+          console.error('Invalid JSON input: ' + e.message);
+          process.exitCode = 1;
+          return;
+        }
+      }
 
 	      const baseRuntime = resolveRuntimeConfig();
 	      await startWunderlandOtel({ serviceName: 'wunderland-mission' });

@@ -12,49 +12,14 @@ import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
 import type { WunderlandGraphRunConfig } from '../../runtime/graph-runner.js';
+import { resolveWunderlandRuntimeConfigFromEnv } from '../../config/provider-defaults.js';
 
 /**
  * Resolves LLM runtime config from environment variables.
  * Checks OpenRouter, OpenAI, Anthropic, Gemini, then Ollama.
  */
 export function resolveRuntimeConfig(): WunderlandGraphRunConfig {
-  const openrouterKey = process.env['OPENROUTER_API_KEY'];
-  const openaiKey = process.env['OPENAI_API_KEY'];
-  const anthropicKey = process.env['ANTHROPIC_API_KEY'];
-  const geminiKey = process.env['GEMINI_API_KEY'];
-  const ollamaBaseUrl = process.env['OLLAMA_BASE_URL'];
-
-  let providerId = 'openai';
-  let apiKey = openaiKey ?? '';
-  let model = 'gpt-4o';
-  let baseUrl: string | undefined;
-
-  if (openrouterKey) {
-    providerId = 'openrouter';
-    apiKey = openrouterKey;
-    model = 'openai/gpt-4o';
-    baseUrl = 'https://openrouter.ai/api/v1';
-  } else if (anthropicKey) {
-    providerId = 'anthropic';
-    apiKey = anthropicKey;
-    model = 'claude-sonnet-4-20250514';
-  } else if (geminiKey) {
-    providerId = 'gemini';
-    apiKey = geminiKey;
-    model = 'gemini-2.5-flash';
-    baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai';
-  } else if (ollamaBaseUrl) {
-    providerId = 'ollama';
-    apiKey = '';
-    model = process.env['OLLAMA_MODEL'] || 'llama3.2';
-    baseUrl = ollamaBaseUrl;
-  }
-
-  if (!apiKey && providerId !== 'ollama') {
-    throw new Error(
-      'No LLM runtime found. Set OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or OLLAMA_BASE_URL.'
-    );
-  }
+  const { providerId, apiKey, model, baseUrl } = resolveWunderlandRuntimeConfigFromEnv();
 
   return {
     llm: { providerId, apiKey, model, baseUrl },
@@ -163,7 +128,16 @@ export default async function cmdWorkflows(
 
       // Parse --input flag as JSON
       const inputFlag = _flags['input'] as string | undefined;
-      const input = inputFlag ? JSON.parse(inputFlag) : {};
+      let input: Record<string, unknown> = {};
+      if (inputFlag) {
+        try {
+          input = JSON.parse(inputFlag);
+        } catch (e: any) {
+          console.error('Invalid JSON input: ' + e.message);
+          process.exitCode = 1;
+          return;
+        }
+      }
 
       // Resolve LLM config from environment
 	      const runtimeConfig = resolveRuntimeConfig();
