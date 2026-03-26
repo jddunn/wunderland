@@ -23,7 +23,7 @@ import {
   warn as wColor,
 } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
-import { glyphs } from '../ui/glyphs.js';
+import { glyphs as getGlyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 
 // ---------------------------------------------------------------------------
@@ -68,7 +68,9 @@ const DEMO_AGENCIES: AgencyEntry[] = [
 // Backend API helpers
 // ---------------------------------------------------------------------------
 
-function getBackendBaseUrl(): string {
+/** @internal Resolve the backend API base URL from environment. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _getBackendBaseUrl(): string {
   const raw =
     process.env.WUNDERLAND_BACKEND_URL ??
     process.env.NEXT_PUBLIC_API_URL ??
@@ -117,10 +119,10 @@ async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
   };
 
   const statusIcon = (s: string) => {
-    if (s === 'running') return sColor(glyphs.progress);
-    if (s === 'completed') return sColor(glyphs.check);
-    if (s === 'error') return wColor(glyphs.cross);
-    return dim(glyphs.bullet);
+    if (s === 'running') return sColor(getGlyphs().info);
+    if (s === 'completed') return sColor(getGlyphs().ok);
+    if (s === 'error') return wColor(getGlyphs().fail);
+    return dim(getGlyphs().bullet);
   };
 
   for (const agency of agencies) {
@@ -190,7 +192,7 @@ async function cmdStatus(args: string[]): Promise<void> {
   console.log(`  ${dim('Total runs:')} ${bright(String(agency.totalRuns))}`);
   console.log(`  ${dim('Agents:')}`);
   for (const agent of agency.agents) {
-    console.log(`    ${dim(glyphs.bullet)} ${agent}`);
+    console.log(`    ${dim(getGlyphs().bullet)} ${agent}`);
   }
   if (agency.lastRun) {
     console.log(`  ${dim('Last run:')}   ${new Date(agency.lastRun).toLocaleString()}`);
@@ -262,11 +264,11 @@ async function cmdRun(args: string[], flags: Record<string, string | boolean>): 
       if (result?.fullStream) {
         for await (const part of result.fullStream as AsyncIterable<{ type: string; agent?: string; text?: string; output?: string }>) {
           if (part.type === 'agent-start' && part.agent !== '__agency__') {
-            console.log(`\n  ${sColor(glyphs.progress)} ${bright(part.agent!)} started`);
+            console.log(`\n  ${sColor(getGlyphs().info)} ${bright(part.agent!)} started`);
           } else if (part.type === 'text') {
             process.stdout.write(part.text!);
           } else if (part.type === 'agent-end' && part.agent !== '__agency__') {
-            console.log(`\n  ${sColor(glyphs.check)} ${bright(part.agent!)} done`);
+            console.log(`\n  ${sColor(getGlyphs().ok)} ${bright(part.agent!)} done`);
           }
         }
       }
@@ -281,7 +283,7 @@ async function cmdRun(args: string[], flags: Record<string, string | boolean>): 
       if (agentCalls.length > 0) {
         fmt.section('Agent Calls');
         for (const call of agentCalls) {
-          console.log(`  ${sColor(glyphs.check)} ${bright(call.agent)} ${dim(`(${call.durationMs}ms)`)}`);
+          console.log(`  ${sColor(getGlyphs().ok)} ${bright(call.agent)} ${dim(`(${call.durationMs}ms)`)}`);
         }
       }
     }
