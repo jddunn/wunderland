@@ -87,6 +87,8 @@ function printHelp(opts?: { isExporting?: boolean }): void {
 
     ${w('AI')}
       ${w('image')}                 Image generation, editing, upscaling, variations
+      ${w('video')}                 Video generation, animation, and analysis
+      ${w('audio')}                 Music and sound effect generation
       ${w('vision')}                Vision pipeline: OCR, describe, CLIP embeddings
       ${w('structured')}            Structured data extraction from text
 
@@ -446,6 +448,33 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     ],
     notes: ['Supported providers: openai (default), stability, replicate, ollama, stable-diffusion-local.'],
   },
+  video: {
+    summary: 'Video generation, image-to-video animation, and video analysis via AgentOS providers.',
+    usage: [
+      'wunderland video generate "<prompt>" [--provider <name>] [--model <id>] [--duration <secs>] [--aspect-ratio <r>] [--resolution <res>] [--output <path>]',
+      'wunderland video animate <image> "<prompt>" [--provider <name>] [--duration <secs>] [--output <path>]',
+      'wunderland video analyze <file> [--provider <name>] [--output <path>]',
+    ],
+    examples: [
+      'wunderland video generate "A drone flyover of a mountain lake at sunrise"',
+      'wunderland video animate photo.jpg "Make the water ripple gently" --output animated.mp4',
+      'wunderland video analyze clip.mp4 --output analysis.json',
+    ],
+    notes: ['Supported providers: runway, pika, stability, replicate.'],
+  },
+  audio: {
+    summary: 'Music and sound effect generation via AgentOS providers.',
+    usage: [
+      'wunderland audio music "<prompt>" [--provider <name>] [--duration <secs>] [--bpm <n>] [--genre <name>] [--mood <name>] [--output <path>]',
+      'wunderland audio sfx "<prompt>" [--provider <name>] [--duration <secs>] [--output <path>]',
+    ],
+    examples: [
+      'wunderland audio music "Upbeat electronic lo-fi beat" --duration 60 --bpm 90',
+      'wunderland audio sfx "Thunderclap followed by heavy rain" --output thunder.mp3',
+      'wunderland audio music "Ambient piano for a meditation app" --genre ambient --mood calm',
+    ],
+    notes: ['Supported providers: suno, udio, elevenlabs, stability.'],
+  },
   vision: {
     summary: 'Vision pipeline: OCR text extraction, image description, and CLIP embeddings.',
     usage: [
@@ -591,6 +620,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   new:               () => import('./commands/new.js'),
   connect:           () => import('./commands/connect.js'),
   image:             () => import('./commands/image.js'),
+  video:             () => import('./commands/video.js'),
+  audio:             () => import('./commands/audio.js'),
   vision:            () => import('./commands/vision.js'),
   structured:        () => import('./commands/structured.js'),
 };
