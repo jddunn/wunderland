@@ -45,6 +45,10 @@ export interface CliConfig {
     stt?: string;
     /** Web search provider: 'serper' | 'brave' | 'duckduckgo'. */
     webSearch?: string;
+    /** Video generation provider + model defaults. */
+    videoGeneration?: { provider?: string; model?: string };
+    /** Audio generation provider + model defaults. */
+    audioGeneration?: { provider?: string; model?: string };
   };
   /** Global extension overrides (merged under agent-level overrides). */
   extensionOverrides?: Record<string, {
