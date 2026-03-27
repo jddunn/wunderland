@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import type { WunderlandProviderId } from '../../api/types.js';
+import type { WunderlandProviderId, WunderlandAgentRagConfig } from '../../api/types.js';
 import chalk from 'chalk';
 import {
   accent,
@@ -1191,10 +1191,23 @@ export default async function cmdChat(
   // documentation context before the LLM call. This enhances — but does not
   // replace — the existing RAG tools and capability discovery layers.
   //
+  // When the agent's config has unified retrieval settings (rag.hybrid,
+  // rag.raptor, rag.hyde, rag.memoryIntegration), the router is upgraded
+  // with a UnifiedRetriever that orchestrates all sources in parallel via
+  // plan-based retrieval.
+  //
   // When --no-query-router is set, or init fails (missing key, empty corpus),
   // the chat falls back gracefully to the existing behaviour.
   let queryRouterPromise: Promise<QueryRouter | null> | null = null;
   if (enableQueryRouter) {
+    // Resolve the per-agent workspace directory for BM25/RAPTOR persistence.
+    const agentDir = path.resolve(
+      (await import('node:os')).homedir(),
+      '.wunderland',
+      'agents',
+      seedId,
+    );
+
     const qrOpts: CliQueryRouterOptions = {
       apiKey: llmApiKey || undefined,
       baseUrl: llmBaseUrl || undefined,
@@ -1208,6 +1221,26 @@ export default async function cmdChat(
       maxTier: typeof cfg?.queryRouter?.maxTier === 'number' ? cfg.queryRouter.maxTier : undefined,
       verbose,
       logger: { log: console.log, warn: console.warn, error: console.error, debug: console.debug },
+      // ── Unified retrieval wiring from agent.config.json ──
+      ragConfig: cfg?.rag as WunderlandAgentRagConfig | undefined,
+      memorySystem,
+      vectorStore: agentStorageManager?.getVectorStore(),
+      agentDir,
+      llmCaller: canUseLLM && llmApiKey && model
+        ? async (prompt: string) => {
+            const { default: OpenAI } = await import('openai');
+            const client = new OpenAI({
+              apiKey: llmApiKey,
+              baseURL: llmBaseUrl || undefined,
+            });
+            const resp = await client.chat.completions.create({
+              model,
+              messages: [{ role: 'user', content: prompt }],
+              max_tokens: 512,
+            });
+            return resp.choices?.[0]?.message?.content ?? '';
+          }
+        : undefined,
     };
     // Fire and forget — we await lazily when the first user message arrives.
     queryRouterPromise = initCliQueryRouter(qrOpts);
