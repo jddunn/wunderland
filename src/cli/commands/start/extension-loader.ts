@@ -394,18 +394,6 @@ export async function loadExtensions(ctx: any): Promise<void> {
         }
       }
 
-      // Optional skills extension (may not be installed in standalone builds)
-      try {
-        const skillsPkg = '@framers/agentos-ext-skills';
-        const skillsExt: any = await import(/* webpackIgnore: true */ skillsPkg);
-        if (skillsExt?.createExtensionPack) {
-          packs.push(skillsExt.createExtensionPack({ options: {}, logger: console, getSecret }));
-          preloadedPackages.push(skillsPkg);
-        }
-      } catch {
-        // Not available — skip silently
-      }
-
       // Activate all packs (graceful — don't let one bad extension crash everything)
       const activationResults = await Promise.allSettled(
         packs
