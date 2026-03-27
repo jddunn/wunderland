@@ -398,6 +398,15 @@ export type WunderlandAgentConfig = {
   research?: WunderlandAgentResearchConfig;
   /** AgentOS persona registry configuration. */
   personaRegistry?: WunderlandAgentPersonaRegistryConfig;
+  /** User-configurable provider ordering for media generation. */
+  providerPreferences?: {
+    image?: { preferred?: string[]; weights?: Record<string, number>; blocked?: string[] };
+    video?: { preferred?: string[]; weights?: Record<string, number>; blocked?: string[] };
+    audio?: {
+      music?: { preferred?: string[]; weights?: Record<string, number>; blocked?: string[] };
+      sfx?: { preferred?: string[]; weights?: Record<string, number>; blocked?: string[] };
+    };
+  };
 };
 
 export type WunderlandProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic' | 'gemini' | 'claude-code-cli' | 'gemini-cli';
