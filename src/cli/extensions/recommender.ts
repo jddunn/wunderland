@@ -80,6 +80,62 @@ const CREDENTIAL_MAP: Array<{
     packageName: '@framers/agentos-ext-calendar-google',
     displayName: 'Google Calendar',
   },
+  {
+    envVars: ['RUNWAY_API_KEY'],
+    allRequired: false,
+    extensionId: 'video-generation',
+    packageName: '@framers/agentos-ext-video-generation',
+    displayName: 'Video Generation (Runway)',
+  },
+  {
+    envVars: ['REPLICATE_API_TOKEN'],
+    allRequired: false,
+    extensionId: 'video-generation',
+    packageName: '@framers/agentos-ext-video-generation',
+    displayName: 'Video Generation (Replicate)',
+  },
+  {
+    envVars: ['REPLICATE_API_TOKEN'],
+    allRequired: false,
+    extensionId: 'audio-generation',
+    packageName: '@framers/agentos-ext-audio-generation',
+    displayName: 'Audio Generation (Replicate)',
+  },
+  {
+    envVars: ['FAL_API_KEY'],
+    allRequired: false,
+    extensionId: 'video-generation',
+    packageName: '@framers/agentos-ext-video-generation',
+    displayName: 'Video Generation (fal.ai)',
+  },
+  {
+    envVars: ['FAL_API_KEY'],
+    allRequired: false,
+    extensionId: 'audio-generation',
+    packageName: '@framers/agentos-ext-audio-generation',
+    displayName: 'Audio Generation (fal.ai)',
+  },
+  {
+    envVars: ['SUNO_API_KEY'],
+    allRequired: false,
+    extensionId: 'audio-generation',
+    packageName: '@framers/agentos-ext-audio-generation',
+    displayName: 'Audio Generation (Suno)',
+  },
+  {
+    envVars: ['STABILITY_API_KEY'],
+    allRequired: false,
+    extensionId: 'audio-generation',
+    packageName: '@framers/agentos-ext-audio-generation',
+    displayName: 'Audio Generation (Stability)',
+  },
+  {
+    envVars: ['BFL_API_KEY'],
+    allRequired: false,
+    extensionId: 'image-generation',
+    packageName: '@framers/agentos-ext-image-generation',
+    displayName: 'Image Generation (BFL)',
+  },
 ];
 
 /**
