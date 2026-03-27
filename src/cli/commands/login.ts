@@ -540,14 +540,79 @@ async function loginClaudeCodeCli(globals: GlobalFlags): Promise<void> {
   console.log();
 }
 
+// ── Gemini CLI login ─────────────────────────────────────────────────────────
+
+/**
+ * Login handler for the gemini-cli provider.
+ * No API key needed — verifies that Gemini CLI is installed and
+ * authenticated, then persists the provider selection to config.
+ */
+async function loginGeminiCli(globals: GlobalFlags): Promise<void> {
+  console.log();
+  console.log(bright('  Gemini CLI Provider'));
+  console.log(dim('  ────────────────────'));
+  console.log();
+
+  /* 1. Check if gemini binary is on PATH */
+  let cliPath = '';
+  let version = '';
+  try {
+    const { execSync } = await import('child_process');
+    cliPath = execSync('which gemini', { encoding: 'utf8' }).trim();
+    const versionRaw = execSync('gemini --version', { encoding: 'utf8' }).trim();
+    const match = versionRaw.match(/(\d+\.\d+\.\d+)/);
+    version = match ? match[1] : 'unknown';
+    console.log(sColor(`  ${glyphs.check} CLI installed    ${dim(cliPath)} (v${version})`));
+  } catch {
+    console.log(accent(`  ${glyphs.cross} CLI not installed`));
+    console.log();
+    console.log('  Install Gemini CLI:');
+    console.log(bright('    npm install -g @google/gemini-cli'));
+    console.log();
+    console.log('  Then run this command again.');
+    return;
+  }
+
+  /* 2. Check authentication via a lightweight ping */
+  try {
+    const { execSync } = await import('child_process');
+    execSync('echo "Reply with exactly: pong" | gemini -p --output-format json', {
+      stdio: 'ignore',
+      timeout: 30_000,
+    });
+    console.log(sColor(`  ${glyphs.check} Authenticated`));
+  } catch {
+    console.log(accent(`  ${glyphs.cross} Not authenticated`));
+    console.log();
+    console.log('  Action needed:');
+    console.log(bright('    1. Open a new terminal'));
+    console.log(bright('    2. Run: gemini'));
+    console.log(bright('    3. Sign in with your Google account'));
+    console.log(bright('    4. Come back and run: wunderland login'));
+    return;
+  }
+
+  /* 3. Persist provider selection */
+  await updateConfig({
+    llmProvider: 'gemini-cli',
+    llmModel: 'gemini-2.5-flash',
+  });
+
+  console.log(sColor(`  ${glyphs.check} Model available  ${dim('gemini-2.5-flash')}`));
+  console.log();
+  console.log(sColor('  Ready to use! No API key needed.'));
+  console.log();
+}
+
 // ── Interactive LLM provider menu ────────────────────────────────────────────
 
-type LoginChoice = 'openai-oauth' | 'openai-key' | 'anthropic-key' | 'gemini-key' | 'openrouter-key' | 'claude-code-cli' | 'other-key';
+type LoginChoice = 'openai-oauth' | 'openai-key' | 'anthropic-key' | 'gemini-key' | 'openrouter-key' | 'claude-code-cli' | 'gemini-cli' | 'other-key';
 
 const LOGIN_OPTIONS: Array<{ value: LoginChoice; label: string; hint: string }> = [
   { value: 'openai-oauth',  label: 'OpenAI (ChatGPT Subscription)', hint: 'not yet supported — use API key instead' },
   { value: 'openai-key',    label: 'OpenAI (API Key)',               hint: 'paste your OPENAI_API_KEY' },
   { value: 'claude-code-cli', label: 'Claude Code CLI (Max subscription)', hint: 'no API key — uses your local Claude Code login' },
+  { value: 'gemini-cli', label: 'Gemini CLI (Google account)', hint: 'no API key — uses your local Gemini CLI login' },
   { value: 'anthropic-key', label: 'Anthropic (API Key)',            hint: 'paste your ANTHROPIC_API_KEY' },
   { value: 'gemini-key',    label: 'Google Gemini (API Key)',        hint: 'paste your GEMINI_API_KEY' },
   { value: 'openrouter-key', label: 'OpenRouter (API Key)',          hint: 'universal — routes to any model' },
@@ -630,6 +695,9 @@ export default async function cmdLogin(
       case 'claude-code-cli':
         await loginClaudeCodeCli(globals);
         break;
+      case 'gemini-cli':
+        await loginGeminiCli(globals);
+        break;
       case 'anthropic-key':
         await loginApiKey('anthropic', globals);
         break;
@@ -662,9 +730,13 @@ async function dispatchProvider(
     return;
   }
 
-  // Claude Code CLI has no API key — special handler
+  // CLI-based providers have no API key — special handlers
   if (provider === 'claude-code-cli') {
     await loginClaudeCodeCli(globals);
+    return;
+  }
+  if (provider === 'gemini-cli') {
+    await loginGeminiCli(globals);
     return;
   }
 
