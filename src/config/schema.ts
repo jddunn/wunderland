@@ -389,5 +389,59 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
     }
   }
 
+  // ── providerPreferences ──
+  if (cfg.providerPreferences !== undefined) {
+    if (!isPlainObject(cfg.providerPreferences)) {
+      issues.push({ path: 'providerPreferences', message: 'Expected object.' });
+    } else {
+      const pp = cfg.providerPreferences as Record<string, unknown>;
+
+      /** Validate a single media-preference block (preferred, weights, blocked). */
+      const validateMediaPref = (obj: unknown, basePath: string) => {
+        if (!isPlainObject(obj)) {
+          issues.push({ path: basePath, message: 'Expected object.' });
+          return;
+        }
+        const block = obj as Record<string, unknown>;
+        if (block.preferred !== undefined && !isStringArray(block.preferred)) {
+          issues.push({ path: `${basePath}.preferred`, message: 'Expected string[]' });
+        }
+        if (block.blocked !== undefined && !isStringArray(block.blocked)) {
+          issues.push({ path: `${basePath}.blocked`, message: 'Expected string[]' });
+        }
+        if (block.weights !== undefined) {
+          if (!isPlainObject(block.weights)) {
+            issues.push({ path: `${basePath}.weights`, message: 'Expected object mapping string -> number.' });
+          } else {
+            for (const [k, v] of Object.entries(block.weights as Record<string, unknown>)) {
+              if (typeof v !== 'number') {
+                issues.push({ path: `${basePath}.weights.${k}`, message: `Expected number (got ${typeof v}).` });
+              }
+            }
+          }
+        }
+      };
+
+      for (const modality of ['image', 'video'] as const) {
+        if (pp[modality] !== undefined) {
+          validateMediaPref(pp[modality], `providerPreferences.${modality}`);
+        }
+      }
+
+      if (pp.audio !== undefined) {
+        if (!isPlainObject(pp.audio)) {
+          issues.push({ path: 'providerPreferences.audio', message: 'Expected object.' });
+        } else {
+          const audio = pp.audio as Record<string, unknown>;
+          for (const sub of ['music', 'sfx'] as const) {
+            if (audio[sub] !== undefined) {
+              validateMediaPref(audio[sub], `providerPreferences.audio.${sub}`);
+            }
+          }
+        }
+      }
+    }
+  }
+
   return { config: input as WunderlandAgentConfig, issues };
 }
