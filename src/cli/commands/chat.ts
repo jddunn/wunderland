@@ -651,6 +651,26 @@ export default async function cmdChat(
             options: { ...configOverrides['web-search']?.options, defaultProvider: providerDefaults.webSearch },
           };
         }
+        if (providerDefaults.videoGeneration && !configOverrides['video-generation']?.options?.defaultProvider) {
+          configOverrides['video-generation'] = {
+            ...configOverrides['video-generation'],
+            options: {
+              ...configOverrides['video-generation']?.options,
+              defaultProvider: providerDefaults.videoGeneration.provider,
+              defaultModel: providerDefaults.videoGeneration.model,
+            },
+          };
+        }
+        if (providerDefaults.audioGeneration && !configOverrides['audio-generation']?.options?.defaultProvider) {
+          configOverrides['audio-generation'] = {
+            ...configOverrides['audio-generation'],
+            options: {
+              ...configOverrides['audio-generation']?.options,
+              defaultProvider: providerDefaults.audioGeneration.provider,
+              defaultModel: providerDefaults.audioGeneration.model,
+            },
+          };
+        }
       }
 
       // Build filesystem roots: agent workspace + user's home directory + cwd.
