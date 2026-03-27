@@ -12,6 +12,12 @@
  * 4. Shared monorepo docs at `docs/`
  * 5. Curated skill registry markdown
  *
+ * When a `ragConfig` is supplied (from `agent.config.json`), the router is
+ * enhanced with a {@link UnifiedRetriever} that orchestrates hybrid search
+ * (BM25 + dense), RAPTOR hierarchical summaries, HyDE hypothesis generation,
+ * and cognitive memory integration. Each feature is independently enabled
+ * by the corresponding `rag.*` config field.
+ *
  * The singleton gracefully degrades: if initialisation fails (missing API
  * key, no corpus files, network error), callers receive `null` instead of
  * a router instance, and the CLI falls back to its existing RAG tools.
@@ -29,6 +35,14 @@ import type {
   QueryRouterCorpusStats,
   RetrievedChunk,
 } from '@framers/agentos/query-router';
+import type { WunderlandAgentRagConfig } from '../api/types.js';
+import type { MemorySystem } from '../memory/index.js';
+import type { IVectorStore, IEmbeddingManager } from '@framers/agentos';
+import {
+  buildUnifiedRetrieverFromConfig,
+  formatUnifiedRetrievalLog,
+  type UnifiedRetrieverBuildResult,
+} from './unified-retriever-builder.js';
 
 // ============================================================================
 // Types
@@ -82,6 +96,49 @@ export interface CliQueryRouterOptions {
     error: (...args: unknown[]) => void;
     debug: (...args: unknown[]) => void;
   };
+
+  // ── Unified retrieval config (new) ──────────────────────────────────
+
+  /**
+   * Full RAG config from `agent.config.json`.
+   *
+   * When provided, the router is enhanced with a {@link UnifiedRetriever}
+   * that wires BM25 hybrid search, RAPTOR tree, HyDE, and memory
+   * integration based on the enabled features.
+   */
+  ragConfig?: WunderlandAgentRagConfig;
+
+  /**
+   * The wunderland MemorySystem (wraps CognitiveMemoryManager).
+   * Wired into the UnifiedRetriever when `ragConfig.memoryIntegration.enabled`.
+   */
+  memorySystem?: MemorySystem | null;
+
+  /**
+   * The agent's vector store instance from AgentStorageManager.
+   * Used for hybrid search (the dense side) and RAPTOR tree storage.
+   */
+  vectorStore?: IVectorStore;
+
+  /**
+   * Embedding manager for hybrid search and RAPTOR clustering.
+   * When not provided, the builder attempts to create one from the
+   * embedding API key.
+   */
+  embeddingManager?: IEmbeddingManager;
+
+  /**
+   * LLM caller function for HyDE hypothesis generation and RAPTOR summaries.
+   * When not provided, HyDE and RAPTOR features that require LLM calls
+   * will be skipped.
+   */
+  llmCaller?: (prompt: string) => Promise<string>;
+
+  /**
+   * Per-agent workspace directory for BM25/RAPTOR state persistence.
+   * Typically `~/.wunderland/agents/<agent-id>/`.
+   */
+  agentDir?: string;
 }
 
 // ============================================================================
@@ -127,6 +184,12 @@ let routerInstance: QueryRouter | null = null;
 
 /** In-flight initialisation promise, used to deduplicate concurrent callers. */
 let initPromise: Promise<QueryRouter | null> | null = null;
+
+/**
+ * Cached unified retriever build result, set after successful init.
+ * Exposed for shutdown persistence and status reporting.
+ */
+let unifiedBuildResult: UnifiedRetrieverBuildResult | null = null;
 
 // ============================================================================
 // Reranker (same lightweight heuristic the bot uses)
@@ -378,6 +441,42 @@ export async function initCliQueryRouter(
       routerInstance = router;
       const stats = router.getCorpusStats();
       logger.log(formatCliQueryRouterReadyLog(stats));
+
+      // ── Unified Retriever wiring ────────────────────────────────────
+      //
+      // If the caller provided ragConfig from agent.config.json, build a
+      // UnifiedRetriever with the configured sources (BM25, RAPTOR, HyDE,
+      // memory) and attach it to the QueryRouter. This upgrades the
+      // route() method from legacy QueryDispatcher to plan-based retrieval.
+      if (opts.ragConfig) {
+        try {
+          const buildResult = await buildUnifiedRetrieverFromConfig({
+            ragConfig: opts.ragConfig,
+            vectorStore: opts.vectorStore,
+            embeddingManager: opts.embeddingManager,
+            memorySystem: opts.memorySystem,
+            llmCaller: opts.llmCaller,
+            llmApiKey: opts.apiKey,
+            llmModel: opts.model,
+            llmBaseUrl: opts.baseUrl,
+            corpusPaths: config.knowledgeCorpus,
+            agentDir: opts.agentDir,
+            rerank: rerankCliChunks,
+            verbose: opts.verbose,
+            logger,
+          });
+
+          if (buildResult.retriever) {
+            router.setUnifiedRetriever(buildResult.retriever);
+            unifiedBuildResult = buildResult;
+            logger.log(formatUnifiedRetrievalLog(buildResult));
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(`[RAG] Unified retriever wiring failed (continuing with legacy): ${msg}`);
+        }
+      }
+
       return router;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -405,12 +504,26 @@ export function getCliQueryRouter(): QueryRouter | null {
 }
 
 /**
+ * Returns the cached unified retriever build result, or `null` if unified
+ * retrieval was not configured or has not yet been built.
+ *
+ * Useful for status reporting and shutdown persistence.
+ *
+ * @returns The build result, or `null`.
+ */
+export function getUnifiedRetrieverBuildResult(): UnifiedRetrieverBuildResult | null {
+  return unifiedBuildResult;
+}
+
+/**
  * Test-only reset hook so unit tests can clear the singleton between runs.
  */
 export function resetCliQueryRouterForTests(): void {
   routerInstance = null;
   initPromise = null;
+  unifiedBuildResult = null;
 }
 
 // Re-export types that consumers need
 export type { ClassificationResult, QueryRouterCorpusStats, RetrievedChunk } from '@framers/agentos/query-router';
+export type { UnifiedRetrieverBuildResult } from './unified-retriever-builder.js';

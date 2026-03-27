@@ -2,15 +2,27 @@ import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 
-// Cross-package alias for @framers/agentos/auth (only available in monorepo)
+// Cross-package aliases for @framers/agentos sub-packages (only available in monorepo)
 const agentosAuthPath = resolve(__dirname, '../agentos/src/core/llm/auth/index.ts');
+const agentosRagPath = resolve(__dirname, '../agentos/src/rag/index.ts');
+const agentosQueryRouterPath = resolve(__dirname, '../agentos/src/query-router/index.ts');
+const agentosMemoryPath = resolve(__dirname, '../agentos/src/memory/index.ts');
+const agentosRootPath = resolve(__dirname, '../agentos/src/index.ts');
 const hasAgentosAuth = existsSync(agentosAuthPath);
+const hasAgentosRoot = existsSync(agentosRootPath);
+
+const agentosAliases: Record<string, string> = {};
+if (hasAgentosAuth) agentosAliases['@framers/agentos/auth'] = agentosAuthPath;
+if (hasAgentosRoot) {
+  agentosAliases['@framers/agentos/rag'] = agentosRagPath;
+  agentosAliases['@framers/agentos/query-router'] = agentosQueryRouterPath;
+  agentosAliases['@framers/agentos/memory'] = agentosMemoryPath;
+  agentosAliases['@framers/agentos'] = agentosRootPath;
+}
 
 export default defineConfig({
   resolve: {
-    alias: hasAgentosAuth ? {
-      '@framers/agentos/auth': agentosAuthPath,
-    } : {},
+    alias: agentosAliases,
   },
   test: {
     include: ['src/**/*.test.ts'],

@@ -51,7 +51,27 @@ export {
 export {
   initCliQueryRouter,
   getCliQueryRouter,
+  getUnifiedRetrieverBuildResult,
   resetCliQueryRouterForTests,
   formatCliQueryRouterReadyLog,
   type CliQueryRouterOptions,
+  type UnifiedRetrieverBuildResult,
 } from './query-router-init.js';
+export {
+  buildUnifiedRetrieverFromConfig,
+  formatUnifiedRetrievalLog,
+  persistBM25Index,
+  type UnifiedRetrieverBuildContext,
+} from './unified-retriever-builder.js';
+export {
+  saveBM25State,
+  loadBM25State,
+  saveRaptorState,
+  loadRaptorState,
+  computeCorpusHash,
+  getBM25StateAge,
+  getRaptorStateAge,
+  type SerializedBM25State,
+  type SerializedRaptorState,
+  type RagStatePersistenceOptions,
+} from './rag-state-persistence.js';
