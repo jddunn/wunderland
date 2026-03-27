@@ -99,6 +99,12 @@ import { createMemorySystem, type MemorySystem } from '../../memory/index.js';
 import { injectMemoryContext } from '../../memory/index.js';
 import { ContextWindowManager } from '@framers/agentos/memory';
 import type { InfiniteContextConfig } from '@framers/agentos/memory';
+import {
+  initCliQueryRouter,
+  getCliQueryRouter,
+  type CliQueryRouterOptions,
+} from '../../runtime/query-router-init.js';
+import type { QueryRouter, QueryResult, ConversationMessage } from '@framers/agentos/query-router';
 
 
 // UI helpers extracted to chat-ui.ts
@@ -478,6 +484,7 @@ export default async function cmdChat(
   const autoApproveToolCalls =
     globals.autoApproveTools || dangerouslySkipPermissions || overdriveMode || policy.executionMode === 'autonomous';
   const enableSkills = flags['no-skills'] !== true;
+  const enableQueryRouter = flags['no-query-router'] !== true;
   const lazyTools = flags['lazy-tools'] === true;
   const verbose = flags['verbose'] === true || flags['v'] === true;
   const workspaceBaseDir = resolveAgentWorkspaceBaseDir();
@@ -1177,6 +1184,35 @@ export default async function cmdChat(
     }
   }
 
+  // ── QueryRouter (intelligent tiered retrieval, non-blocking init) ────────
+  //
+  // Kicks off QueryRouter initialisation in the background. The router
+  // classifies each user message by complexity tier and retrieves relevant
+  // documentation context before the LLM call. This enhances — but does not
+  // replace — the existing RAG tools and capability discovery layers.
+  //
+  // When --no-query-router is set, or init fails (missing key, empty corpus),
+  // the chat falls back gracefully to the existing behaviour.
+  let queryRouterPromise: Promise<QueryRouter | null> | null = null;
+  if (enableQueryRouter) {
+    const qrOpts: CliQueryRouterOptions = {
+      apiKey: llmApiKey || undefined,
+      baseUrl: llmBaseUrl || undefined,
+      embeddingApiKey: process.env['OPENAI_API_KEY'] || llmApiKey || undefined,
+      embeddingBaseUrl:
+        process.env['OPENAI_API_KEY'] ? undefined : (llmBaseUrl || undefined),
+      model: model || undefined,
+      extraCorpusPaths: typeof cfg?.queryRouter?.corpusPaths === 'object' && Array.isArray(cfg.queryRouter.corpusPaths)
+        ? (cfg.queryRouter.corpusPaths as string[])
+        : undefined,
+      maxTier: typeof cfg?.queryRouter?.maxTier === 'number' ? cfg.queryRouter.maxTier : undefined,
+      verbose,
+      logger: { log: console.log, warn: console.warn, error: console.error, debug: console.debug },
+    };
+    // Fire and forget — we await lazily when the first user message arrives.
+    queryRouterPromise = initCliQueryRouter(qrOpts);
+  }
+
   // ── Tool failure learner (saves lessons to RAG from tool errors) ─────────
   const toolFailureLearner = new ToolFailureLearner({
     autoIngestPipeline: autoIngestPipeline ?? undefined,
@@ -1701,6 +1737,84 @@ export default async function cmdChat(
       }
     }
 
+    // QueryRouter — intelligent tiered retrieval pre-processing
+    //
+    // Before the LLM generates a response, classify the user message and
+    // retrieve relevant documentation context via the QueryRouter pipeline.
+    // The retrieved context is injected as a system message so the LLM can
+    // ground its answer in the knowledge corpus.
+    try {
+      const qr = queryRouterPromise ? await queryRouterPromise : null;
+      if (qr) {
+        const routeStart = Date.now();
+
+        // Build lightweight conversation history for the classifier
+        const convHistory: ConversationMessage[] = [];
+        for (let i = Math.max(1, messages.length - 10); i < messages.length - 1; i++) {
+          const m = messages[i];
+          if (m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') {
+            convHistory.push({ role: m.role as 'user' | 'assistant', content: m.content as string });
+          }
+        }
+
+        const routerResult: QueryResult = await qr.route(input, convHistory);
+        const routeDuration = Date.now() - routeStart;
+
+        if (verbose) {
+          const c = routerResult.classification;
+          console.log(
+            `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[QueryRouter] tier=${c.tier} confidence=${c.confidence.toFixed(2)} strategy=${c.strategy} reasoning="${c.reasoning}" | ${routeDuration}ms`)}`
+          );
+        }
+
+        // Inject retrieved context when the router found relevant sources
+        if (
+          routerResult.classification.tier > 0 &&
+          routerResult.sources.length > 0
+        ) {
+          // Remove any previous QueryRouter context injection
+          for (let i = messages.length - 1; i >= 1; i--) {
+            if (
+              typeof messages[i]?.content === 'string' &&
+              String(messages[i]!.content).startsWith('[QueryRouter Context]')
+            ) {
+              messages.splice(i, 1);
+            }
+          }
+
+          const contextBlock = routerResult.sources
+            .map(
+              (s: { heading: string; path: string; relevanceScore: number; matchType: string }) =>
+                `## ${s.heading} (${s.path})\nRelevance: ${s.relevanceScore.toFixed(2)} | Match: ${s.matchType}`,
+            )
+            .join('\n\n');
+
+          const contextParts = ['[QueryRouter Context]'];
+          contextParts.push(
+            `The following documentation context was retrieved for this query (tier ${routerResult.classification.tier}, strategy: ${routerResult.classification.strategy}):`,
+          );
+          contextParts.push(contextBlock);
+
+          // If the router produced a grounded answer, include it as
+          // suggested context the LLM can draw from (not a direct reply).
+          if (routerResult.answer) {
+            contextParts.push(
+              '\nGrounded answer from documentation retrieval (use as reference, not verbatim):',
+            );
+            contextParts.push(routerResult.answer);
+          }
+
+          // Inject after the system prompt (position 1)
+          messages.splice(1, 0, {
+            role: 'system',
+            content: contextParts.join('\n'),
+          });
+        }
+      }
+    } catch {
+      // Non-fatal — QueryRouter failure does not block the chat turn
+    }
+
     // Capability discovery — inject tiered context for this turn
     try {
       const discoveryResult = await discoveryManager?.discoverForTurn(input);
@@ -1993,6 +2107,12 @@ export default async function cmdChat(
         )
       );
       helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.cyan)('/router')}    ${chalk.hex(C.text)('Show QueryRouter status & corpus stats')}`,
+          iw
+        )
+      );
+      helpLines.push(
         frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw)
       );
       helpLines.push('');
@@ -2111,6 +2231,37 @@ export default async function cmdChat(
         memoryAdapter.deleteConversation(conversationId).catch(() => {});
       }
       console.log(`  ${chalk.hex(C.dim)('Conversation history cleared.')}`);
+      return true;
+    }
+
+    if (input === '/router') {
+      const cw = getChatWidth();
+      const iw = cw - 2;
+      const rLines: string[] = [''];
+      rLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('QueryRouter Status')}`, iw));
+      if (!enableQueryRouter) {
+        rLines.push(frameLine(`   Enabled:       ${wColor('no')} (--no-query-router)`, iw));
+      } else {
+        const qr = getCliQueryRouter();
+        if (qr) {
+          const stats = qr.getCorpusStats();
+          rLines.push(frameLine(`   Enabled:       ${sColor('yes')}`, iw));
+          rLines.push(frameLine(`   Initialised:   ${stats.initialized ? sColor('yes') : wColor('no')}`, iw));
+          rLines.push(frameLine(`   Corpus paths:  ${stats.configuredPathCount}`, iw));
+          rLines.push(frameLine(`   Chunks:        ${stats.chunkCount}`, iw));
+          rLines.push(frameLine(`   Sources:       ${stats.sourceCount}`, iw));
+          rLines.push(frameLine(`   Topics:        ${stats.topicCount}`, iw));
+          rLines.push(frameLine(`   Retrieval:     ${stats.retrievalMode}`, iw));
+          rLines.push(frameLine(`   Embedding dim: ${stats.embeddingDimension}`, iw));
+          rLines.push(frameLine(`   Rerank:        ${stats.rerankRuntimeMode}`, iw));
+          rLines.push(frameLine(`   Deep research: ${stats.deepResearchEnabled ? sColor('yes') : wColor('no')} (${stats.deepResearchRuntimeMode})`, iw));
+        } else {
+          rLines.push(frameLine(`   Enabled:       ${wColor('pending')} (init in progress or failed)`, iw));
+          rLines.push(frameLine(`   ${muted('The router initialises in the background. Try again shortly.')}`, iw));
+        }
+      }
+      rLines.push('');
+      console.log(rLines.join('\n'));
       return true;
     }
 

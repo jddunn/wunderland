@@ -48,3 +48,10 @@ export {
   resolveAgentWorkspaceBaseDir,
   sanitizeAgentWorkspaceId,
 } from './workspace.js';
+export {
+  initCliQueryRouter,
+  getCliQueryRouter,
+  resetCliQueryRouterForTests,
+  formatCliQueryRouterReadyLog,
+  type CliQueryRouterOptions,
+} from './query-router-init.js';
