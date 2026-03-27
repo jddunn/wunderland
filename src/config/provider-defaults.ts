@@ -7,6 +7,7 @@ const SUPPORTED_TEXT_PROVIDERS = new Set<WunderlandProviderId>([
   'anthropic',
   'gemini',
   'claude-code-cli',
+  'gemini-cli',
 ]);
 
 const TEXT_MODEL_ENV_KEYS: Record<WunderlandProviderId, string> = {
@@ -16,6 +17,7 @@ const TEXT_MODEL_ENV_KEYS: Record<WunderlandProviderId, string> = {
   anthropic: 'ANTHROPIC_MODEL',
   gemini: 'GEMINI_MODEL',
   'claude-code-cli': 'CLAUDE_CODE_MODEL',
+  'gemini-cli': 'GEMINI_CLI_MODEL',
 };
 
 const TEXT_PROVIDER_DEFAULTS: Record<WunderlandProviderId, string> = {
@@ -25,6 +27,7 @@ const TEXT_PROVIDER_DEFAULTS: Record<WunderlandProviderId, string> = {
   anthropic: 'claude-sonnet-4-20250514',
   gemini: 'gemini-2.5-flash',
   'claude-code-cli': 'claude-sonnet-4-20250514',
+  'gemini-cli': 'gemini-2.5-flash',
 };
 
 const TEXT_PROVIDER_ENV_ORDER: Array<{
@@ -36,6 +39,7 @@ const TEXT_PROVIDER_ENV_ORDER: Array<{
   { providerId: 'anthropic', key: 'ANTHROPIC_API_KEY' },
   { providerId: 'gemini', key: 'GEMINI_API_KEY' },
   { providerId: 'claude-code-cli' as WunderlandProviderId, key: '__CLAUDE_CODE_CLI_DETECT__' },
+  { providerId: 'gemini-cli' as WunderlandProviderId, key: '__GEMINI_CLI_DETECT__' },
   { providerId: 'ollama', key: 'OLLAMA_BASE_URL' },
 ];
 
@@ -51,7 +55,7 @@ export function resolveWunderlandProviderId(
   if (!normalized) return fallback;
   if (isWunderlandProviderId(normalized)) return normalized;
   throw new Error(
-    `Unsupported provider "${String(raw)}". Supported: openai, openrouter, ollama, anthropic, gemini, claude-code-cli.`,
+    `Unsupported provider "${String(raw)}". Supported: openai, openrouter, ollama, anthropic, gemini, claude-code-cli, gemini-cli.`,
   );
 }
 
@@ -84,13 +88,21 @@ export function resolveWunderlandTextModel(opts: {
 
 export function detectWunderlandRuntimeProviderFromEnv(): WunderlandProviderId | undefined {
   for (const { providerId, key } of TEXT_PROVIDER_ENV_ORDER) {
-    /* claude-code-cli uses PATH detection, not an env var */
+    /* CLI-based providers use PATH detection, not env vars */
     if (providerId === 'claude-code-cli') {
       try {
         const { execSync } = require('child_process');
         execSync('which claude', { stdio: 'ignore' });
         return 'claude-code-cli';
       } catch { /* claude not on PATH — skip */ }
+      continue;
+    }
+    if (providerId === 'gemini-cli') {
+      try {
+        const { execSync } = require('child_process');
+        execSync('which gemini', { stdio: 'ignore' });
+        return 'gemini-cli';
+      } catch { /* gemini not on PATH — skip */ }
       continue;
     }
     if (process.env[key]?.trim()) return providerId;
@@ -151,6 +163,13 @@ export function resolveWunderlandRuntimeConfigFromEnv(): {
     };
   }
   if (providerId === 'claude-code-cli') {
+    return {
+      providerId,
+      apiKey: '',
+      model,
+    };
+  }
+  if (providerId === 'gemini-cli') {
     return {
       providerId,
       apiKey: '',

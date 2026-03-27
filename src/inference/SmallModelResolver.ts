@@ -37,6 +37,7 @@ const SMALL_MODEL_MAP: Record<string, string> = {
   mistral: 'mistral-small-latest',
   cohere: 'command-r',
   'claude-code-cli': 'claude-haiku-4-5-20251001',
+  'gemini-cli': 'gemini-2.0-flash-lite',
 };
 
 /** Default model IDs per provider (the primary/powerful model). */
@@ -66,6 +67,7 @@ const DEFAULT_MODEL_MAP: Record<string, string> = {
   mistral: 'mistral-large-latest',
   cohere: 'command-r-plus',
   'claude-code-cli': 'claude-sonnet-4-20250514',
+  'gemini-cli': 'gemini-2.5-flash',
 };
 
 // ============================================================================
