@@ -400,7 +400,7 @@ export type WunderlandAgentConfig = {
   personaRegistry?: WunderlandAgentPersonaRegistryConfig;
 };
 
-export type WunderlandProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic' | 'gemini';
+export type WunderlandProviderId = 'openai' | 'openrouter' | 'ollama' | 'anthropic' | 'gemini' | 'claude-code-cli';
 
 export type WunderlandLLMConfig = {
   providerId: WunderlandProviderId;

@@ -36,6 +36,7 @@ const SMALL_MODEL_MAP: Record<string, string> = {
   perplexity: 'llama-3.1-sonar-small-128k-online',
   mistral: 'mistral-small-latest',
   cohere: 'command-r',
+  'claude-code-cli': 'claude-haiku-4-5-20251001',
 };
 
 /** Default model IDs per provider (the primary/powerful model). */
@@ -64,6 +65,7 @@ const DEFAULT_MODEL_MAP: Record<string, string> = {
   perplexity: 'llama-3.1-sonar-large-128k-online',
   mistral: 'mistral-large-latest',
   cohere: 'command-r-plus',
+  'claude-code-cli': 'claude-sonnet-4-20250514',
 };
 
 // ============================================================================
