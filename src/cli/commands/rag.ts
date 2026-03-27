@@ -1,16 +1,34 @@
 /**
  * @fileoverview `wunderland rag` -- RAG memory management (ingest, query, collections, media, graph).
+ *
+ * Provides subcommands for document ingestion (text, image, audio, PDF),
+ * retrieval queries (vector, hybrid, HyDE, RAPTOR, graph), collection
+ * management, GraphRAG exploration, audit trail, and the unified retrieval
+ * status/plan inspection commands.
+ *
  * @module wunderland/cli/commands/rag
  */
 
 import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import { accent, dim, success as sColor, error as eColor } from '../ui/theme.js';
+import { accent, dim, bright, success as sColor, error as eColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { getUiRuntime } from '../ui/runtime.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { normalizeRagApiBaseUrl } from '../../rag/rag-client.js';
+import {
+  heuristicClassify,
+} from '@framers/agentos/query-router';
+import type {
+  RetrievalStrategy,
+} from '@framers/agentos/query-router';
+import {
+  buildDefaultPlan,
+} from '@framers/agentos/rag';
+import type {
+  RetrievalPlan,
+} from '@framers/agentos/rag';
 
 function getRagBaseUrl(): string {
   const base = process.env.WUNDERLAND_BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -123,34 +141,6 @@ function renderMediaQueryResult(title: string, result: any, format: string): voi
 
 // -- Sub-commands -----------------------------------------------------------
 
-async function cmdIngest(args: string[], flags: Record<string, string | boolean>): Promise<void> {
-  const target = args[0];
-  if (!target) {
-    fmt.errorBlock('Missing argument', 'Usage: wunderland rag ingest <file-or-text>');
-    process.exitCode = 1;
-    return;
-  }
-
-  let content: string;
-  try {
-    const s = await stat(target);
-    if (s.isFile()) {
-      content = await readFile(target, 'utf8');
-      fmt.note(`Reading file: ${path.basename(target)} (${(s.size / 1024).toFixed(1)} KB)`);
-    } else {
-      content = target;
-    }
-  } catch {
-    content = target;
-  }
-
-  const collectionId = typeof flags['collection'] === 'string' ? flags['collection'] : undefined;
-  const category = typeof flags['category'] === 'string' ? flags['category'] : undefined;
-
-  const result = await ragFetch('/ingest', { method: 'POST', body: { content, collectionId, category } });
-  fmt.ok(`Ingested ${arrow()} document ${dim(result.documentId)} (${result.chunksCreated} chunks)`);
-}
-
 async function cmdIngestImage(args: string[]): Promise<void> {
   const filePath = args[0];
   if (!filePath) {
@@ -206,118 +196,6 @@ async function cmdIngestDocument(args: string[]): Promise<void> {
 
   const result = (await ragMultipartFetch('/multimodal/documents/ingest', formData)) as any;
   fmt.ok(`Document ingested ${arrow()} asset ${dim(result.assetId)} (${result.chunksCreated} chunks)`);
-}
-
-async function cmdQuery(args: string[], flags: Record<string, string | boolean>): Promise<void> {
-  const query = args.join(' ');
-  if (!query) {
-    fmt.errorBlock('Missing argument', 'Usage: wunderland rag query <text>');
-    process.exitCode = 1;
-    return;
-  }
-  const topK = typeof flags['top-k'] === 'string' ? parseInt(flags['top-k'], 10) : 5;
-  const preset = typeof flags['preset'] === 'string' ? flags['preset'] : undefined;
-  const collectionId = typeof flags['collection'] === 'string' ? flags['collection'] : undefined;
-  const collectionIds = collectionId ? [collectionId] : undefined;
-  const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
-
-  const verbose = flags['verbose'] === true || flags['v'] === true;
-  const includeGraphRag = flags['graph'] === true;
-  const debug = flags['debug'] === true;
-
-  const result = await ragFetch('/query', {
-    method: 'POST',
-    body: { query, topK, preset, collectionIds, includeAudit: verbose, includeGraphRag, debug },
-  });
-
-  if (format === 'json') {
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  fmt.section(`RAG Query: "${query}"`);
-  if (!result.chunks?.length) {
-    fmt.note('No results found.');
-    return;
-  }
-  for (const chunk of result.chunks) {
-    const score = typeof chunk.score === 'number' ? ` (${(chunk.score * 100).toFixed(1)}%)` : '';
-    fmt.kvPair(`[${chunk.chunkId}]${score}`, chunk.content.slice(0, 200) + (chunk.content.length > 200 ? '...' : ''));
-  }
-  fmt.blank();
-  fmt.note(`${result.totalResults} result(s) in ${result.processingTimeMs}ms`);
-
-  // Show GraphRAG context when --graph
-  if (result.graphContext) {
-    const gc = result.graphContext;
-    fmt.blank();
-    fmt.section('GraphRAG Context');
-    const cleanName = (s: string) => s.replace(/[\n\r]+/g, ' ').trim().slice(0, 40);
-    if (gc.entities?.length) {
-      fmt.kvPair('Entities', String(gc.entities.length));
-      for (const e of gc.entities.slice(0, 8)) {
-        const score = typeof e.relevanceScore === 'number' ? ` ${(e.relevanceScore * 100).toFixed(0)}%` : '';
-        const desc = e.description?.replace(/[\n\r]+/g, ' ').trim().slice(0, 80) ?? '';
-        fmt.kvPair(`  ${cleanName(e.name)}`, `(${e.type})${score} ${desc}`);
-      }
-      if (gc.entities.length > 8) fmt.note(`  ... and ${gc.entities.length - 8} more entities`);
-    }
-    if (gc.relationships?.length) {
-      fmt.kvPair('Relationships', String(gc.relationships.length));
-      for (const r of gc.relationships.slice(0, 6)) {
-        const desc = r.description?.replace(/[\n\r]+/g, ' ').trim().slice(0, 80) ?? '';
-        fmt.kvPair(`  ${cleanName(r.source)} ${arrow()} ${cleanName(r.target)}`, `[${r.type}] ${desc}`);
-      }
-      if (gc.relationships.length > 6) fmt.note(`  ... and ${gc.relationships.length - 6} more relationships`);
-    }
-    if (gc.communityContext) {
-      const ctx = typeof gc.communityContext === 'string'
-        ? gc.communityContext
-        : Array.isArray(gc.communityContext)
-          ? (gc.communityContext as any[]).map((c: any) => c.title ?? c.summary ?? JSON.stringify(c).slice(0, 80)).join('; ')
-          : JSON.stringify(gc.communityContext);
-      fmt.kvPair('Community Context', ctx.slice(0, 300) + (ctx.length > 300 ? '...' : ''));
-    }
-  }
-
-  // Show debug pipeline trace when --debug
-  if (result.debugTrace?.length) {
-    fmt.blank();
-    fmt.section('Debug Pipeline Trace');
-    for (const step of result.debugTrace) {
-      const dataEntries = Object.entries(step.data)
-        .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`)
-        .join(', ');
-      fmt.kvPair(`  [+${step.ms}ms] ${step.step}`, dataEntries);
-    }
-  }
-
-  // Show audit trail when --verbose
-  if (verbose && result.auditTrail) {
-    const trail = result.auditTrail;
-    fmt.blank();
-    fmt.section('Audit Trail');
-    fmt.kvPair('Trail ID', trail.trailId);
-    fmt.kvPair('Summary', [
-      `${trail.summary.totalOperations} ops`,
-      `${trail.summary.totalLLMCalls} LLM calls`,
-      `${trail.summary.totalTokens} tokens`,
-      `$${trail.summary.totalCostUSD.toFixed(4)}`,
-      `${trail.summary.totalDurationMs}ms`,
-    ].join(' | '));
-    fmt.kvPair('Methods', trail.summary.operationTypes.join(', '));
-    fmt.kvPair('Sources', `${trail.summary.sourceSummary.uniqueDocuments} docs, ${trail.summary.sourceSummary.uniqueDataSources} data sources`);
-
-    for (const op of trail.operations) {
-      const typeLabel = op.operationType.padEnd(14);
-      const tokLabel = `${op.tokenUsage.totalTokens} tok`;
-      const costLabel = `$${op.costUSD.toFixed(4)}`;
-      const durLabel = `${op.durationMs}ms`;
-      const srcLabel = `${op.sources.length} src`;
-      fmt.kvPair(`  ${typeLabel}`, `${durLabel} | ${tokLabel} | ${costLabel} | ${srcLabel}`);
-    }
-  }
 }
 
 async function cmdQueryMedia(args: string[], flags: Record<string, string | boolean>): Promise<void> {
@@ -645,6 +523,518 @@ async function cmdAudit(_args: string[], flags: Record<string, string | boolean>
   }
 }
 
+// -- Unified retrieval subcommands ------------------------------------------
+
+/**
+ * Valid strategy names for the `--strategy` flag.
+ * `'auto'` means the heuristic classifier decides.
+ */
+const VALID_STRATEGIES = new Set<string>(['none', 'simple', 'moderate', 'complex', 'auto']);
+
+/**
+ * Resolves a `--strategy` flag value into either a forced {@link RetrievalStrategy}
+ * or `undefined` for auto-detection via the heuristic classifier.
+ *
+ * @param raw - The raw `--strategy` flag value.
+ * @returns The resolved strategy, or `undefined` for auto.
+ */
+function resolveStrategy(raw: string | boolean | undefined): RetrievalStrategy | undefined {
+  if (raw === undefined || raw === true || raw === 'auto') return undefined;
+  const normalized = String(raw).trim().toLowerCase();
+  if (!VALID_STRATEGIES.has(normalized) || normalized === 'auto') return undefined;
+  return normalized as RetrievalStrategy;
+}
+
+/**
+ * Renders a human-friendly check/cross glyph for a boolean value.
+ *
+ * @param enabled - Whether the feature is enabled.
+ * @returns A coloured tick or cross.
+ */
+function boolGlyph(enabled: boolean): string {
+  return enabled ? sColor('Y') : dim('N');
+}
+
+/**
+ * `wunderland rag status` — display unified retrieval system status.
+ *
+ * Shows the current state of all retrieval sources (vector, BM25, RAPTOR,
+ * GraphRAG, HyDE, reranker, memory) by querying the RAG health endpoint
+ * and supplementing with local configuration data.
+ */
+async function cmdStatus(flags: Record<string, string | boolean>): Promise<void> {
+  const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+
+  // Fetch health info from the RAG backend
+  let health: any = null;
+  try {
+    health = await ragFetch('/health');
+  } catch {
+    // Backend may be offline — show what we can from local state
+  }
+
+  // Fetch stats for document counts
+  let stats: any = null;
+  try {
+    stats = await ragFetch('/stats');
+  } catch {
+    // Non-fatal
+  }
+
+  // Fetch GraphRAG stats if available
+  let graphStats: any = null;
+  try {
+    graphStats = await ragFetch('/graphrag/stats');
+  } catch {
+    // Non-fatal — GraphRAG may not be enabled
+  }
+
+  if (format === 'json') {
+    console.log(JSON.stringify({ health, stats, graphStats }, null, 2));
+    return;
+  }
+
+  fmt.section('Unified Retrieval System Status');
+  fmt.blank();
+
+  // Vector store
+  const vectorReady = health?.vectorStoreConnected ?? false;
+  const totalDocs = stats?.totalDocuments ?? health?.stats?.totalDocuments ?? 0;
+  const totalChunks = stats?.totalChunks ?? health?.stats?.totalChunks ?? 0;
+  const vectorProvider = health?.vectorProvider ?? health?.adapterKind ?? 'unknown';
+  fmt.kvPair(
+    'Vector Store',
+    vectorReady
+      ? `${sColor(vectorProvider)} (${totalDocs.toLocaleString()} documents, ${totalChunks.toLocaleString()} chunks)`
+      : eColor('disconnected'),
+  );
+
+  // BM25 index
+  const bm25Enabled = health?.bm25Enabled ?? false;
+  fmt.kvPair(
+    'BM25 Index',
+    bm25Enabled
+      ? `${sColor('enabled')} (${totalChunks.toLocaleString()} documents)`
+      : dim('disabled'),
+  );
+
+  // RAPTOR tree
+  const raptorEnabled = health?.raptorEnabled ?? false;
+  if (raptorEnabled && health?.raptorStats) {
+    const rs = health.raptorStats;
+    fmt.kvPair(
+      'RAPTOR Tree',
+      `${rs.layerCount ?? 0} layers (leaf: ${rs.leafCount ?? 0}, L1: ${rs.l1Count ?? 0}, L2: ${rs.l2Count ?? 0})`,
+    );
+  } else {
+    fmt.kvPair('RAPTOR Tree', raptorEnabled ? sColor('enabled') : dim('disabled'));
+  }
+
+  // GraphRAG
+  const graphEnabled = health?.graphRagEnabled ?? false;
+  if (graphEnabled && graphStats) {
+    const gs = graphStats.stats ?? graphStats;
+    fmt.kvPair(
+      'GraphRAG',
+      `${gs.totalEntities ?? 0} entities, ${gs.totalRelationships ?? 0} relationships`,
+    );
+  } else {
+    fmt.kvPair('GraphRAG', graphEnabled ? sColor('enabled') : dim('disabled'));
+  }
+
+  // HyDE
+  const hydeEnabled = health?.hydeEnabled ?? true;
+  fmt.kvPair(
+    'HyDE',
+    hydeEnabled ? sColor('enabled') : dim('disabled'),
+  );
+
+  // Reranker
+  const rerankMode = health?.rerankMode ?? 'lexical';
+  fmt.kvPair('Reranker', rerankMode);
+
+  // Embeddings
+  const embeddingsAvailable = health?.embeddingServiceAvailable ?? false;
+  fmt.kvPair(
+    'Embeddings',
+    embeddingsAvailable ? sColor('available') : eColor('unavailable'),
+  );
+
+  // Memory connection
+  const memoryConnected = health?.memoryConnected ?? false;
+  if (memoryConnected && health?.memoryStats) {
+    const ms = health.memoryStats;
+    fmt.kvPair(
+      'Memory',
+      `connected (episodic: ${ms.episodic ?? 0}, semantic: ${ms.semantic ?? 0})`,
+    );
+  } else {
+    fmt.kvPair('Memory', memoryConnected ? sColor('connected') : dim('not connected'));
+  }
+
+  fmt.blank();
+}
+
+/**
+ * `wunderland rag plan "<query>"` — preview what the classifier would do.
+ *
+ * Runs the heuristic classifier against the supplied query and displays the
+ * resulting {@link RetrievalPlan} without executing any retrieval. Useful for
+ * debugging strategy selection and understanding which sources would be queried.
+ *
+ * @param args - Positional arguments (the query text).
+ * @param flags - CLI flags (--strategy, --json).
+ */
+async function cmdPlan(args: string[], flags: Record<string, string | boolean>): Promise<void> {
+  const query = args.join(' ');
+  if (!query) {
+    fmt.errorBlock('Missing argument', 'Usage: wunderland rag plan "<query text>"');
+    process.exitCode = 1;
+    return;
+  }
+
+  const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+  const forcedStrategy = resolveStrategy(flags['strategy'] as string | undefined);
+
+  // Determine strategy — use forced value or run heuristic classifier
+  const strategy: RetrievalStrategy = forcedStrategy ?? heuristicClassify(query);
+  const plan: RetrievalPlan = buildDefaultPlan(strategy);
+
+  if (format === 'json') {
+    console.log(JSON.stringify({ query, plan }, null, 2));
+    return;
+  }
+
+  fmt.section(`Retrieval Plan: "${query.length > 60 ? query.slice(0, 57) + '...' : query}"`);
+  fmt.blank();
+
+  fmt.kvPair('Strategy', bright(plan.strategy));
+  fmt.kvPair('Confidence', `${(plan.confidence * 100).toFixed(0)}%`);
+  fmt.kvPair('Reasoning', plan.reasoning);
+  fmt.blank();
+
+  // Sources grid
+  fmt.kvPair('Sources', [
+    `vector ${boolGlyph(plan.sources.vector)}`,
+    `bm25 ${boolGlyph(plan.sources.bm25)}`,
+    `graph ${boolGlyph(plan.sources.graph)}`,
+    `raptor ${boolGlyph(plan.sources.raptor)}`,
+    `memory ${boolGlyph(plan.sources.memory)}`,
+    `multimodal ${boolGlyph(plan.sources.multimodal)}`,
+  ].join('  '));
+
+  // HyDE
+  if (plan.hyde.enabled) {
+    fmt.kvPair('HyDE', `${plan.hyde.hypothesisCount} hypothesis(es)`);
+  } else {
+    fmt.kvPair('HyDE', dim('disabled'));
+  }
+
+  // Deep Research
+  fmt.kvPair('Deep Research', plan.deepResearch ? sColor('enabled') : dim('disabled'));
+
+  // Memory types
+  if (plan.memoryTypes.length > 0) {
+    fmt.kvPair('Memory Types', plan.memoryTypes.join(', '));
+  }
+
+  // RAPTOR layers
+  if (plan.raptorLayers.length > 0) {
+    fmt.kvPair('RAPTOR Layers', plan.raptorLayers.join(', '));
+  }
+
+  // Graph config
+  if (plan.sources.graph) {
+    fmt.kvPair('Graph Traversal', `depth=${plan.graphConfig.maxDepth} minWeight=${plan.graphConfig.minEdgeWeight}`);
+  }
+
+  // Temporal
+  if (plan.temporal.preferRecent) {
+    fmt.kvPair('Temporal', `recencyBoost=${plan.temporal.recencyBoost}x${plan.temporal.maxAgeMs ? ` maxAge=${plan.temporal.maxAgeMs}ms` : ''}`);
+  }
+
+  fmt.blank();
+}
+
+/**
+ * Enhanced `wunderland rag query` — supports unified retrieval strategy
+ * selection, hybrid search, and plan-based retrieval.
+ *
+ * This wraps the existing query command but adds `--strategy`, `--hyde`,
+ * `--hyde-count`, `--bm25`, `--raptor`, `--memory`, `--memory-types`,
+ * and `--deep-research` flags. When these are supplied, the query builds
+ * a {@link RetrievalPlan} and sends it alongside the standard query.
+ *
+ * @param args - Positional arguments (the query text).
+ * @param flags - CLI flags for retrieval configuration.
+ */
+async function cmdQueryUnified(args: string[], flags: Record<string, string | boolean>): Promise<void> {
+  const query = args.join(' ');
+  if (!query) {
+    fmt.errorBlock('Missing argument', 'Usage: wunderland rag query <text>');
+    process.exitCode = 1;
+    return;
+  }
+
+  const topK = typeof flags['top-k'] === 'string' ? parseInt(flags['top-k'], 10) : 5;
+  const preset = typeof flags['preset'] === 'string' ? flags['preset'] : undefined;
+  const collectionId = typeof flags['collection'] === 'string' ? flags['collection'] : undefined;
+  const collectionIds = collectionId ? [collectionId] : undefined;
+  const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+
+  const verbose = flags['verbose'] === true || flags['v'] === true;
+  const includeGraphRag = flags['graph'] === true;
+  const debug = flags['debug'] === true;
+
+  // ── Unified retrieval flags ──
+  const hasUnifiedFlags = (
+    flags['strategy'] !== undefined ||
+    flags['hyde'] === true ||
+    flags['hyde-count'] !== undefined ||
+    flags['bm25'] === true ||
+    flags['raptor'] === true ||
+    flags['memory'] === true ||
+    flags['memory-types'] !== undefined ||
+    flags['deep-research'] === true
+  );
+
+  // Build a RetrievalPlan when unified flags are present
+  let plan: RetrievalPlan | undefined;
+  if (hasUnifiedFlags) {
+    const forcedStrategy = resolveStrategy(flags['strategy'] as string | undefined);
+    const strategy: RetrievalStrategy = forcedStrategy ?? heuristicClassify(query);
+    const basePlan = buildDefaultPlan(strategy);
+
+    // Apply flag overrides
+    if (flags['hyde'] === true) {
+      basePlan.hyde.enabled = true;
+    }
+    if (typeof flags['hyde-count'] === 'string') {
+      basePlan.hyde.enabled = true;
+      basePlan.hyde.hypothesisCount = parseInt(flags['hyde-count'], 10) || 3;
+    }
+    if (flags['bm25'] === true) {
+      basePlan.sources.bm25 = true;
+    }
+    if (flags['graph'] === true || includeGraphRag) {
+      basePlan.sources.graph = true;
+    }
+    if (flags['raptor'] === true) {
+      basePlan.sources.raptor = true;
+    }
+    if (flags['memory'] === true) {
+      basePlan.sources.memory = true;
+    }
+    if (typeof flags['memory-types'] === 'string') {
+      basePlan.sources.memory = true;
+      basePlan.memoryTypes = flags['memory-types']
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => ['episodic', 'semantic', 'procedural', 'prospective'].includes(t)) as any[];
+    }
+    if (flags['deep-research'] === true) {
+      basePlan.deepResearch = true;
+    }
+
+    plan = basePlan;
+  }
+
+  // Build the request body
+  const body: Record<string, unknown> = {
+    query,
+    topK,
+    preset,
+    collectionIds,
+    includeAudit: verbose,
+    includeGraphRag: includeGraphRag || plan?.sources.graph,
+    debug,
+  };
+
+  // Attach the plan when unified flags were used
+  if (plan) {
+    body.retrievalPlan = plan;
+  }
+
+  const result = await ragFetch('/query', { method: 'POST', body });
+
+  if (format === 'json') {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  // Show strategy info when unified flags were used
+  if (plan && verbose) {
+    fmt.section('Retrieval Plan');
+    fmt.kvPair('Strategy', plan.strategy);
+    fmt.kvPair('Sources', [
+      plan.sources.vector ? 'vector' : null,
+      plan.sources.bm25 ? 'bm25' : null,
+      plan.sources.graph ? 'graph' : null,
+      plan.sources.raptor ? 'raptor' : null,
+      plan.sources.memory ? 'memory' : null,
+    ].filter(Boolean).join(' + '));
+    if (plan.hyde.enabled) {
+      fmt.kvPair('HyDE', `${plan.hyde.hypothesisCount} hypothesis(es)`);
+    }
+    if (plan.deepResearch) {
+      fmt.kvPair('Deep Research', sColor('enabled'));
+    }
+    fmt.blank();
+  }
+
+  fmt.section(`RAG Query: "${query}"`);
+  if (!result.chunks?.length) {
+    fmt.note('No results found.');
+    return;
+  }
+  for (const chunk of result.chunks) {
+    const score = typeof chunk.score === 'number' ? ` (${(chunk.score * 100).toFixed(1)}%)` : '';
+    fmt.kvPair(`[${chunk.chunkId}]${score}`, chunk.content.slice(0, 200) + (chunk.content.length > 200 ? '...' : ''));
+  }
+  fmt.blank();
+  fmt.note(`${result.totalResults} result(s) in ${result.processingTimeMs}ms`);
+
+  // Show GraphRAG context when --graph
+  if (result.graphContext) {
+    const gc = result.graphContext;
+    fmt.blank();
+    fmt.section('GraphRAG Context');
+    const cleanName = (s: string) => s.replace(/[\n\r]+/g, ' ').trim().slice(0, 40);
+    if (gc.entities?.length) {
+      fmt.kvPair('Entities', String(gc.entities.length));
+      for (const e of gc.entities.slice(0, 8)) {
+        const score = typeof e.relevanceScore === 'number' ? ` ${(e.relevanceScore * 100).toFixed(0)}%` : '';
+        const desc = e.description?.replace(/[\n\r]+/g, ' ').trim().slice(0, 80) ?? '';
+        fmt.kvPair(`  ${cleanName(e.name)}`, `(${e.type})${score} ${desc}`);
+      }
+      if (gc.entities.length > 8) fmt.note(`  ... and ${gc.entities.length - 8} more entities`);
+    }
+    if (gc.relationships?.length) {
+      fmt.kvPair('Relationships', String(gc.relationships.length));
+      for (const r of gc.relationships.slice(0, 6)) {
+        const desc = r.description?.replace(/[\n\r]+/g, ' ').trim().slice(0, 80) ?? '';
+        fmt.kvPair(`  ${cleanName(r.source)} ${arrow()} ${cleanName(r.target)}`, `[${r.type}] ${desc}`);
+      }
+      if (gc.relationships.length > 6) fmt.note(`  ... and ${gc.relationships.length - 6} more relationships`);
+    }
+    if (gc.communityContext) {
+      const ctx = typeof gc.communityContext === 'string'
+        ? gc.communityContext
+        : Array.isArray(gc.communityContext)
+          ? (gc.communityContext as any[]).map((c: any) => c.title ?? c.summary ?? JSON.stringify(c).slice(0, 80)).join('; ')
+          : JSON.stringify(gc.communityContext);
+      fmt.kvPair('Community Context', ctx.slice(0, 300) + (ctx.length > 300 ? '...' : ''));
+    }
+  }
+
+  // Show debug pipeline trace when --debug
+  if (result.debugTrace?.length) {
+    fmt.blank();
+    fmt.section('Debug Pipeline Trace');
+    for (const step of result.debugTrace) {
+      const dataEntries = Object.entries(step.data)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`)
+        .join(', ');
+      fmt.kvPair(`  [+${step.ms}ms] ${step.step}`, dataEntries);
+    }
+  }
+
+  // Show audit trail when --verbose
+  if (verbose && result.auditTrail) {
+    const trail = result.auditTrail;
+    fmt.blank();
+    fmt.section('Audit Trail');
+    fmt.kvPair('Trail ID', trail.trailId);
+    fmt.kvPair('Summary', [
+      `${trail.summary.totalOperations} ops`,
+      `${trail.summary.totalLLMCalls} LLM calls`,
+      `${trail.summary.totalTokens} tokens`,
+      `$${trail.summary.totalCostUSD.toFixed(4)}`,
+      `${trail.summary.totalDurationMs}ms`,
+    ].join(' | '));
+    fmt.kvPair('Methods', trail.summary.operationTypes.join(', '));
+    fmt.kvPair('Sources', `${trail.summary.sourceSummary.uniqueDocuments} docs, ${trail.summary.sourceSummary.uniqueDataSources} data sources`);
+
+    for (const op of trail.operations) {
+      const typeLabel = op.operationType.padEnd(14);
+      const tokLabel = `${op.tokenUsage.totalTokens} tok`;
+      const costLabel = `$${op.costUSD.toFixed(4)}`;
+      const durLabel = `${op.durationMs}ms`;
+      const srcLabel = `${op.sources.length} src`;
+      fmt.kvPair(`  ${typeLabel}`, `${durLabel} | ${tokLabel} | ${costLabel} | ${srcLabel}`);
+    }
+  }
+}
+
+/**
+ * Enhanced `wunderland rag ingest` — supports semantic chunking, RAPTOR tree
+ * building, BM25 index building, and GraphRAG entity extraction.
+ *
+ * @param args - Positional arguments (file path or inline text).
+ * @param flags - CLI flags for ingestion configuration.
+ */
+async function cmdIngestUnified(args: string[], flags: Record<string, string | boolean>): Promise<void> {
+  const target = args[0];
+  if (!target) {
+    fmt.errorBlock('Missing argument', 'Usage: wunderland rag ingest <file-or-text>');
+    process.exitCode = 1;
+    return;
+  }
+
+  let content: string;
+  try {
+    const s = await stat(target);
+    if (s.isFile()) {
+      content = await readFile(target, 'utf8');
+      fmt.note(`Reading file: ${path.basename(target)} (${(s.size / 1024).toFixed(1)} KB)`);
+    } else {
+      content = target;
+    }
+  } catch {
+    content = target;
+  }
+
+  const collectionId = typeof flags['collection'] === 'string' ? flags['collection'] : undefined;
+  const category = typeof flags['category'] === 'string' ? flags['category'] : undefined;
+
+  // ── Unified ingestion flags ──
+  const chunkingMethod = typeof flags['chunking'] === 'string' ? flags['chunking'] : undefined;
+  const chunkSize = typeof flags['chunk-size'] === 'string' ? parseInt(flags['chunk-size'], 10) : undefined;
+  const chunkOverlap = typeof flags['chunk-overlap'] === 'string' ? parseInt(flags['chunk-overlap'], 10) : undefined;
+  const buildRaptor = flags['build-raptor'] === true;
+  const buildBm25 = flags['build-bm25'] === true;
+  const extractEntities = flags['extract-entities'] === true;
+
+  // Build request body with optional unified ingestion parameters
+  const body: Record<string, unknown> = { content, collectionId, category };
+
+  if (chunkingMethod) {
+    body.chunking = {
+      method: chunkingMethod,
+      targetSize: chunkSize,
+      overlap: chunkOverlap,
+    };
+  }
+  if (buildRaptor) body.buildRaptor = true;
+  if (buildBm25) body.buildBm25 = true;
+  if (extractEntities) body.extractEntities = true;
+
+  const result = await ragFetch('/ingest', { method: 'POST', body });
+  fmt.ok(`Ingested ${arrow()} document ${dim(result.documentId)} (${result.chunksCreated} chunks)`);
+
+  // Report post-processing results when available
+  if (result.raptorUpdated) {
+    fmt.ok(`RAPTOR tree updated (${result.raptorLayers ?? '?'} layers)`);
+  }
+  if (result.bm25Updated) {
+    fmt.ok('BM25 index updated');
+  }
+  if (result.entitiesExtracted) {
+    fmt.ok(`Entities extracted: ${result.entityCount ?? 0} entities, ${result.relationshipCount ?? 0} relationships`);
+  }
+}
+
 // -- Main dispatcher --------------------------------------------------------
 
 export default async function cmdRag(
@@ -660,14 +1050,16 @@ export default async function cmdRag(
     fmt.section('wunderland rag');
     console.log(`
   ${accent('Subcommands:')}
-    ${dim('ingest <file|text>')}       Ingest a document
+    ${dim('ingest <file|text>')}       Ingest a document (semantic chunking, RAPTOR, BM25)
     ${dim('ingest-image <file>')}      Ingest an image (LLM captioning)
     ${dim('ingest-audio <file>')}      Ingest audio (Whisper transcription)
     ${dim('ingest-document <file>')}   Ingest a document file (PDF/DOCX/TXT/MD/CSV/JSON/XML)
-    ${dim('query <text>')}             Search RAG memory
+    ${dim('query <text>')}             Search with unified retrieval (strategy selection, hybrid, HyDE)
     ${dim('query-media <text>')}       Search media assets
     ${dim('query-image <file>')}       Search assets using a query image
     ${dim('query-audio <file>')}       Search assets using a query audio clip
+    ${dim('status')}                   Show unified retrieval system status
+    ${dim('plan "<query>"')}           Preview retrieval plan without executing
     ${dim('collections [list|create|delete]')}  Manage collections
     ${dim('documents [list|delete]')}  Manage documents
     ${dim('graph [local-search|global-search|stats]')}  GraphRAG
@@ -675,12 +1067,31 @@ export default async function cmdRag(
     ${dim('health')}                   Service health
     ${dim('audit')}                    View audit trail
 
-  ${accent('Flags:')}
+  ${accent('Query Flags (unified retrieval):')}
+    ${dim('--strategy <s>')}     Retrieval strategy: none|simple|moderate|complex|auto (default: auto)
+    ${dim('--hyde')}              Enable HyDE hypothesis generation
+    ${dim('--hyde-count <n>')}   Number of hypotheses (default: 3)
+    ${dim('--bm25')}              Enable BM25 keyword search alongside vector
+    ${dim('--graph')}             Enable GraphRAG entity traversal
+    ${dim('--raptor')}            Enable RAPTOR hierarchical tree search
+    ${dim('--memory')}            Search cognitive memory alongside documents
+    ${dim('--memory-types <t>')} Memory types: episodic,semantic,procedural (default: all)
+    ${dim('--deep-research')}    Enable deep research decomposition
+    ${dim('--json')}              Output raw JSON result
+
+  ${accent('Ingest Flags (unified chunking):')}
+    ${dim('--chunking <method>')}   Chunking: fixed|semantic (default: semantic)
+    ${dim('--chunk-size <n>')}      Target chunk size in chars (default: 1000)
+    ${dim('--chunk-overlap <n>')}   Overlap chars (default: 100)
+    ${dim('--build-raptor')}        Build/update RAPTOR summary tree after ingestion
+    ${dim('--build-bm25')}          Build/update BM25 keyword index after ingestion
+    ${dim('--extract-entities')}    Run GraphRAG entity extraction
+
+  ${accent('General Flags:')}
     ${dim('--collection <id>')}  Target collection
     ${dim('--format json|table')}  Output format
     ${dim('--top-k <n>')}        Max results (default: 5)
     ${dim('--preset <p>')}       Retrieval preset (fast|balanced|accurate)
-    ${dim('--graph')}             Include GraphRAG context in query results
     ${dim('--debug')}             Show pipeline debug trace (query)
     ${dim('--modality <m>')}     Media filter (image|audio|document)
     ${dim('--text <text>')}       Precomputed caption/transcript for multimodal query
@@ -698,14 +1109,16 @@ export default async function cmdRag(
   }
 
   try {
-    if (sub === 'ingest') await cmdIngest(args.slice(1), flags);
+    if (sub === 'ingest') await cmdIngestUnified(args.slice(1), flags);
     else if (sub === 'ingest-image') await cmdIngestImage(args.slice(1));
     else if (sub === 'ingest-audio') await cmdIngestAudio(args.slice(1));
     else if (sub === 'ingest-document') await cmdIngestDocument(args.slice(1));
-    else if (sub === 'query') await cmdQuery(args.slice(1), flags);
+    else if (sub === 'query') await cmdQueryUnified(args.slice(1), flags);
     else if (sub === 'query-media') await cmdQueryMedia(args.slice(1), flags);
     else if (sub === 'query-image') await cmdQueryImage(args.slice(1), flags);
     else if (sub === 'query-audio') await cmdQueryAudio(args.slice(1), flags);
+    else if (sub === 'status') await cmdStatus(flags);
+    else if (sub === 'plan') await cmdPlan(args.slice(1), flags);
     else if (sub === 'collections') await cmdCollections(args.slice(1), flags);
     else if (sub === 'documents') await cmdDocuments(args.slice(1), flags);
     else if (sub === 'graph') await cmdGraph(args.slice(1), flags);

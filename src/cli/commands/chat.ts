@@ -1762,8 +1762,10 @@ export default async function cmdChat(
 
         if (verbose) {
           const c = routerResult.classification;
+          const srcCount = routerResult.sources?.length ?? 0;
+          const fallbacks = routerResult.fallbacksUsed?.length ? ` fallbacks=[${routerResult.fallbacksUsed.join(',')}]` : '';
           console.log(
-            `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[QueryRouter] tier=${c.tier} confidence=${c.confidence.toFixed(2)} strategy=${c.strategy} reasoning="${c.reasoning}" | ${routeDuration}ms`)}`
+            `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[QueryRouter] tier=${c.tier} confidence=${c.confidence.toFixed(2)} strategy=${c.strategy} sources=${srcCount}${fallbacks} reasoning="${c.reasoning}" | ${routeDuration}ms`)}`
           );
         }
 
