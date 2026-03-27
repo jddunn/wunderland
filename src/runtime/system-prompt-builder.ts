@@ -113,12 +113,27 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
     );
   }
 
-  // 7b. Authenticated integrations — tell the agent what services it can access.
+  // 7b. Media generation & analysis capabilities.
+  parts.push(
+    'Media Capabilities:\n' +
+      '- Video generation: You can generate videos from text prompts or animate images using generateVideo().\n' +
+      '- Video analysis: You can analyze videos for scene detection and structured descriptions using analyzeVideo().\n' +
+      '- Audio generation: You can create music using generateMusic() and sound effects using generateSFX().\n' +
+      '- OCR: You can extract text from images using performOCR() with progressive OCR → cloud vision fallback.'
+  );
+
+  // 7c. Authenticated integrations — tell the agent what services it can access.
   if (authenticatedIntegrations && authenticatedIntegrations.length > 0) {
     const integrationHints: Record<string, string> = {
       github:
         'You have GitHub API access. Use the GitHub tools (search repos, create issues/PRs, read files, create gists) or the gh CLI to perform GitHub operations. Do NOT ask the user for a token — you already have one configured.',
       telegram: 'You have Telegram Bot API access for sending messages.',
+      'video-generation':
+        'You have video generation credentials configured. Use generateVideo() to create videos from text prompts or animate still images.',
+      'audio-generation':
+        'You have audio generation credentials configured. Use generateMusic() for music and generateSFX() for sound effects.',
+      'vision-pipeline':
+        'You have vision pipeline access. Use analyzeVideo() for video scene analysis and performOCR() for text extraction from images.',
     };
     const hints = authenticatedIntegrations
       .map((name) => integrationHints[name] || `You have ${name} integration access.`)
