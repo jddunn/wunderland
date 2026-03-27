@@ -537,7 +537,8 @@ export default async function cmdChat(
       tools: [
         'cli-executor', 'web-search', 'web-browser', 'browser-automation',
         'content-extraction', 'credential-vault', 'giphy', 'image-search',
-        'image-generation', 'news-search', 'weather', 'skills',
+        'image-generation', 'video-generation', 'audio-generation',
+        'vision-pipeline', 'news-search', 'weather', 'skills',
         'deep-research', 'github',
       ],
       voice: getDefaultVoiceExtensions(),
