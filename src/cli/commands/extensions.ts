@@ -349,7 +349,12 @@ async function listExtensions(flags: Record<string, string | boolean>): Promise<
     fmt.note(`Total: ${available.length} extensions (${available.filter((e: any) => e.available).length} installed)`);
     fmt.note(`Search: ${accent('wunderland extensions search <query>')}`);
   } catch (err) {
-    fmt.errorBlock('Extensions registry not available', 'Install @framers/agentos-extensions-registry to use this command.');
+    const format = typeof flags['format'] === 'string' ? flags['format'] : 'table';
+    if (format === 'json') {
+      console.log(JSON.stringify({ error: 'Extensions registry not available', tools: [], voice: [], productivity: [], channels: [] }, null, 2));
+    } else {
+      fmt.errorBlock('Extensions registry not available', 'Install @framers/agentos-extensions-registry to use this command.');
+    }
     process.exitCode = 1;
   }
 }
