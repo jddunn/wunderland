@@ -278,6 +278,7 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
             'minThreshold',
             'thresholdStep',
             'maxHypothesisTokens',
+            'hypothesisCount',
           ]) {
             if (hyde[numField] !== undefined && typeof hyde[numField] !== 'number') {
               issues.push({ path: `rag.hyde.${numField}`, message: 'Expected number.' });
@@ -291,6 +292,110 @@ export function validateWunderlandAgentConfig(input: unknown): { config: Wunderl
               path: 'rag.hyde.hypothesisSystemPrompt',
               message: 'Expected string.',
             });
+          }
+        }
+      }
+
+      // ── rag.hybrid — BM25 + dense vector hybrid search configuration ──
+      if (rag.hybrid !== undefined) {
+        if (!isPlainObject(rag.hybrid)) {
+          issues.push({ path: 'rag.hybrid', message: 'Expected object.' });
+        } else {
+          const hybrid = rag.hybrid as Record<string, unknown>;
+          if (hybrid.enabled !== undefined && typeof hybrid.enabled !== 'boolean') {
+            issues.push({ path: 'rag.hybrid.enabled', message: 'Expected boolean.' });
+          }
+          for (const numField of ['denseWeight', 'sparseWeight']) {
+            if (hybrid[numField] !== undefined && typeof hybrid[numField] !== 'number') {
+              issues.push({ path: `rag.hybrid.${numField}`, message: 'Expected number.' });
+            }
+          }
+        }
+      }
+
+      // ── rag.raptor — RAPTOR hierarchical summary tree configuration ──
+      if (rag.raptor !== undefined) {
+        if (!isPlainObject(rag.raptor)) {
+          issues.push({ path: 'rag.raptor', message: 'Expected object.' });
+        } else {
+          const raptor = rag.raptor as Record<string, unknown>;
+          if (raptor.enabled !== undefined && typeof raptor.enabled !== 'boolean') {
+            issues.push({ path: 'rag.raptor.enabled', message: 'Expected boolean.' });
+          }
+          for (const numField of ['maxDepth', 'clusterSize']) {
+            if (raptor[numField] !== undefined && typeof raptor[numField] !== 'number') {
+              issues.push({ path: `rag.raptor.${numField}`, message: 'Expected number.' });
+            }
+          }
+        }
+      }
+
+      // ── rag.chunking — semantic / fixed chunking strategy ──
+      if (rag.chunking !== undefined) {
+        if (!isPlainObject(rag.chunking)) {
+          issues.push({ path: 'rag.chunking', message: 'Expected object.' });
+        } else {
+          const chunking = rag.chunking as Record<string, unknown>;
+          if (chunking.strategy !== undefined) {
+            if (
+              typeof chunking.strategy !== 'string'
+              || !['fixed', 'semantic'].includes(chunking.strategy)
+            ) {
+              issues.push({ path: 'rag.chunking.strategy', message: 'Expected "fixed" or "semantic".' });
+            }
+          }
+          for (const numField of ['targetSize', 'overlap']) {
+            if (chunking[numField] !== undefined && typeof chunking[numField] !== 'number') {
+              issues.push({ path: `rag.chunking.${numField}`, message: 'Expected number.' });
+            }
+          }
+          if (chunking.preserveCodeBlocks !== undefined && typeof chunking.preserveCodeBlocks !== 'boolean') {
+            issues.push({ path: 'rag.chunking.preserveCodeBlocks', message: 'Expected boolean.' });
+          }
+        }
+      }
+
+      // ── rag.queryRouter — unified query routing / auto-classification ──
+      if (rag.queryRouter !== undefined) {
+        if (!isPlainObject(rag.queryRouter)) {
+          issues.push({ path: 'rag.queryRouter', message: 'Expected object.' });
+        } else {
+          const qr = rag.queryRouter as Record<string, unknown>;
+          if (qr.enabled !== undefined && typeof qr.enabled !== 'boolean') {
+            issues.push({ path: 'rag.queryRouter.enabled', message: 'Expected boolean.' });
+          }
+          if (qr.classifierMode !== undefined) {
+            if (
+              typeof qr.classifierMode !== 'string'
+              || !['heuristic', 'llm', 'hybrid'].includes(qr.classifierMode)
+            ) {
+              issues.push({ path: 'rag.queryRouter.classifierMode', message: 'Expected "heuristic", "llm", or "hybrid".' });
+            }
+          }
+          if (qr.defaultStrategy !== undefined) {
+            if (
+              typeof qr.defaultStrategy !== 'string'
+              || !['none', 'simple', 'moderate', 'complex'].includes(qr.defaultStrategy)
+            ) {
+              issues.push({ path: 'rag.queryRouter.defaultStrategy', message: 'Expected "none", "simple", "moderate", or "complex".' });
+            }
+          }
+        }
+      }
+
+      // ── rag.memoryIntegration — cognitive memory search integration ──
+      if (rag.memoryIntegration !== undefined) {
+        if (!isPlainObject(rag.memoryIntegration)) {
+          issues.push({ path: 'rag.memoryIntegration', message: 'Expected object.' });
+        } else {
+          const mi = rag.memoryIntegration as Record<string, unknown>;
+          for (const boolField of ['enabled', 'feedbackLoop']) {
+            if (mi[boolField] !== undefined && typeof mi[boolField] !== 'boolean') {
+              issues.push({ path: `rag.memoryIntegration.${boolField}`, message: 'Expected boolean.' });
+            }
+          }
+          if (mi.memoryTypes !== undefined && !isStringArray(mi.memoryTypes)) {
+            issues.push({ path: 'rag.memoryIntegration.memoryTypes', message: 'Expected string[]' });
           }
         }
       }

@@ -200,6 +200,12 @@ export interface WunderlandAgentRagConfig {
   hyde?: {
     /** Enable HyDE. Default: true (can be disabled per-agent). */
     enabled?: boolean;
+    /**
+     * Number of diverse hypotheses to generate per query.
+     * More hypotheses improve recall at the cost of additional LLM calls.
+     * @default 3
+     */
+    hypothesisCount?: number;
     /** Initial similarity threshold for adaptive search. Default: 0.7. */
     initialThreshold?: number;
     /** Minimum threshold to step down to. Default: 0.3. */
@@ -214,6 +220,96 @@ export interface WunderlandAgentRagConfig {
     hypothesisSystemPrompt?: string;
     /** Prefer full-answer prose rather than terse keyword expansions. Default: true. */
     fullAnswerGranularity?: boolean;
+  };
+  /**
+   * Hybrid search configuration — BM25 keyword search alongside dense vectors.
+   *
+   * When enabled, both BM25 sparse and dense vector searches are executed in
+   * parallel for each query. Results are merged via Reciprocal Rank Fusion
+   * (RRF) using the configured weight ratio.
+   */
+  hybrid?: {
+    /** Enable hybrid search. Default: true. */
+    enabled?: boolean;
+    /** Weight for dense vector results (0-1). Default: 0.7. */
+    denseWeight?: number;
+    /** Weight for BM25 sparse results (0-1). Default: 0.3. */
+    sparseWeight?: number;
+  };
+  /**
+   * RAPTOR (Recursive Abstractive Processing for Tree-Organized Retrieval)
+   * hierarchical summary tree configuration.
+   *
+   * Builds a multi-layer summary tree over the document corpus where each
+   * layer clusters and summarises the layer below. Queries can target
+   * specific layers (leaf for detail, higher for "big picture").
+   */
+  raptor?: {
+    /** Enable RAPTOR tree. Default: true. */
+    enabled?: boolean;
+    /** Maximum tree depth (number of summary layers). Default: 4. */
+    maxDepth?: number;
+    /** Target cluster size per RAPTOR layer. Default: 8. */
+    clusterSize?: number;
+  };
+  /**
+   * Document chunking strategy configuration.
+   *
+   * Controls how ingested documents are split into retrievable chunks.
+   * Semantic chunking uses paragraph/heading boundaries and embedding
+   * similarity to find natural break points. Fixed chunking uses a
+   * simple character-count window.
+   */
+  chunking?: {
+    /** Chunking strategy. Default: "semantic". */
+    strategy?: 'fixed' | 'semantic';
+    /** Target chunk size in characters. Default: 1000. */
+    targetSize?: number;
+    /** Overlap between consecutive chunks in characters. Default: 100. */
+    overlap?: number;
+    /** Preserve code blocks as atomic chunks. Default: true. */
+    preserveCodeBlocks?: boolean;
+  };
+  /**
+   * Unified query routing / auto-classification configuration.
+   *
+   * When enabled, the QueryRouter automatically classifies each query by
+   * complexity (none/simple/moderate/complex) and selects the appropriate
+   * retrieval strategy, sources, HyDE configuration, and memory types.
+   */
+  queryRouter?: {
+    /** Enable the query router. Default: true. */
+    enabled?: boolean;
+    /**
+     * Classifier mode: "heuristic" (zero-cost keyword), "llm" (LLM-as-judge),
+     * or "hybrid" (heuristic with LLM escalation).
+     * @default "hybrid"
+     */
+    classifierMode?: 'heuristic' | 'llm' | 'hybrid';
+    /**
+     * Default retrieval strategy when the classifier is unavailable.
+     * @default "moderate"
+     */
+    defaultStrategy?: 'none' | 'simple' | 'moderate' | 'complex';
+  };
+  /**
+   * Cognitive memory integration configuration.
+   *
+   * When enabled, retrieval queries also search the agent's cognitive memory
+   * (episodic events, semantic facts, procedural knowledge) alongside the
+   * document corpus. A feedback loop can store retrieval outcomes as new
+   * episodic memories for improved future recall.
+   */
+  memoryIntegration?: {
+    /** Enable cognitive memory search during retrieval. Default: true. */
+    enabled?: boolean;
+    /** Store retrieval feedback as episodic memory. Default: true. */
+    feedbackLoop?: boolean;
+    /**
+     * Memory types to search. Default: ["episodic", "semantic"].
+     * Valid values: "episodic", "semantic", "procedural", "prospective".
+     */
+    memoryTypes?: string[];
   };
 }
 
