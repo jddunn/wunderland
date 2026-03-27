@@ -31,7 +31,8 @@ export type HelpTopicId =
   | 'whatsapp'
   | 'slack'
   | 'signal'
-  | 'emergent';
+  | 'emergent'
+  | 'retrieval';
 
 export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: string }> = [
   {
@@ -140,6 +141,11 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     summary: 'Runtime tool forging: lifecycle, safety, LLM-as-judge, and CLI commands.',
   },
   {
+    id: 'retrieval',
+    title: 'Unified Retrieval System',
+    summary: 'Multi-source retrieval: strategy tiers, HyDE, BM25, RAPTOR, GraphRAG, memory.',
+  },
+  {
     id: 'faq',
     title: 'FAQ',
     summary: 'Frequently asked questions about setup, voice, LLMs, and more.',
@@ -189,6 +195,7 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'vision' || topic === 'ocr' || topic === 'paddle-ocr' || topic === 'trocr' || topic === 'florence' || topic === 'clip') return 'vision';
     if (topic === 'image-editing' || topic === 'img2img' || topic === 'inpainting' || topic === 'upscale' || topic === 'upscaling') return 'image-editing';
     if (topic === 'emergent' || topic === 'emergent-tools' || topic === 'forge' || topic === 'forged-tools') return 'emergent';
+    if (topic === 'retrieval' || topic === 'rag' || topic === 'unified-retrieval' || topic === 'hyde' || topic === 'bm25' || topic === 'raptor' || topic === 'hybrid-search' || topic === 'query-router') return 'retrieval';
     if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
   })();
@@ -858,6 +865,69 @@ export function printHelpTopic(topicRaw: string): void {
     return;
   }
 
+  if (resolved === 'retrieval') {
+    printTitle('Unified Retrieval System');
+    console.log(`  ${bright('AgentOS uses a multi-source retrieval pipeline that automatically selects')}`);
+    console.log(`  ${bright('the best strategy for each query.')}`);
+    console.log();
+    console.log(`  ${dim('STRATEGY')}    ${dim('SOURCES')}                                 ${dim('WHEN TO USE')}`);
+    console.log(`  ${accent('none')}        ${dim('(skip retrieval)')}                       ${dim('Greetings, trivial questions')}`);
+    console.log(`  ${accent('simple')}      ${dim('Vector + BM25')}                         ${dim('Direct lookups, specific terms')}`);
+    console.log(`  ${accent('moderate')}    ${dim('+ HyDE + Graph + RAPTOR')}               ${dim('Abstract questions, "how" / "why"')}`);
+    console.log(`  ${accent('complex')}     ${dim('+ Decompose + Deep Research')}           ${dim('Multi-part, comparative analysis')}`);
+    console.log();
+    console.log(`  ${bright('The QueryClassifier (LLM-as-judge) auto-selects the strategy, or you can force it:')}`);
+    console.log();
+    console.log(`     ${muted('$')} ${accent('wunderland rag query "How does auth work?" --strategy moderate')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland rag query "Compare all approaches" --strategy complex --deep-research')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Preview a retrieval plan without executing:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland rag plan "Compare all caching strategies"')}`);
+    console.log(`     ${dim('Shows: strategy, sources, HyDE config, deep research, and reasoning.')}`);
+    console.log();
+    console.log(`  ${bright('Check system status:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland rag status')}`);
+    console.log(`     ${dim('Shows: vector store, BM25, RAPTOR, GraphRAG, HyDE, reranker, and memory.')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Configuration (agent.config.json):')}`);
+    console.log(`     ${accent('rag.hybrid.enabled: true')}           ${dim('BM25 keyword search alongside vectors')}`);
+    console.log(`     ${accent('rag.hybrid.denseWeight: 0.7')}        ${dim('Dense vector weight (0-1)')}`);
+    console.log(`     ${accent('rag.hybrid.sparseWeight: 0.3')}       ${dim('BM25 sparse weight (0-1)')}`);
+    console.log(`     ${accent('rag.raptor.enabled: true')}           ${dim('Hierarchical summary tree')}`);
+    console.log(`     ${accent('rag.raptor.maxDepth: 4')}             ${dim('Tree depth (summary layers)')}`);
+    console.log(`     ${accent('rag.raptor.clusterSize: 8')}          ${dim('Cluster size per layer')}`);
+    console.log(`     ${accent('rag.hyde.enabled: true')}             ${dim('Hypothesis-based retrieval')}`);
+    console.log(`     ${accent('rag.hyde.hypothesisCount: 3')}        ${dim('Multiple hypotheses for better recall')}`);
+    console.log(`     ${accent('rag.chunking.strategy: "semantic"')}  ${dim('Paragraph-aware document splitting')}`);
+    console.log(`     ${accent('rag.chunking.targetSize: 1000')}      ${dim('Target chunk size (chars)')}`);
+    console.log(`     ${accent('rag.chunking.overlap: 100')}          ${dim('Overlap between chunks (chars)')}`);
+    console.log(`     ${accent('rag.chunking.preserveCodeBlocks: true')} ${dim('Keep code blocks atomic')}`);
+    console.log(`     ${accent('rag.queryRouter.enabled: true')}      ${dim('Auto-classify query complexity')}`);
+    console.log(`     ${accent('rag.queryRouter.classifierMode: "hybrid"')} ${dim('heuristic | llm | hybrid')}`);
+    console.log(`     ${accent('rag.queryRouter.defaultStrategy: "moderate"')} ${dim('Fallback strategy')}`);
+    console.log(`     ${accent('rag.memoryIntegration.enabled: true')} ${dim('Search cognitive memory too')}`);
+    console.log(`     ${accent('rag.memoryIntegration.feedbackLoop: true')} ${dim('Store retrieval as episodic memory')}`);
+    console.log(`     ${accent('rag.memoryIntegration.memoryTypes: ["episodic","semantic"]')} ${dim('Memory types to search')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Ingestion with unified chunking:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland rag ingest ./docs --chunking semantic --build-raptor --build-bm25')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland rag ingest ./code --extract-entities --chunk-size 1500')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('During chat:')}`);
+    console.log(`     ${dim('The query router automatically classifies and retrieves when enabled.')}`);
+    console.log(`     ${dim('Use --verbose in chat to see the retrieval strategy and timing.')}`);
+    console.log(`     ${dim('Disable with:')} ${accent('wunderland chat --no-query-router')}`);
+    console.log();
+    console.log(`  ${dim('See also:')} ${accent('wunderland help memory')}${dim(',')} ${accent('wunderland help faq')}`);
+    console.log(`  ${dim('Full docs:')} ${accent(`${URLS.docs}/guides/unified-retrieval`)}`);
+    console.log();
+    return;
+  }
+
   if (resolved === 'faq') {
     printTitle('Frequently Asked Questions');
     console.log();
@@ -914,7 +984,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log();
 
     console.log(`  ${hr()}`);
-    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, email, whatsapp, slack, signal, presets, security, tui, ui, export')}`);
+    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, retrieval, email, whatsapp, slack, signal, presets, security, tui, ui, export')}`);
     console.log(`  ${dim('Full docs:')} ${accent(URLS.docs)}`);
     console.log();
     return;
