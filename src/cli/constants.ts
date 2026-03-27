@@ -32,6 +32,7 @@ export const CREDENTIALS_DIR_NAME = 'credentials';
 
 export const LLM_PROVIDERS = [
   { id: 'openai', label: 'OpenAI', envVar: 'OPENAI_API_KEY', signupUrl: 'https://platform.openai.com/api-keys', docsUrl: 'https://developers.openai.com/api/docs', validationUrl: 'https://api.openai.com/v1/models', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'] },
+  { id: 'claude-code-cli', label: 'Claude Code CLI (Max subscription)', envVar: '', signupUrl: 'https://claude.ai/download', docsUrl: 'https://docs.anthropic.com/en/docs/claude-code', validationUrl: '', models: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-haiku-4-5-20251001'] },
   { id: 'anthropic', label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY', signupUrl: 'https://console.anthropic.com/settings/keys', docsUrl: 'https://platform.claude.com/docs/en/api/overview', validationUrl: 'https://api.anthropic.com/v1/messages', models: ['claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
   { id: 'openrouter', label: 'OpenRouter', envVar: 'OPENROUTER_API_KEY', signupUrl: 'https://openrouter.ai/keys', docsUrl: 'https://openrouter.ai/docs/quickstart', validationUrl: 'https://openrouter.ai/api/v1/models', models: ['auto'] },
   { id: 'ollama', label: 'Ollama (local)', envVar: '', signupUrl: 'https://ollama.ai/download', docsUrl: 'https://docs.ollama.com/', validationUrl: '', models: ['qwen2.5:7b', 'qwen2.5:3b', 'llama3.3', 'gemma3:4b', 'mistral'] },
