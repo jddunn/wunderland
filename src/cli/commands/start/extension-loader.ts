@@ -136,7 +136,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
 
     // Merge: agent config > global config > hardcoded defaults
     const globalExts = globalConfig?.extensions;
-    const hardcodedTools = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'image-generation', 'news-search', 'weather', 'skills', 'deep-research', 'github'];
+    const hardcodedTools = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'image-generation', 'video-generation', 'audio-generation', 'vision-pipeline', 'news-search', 'weather', 'skills', 'deep-research', 'github'];
 
     toolExtensions = normalizeExtensionList(
       extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedTools,
