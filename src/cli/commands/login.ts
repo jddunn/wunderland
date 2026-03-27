@@ -475,13 +475,79 @@ function printApiKeySuccess(displayName: string, envVar: string): void {
   });
 }
 
+// ── Claude Code CLI login ────────────────────────────────────────────────────
+
+/**
+ * Login handler for the claude-code-cli provider.
+ * No API key needed — verifies that Claude Code CLI is installed and
+ * authenticated, then persists the provider selection to config.
+ */
+async function loginClaudeCodeCli(globals: GlobalFlags): Promise<void> {
+  console.log();
+  console.log(bright('  Claude Code CLI Provider'));
+  console.log(dim('  ────────────────────────'));
+  console.log();
+
+  /* 1. Check if claude binary is on PATH */
+  let cliPath = '';
+  let version = '';
+  try {
+    const { execSync } = await import('child_process');
+    cliPath = execSync('which claude', { encoding: 'utf8' }).trim();
+    const versionRaw = execSync('claude --version', { encoding: 'utf8' }).trim();
+    const match = versionRaw.match(/(\d+\.\d+\.\d+)/);
+    version = match ? match[1] : 'unknown';
+    console.log(sColor(`  ${glyphs.check} CLI installed    ${dim(cliPath)} (v${version})`));
+  } catch {
+    console.log(accent(`  ${glyphs.cross} CLI not installed`));
+    console.log();
+    console.log('  Install Claude Code:');
+    console.log(bright('    npm install -g @anthropic-ai/claude-code'));
+    console.log(dim('    — or download from https://claude.ai/download'));
+    console.log();
+    console.log('  Then run this command again.');
+    return;
+  }
+
+  /* 2. Check authentication via a lightweight ping */
+  try {
+    const { execSync } = await import('child_process');
+    execSync('echo "Reply with exactly: pong" | claude --bare -p --output-format json --max-turns 1', {
+      stdio: 'ignore',
+      timeout: 30_000,
+    });
+    console.log(sColor(`  ${glyphs.check} Authenticated`));
+  } catch {
+    console.log(accent(`  ${glyphs.cross} Not authenticated`));
+    console.log();
+    console.log('  Action needed:');
+    console.log(bright('    1. Open a new terminal'));
+    console.log(bright('    2. Run: claude'));
+    console.log(bright('    3. Complete the login flow'));
+    console.log(bright('    4. Come back and run: wunderland login'));
+    return;
+  }
+
+  /* 3. Persist provider selection */
+  await updateConfig({
+    llmProvider: 'claude-code-cli',
+    llmModel: 'claude-sonnet-4-20250514',
+  });
+
+  console.log(sColor(`  ${glyphs.check} Model available  ${dim('claude-sonnet-4-20250514')}`));
+  console.log();
+  console.log(sColor('  Ready to use! No API key needed.'));
+  console.log();
+}
+
 // ── Interactive LLM provider menu ────────────────────────────────────────────
 
-type LoginChoice = 'openai-oauth' | 'openai-key' | 'anthropic-key' | 'gemini-key' | 'openrouter-key' | 'other-key';
+type LoginChoice = 'openai-oauth' | 'openai-key' | 'anthropic-key' | 'gemini-key' | 'openrouter-key' | 'claude-code-cli' | 'other-key';
 
 const LOGIN_OPTIONS: Array<{ value: LoginChoice; label: string; hint: string }> = [
   { value: 'openai-oauth',  label: 'OpenAI (ChatGPT Subscription)', hint: 'not yet supported — use API key instead' },
   { value: 'openai-key',    label: 'OpenAI (API Key)',               hint: 'paste your OPENAI_API_KEY' },
+  { value: 'claude-code-cli', label: 'Claude Code CLI (Max subscription)', hint: 'no API key — uses your local Claude Code login' },
   { value: 'anthropic-key', label: 'Anthropic (API Key)',            hint: 'paste your ANTHROPIC_API_KEY' },
   { value: 'gemini-key',    label: 'Google Gemini (API Key)',        hint: 'paste your GEMINI_API_KEY' },
   { value: 'openrouter-key', label: 'OpenRouter (API Key)',          hint: 'universal — routes to any model' },
@@ -561,6 +627,9 @@ export default async function cmdLogin(
       case 'openai-key':
         await loginApiKey('openai', globals);
         break;
+      case 'claude-code-cli':
+        await loginClaudeCodeCli(globals);
+        break;
       case 'anthropic-key':
         await loginApiKey('anthropic', globals);
         break;
@@ -590,6 +659,12 @@ async function dispatchProvider(
   // Normalize
   if (provider === 'openai-oauth') {
     await loginOpenAIOAuth(flags, globals);
+    return;
+  }
+
+  // Claude Code CLI has no API key — special handler
+  if (provider === 'claude-code-cli') {
+    await loginClaudeCodeCli(globals);
     return;
   }
 
