@@ -136,11 +136,20 @@ export async function loadExtensions(ctx: any): Promise<void> {
 
     // Merge: agent config > global config > hardcoded defaults
     const globalExts = globalConfig?.extensions;
-    const hardcodedTools = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'image-generation', 'video-generation', 'audio-generation', 'vision-pipeline', 'news-search', 'weather', 'skills', 'deep-research', 'github'];
+    const hardcodedTools = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'image-generation', 'video-generation', 'audio-generation', 'vision-pipeline', 'news-search', 'weather', 'skills', 'deep-research', 'github', 'web-scraper'];
 
-    toolExtensions = normalizeExtensionList(
-      extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedTools,
-    );
+    // Category-aware loading: if agent config defines extensionCategories,
+    // expand categories to extension IDs instead of using hardcoded defaults.
+    const extensionCategories = cfg?.extensionCategories as string[] | undefined;
+    if (extensionCategories && extensionCategories.length > 0 && !extensionsFromConfig?.tools) {
+      const { expandCategories } = await import('../extensions/categories.js');
+      const categoryTools = expandCategories(extensionCategories as any);
+      toolExtensions = normalizeExtensionList(categoryTools);
+    } else {
+      toolExtensions = normalizeExtensionList(
+        extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedTools,
+      );
+    }
     voiceExtensions = normalizeExtensionList(
       extensionsFromConfig?.voice ?? globalExts?.voice ?? getDefaultVoiceExtensions(),
     );
