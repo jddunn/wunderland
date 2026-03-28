@@ -55,5 +55,8 @@
     "includeAudit": false,
     "defaultTopK": 5,
     "strategy": "similarity"
+  },
+  "memory": {
+    "cognitiveMechanisms": {}
   }
 }

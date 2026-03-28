@@ -523,6 +523,28 @@ export async function createWunderlandChatRuntime(opts: {
       const storageMgr = new AgentStorageManager(storageConfig);
       await storageMgr.initialize();
 
+      // Cognitive Memory (optional — when cognitiveMechanisms config present)
+      let cognitiveMemoryManager: any;
+      let cognitiveMoodProvider: any;
+      if (agentConfig.memory?.cognitiveMechanisms) {
+        try {
+          const { initializeCognitiveMemory } = await import('../memory/CognitiveMemoryInitializer.js');
+          const result = await initializeCognitiveMemory({
+            cognitiveMechanisms: agentConfig.memory.cognitiveMechanisms,
+            vectorStore: storageMgr.getVectorStore(),
+            traits: (agentConfig.personality ?? {}) as any,
+            agentId: seedIdForWorkspace,
+            llm: { providerId: opts.llm.providerId, apiKey: opts.llm.apiKey, baseUrl: opts.llm.baseUrl },
+          });
+          cognitiveMemoryManager = result.manager;
+          cognitiveMoodProvider = result.moodProvider;
+        } catch (err) {
+          logger.warn?.('[wunderland/api] Cognitive memory init failed (continuing without)', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
       memorySystem = await createMemorySystem({
         vectorStore: storageMgr.getVectorStore(),
         traits: (agentConfig.personality ?? {}) as any,
@@ -530,6 +552,8 @@ export async function createWunderlandChatRuntime(opts: {
         ollama: (agentConfig as any).ollama,
         retrievalBudgetTokens: agentConfig.memory?.retrievalBudgetTokens ?? 4000,
         agentId: seedIdForWorkspace,
+        cognitiveMemoryManager,
+        moodProvider: cognitiveMoodProvider,
       });
     } catch (err) {
       logger.warn?.('[wunderland/api] Memory system init failed (continuing without retrieval)', {
