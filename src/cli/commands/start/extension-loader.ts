@@ -6,8 +6,8 @@
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fmt from '../../ui/format.js';
-import { type ToolInstance, getGuardrailsInstance } from '../../openai/tool-calling.js';
-import { createSchemaOnDemandTools } from '../../openai/schema-on-demand.js';
+import { type ToolInstance, getGuardrailsInstance } from '../../../runtime/tool-calling.js';
+import { createSchemaOnDemandTools } from '../../../runtime/schema-on-demand.js';
 import { filterToolMapByPolicy } from '../../security/runtime-policy.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
 import { normalizeExtensionList } from '../../extensions/aliases.js';

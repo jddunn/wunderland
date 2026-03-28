@@ -1,16 +1,16 @@
 /**
- * @fileoverview Schema-on-demand meta tools for Wunderland's CLI tool-calling loop.
+ * @fileoverview Schema-on-demand meta tools for Wunderland's tool-calling loop.
  *
  * These tools let the model enable curated extension packs at runtime so the
- * next OpenAI round includes the newly-available tool schemas.
+ * next LLM round includes the newly-available tool schemas.
  */
 
 import { getAvailableExtensions, type ExtensionInfo } from '@framers/agentos-extensions-registry';
 
 import type { ToolInstance } from './tool-calling.js';
-import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from '../security/runtime-policy.js';
-import { normalizeExtensionName } from '../extensions/aliases.js';
-import { createSpeechExtensionEnvOverrides } from '../../voice/speech-catalog.js';
+import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from '../cli/security/runtime-policy.js';
+import { normalizeExtensionName } from '../cli/extensions/aliases.js';
+import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
 
 type ExtensionsListOutput = {
   curated: ExtensionInfo[];

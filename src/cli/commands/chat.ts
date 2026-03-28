@@ -35,7 +35,7 @@ import {
   type ToolInstance,
   type LLMProviderConfig,
 } from '../openai/tool-calling.js';
-import { createSchemaOnDemandTools } from '../openai/schema-on-demand.js';
+import { createSchemaOnDemandTools } from '../../runtime/schema-on-demand.js';
 import { ToolFailureLearner } from '../../runtime/tool-failure-learner.js';
 import {
   classifyResearchDepth,

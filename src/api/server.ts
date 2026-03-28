@@ -45,7 +45,7 @@ import {
 } from '../runtime/tool-calling.js';
 import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
 import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
-import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
+import { createSchemaOnDemandTools } from '../runtime/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import {
   filterToolMapByPolicy,
