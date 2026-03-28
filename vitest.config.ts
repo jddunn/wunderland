@@ -9,6 +9,12 @@ const agentosQueryRouterPath = resolve(__dirname, '../agentos/src/query-router/i
 const agentosMemoryPath = resolve(__dirname, '../agentos/src/memory/index.ts');
 const agentosOrchestrationPath = resolve(__dirname, '../agentos/src/orchestration/index.ts');
 const agentosRootPath = resolve(__dirname, '../agentos/src/index.ts');
+const agentosOrchestrationIrTypesPath = resolve(__dirname, '../agentos/src/orchestration/ir/types.ts');
+const agentosOrchestrationGraphEventPath = resolve(__dirname, '../agentos/src/orchestration/events/GraphEvent.ts');
+const agentosOrchestrationCheckpointInterfacePath = resolve(__dirname, '../agentos/src/orchestration/checkpoint/ICheckpointStore.ts');
+const agentosOrchestrationInMemoryCheckpointPath = resolve(__dirname, '../agentos/src/orchestration/checkpoint/InMemoryCheckpointStore.ts');
+const agentosOrchestrationGraphRuntimePath = resolve(__dirname, '../agentos/src/orchestration/runtime/GraphRuntime.ts');
+const agentosOrchestrationNodeExecutorPath = resolve(__dirname, '../agentos/src/orchestration/runtime/NodeExecutor.ts');
 const hasAgentosAuth = existsSync(agentosAuthPath);
 const hasAgentosRoot = existsSync(agentosRootPath);
 
@@ -19,6 +25,12 @@ if (hasAgentosRoot) {
   agentosAliases['@framers/agentos/query-router'] = agentosQueryRouterPath;
   agentosAliases['@framers/agentos/memory'] = agentosMemoryPath;
   agentosAliases['@framers/agentos/orchestration'] = agentosOrchestrationPath;
+  agentosAliases['@framers/agentos/orchestration/ir/types'] = agentosOrchestrationIrTypesPath;
+  agentosAliases['@framers/agentos/orchestration/events/GraphEvent'] = agentosOrchestrationGraphEventPath;
+  agentosAliases['@framers/agentos/orchestration/checkpoint/ICheckpointStore'] = agentosOrchestrationCheckpointInterfacePath;
+  agentosAliases['@framers/agentos/orchestration/checkpoint/InMemoryCheckpointStore'] = agentosOrchestrationInMemoryCheckpointPath;
+  agentosAliases['@framers/agentos/orchestration/runtime/GraphRuntime'] = agentosOrchestrationGraphRuntimePath;
+  agentosAliases['@framers/agentos/orchestration/runtime/NodeExecutor'] = agentosOrchestrationNodeExecutorPath;
   agentosAliases['@framers/agentos'] = agentosRootPath;
 }
 
@@ -28,6 +40,10 @@ export default defineConfig({
   resolve: {
     alias: [
       ...Object.entries(agentosAliases).map(([find, replacement]) => ({ find, replacement })),
+      {
+        find: '@framers/agentos/',
+        replacement: `${agentosSourceDir}/`,
+      },
       {
         find: /^@framers\/agentos\/(.+)$/,
         replacement: `${agentosSourceDir}/$1`,
