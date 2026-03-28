@@ -41,6 +41,8 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('quickstart')}            Detect env → scaffold → go
       ${w('init')} ${d('<dir>')}            Scaffold an agent project
       ${w('create')} ${d('[description]')}  Create agent from natural language
+      ${w('spawn')} ${d('<description>')}   Create + start agent in one step
+      ${w('batch-create')} ${d('<file>')}   Bulk create agents from file or mission
       ${w('doctor')}                Health check
 
     ${w('Auth')}
@@ -186,6 +188,40 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     summary: 'Create an agent config from a natural-language description.',
     usage: ['wunderland create [description] [--managed] [--yes]'],
     examples: ['wunderland create "Build a research assistant that summarizes the web."', 'wunderland create "Customer support bot for Shopify orders" --managed'],
+  },
+  spawn: {
+    summary: 'Create an agent from natural language and start it immediately.',
+    usage: ['wunderland spawn <description> [--port <number>] [--background] [--dir <path>]'],
+    examples: [
+      'wunderland spawn "a research assistant that monitors Hacker News daily"',
+      'wunderland spawn "customer support bot for Shopify" --port 3001',
+      'wunderland spawn "creative writer for blog posts" --background',
+      'wunderland spawn "DevOps monitor" --dir ./agents/devops -b',
+    ],
+    notes: [
+      'Auto-populates .env from parent process environment (API keys, tokens).',
+      '--background / -b: run as a background daemon (uses wunderland serve).',
+      'No interactive prompts — fully non-interactive by design.',
+    ],
+  },
+  'batch-create': {
+    summary: 'Bulk-create agents from a descriptions file or an LLM-decomposed team mission.',
+    usage: [
+      'wunderland batch-create <file.txt|file.json> [--output-dir <dir>] [--start-all]',
+      'wunderland batch-create --from-mission "<mission>" [--output-dir <dir>] [--start-all]',
+    ],
+    examples: [
+      'wunderland batch-create descriptions.txt',
+      'wunderland batch-create agents.json --output-dir ./my-team',
+      'wunderland batch-create --from-mission "Build a content marketing team"',
+      'wunderland batch-create agents.txt --start-all',
+    ],
+    notes: [
+      '.txt: one description per line (blank lines and # comments are ignored).',
+      '.json: array of strings or { "description": "...", "role": "..." } objects.',
+      '--from-mission: uses LLM to decompose a high-level mission into agent roles.',
+      '--start-all: auto-starts all created agents as daemons after creation.',
+    ],
   },
   doctor: {
     summary: 'Check local configuration, API keys, and service connectivity.',
@@ -570,6 +606,8 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   setup:          () => import('./commands/setup.js'),
   init:           () => import('./commands/init.js'),
   create:         () => import('./commands/create.js'),
+  spawn:          () => import('./commands/spawn.js'),
+  'batch-create': () => import('./commands/batch-create.js'),
   start:          () => import('./commands/start/index.js'),
   chat:           () => import('./commands/chat.js'),
   hitl:           () => import('./commands/hitl.js'),
