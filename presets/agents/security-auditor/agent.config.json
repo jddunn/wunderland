@@ -28,6 +28,7 @@
     "voice": [],
     "productivity": []
   },
+  "extensionCategories": ["core", "research"],
   "discovery": {
     "enabled": true,
     "recallProfile": "precision",

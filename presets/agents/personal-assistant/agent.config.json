@@ -41,6 +41,7 @@
       "calendar-google"
     ]
   },
+  "extensionCategories": ["core", "media", "research", "entertainment", "business"],
   "discovery": {
     "enabled": true,
     "recallProfile": "balanced",
