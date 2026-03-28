@@ -56,6 +56,7 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
 
   const showDashboard = async () => {
     if (activeView) { activeView.dispose(); activeView = null; }
+    screen.clear();
     await dashboard.render();
   };
 
@@ -67,21 +68,28 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
       const viewLoader = VIEW_MAP[command];
 
       if (viewLoader) {
-        // Drill down into TUI view
-        const viewModule = await viewLoader();
-        const ViewClass = viewModule.DoctorView || viewModule.ModelsView
-          || viewModule.SkillsView || viewModule.RagView
-          || viewModule.ExtensionsView || viewModule.StatusView
-          || viewModule.VoiceView || viewModule.AgentsView;
+        try {
+          // Drill down into TUI view
+          const viewModule = await viewLoader();
+          const ViewClass = viewModule.DoctorView || viewModule.ModelsView
+            || viewModule.SkillsView || viewModule.RagView
+            || viewModule.ExtensionsView || viewModule.StatusView
+            || viewModule.VoiceView || viewModule.AgentsView;
 
-        if (ViewClass) {
-          activeView = new ViewClass({
-            screen,
-            keys,
-            configDir: _globals.config,
-            onBack: () => { showDashboard(); },
-          });
-          await (activeView as any).run();
+          if (ViewClass) {
+            activeView = new ViewClass({
+              screen,
+              keys,
+              configDir: _globals.config,
+              onBack: () => { showDashboard().catch(() => {}); },
+            });
+            await (activeView as any).run();
+            return;
+          }
+        } catch {
+          // View failed to load or render — recover to dashboard
+          if (activeView) { activeView.dispose(); activeView = null; }
+          await showDashboard();
           return;
         }
       }
@@ -113,12 +121,12 @@ export async function launchTui(_globals: GlobalFlags): Promise<void> {
     keys.handle(key);
   });
 
-  // Render on resize
+  // Render on resize — .catch() prevents unhandled rejections from crashing the TUI
   screen.onResize(() => {
     if (activeView && typeof (activeView as any).run === 'function') {
-      (activeView as any).run();
+      (activeView as any).run().catch(() => {});
     } else {
-      dashboard.render();
+      dashboard.render().catch(() => {});
     }
   });
 

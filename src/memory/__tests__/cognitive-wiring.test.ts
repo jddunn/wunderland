@@ -230,6 +230,33 @@ describe('createMemorySystem with cognitiveMemoryManager', () => {
     expect(result).toBeNull();
   });
 
+  it('filters fallback vector results to the active agent scope', async () => {
+    const vectorStore = makeMockVectorStore();
+    vectorStore.listDocuments.mockResolvedValue({
+      documents: [
+        {
+          textContent: 'Memory for active agent',
+          metadata: { agentId: 'test-agent' },
+        },
+        {
+          textContent: 'Memory from another agent',
+          metadata: { agentId: 'other-agent' },
+        },
+      ],
+    });
+
+    const system = await createMemorySystem({
+      vectorStore: vectorStore as any,
+      llm: { providerId: 'openai' },
+      agentId: 'test-agent',
+    });
+
+    const result = await system.retrieveForTurn('memory');
+    expect(result).not.toBeNull();
+    expect(result!.contextText).toContain('Memory for active agent');
+    expect(result!.contextText).not.toContain('Memory from another agent');
+  });
+
   it('observe is no-op when no manager present', async () => {
     const system = await createMemorySystem({
       vectorStore: makeMockVectorStore() as any,

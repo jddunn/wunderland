@@ -131,7 +131,7 @@ class AgentOS implements IAgentOS {
 
 ### The Orchestration Pipeline
 
-`packages/agentos/src/api/AgentOSOrchestrator.ts`
+`packages/agentos/src/api/runtime/AgentOSOrchestrator.ts`
 
 Every user message flows through a structured pipeline:
 

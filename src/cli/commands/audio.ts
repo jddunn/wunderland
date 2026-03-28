@@ -85,17 +85,17 @@ export default async function cmdAudio(
         configDirOverride: globals.config,
         usage: result.usage
           ? {
-              prompt_tokens: result.usage.promptTokens,
-              completion_tokens: result.usage.completionTokens,
-              total_tokens: result.usage.totalTokens,
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: result.usage.totalAudioClips ?? 0,
               totalCostUSD: result.usage.totalCostUSD,
             }
           : null,
       });
 
-      if (output && result.audio) {
+      const audio = result.audio?.[0];
+      if (output && audio) {
         const { writeFile } = await import('node:fs/promises');
-        const audio = result.audio;
         if (audio.base64) {
           await writeFile(output, Buffer.from(audio.base64, 'base64'));
           console.log(`  └── ${accent('✓')} Saved to ${output}\n`);
@@ -103,7 +103,6 @@ export default async function cmdAudio(
           console.log(`  └── ${accent('✓')} URL: ${audio.url}\n`);
         }
       } else {
-        const audio = result.audio;
         if (audio?.url) {
           console.log(`  └── ${accent('✓')} URL: ${audio.url}\n`);
         } else if (audio?.base64) {
@@ -150,17 +149,17 @@ export default async function cmdAudio(
         configDirOverride: globals.config,
         usage: result.usage
           ? {
-              prompt_tokens: result.usage.promptTokens,
-              completion_tokens: result.usage.completionTokens,
-              total_tokens: result.usage.totalTokens,
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: result.usage.totalAudioClips ?? 0,
               totalCostUSD: result.usage.totalCostUSD,
             }
           : null,
       });
 
-      if (output && result.audio) {
+      const audio = result.audio?.[0];
+      if (output && audio) {
         const { writeFile } = await import('node:fs/promises');
-        const audio = result.audio;
         if (audio.base64) {
           await writeFile(output, Buffer.from(audio.base64, 'base64'));
           console.log(`  └── ${accent('✓')} Saved to ${output}\n`);
@@ -168,7 +167,6 @@ export default async function cmdAudio(
           console.log(`  └── ${accent('✓')} URL: ${audio.url}\n`);
         }
       } else {
-        const audio = result.audio;
         if (audio?.url) {
           console.log(`  └── ${accent('✓')} URL: ${audio.url}\n`);
         } else if (audio?.base64) {

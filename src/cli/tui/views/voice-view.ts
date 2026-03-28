@@ -24,6 +24,7 @@ export class VoiceView {
   private configDir?: string;
   private scrollOffset = 0;
   private modal: null | { title: string; lines: string[] } = null;
+  private lastLines: string[] = [];
 
   constructor(opts: { screen: Screen; keys: KeybindingManager; onBack: () => void; configDir?: string }) {
     this.screen = opts.screen;
@@ -36,15 +37,15 @@ export class VoiceView {
       bindings: {
         '__text__': () => { return true; },
         '?': () => {
-          if (this.modal?.title === 'Help') { this.modal = null; this.run(); return; }
+          if (this.modal?.title === 'Help') { this.modal = null; this.render(this.lastLines); return; }
           if (this.modal) return;
           this.modal = { title: 'Help', lines: this.getHelpLines() };
-          this.run();
+          this.render(this.lastLines);
         },
-        'escape':    () => { if (this.modal) { this.modal = null; this.run(); return; } this.back(); },
-        'backspace': () => { if (this.modal) { this.modal = null; this.run(); return; } this.back(); },
-        'q':         () => { if (this.modal) { this.modal = null; this.run(); return; } this.back(); },
-        'r':         () => { if (this.modal) return; this.run(); },
+        'escape':    () => { if (this.modal) { this.modal = null; this.render(this.lastLines); return; } this.back(); },
+        'backspace': () => { if (this.modal) { this.modal = null; this.render(this.lastLines); return; } this.back(); },
+        'q':         () => { if (this.modal) { this.modal = null; this.render(this.lastLines); return; } this.back(); },
+        'r':         () => { if (this.modal) return; this.run().catch(() => {}); },
         'up':        () => { if (this.modal) return; this.scroll(-3); },
         'down':      () => { if (this.modal) return; this.scroll(3); },
         'k':         () => { if (this.modal) return; this.scroll(-3); },
@@ -57,7 +58,12 @@ export class VoiceView {
     await loadDotEnvIntoProcessUpward({ startDir: process.cwd(), configDirOverride: this.configDir });
     const env = await loadEnv(this.configDir);
     const allLines = this.buildLines(env);
+    this.lastLines = allLines;
 
+    this.renderFromLines(allLines);
+  }
+
+  private renderFromLines(allLines: string[]): void {
     const { rows, cols } = this.screen.getSize();
     const visibleRows = rows - 4; // account for frame borders
     const maxOffset = Math.max(0, allLines.length - visibleRows);
@@ -83,6 +89,10 @@ export class VoiceView {
       rows,
     });
     this.screen.render(stamped.join('\n'));
+  }
+
+  private render(lines: string[]): void {
+    this.renderFromLines(lines);
   }
 
   private buildLines(env: Record<string, string>): string[] {
@@ -167,7 +177,7 @@ export class VoiceView {
 
   private scroll(delta: number): void {
     this.scrollOffset = Math.max(0, this.scrollOffset + delta);
-    this.run();
+    this.renderFromLines(this.lastLines);
   }
 
   private back(): void {

@@ -207,7 +207,7 @@ AgentOS rolling memory should be configured via `config/metaprompt-presets.json`
 ## 3) Where it’s wired
 
 - **AgentOS (first-class):**
-  - `packages/agentos/src/api/AgentOSOrchestrator.ts` runs prompt-profile routing + rolling memory compaction **before** each LLM call.
+  - `packages/agentos/src/api/runtime/AgentOSOrchestrator.ts` runs prompt-profile routing + rolling memory compaction **before** each LLM call.
   - `packages/agentos/src/cognitive_substrate/GMI.ts` injects the prompt-profile instructions + rolling summary into the system prompt.
   - `packages/agentos/src/core/llm/PromptEngine.ts` supports `MessageRole.SUMMARY` for summarized older context.
 - **Backend integration:**

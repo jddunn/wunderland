@@ -81,6 +81,7 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
     markdownMemory,
     graphRAG,
     retrievalBudgetTokens = 4000,
+    agentId,
   } = config;
 
   const collectionName = `auto_memories`;
@@ -108,10 +109,14 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
         try {
           // Use listDocuments with text filter as fallback for stores without embedding
           const docs = await (vectorStore as any).listDocuments?.(collectionName, {
-            filter: { $textSearch: userInput },
+            filter: { $textSearch: userInput, agentId },
             limit: 10,
           }) ?? { documents: [] };
           for (const doc of docs?.documents ?? []) {
+            const docAgentId = doc?.metadata?.agentId ?? doc?.agentId;
+            if (docAgentId !== agentId) {
+              continue;
+            }
             const text = doc?.textContent ?? doc?.metadata?.content ?? '';
             if (text) retrievedTexts.push(text);
           }
