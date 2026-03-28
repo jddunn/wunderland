@@ -76,6 +76,7 @@
 - **Folder-level permissions** -- Fine-grained access control per folder with glob pattern support
 - **Tool registry** -- Loads curated AgentOS tools via `@framers/agentos-extensions-registry`
 - **Memory hooks** -- Optional `memory_read` tool with pluggable storage (SQL, vector, graph)
+- **Cognitive mechanisms** -- 8 optional neuroscience-grounded memory mechanisms (reconsolidation, RIF, involuntary recall, FOK, temporal gist, schema encoding, source confidence decay, emotion regulation) with HEXACO personality modulation. Enabled via `memory.cognitiveMechanisms` in agent config.
 - **Immutability** -- Seal agent configuration after setup; rotate operational secrets without changing the sealed spec
 - **Streamlined library API** -- `createWunderland()` + sessions from the root import, plus `app.runGraph(...)` / `app.streamGraph(...)` for orchestrated execution
 - **RAG memory** -- Multimodal retrieval-augmented generation with vector, graph, and hybrid search
