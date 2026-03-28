@@ -22,7 +22,7 @@ export type ExtensionLoadCategory = 'core' | 'research' | 'entertainment' | 'bus
  */
 export const CATEGORY_EXTENSIONS: Record<ExtensionLoadCategory, string[]> = {
   core: [
-    'cli-executor', 'web-search', 'web-browser', 'skills', 'github', 'weather',
+    'cli-executor', 'web-search', 'web-browser', 'skills', 'github', 'weather', 'document-export',
   ],
   research: [
     'web-scraper', 'deep-research', 'content-extraction', 'news-search',
