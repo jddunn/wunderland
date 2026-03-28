@@ -27,6 +27,7 @@
     "voice": [],
     "productivity": []
   },
+  "extensionCategories": ["core", "media", "research", "entertainment"],
   "discovery": {
     "enabled": true,
     "recallProfile": "precision",

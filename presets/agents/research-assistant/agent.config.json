@@ -30,6 +30,7 @@
     "voice": [],
     "productivity": []
   },
+  "extensionCategories": ["core", "media", "research", "entertainment", "business"],
   "extensionOverrides": {
     "web-search": {
       "enabled": true,
