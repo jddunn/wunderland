@@ -128,6 +128,8 @@ NL Mission Flags:
   --cost-cap <dollars>        Maximum spend in USD (default: 10.00)
   --max-agents <count>        Maximum concurrent agents (default: 10)
   --branches <count>          Tree of Thought branches (default: 3)
+  --planner-model <model>     Model for ToT planning (e.g. claude-opus-4-6)
+  --execution-model <model>   Model for agent execution (e.g. gpt-5.4)
   --verbose                   Show planning phases, scores, checkpoints
   --json                      Raw JSON event stream (one per line)
   --quiet                     Final output + cost summary only
@@ -149,6 +151,7 @@ async function runNaturalLanguageMission(
   const { MissionPlanner } = await import('@framers/agentos/orchestration/planning/MissionPlanner');
   const { ProviderAssignmentEngine } = await import('@framers/agentos/orchestration/planning/ProviderAssignmentEngine');
   const { DEFAULT_THRESHOLDS } = await import('@framers/agentos/orchestration/planning/types');
+  const { buildSplitCallers } = await import('@framers/agentos/orchestration/planning/buildLlmCaller');
   const { MissionStreamRenderer } = await import('../renderers/MissionStreamRenderer.js');
   const { createWunderland } = await import('../../public/index.js');
 
@@ -158,6 +161,8 @@ async function runNaturalLanguageMission(
   const costCap = parseFloat(String(flags['cost-cap'] ?? flags['costCap'] ?? '10.00'));
   const maxAgents = parseInt(String(flags['max-agents'] ?? flags['maxAgents'] ?? '10'), 10);
   const branchCount = parseInt(String(flags['branches'] ?? '3'), 10);
+  const plannerModelFlag = flags['planner-model'] as string | undefined;
+  const executionModelFlag = flags['execution-model'] as string | undefined;
   const verbose = flags['verbose'] === true;
   const json = flags['json'] === true;
   const quiet = flags['quiet'] === true;
@@ -183,13 +188,38 @@ async function runNaturalLanguageMission(
   });
 
   try {
-    // Build LLM caller from the wunderland runtime
-    const llmCaller = async (system: string, user: string): Promise<string> => {
-      const result = await app.generateText({ system, prompt: user });
-      return result.text;
-    };
+    // Build LLM callers — supports ALL provider types including CLI (claude-code-cli, gemini-cli)
+    // Uses the full AgentOS provider resolution chain: resolveModelOption → resolveProvider → createProviderManager
+    const plannerProvider = plannerModelFlag?.includes('/') ? plannerModelFlag.split('/')[0] : undefined;
+    const plannerModel = plannerModelFlag?.includes('/') ? plannerModelFlag.split('/')[1] : plannerModelFlag;
+    const execProvider = executionModelFlag?.includes('/') ? executionModelFlag.split('/')[0] : undefined;
+    const execModel = executionModelFlag?.includes('/') ? executionModelFlag.split('/')[1] : executionModelFlag;
 
-    // Detect available providers by scanning env vars
+    const { plannerCaller, executionCaller, plannerModel: resolvedPlannerModel, executionModel: resolvedExecModel } =
+      await buildSplitCallers(
+        {
+          provider: plannerProvider ?? baseRuntime.llm.providerId,
+          model: plannerModel ?? baseRuntime.llm.model,
+          apiKey: baseRuntime.llm.apiKey,
+          baseUrl: baseRuntime.llm.baseUrl,
+        },
+        executionModelFlag
+          ? {
+              provider: execProvider ?? baseRuntime.llm.providerId,
+              model: execModel ?? baseRuntime.llm.model,
+              apiKey: baseRuntime.llm.apiKey,
+              baseUrl: baseRuntime.llm.baseUrl,
+            }
+          : undefined, // Same as planner if not specified
+      );
+
+    if (verbose) {
+      console.log(`  Planner model: ${resolvedPlannerModel}`);
+      console.log(`  Execution model: ${resolvedExecModel}`);
+    }
+
+    // Detect available providers by scanning env vars + CLI binaries
+    const { autoDetectProvider } = await import('@framers/agentos/api/provider-defaults');
     const availableProviders: string[] = [];
     const providerEnvMap: Array<{ env: string; id: string }> = [
       { env: 'OPENROUTER_API_KEY', id: 'openrouter' },
@@ -204,7 +234,12 @@ async function runNaturalLanguageMission(
     for (const { env, id } of providerEnvMap) {
       if (process.env[env]) availableProviders.push(id);
     }
-    if (availableProviders.length === 0) availableProviders.push('openai'); // fallback
+    // Also detect CLI providers (claude, gemini binaries on PATH)
+    const autoDetected = autoDetectProvider?.('text');
+    if (autoDetected && !availableProviders.includes(autoDetected)) {
+      availableProviders.push(autoDetected);
+    }
+    if (availableProviders.length === 0) availableProviders.push('openai');
 
     // Discover available tools from the wunderland runtime
     const toolList = (app.listTools?.() ?? []).map((t: { name: string; description: string }) => ({
@@ -222,7 +257,7 @@ async function runNaturalLanguageMission(
       strategyConfig = { strategy: 'mixed', fallback: 'balanced' };
     }
 
-    // Build planner
+    // Build planner — uses split callers for planner vs execution models
     const planner = new MissionPlanner({
       branchCount,
       autonomy,
@@ -234,7 +269,10 @@ async function runNaturalLanguageMission(
       maxExpansions: 8,
       maxDepth: 3,
       reevalInterval: 3,
-      llmCaller,
+      llmCaller: executionCaller,
+      plannerLlmCaller: plannerCaller,
+      plannerModel: resolvedPlannerModel,
+      executionModel: resolvedExecModel,
     });
 
     // Run planning pipeline with event streaming
