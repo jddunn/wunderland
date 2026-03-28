@@ -30,6 +30,7 @@
     "voice": [],
     "productivity": []
   },
+  "extensionCategories": ["core"],
   "discovery": {
     "enabled": true,
     "recallProfile": "balanced",

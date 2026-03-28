@@ -30,6 +30,7 @@
     ],
     "productivity": []
   },
+  "extensionCategories": ["core", "media", "business"],
   "discovery": {
     "enabled": true,
     "recallProfile": "balanced",
