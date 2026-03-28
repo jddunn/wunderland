@@ -46,6 +46,15 @@ export interface WunderlandGraphRunConfig {
     getApiKey?: () => string | Promise<string>;
     ollamaOptions?: Record<string, unknown>;
   };
+  llmByProvider?: Record<string, {
+    providerId?: string;
+    apiKey: string | Promise<string>;
+    model?: string;
+    baseUrl?: string;
+    fallback?: LLMProviderConfig;
+    getApiKey?: () => string | Promise<string>;
+    ollamaOptions?: Record<string, unknown>;
+  }>;
   systemPrompt: string;
   toolMap: Map<string, ToolInstance>;
   toolContext: Record<string, unknown>;
@@ -200,6 +209,38 @@ class WunderlandNodeExecutor extends NodeExecutor {
     });
   }
 
+  private resolveNodeLlm(node: GraphNode): WunderlandGraphRunConfig['llm'] {
+    const override = node.llm;
+    if (!override) {
+      return this.config.llm;
+    }
+
+    const providerConfig = this.config.llmByProvider?.[override.providerId];
+    if (providerConfig) {
+      return {
+        providerId: providerConfig.providerId ?? override.providerId,
+        apiKey: providerConfig.apiKey,
+        model: override.model || providerConfig.model || this.config.llm.model,
+        baseUrl: providerConfig.baseUrl,
+        fallback: providerConfig.fallback,
+        getApiKey: providerConfig.getApiKey,
+        ollamaOptions: providerConfig.ollamaOptions ?? this.config.llm.ollamaOptions,
+      };
+    }
+
+    if (
+      override.providerId === this.config.llm.providerId ||
+      !this.config.llm.providerId
+    ) {
+      return {
+        ...this.config.llm,
+        model: override.model || this.config.llm.model,
+      };
+    }
+
+    throw new Error(`No LLM config registered for graph node provider "${override.providerId}".`);
+  }
+
   override async execute(node: GraphNode, state: Partial<GraphState>): Promise<NodeExecutionResult> {
     if (node.executorConfig.type === 'tool') {
       const tool = this.config.toolMap.get(node.executorConfig.toolName);
@@ -242,15 +283,16 @@ class WunderlandNodeExecutor extends NodeExecutor {
     }
 
     if (node.executorConfig.type === 'gmi') {
+      const llm = this.resolveNodeLlm(node);
       const maxRounds =
         node.executionMode === 'single_turn'
           ? 1
           : Math.max(1, node.executorConfig.maxInternalIterations ?? 4);
 
       const reply = await runToolCallingTurn({
-        providerId: this.config.llm.providerId,
-        apiKey: this.config.llm.apiKey,
-        model: this.config.llm.model,
+        providerId: llm.providerId,
+        apiKey: llm.apiKey,
+        model: llm.model,
         messages: buildNodePrompt(node, state, this.config.systemPrompt),
         toolMap: this.config.toolMap,
         toolContext: this.config.toolContext,
@@ -258,10 +300,10 @@ class WunderlandNodeExecutor extends NodeExecutor {
         dangerouslySkipPermissions: false,
         strictToolNames: this.config.strictToolNames,
         askPermission: this.config.askPermission,
-        baseUrl: this.config.llm.baseUrl,
-        fallback: this.config.llm.fallback,
-        getApiKey: this.config.llm.getApiKey,
-        ollamaOptions: this.config.llm.ollamaOptions,
+        baseUrl: llm.baseUrl,
+        fallback: llm.fallback,
+        getApiKey: llm.getApiKey,
+        ollamaOptions: llm.ollamaOptions,
         debug: this.config.debug,
       });
 
