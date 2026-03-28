@@ -10,7 +10,8 @@
  * - Falls back to demo data when no seed/backend is configured.
  */
 
-import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import type { GlobalFlags } from '../types.js';
@@ -24,7 +25,9 @@ import {
 } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs as getGlyphs } from '../ui/glyphs.js';
-import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
+import { loadDotEnvIntoProcessUpward, mergeEnv } from '../config/env-manager.js';
+import { runInitLlmStep } from '../wizards/init-llm-step.js';
+import { openaiChatWithTools, type LLMProviderConfig } from '../openai/tool-calling.js';
 
 // ---------------------------------------------------------------------------
 // Demo data (when no backend/seed is available)
@@ -92,27 +95,272 @@ function resolveSeedId(
   return seedId ? seedId : undefined;
 }
 
+async function loadAgencies(
+  flags: Record<string, string | boolean>,
+): Promise<{ agencies: AgencyEntry[]; isDemo: boolean }> {
+  const seedId = resolveSeedId(flags);
+  if (!seedId) {
+    return { agencies: DEMO_AGENCIES, isDemo: true };
+  }
+
+  try {
+    const res = await fetch(
+      `${_getBackendBaseUrl()}/agencies?seedId=${encodeURIComponent(seedId)}`,
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { agencies?: AgencyEntry[] };
+      return {
+        agencies: Array.isArray(data.agencies) ? data.agencies : [],
+        isDemo: false,
+      };
+    }
+  } catch {
+    // Backend unavailable — fall back to demo data
+  }
+
+  return { agencies: DEMO_AGENCIES, isDemo: true };
+}
+
+// ---------------------------------------------------------------------------
+// NL agency extraction
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracted agency configuration from a natural language description.
+ * Returned by `extractAgencyConfig()`.
+ */
+export interface ExtractedAgencyConfig {
+  /** Human-friendly name for the agency. */
+  name: string;
+  /** Orchestration strategy. */
+  strategy: 'sequential' | 'parallel' | 'graph' | 'debate' | 'review-loop' | 'hierarchical';
+  /** Shared goals the agents work towards. */
+  sharedGoals?: string[];
+  /** Named agents with their roles and instructions. */
+  agents: Record<string, {
+    instructions: string;
+    role?: string;
+    dependsOn?: string[];
+  }>;
+}
+
+/** System prompt sent to the LLM for agency configuration extraction. */
+const AGENCY_EXTRACTION_PROMPT = `You are an AI configuration expert. Generate an "agency" configuration block from the user's natural language description of a multi-agent team.
+
+**Available strategies:**
+- sequential: Agents run one after another in order
+- parallel: All agents run at the same time
+- graph: Agents form a DAG with dependsOn edges
+- debate: Agents argue different viewpoints, then a moderator synthesizes
+- review-loop: One agent drafts, another reviews, iterates until approved
+- hierarchical: A manager delegates tasks to subordinate agents
+
+**Output JSON schema:**
+{
+  "name": "string — agency name (kebab-case)",
+  "strategy": "sequential | parallel | graph | debate | review-loop | hierarchical",
+  "sharedGoals": ["string — optional shared goals"],
+  "agents": {
+    "<agent-name>": {
+      "instructions": "What this agent does",
+      "role": "optional role label (researcher, writer, reviewer, etc.)",
+      "dependsOn": ["optional — other agent names this agent waits for (graph strategy)"]
+    }
+  }
+}
+
+**Instructions:**
+1. Respond ONLY with valid JSON matching the schema above.
+2. Choose the strategy that best fits the described workflow.
+3. Give each agent a descriptive kebab-case name and clear instructions.
+4. For graph strategy, set dependsOn edges to express the workflow order.
+5. Include sharedGoals when the user mentions team-level objectives.
+6. Use 2-6 agents unless the user specifies otherwise.
+
+**User description:** {{DESCRIPTION}}`;
+
+/**
+ * Extract an agency configuration from a natural language description.
+ *
+ * Sends the description to an LLM with a structured prompt, parses the
+ * resulting JSON, and returns a validated `ExtractedAgencyConfig`.
+ *
+ * @param description - Plain-English description of the desired agency
+ * @param llmInvoker  - Function that sends a prompt string and returns the LLM text response
+ * @returns Validated agency configuration
+ *
+ * @throws {Error} If the description is empty or the LLM returns invalid output
+ *
+ * @example
+ * ```typescript
+ * const cfg = await extractAgencyConfig(
+ *   "research team with a researcher, analyst, and writer",
+ *   async (prompt) => openai.complete(prompt),
+ * );
+ * // cfg.name === "research-team"
+ * // cfg.strategy === "graph"
+ * // Object.keys(cfg.agents) === ["researcher", "analyst", "writer"]
+ * ```
+ */
+export async function extractAgencyConfig(
+  description: string,
+  llmInvoker: (prompt: string) => Promise<string>,
+): Promise<ExtractedAgencyConfig> {
+  if (!description.trim()) {
+    throw new Error('Agency description cannot be empty');
+  }
+
+  const prompt = AGENCY_EXTRACTION_PROMPT.replace('{{DESCRIPTION}}', description);
+  const response = await llmInvoker(prompt);
+
+  // Parse JSON from LLM response (handles code fences, leading text)
+  const text = String(response ?? '').trim();
+  if (!text) throw new Error('LLM returned an empty response');
+
+  let parsed: ExtractedAgencyConfig | undefined;
+
+  // Direct JSON
+  try { parsed = JSON.parse(text); } catch { /* continue */ }
+
+  // Fenced code block
+  if (!parsed) {
+    const fenceMatch = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(text);
+    if (fenceMatch?.[1]) {
+      try { parsed = JSON.parse(fenceMatch[1].trim()); } catch { /* continue */ }
+    }
+  }
+
+  // First {...} span
+  if (!parsed) {
+    const first = text.indexOf('{');
+    const last = text.lastIndexOf('}');
+    if (first !== -1 && last > first) {
+      try { parsed = JSON.parse(text.slice(first, last + 1)); } catch { /* fall through */ }
+    }
+  }
+
+  if (!parsed) throw new Error('LLM did not return valid JSON for agency config');
+
+  // Validate strategy
+  const validStrategies = ['sequential', 'parallel', 'graph', 'debate', 'review-loop', 'hierarchical'] as const;
+  if (!validStrategies.includes(parsed.strategy as any)) {
+    parsed.strategy = 'sequential';
+  }
+
+  // Validate agents object
+  if (!parsed.agents || typeof parsed.agents !== 'object' || Object.keys(parsed.agents).length === 0) {
+    throw new Error('LLM did not return any agents in the agency config');
+  }
+
+  // Ensure name
+  if (!parsed.name || typeof parsed.name !== 'string') {
+    parsed.name = 'my-agency';
+  }
+
+  return parsed;
+}
+
+/**
+ * Create an LLM invoker for agency NL extraction.
+ * Reuses the same provider detection as `wunderland create`.
+ */
+async function createAgencyLLMInvoker(globals: GlobalFlags): Promise<(prompt: string) => Promise<string>> {
+  const llm = await runInitLlmStep({ nonInteractive: globals.yes === true });
+  if (!llm) {
+    throw new Error(
+      'No LLM provider configured. Set an API key (OPENAI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY),\n' +
+      'or run `wunderland setup` first.',
+    );
+  }
+
+  for (const [k, v] of Object.entries(llm.apiKeys)) {
+    if (v) process.env[k] = v;
+  }
+  if (Object.keys(llm.apiKeys).length > 0) {
+    await mergeEnv(llm.apiKeys, globals.config);
+  }
+
+  const provider = llm.llmProvider;
+  const model = llm.llmModel;
+
+  if (provider === 'anthropic') {
+    const apiKey = process.env['ANTHROPIC_API_KEY'] || '';
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required for Anthropic provider.');
+
+    return async (prompt: string): Promise<string> => {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 2048,
+          temperature: 0.1,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Anthropic error (${res.status}): ${text.slice(0, 300)}`);
+      const data = JSON.parse(text);
+      const blocks = Array.isArray(data?.content) ? data.content : [];
+      const out = blocks.find((b: any) => b?.type === 'text')?.text;
+      if (typeof out !== 'string') throw new Error('Anthropic returned an empty response.');
+      return out;
+    };
+  }
+
+  // OpenAI-compatible path (openai, openrouter, ollama)
+  const openaiBaseUrl =
+    provider === 'openrouter' ? 'https://openrouter.ai/api/v1'
+    : provider === 'ollama' ? 'http://localhost:11434/v1'
+    : undefined;
+
+  const apiKey =
+    provider === 'openrouter' ? (process.env['OPENROUTER_API_KEY'] || '')
+    : provider === 'ollama' ? 'ollama'
+    : (process.env['OPENAI_API_KEY'] || '');
+
+  if (!apiKey && provider !== 'ollama') {
+    throw new Error(`${provider.toUpperCase()} API key is missing.`);
+  }
+
+  const fallback: LLMProviderConfig | undefined =
+    provider === 'openai' && process.env['OPENROUTER_API_KEY']
+      ? {
+          apiKey: process.env['OPENROUTER_API_KEY'] || '',
+          model: 'auto',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
+        }
+      : undefined;
+
+  return async (prompt: string): Promise<string> => {
+    const { message } = await openaiChatWithTools({
+      apiKey,
+      model,
+      baseUrl: openaiBaseUrl,
+      fallback,
+      messages: [{ role: 'user', content: prompt }],
+      tools: [],
+      temperature: 0.1,
+      maxTokens: 2200,
+    });
+    const content = typeof message.content === 'string' ? message.content : '';
+    if (!content.trim()) throw new Error('LLM returned an empty response.');
+    return content;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Subcommands
 // ---------------------------------------------------------------------------
 
 /** `wunderland agency list` — list configured agencies. */
 async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
-  const seedId = resolveSeedId(flags);
-  const isDemo = !seedId;
-
-  let agencies: AgencyEntry[] = DEMO_AGENCIES;
-  if (!isDemo) {
-    try {
-      const res = await fetch(`${_getBackendBaseUrl()}/agencies?seedId=${seedId}`);
-      if (res.ok) {
-        const data = await res.json() as { agencies?: AgencyEntry[] };
-        if (data.agencies?.length) agencies = data.agencies;
-      }
-    } catch {
-      // Backend unavailable — fall back to demo data
-    }
-  }
+  const { agencies, isDemo } = await loadAgencies(flags);
 
   fmt.section('Agencies' + (isDemo ? dim(' (demo)') : ''));
 
@@ -150,15 +398,160 @@ async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
   fmt.blank();
 }
 
-/** `wunderland agency create <name>` — create a new agency. */
-async function cmdCreate(args: string[], flags: Record<string, string | boolean>): Promise<void> {
-  const name = args[0];
-  if (!name) {
-    fmt.errorBlock('Missing name', 'Usage: wunderland agency create <name> [--strategy sequential|graph|parallel|debate|review-loop|hierarchical]');
+/**
+ * `wunderland agency create <name-or-description>` -- create a new agency.
+ *
+ * When the argument looks like a natural language description (contains spaces
+ * and is longer than a simple name), the CLI sends it to the LLM via
+ * `extractAgencyConfig()` and writes the resulting agency block into
+ * `agent.config.json`.
+ *
+ * When the argument is a simple name (no spaces, or very short), the original
+ * manual template is shown instead.
+ */
+async function cmdCreate(
+  args: string[],
+  flags: Record<string, string | boolean>,
+  globals: GlobalFlags,
+): Promise<void> {
+  const joined = args.join(' ').trim();
+  if (!joined) {
+    fmt.errorBlock(
+      'Missing name or description',
+      'Usage:\n' +
+      '  wunderland agency create <name> [--strategy ...]\n' +
+      '  wunderland agency create "research team with researcher, analyst, and writer"',
+    );
     process.exitCode = 1;
     return;
   }
 
+  // Heuristic: if the input contains spaces and is 20+ chars, treat as NL description
+  const isDescription = joined.includes(' ') && joined.length >= 20;
+
+  if (isDescription) {
+    await cmdCreateNL(joined, flags, globals);
+  } else {
+    cmdCreateManual(joined, flags);
+  }
+}
+
+/**
+ * NL-powered agency creation. Sends the description to the LLM, extracts
+ * agency config, previews it, and appends to agent.config.json.
+ */
+async function cmdCreateNL(
+  description: string,
+  flags: Record<string, string | boolean>,
+  globals: GlobalFlags,
+): Promise<void> {
+  fmt.section('Natural Language Agency Builder');
+  fmt.blank();
+
+  // Validate LLM provider
+  let invoker: (prompt: string) => Promise<string>;
+  try {
+    invoker = await createAgencyLLMInvoker(globals);
+    fmt.ok('LLM provider configured.');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    fmt.errorBlock('LLM provider not configured', msg);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Extract agency config
+  fmt.section('Extracting agency configuration...');
+
+  let extracted: ExtractedAgencyConfig;
+  try {
+    extracted = await extractAgencyConfig(description, invoker);
+    fmt.ok('Agency configuration extracted.');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    fmt.errorBlock('Extraction failed', msg);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Preview
+  fmt.section('Extracted Agency');
+  fmt.kvPair('Name', accent(extracted.name));
+  fmt.kvPair('Strategy', accent(extracted.strategy));
+  if (extracted.sharedGoals && extracted.sharedGoals.length > 0) {
+    fmt.kvPair('Shared Goals', extracted.sharedGoals.join('; '));
+  }
+  console.log();
+  fmt.section('Agents');
+  for (const [agentName, agentDef] of Object.entries(extracted.agents)) {
+    const deps = agentDef.dependsOn?.length ? dim(` (depends on: ${agentDef.dependsOn.join(', ')})`) : '';
+    const role = agentDef.role ? dim(` [${agentDef.role}]`) : '';
+    console.log(`  ${sColor(getGlyphs().ok)} ${bright(agentName)}${role}${deps}`);
+    console.log(`    ${dim(agentDef.instructions)}`);
+  }
+  fmt.blank();
+
+  // Confirm (unless --yes)
+  if (!globals.yes) {
+    try {
+      const { default: prompts } = await import('@clack/prompts');
+      const confirm = await prompts.confirm({ message: 'Write this agency block to agent.config.json?' });
+      if (prompts.isCancel(confirm) || !confirm) {
+        console.log(dim('  Cancelled.'));
+        return;
+      }
+    } catch {
+      // If @clack/prompts not available, proceed
+    }
+  }
+
+  // Write to agent.config.json
+  const configPath = resolve(process.cwd(), 'agent.config.json');
+  let existingConfig: Record<string, unknown> = {};
+
+  if (existsSync(configPath)) {
+    try {
+      const raw = await readFile(configPath, 'utf8');
+      existingConfig = JSON.parse(raw);
+    } catch {
+      // File exists but not valid JSON — start fresh
+    }
+  }
+
+  // Build the agency block
+  const agencyBlock: Record<string, unknown> = {
+    name: extracted.name,
+    strategy: extracted.strategy,
+    agents: extracted.agents,
+  };
+  if (extracted.sharedGoals && extracted.sharedGoals.length > 0) {
+    agencyBlock.sharedGoals = extracted.sharedGoals;
+  }
+
+  existingConfig.agency = agencyBlock;
+
+  try {
+    await writeFile(configPath, JSON.stringify(existingConfig, null, 2) + '\n', 'utf8');
+    fmt.ok(`Agency block written to ${dim(configPath)}`);
+    fmt.blank();
+    fmt.note(
+      `Run your agency:\n\n` +
+      `  ${accent(`wunderland agency run ${extracted.name} "Your prompt here"`)}`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    fmt.errorBlock('Failed to write agent.config.json', msg);
+    process.exitCode = 1;
+  }
+
+  fmt.blank();
+}
+
+/**
+ * Manual agency creation (original behavior). Shows a JSON template when
+ * the user provides a simple name without a description.
+ */
+function cmdCreateManual(name: string, flags: Record<string, string | boolean>): void {
   const strategy = typeof flags.strategy === 'string' ? flags.strategy : 'sequential';
 
   fmt.section(`Create Agency: ${name}`);
@@ -177,11 +570,18 @@ async function cmdCreate(args: string[], flags: Record<string, string | boolean>
     ${dim('}')}
   ${dim('}')}`,
   );
+  fmt.note(
+    'Or use natural language:\n\n' +
+    `  ${accent('wunderland agency create "research team with researcher, analyst, and writer"')}`,
+  );
   fmt.blank();
 }
 
 /** `wunderland agency status <name>` — show agency status. */
-async function cmdStatus(args: string[]): Promise<void> {
+async function cmdStatus(
+  args: string[],
+  flags: Record<string, string | boolean>,
+): Promise<void> {
   const name = args[0];
   if (!name) {
     fmt.errorBlock('Missing name', 'Usage: wunderland agency status <name>');
@@ -189,14 +589,15 @@ async function cmdStatus(args: string[]): Promise<void> {
     return;
   }
 
-  const agency = DEMO_AGENCIES.find((a) => a.name === name);
+  const { agencies, isDemo } = await loadAgencies(flags);
+  const agency = agencies.find((a) => a.name === name);
   if (!agency) {
     fmt.errorBlock('Not found', `Agency "${name}" not found. Run ${accent('wunderland agency list')} to see available agencies.`);
     process.exitCode = 1;
     return;
   }
 
-  fmt.section(`Agency: ${agency.name}`);
+  fmt.section(`Agency: ${agency.name}` + (isDemo ? dim(' (demo)') : ''));
   console.log(`  ${dim('Strategy:')}   ${accent(agency.strategy)}`);
   console.log(`  ${dim('Status:')}     ${agency.status === 'completed' ? sColor(agency.status) : dim(agency.status)}`);
   console.log(`  ${dim('Total runs:')} ${bright(String(agency.totalRuns))}`);
@@ -327,7 +728,8 @@ export default async function cmdAgency(
     console.log(`
   ${accent('Subcommands:')}
     ${dim('list')}                   List configured agencies
-    ${dim('create <name>')}          Create a multi-agent agency
+    ${dim('create <name>')}          Create agency (manual template)
+    ${dim('create "<description>"')} Create agency from NL description (LLM-powered)
     ${dim('status <name>')}          Show agency status and agents
     ${dim('run <name> "<prompt>"')}  Execute an agency against a prompt
     ${dim('add-seat <agency> <agent>')}  Add agent to agency
@@ -338,10 +740,12 @@ export default async function cmdAgency(
     ${dim('--seed <id>')}          Agent seed ID for backend queries
     ${dim('--stream')}             Stream output with agent events
     ${dim('--format json|table')}  Output format
+    ${dim('--yes / -y')}           Skip confirmation prompt
 
   ${accent('Examples:')}
     ${dim('wunderland agency list')}
     ${dim('wunderland agency create research-team --strategy graph')}
+    ${dim('wunderland agency create "research team with researcher, analyst, and writer"')}
     ${dim('wunderland agency run research-team "Summarize recent AI safety papers"')}
     ${dim('wunderland agency run research-team "Write a report on fusion energy" --stream')}
 `);
@@ -350,8 +754,8 @@ export default async function cmdAgency(
 
   try {
     if (sub === 'list') await cmdList(flags);
-    else if (sub === 'create') await cmdCreate(args.slice(1), flags);
-    else if (sub === 'status') await cmdStatus(args.slice(1));
+    else if (sub === 'create') await cmdCreate(args.slice(1), flags, globals);
+    else if (sub === 'status') await cmdStatus(args.slice(1), flags);
     else if (sub === 'run') await cmdRun(args.slice(1), flags);
     else if (sub === 'add-seat') {
       fmt.note('Agency seat management requires a running backend.');
