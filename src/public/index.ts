@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import { AgentMemory, type ITool } from '@framers/agentos';
 import {
   AgentGraph as AgentGraphBuilder,
+  type GraphExpansionHandler,
   mission as createMission,
   workflow as createWorkflow,
   type GraphState,
@@ -40,10 +41,8 @@ import { planTurnToolDefinitions } from './turn-tool-selection.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
-  normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
 } from '../runtime/policy.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
 import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
@@ -52,7 +51,7 @@ import type {
   WunderlandAdaptiveExecutionConfig,
   WunderlandAgentConfig,
   WunderlandTaskOutcomeTelemetryConfig,
-  WunderlandWorkspace,
+  WunderlandToolFailureMode,
 } from '../api/types.js';
 import { WunderlandConfigError } from '../config/errors.js';
 import { loadAgentConfig, resolveLlmConfig } from '../config/load.js';
@@ -62,17 +61,17 @@ import {
 } from '../config/effective-agent-config.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import type { WunderlandDiscoveryConfig, DiscoverySkillEntry } from '../discovery/index.js';
-import {
-  createWunderlandSeed,
-  DEFAULT_INFERENCE_HIERARCHY,
-  DEFAULT_SECURITY_PROFILE,
-  DEFAULT_STEP_UP_AUTH_CONFIG,
-} from '../core/index.js';
 import { resolveSkillContext } from '../core/resolve-skill-context.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
-import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
-import { invokeWunderlandGraph, streamWunderlandGraph, type WunderlandGraphLike } from '../runtime/graph-runner.js';
+import { AgentBootstrap } from '../bootstrap/index.js';
+import {
+  invokeWunderlandGraph,
+  resumeWunderlandGraph,
+  streamResumeWunderlandGraph,
+  streamWunderlandGraph,
+  type WunderlandGraphLike,
+} from '../runtime/graph-runner.js';
 import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../observability/token-usage.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../observability/session-text-log.js';
 
@@ -434,42 +433,6 @@ async function resolveExtensionsFromOpts(opts: {
   }
 }
 
-function buildLibrarySystemPrompt(agentConfig: WunderlandAgentConfig, policy: NormalizedRuntimePolicy, skillsPrompt?: string, lazyTools = false): string {
-  const displayName = resolveAgentDisplayName({
-    displayName: agentConfig.displayName,
-    agentName: agentConfig.agentName,
-    seedId: agentConfig.seedId,
-    fallback: 'Wunderland Agent',
-  });
-  const personality = agentConfig.personality || {};
-  const seed = createWunderlandSeed({
-    seedId: String(agentConfig.seedId || 'seed_library'),
-    name: displayName,
-    description: agentConfig.bio || 'In-process agent runtime',
-    hexacoTraits: {
-      honesty_humility: Number.isFinite(personality.honesty) ? personality.honesty! : 0.8,
-      emotionality: Number.isFinite(personality.emotionality) ? personality.emotionality! : 0.5,
-      extraversion: Number.isFinite(personality.extraversion) ? personality.extraversion! : 0.6,
-      agreeableness: Number.isFinite(personality.agreeableness) ? personality.agreeableness! : 0.7,
-      conscientiousness: Number.isFinite(personality.conscientiousness) ? personality.conscientiousness! : 0.8,
-      openness: Number.isFinite(personality.openness) ? personality.openness! : 0.7,
-    },
-    baseSystemPrompt: typeof agentConfig.systemPrompt === 'string' ? agentConfig.systemPrompt : undefined,
-    securityProfile: DEFAULT_SECURITY_PROFILE,
-    inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
-    stepUpAuthConfig: DEFAULT_STEP_UP_AUTH_CONFIG,
-  });
-
-  return buildAgenticSystemPrompt({
-    seed,
-    policy,
-    mode: 'library',
-    lazyTools,
-    autoApproveToolCalls: false,
-    skillsPrompt: skillsPrompt || undefined,
-  });
-}
-
 // =============================================================================
 // Public entrypoint
 // =============================================================================
@@ -485,9 +448,13 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   };
 
   const workingDirectory = opts.workingDirectory ? path.resolve(opts.workingDirectory) : process.cwd();
+
+  // ── Pre-bootstrap: library-specific config loading ───────────────────
+  // The library API has its own loadAgentConfig + resolveLlmConfig flow
+  // that supports configPath, preset, and llm options.
   const loadedAgentConfig = await loadAgentConfig({ agentConfig: opts.agentConfig, configPath: opts.configPath, workingDirectory });
   const {
-    agentConfig,
+    agentConfig: resolvedConfig,
     preset: loadedPreset,
     selectedPersona,
     availablePersonas,
@@ -498,25 +465,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     logger,
   });
 
-  const policy = normalizeRuntimePolicy(agentConfig as any);
-  const permissions = getPermissionsForSet(policy.permissionSet);
-
-  const workspace: WunderlandWorkspace = {
-    agentId: sanitizeAgentWorkspaceId(opts.workspace?.agentId ?? String(agentConfig.seedId || 'seed_local_agent')),
-    baseDir: opts.workspace?.baseDir ?? resolveAgentWorkspaceBaseDir(),
-  };
-  const sessionTextLogger = new WunderlandSessionTextLogger(
-    resolveWunderlandTextLogConfig({
-      agentConfig,
-      workingDirectory,
-      workspace,
-      defaultAgentId: workspace.agentId,
-      configBacked: Boolean(opts.agentConfig || opts.configPath),
-    }),
-    logger,
-  );
-
-  const llm = await resolveLlmConfig({ agentConfig, llm: opts.llm });
+  const llm = await resolveLlmConfig({ agentConfig: resolvedConfig, llm: opts.llm });
   if (!llm.canUseLLM) {
     throw new WunderlandConfigError('No usable LLM credentials configured.', [
       {
@@ -534,8 +483,38 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       },
     ]);
   }
+
+  // ── Core bootstrap (shared with CLI + chat-runtime) ──────────────────
+  // Uses lazyTools + disableSkills so the library can layer its own
+  // curated-tool, extension, and skill resolution on top.
+  const agent = await AgentBootstrap.create({
+    agentConfig: resolvedConfig as any,
+    providerId: llm.providerId,
+    apiKey: llm.apiKey,
+    baseUrl: llm.baseUrl,
+    mode: 'library',
+    lazyTools: true, // Library manages its own tool loading
+    workspaceId: opts.workspace?.agentId ?? String(resolvedConfig.seedId || 'seed_local_agent'),
+    workspaceBaseDir: opts.workspace?.baseDir,
+    workingDirectory,
+    logger,
+  });
+
+  const { policy, workspace, activePersonaId, agentConfig } = agent;
+  const permissions = getPermissionsForSet(policy.permissionSet);
   const strictToolNames = resolveStrictToolNames(
     opts.toolCalling?.strictToolNames ?? (agentConfig as any)?.toolCalling?.strictToolNames,
+  );
+
+  const sessionTextLogger = new WunderlandSessionTextLogger(
+    resolveWunderlandTextLogConfig({
+      agentConfig,
+      workingDirectory,
+      workspace,
+      defaultAgentId: workspace.agentId,
+      configBacked: Boolean(opts.agentConfig || opts.configPath),
+    }),
+    logger,
   );
 
   const approvalsMode: WunderlandApprovalsMode = opts.approvals?.mode ?? 'deny-side-effects';
@@ -544,11 +523,17 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   // Otherwise default to 'lazy' — meta tools only, agent discovers & enables packs on demand.
   const effectiveTools = opts.tools ?? (loadedPreset ? 'curated' : 'lazy');
 
+  // ── Library-specific tool resolution (curated + custom tools) ─────────
   const { toolMap, droppedByPolicy, availability } = await resolveToolMap({
     tools: effectiveTools,
     policy,
     logger,
   });
+
+  // Merge bootstrap's tools (from security/RAG) into the library's tool map
+  for (const [name, tool] of agent.toolMap.entries()) {
+    if (!toolMap.has(name)) toolMap.set(name, tool);
+  }
 
   // Resolve named extensions → add their tools to toolMap
   const {
@@ -570,7 +555,9 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   }
 
   // Resolve skills → get prompt text + entries for discovery indexing
-  const { skillsPrompt, skillEntries, skillNames } = await resolveSkillsFromOpts({
+  // skillsPrompt is handled by the bootstrap's system prompt builder;
+  // the library resolves skills separately for richer options + discovery indexing.
+  const { skillEntries, skillNames } = await resolveSkillsFromOpts({
     skills: opts.skills,
     agentConfig,
     logger,
@@ -610,7 +597,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   const isLazyMode = effectiveTools === 'lazy';
   if (isLazyMode || effectiveTools === 'curated') {
     try {
-      const { createSchemaOnDemandTools } = await import('../cli/openai/schema-on-demand.js');
+      const { createSchemaOnDemandTools } = await import('../runtime/schema-on-demand.js');
       const sodTools = createSchemaOnDemandTools({
         toolMap: toolMap as any,
         runtimeDefaults: {
@@ -657,10 +644,6 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     logger,
   });
   await adaptiveRuntime.initialize();
-  const activePersonaId =
-    typeof agentConfig.selectedPersonaId === 'string' && agentConfig.selectedPersonaId.trim()
-      ? agentConfig.selectedPersonaId.trim()
-      : String(agentConfig.seedId || workspace.agentId);
 
   const baseToolContext: Record<string, unknown> = {
     agentId: workspace.agentId,
@@ -679,7 +662,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     workingDirectory,
   };
 
-  const systemPrompt = buildLibrarySystemPrompt(agentConfig, policy, skillsPrompt, isLazyMode);
+  const systemPrompt = agent.systemPrompt;
 
   const sessions = new Map<string, Array<Record<string, unknown>>>();
 
@@ -1172,6 +1155,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   const close = async () => {
     await discoveryManager.close();
     await adaptiveRuntime.close();
+    await agent.shutdown().catch(() => {});
     sessions.clear();
   };
 
@@ -1187,7 +1171,17 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   const workflow: WunderlandApp['workflow'] = (name) => createWorkflow(name);
   const mission: WunderlandApp['mission'] = (name) => createMission(name);
 
-  const runGraph: WunderlandApp['runGraph'] = async (graph, input, runOpts) => {
+  const buildGraphRunConfig = (runOpts?: {
+    sessionId?: string;
+    userId?: string;
+    tenantId?: string;
+    toolFailureMode?: WunderlandToolFailureMode;
+    llmByProvider?: Record<string, any>;
+    checkpointStore?: any;
+    expansionHandler?: GraphExpansionHandler;
+    reevalInterval?: number;
+    debug?: boolean;
+  }) => {
     const sessionId =
       typeof runOpts?.sessionId === 'string' && runOpts.sessionId.trim()
         ? runOpts.sessionId.trim()
@@ -1240,7 +1234,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       return false;
     };
 
-    return invokeWunderlandGraph(graph as WunderlandGraphLike, input, {
+    return {
       llm: {
         providerId: llm.providerId,
         apiKey: llm.apiKey,
@@ -1255,81 +1249,43 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
       toolMap,
       toolContext,
       askPermission,
+      checkpointStore: runOpts?.checkpointStore,
+      expansionHandler: runOpts?.expansionHandler,
+      reevalInterval: runOpts?.reevalInterval,
       strictToolNames,
       debug: runOpts?.debug,
+    };
+  };
+
+  const runGraph: WunderlandApp['runGraph'] = async (graph, input, runOpts) => {
+    const graphRunConfig = buildGraphRunConfig(runOpts);
+
+    return invokeWunderlandGraph(graph as WunderlandGraphLike, input, {
+      ...graphRunConfig,
     });
   };
 
   const streamGraph: WunderlandApp['streamGraph'] = (graph, input, runOpts) => {
-    const sessionId =
-      typeof runOpts?.sessionId === 'string' && runOpts.sessionId.trim()
-        ? runOpts.sessionId.trim()
-        : `graph-${randomUUID()}`;
-    const userId =
-      typeof runOpts?.userId === 'string' && runOpts.userId.trim()
-        ? runOpts.userId.trim()
-        : (typeof opts.userId === 'string' && opts.userId.trim() ? opts.userId.trim() : 'local-user');
-    const tenantId =
-      typeof runOpts?.tenantId === 'string' && runOpts.tenantId.trim()
-        ? runOpts.tenantId.trim()
-        : (
-          typeof (agentConfig as any)?.organizationId === 'string' && String((agentConfig as any).organizationId).trim()
-            ? String((agentConfig as any).organizationId).trim()
-            : undefined
-        );
-
-    const toolContext: Record<string, unknown> = {
-      ...baseToolContext,
-      sessionId,
-      userContext: { userId },
-      permissions,
-      toolFailureMode: runOpts?.toolFailureMode ?? opts.toolFailureMode ?? agentConfig.toolFailureMode,
-      orchestrationMode: 'graph-runtime',
-      ...(tenantId ? { tenantId } : null),
-    };
-
-    const askPermission = async (tool: ToolInstance, args: Record<string, unknown>) => {
-      const isSideEffect = tool.hasSideEffects === true;
-      const preview = safeJsonStringify(args, 1800);
-      const req: ToolApprovalRequest = {
-        sessionId,
-        tool: {
-          name: tool.name,
-          description: tool.description,
-          hasSideEffects: tool.hasSideEffects,
-          category: tool.category,
-          requiredCapabilities: tool.requiredCapabilities,
-        },
-        args,
-        preview,
-      };
-
-      if (approvalsMode === 'auto-all') return true;
-      if (approvalsMode === 'deny-side-effects') return !isSideEffect;
-      if (!isSideEffect) return true;
-      if (typeof opts.approvals?.onRequest === 'function') {
-        return opts.approvals.onRequest(req);
-      }
-      return false;
-    };
+    const graphRunConfig = buildGraphRunConfig(runOpts);
 
     return streamWunderlandGraph(graph as WunderlandGraphLike, input, {
-      llm: {
-        providerId: llm.providerId,
-        apiKey: llm.apiKey,
-        model: llm.model,
-        baseUrl: llm.baseUrl,
-        fallback: llm.fallback,
-        getApiKey: llm.getApiKey,
-        ollamaOptions: buildOllamaRuntimeOptions(agentConfig.ollama),
-      },
-      llmByProvider: runOpts?.llmByProvider,
-      systemPrompt,
-      toolMap,
-      toolContext,
-      askPermission,
-      strictToolNames,
-      debug: runOpts?.debug,
+      ...graphRunConfig,
+    });
+  };
+
+  const resumeGraph: WunderlandApp['resumeGraph'] = async (graph, checkpointId, runOpts) => {
+    const graphRunConfig = buildGraphRunConfig(runOpts);
+
+    return resumeWunderlandGraph(graph as WunderlandGraphLike, checkpointId, {
+      ...graphRunConfig,
+    });
+  };
+
+  const streamResumeGraph: WunderlandApp['streamResumeGraph'] = (graph, checkpointId, runOpts) => {
+    const graphRunConfig = buildGraphRunConfig(runOpts);
+
+    return streamResumeWunderlandGraph(graph as WunderlandGraphLike, checkpointId, {
+      ...graphRunConfig,
     });
   };
 
@@ -1396,7 +1352,23 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     }
   };
 
-  return { session, diagnostics, usage, agentGraph, workflow, mission, runGraph, streamGraph, loadWorkflow, loadMission, listWorkflows, memory, close };
+  return {
+    session,
+    diagnostics,
+    usage,
+    agentGraph,
+    workflow,
+    mission,
+    runGraph,
+    streamGraph,
+    resumeGraph,
+    streamResumeGraph,
+    loadWorkflow,
+    loadMission,
+    listWorkflows,
+    memory,
+    close,
+  };
 }
 
 // Convenience re-exports for library consumers (types only).
