@@ -546,16 +546,25 @@ export default async function cmdChat(
         'content-extraction', 'credential-vault', 'giphy', 'image-search',
         'image-generation', 'video-generation', 'audio-generation',
         'vision-pipeline', 'news-search', 'weather', 'skills',
-        'deep-research', 'github',
+        'deep-research', 'github', 'web-scraper',
       ],
       voice: getDefaultVoiceExtensions(),
       productivity: [] as string[],
     };
     const globalExts = globalConfig?.extensions;
 
-    toolExtensions = normalizeExtensionList(
-      extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedDefaults.tools,
-    );
+    // Category-aware loading: if agent config defines extensionCategories,
+    // expand categories to extension IDs instead of using hardcoded defaults.
+    const extensionCategories = cfg?.extensionCategories as string[] | undefined;
+    if (extensionCategories && extensionCategories.length > 0 && !extensionsFromConfig?.tools) {
+      const { expandCategories } = await import('../extensions/categories.js');
+      const categoryTools = expandCategories(extensionCategories as any);
+      toolExtensions = normalizeExtensionList(categoryTools);
+    } else {
+      toolExtensions = normalizeExtensionList(
+        extensionsFromConfig?.tools ?? globalExts?.tools ?? hardcodedDefaults.tools,
+      );
+    }
     voiceExtensions = normalizeExtensionList(
       extensionsFromConfig?.voice ?? globalExts?.voice ?? hardcodedDefaults.voice,
     );
