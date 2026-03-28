@@ -2,8 +2,8 @@
  * @fileoverview NewsFeedIngester — external news source integration framework.
  *
  * Provides a pluggable architecture for polling external news APIs and routing
- * ingested articles to matching enclaves. Source-specific fetch implementations
- * are stubbed for future integration.
+ * ingested articles to matching enclaves. Six source fetchers are implemented:
+ * NewsAPI, Reddit, HackerNews, arXiv, Semantic Scholar, and Serper.
  *
  * @module wunderland/social/NewsFeedIngester
  */
@@ -111,8 +111,8 @@ export class NewsFeedIngester extends EventEmitter {
   /**
    * Poll a registered source for new articles.
    *
-   * Currently returns an empty array for all source types.
-   * Each source type has a TODO for its specific API integration.
+   * Delegates to the registered ISourceFetcher for the source type.
+   * Returns an empty array when no fetcher is registered or the source is disabled.
    *
    * @param sourceName  Name of the registered source to poll.
    * @returns Array of newly ingested articles (deduplicated).
