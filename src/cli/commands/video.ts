@@ -84,17 +84,17 @@ export default async function cmdVideo(
         configDirOverride: globals.config,
         usage: result.usage
           ? {
-              prompt_tokens: result.usage.promptTokens,
-              completion_tokens: result.usage.completionTokens,
-              total_tokens: result.usage.totalTokens,
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: result.usage.totalVideos ?? 0,
               totalCostUSD: result.usage.totalCostUSD,
             }
           : null,
       });
 
-      if (output && result.video) {
+      const vid = result.videos?.[0];
+      if (output && vid) {
         const { writeFile } = await import('node:fs/promises');
-        const vid = result.video;
         if (vid.base64) {
           await writeFile(output, Buffer.from(vid.base64, 'base64'));
           console.log(`  └── ${accent('✓')} Saved to ${output}\n`);
@@ -102,7 +102,6 @@ export default async function cmdVideo(
           console.log(`  └── ${accent('✓')} URL: ${vid.url}\n`);
         }
       } else {
-        const vid = result.video;
         if (vid?.url) {
           console.log(`  └── ${accent('✓')} URL: ${vid.url}\n`);
         } else if (vid?.base64) {
@@ -154,8 +153,8 @@ export default async function cmdVideo(
       console.log(`\n  ${accent('●')} Animating image...`);
       const result = await generateVideo(request as any);
 
-      if (output && result.video) {
-        const vid = result.video;
+      const vid = result.videos?.[0];
+      if (output && vid) {
         if (vid.base64) {
           await writeFile(output, Buffer.from(vid.base64, 'base64'));
           console.log(`  └── ${accent('✓')} Saved to ${output}\n`);
@@ -163,7 +162,6 @@ export default async function cmdVideo(
           console.log(`  └── ${accent('✓')} URL: ${vid.url}\n`);
         }
       } else {
-        const vid = result.video;
         if (vid?.url) {
           console.log(`  └── ${accent('✓')} URL: ${vid.url}\n`);
         } else if (vid?.base64) {
@@ -209,8 +207,9 @@ export default async function cmdVideo(
         if (result.description) {
           console.log(`  └── ${accent('Description:')} ${result.description}`);
         }
-        if (result.transcript) {
-          console.log(`  └── ${accent('Transcript:')} ${result.transcript.slice(0, 200)}${result.transcript.length > 200 ? '...' : ''}`);
+        if (result.text?.length) {
+          const joined = result.text.join(' ');
+          console.log(`  └── ${accent('Text:')} ${joined.slice(0, 200)}${joined.length > 200 ? '...' : ''}`);
         }
         if (result.scenes?.length) {
           console.log(`  └── ${accent('Scenes:')} ${result.scenes.length} detected`);
