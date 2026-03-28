@@ -7,6 +7,7 @@ const agentosAuthPath = resolve(__dirname, '../agentos/src/core/llm/auth/index.t
 const agentosRagPath = resolve(__dirname, '../agentos/src/rag/index.ts');
 const agentosQueryRouterPath = resolve(__dirname, '../agentos/src/query-router/index.ts');
 const agentosMemoryPath = resolve(__dirname, '../agentos/src/memory/index.ts');
+const agentosOrchestrationPath = resolve(__dirname, '../agentos/src/orchestration/index.ts');
 const agentosRootPath = resolve(__dirname, '../agentos/src/index.ts');
 const hasAgentosAuth = existsSync(agentosAuthPath);
 const hasAgentosRoot = existsSync(agentosRootPath);
@@ -17,12 +18,21 @@ if (hasAgentosRoot) {
   agentosAliases['@framers/agentos/rag'] = agentosRagPath;
   agentosAliases['@framers/agentos/query-router'] = agentosQueryRouterPath;
   agentosAliases['@framers/agentos/memory'] = agentosMemoryPath;
+  agentosAliases['@framers/agentos/orchestration'] = agentosOrchestrationPath;
   agentosAliases['@framers/agentos'] = agentosRootPath;
 }
 
+const agentosSourceDir = resolve(__dirname, '../agentos/src');
+
 export default defineConfig({
   resolve: {
-    alias: agentosAliases,
+    alias: [
+      ...Object.entries(agentosAliases).map(([find, replacement]) => ({ find, replacement })),
+      {
+        find: /^@framers\/agentos\/(.+)$/,
+        replacement: `${agentosSourceDir}/$1`,
+      },
+    ],
   },
   test: {
     include: ['src/**/*.test.ts'],
