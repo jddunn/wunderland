@@ -20,15 +20,13 @@ import {
   type CompiledExecutionGraph,
   type GraphNode,
   type GraphState,
-} from '@framers/agentos/orchestration/ir/types';
-import type { GraphEvent } from '@framers/agentos/orchestration/events/GraphEvent';
-import type { ICheckpointStore } from '@framers/agentos/orchestration/checkpoint/ICheckpointStore';
-import { InMemoryCheckpointStore } from '@framers/agentos/orchestration/checkpoint/InMemoryCheckpointStore';
-import { GraphRuntime } from '@framers/agentos/orchestration/runtime/GraphRuntime';
-import {
+  type GraphEvent,
+  type ICheckpointStore,
+  InMemoryCheckpointStore,
+  GraphRuntime,
   NodeExecutor,
   type NodeExecutionResult,
-} from '@framers/agentos/orchestration/runtime/NodeExecutor';
+} from '@framers/agentos/orchestration';
 
 import { runToolCallingTurn, safeJsonStringify, type LLMProviderConfig, type ToolInstance } from './tool-calling.js';
 
