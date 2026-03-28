@@ -13,10 +13,9 @@
  *   - file_read      => Filesystem read  (filesystem.read via isFilesystemReadTool)
  *   - list_directory  => Filesystem read  (filesystem.read via isFilesystemReadTool)
  *
- * Note: create_spreadsheet / create_document are NOT in the isFilesystemWriteTool()
- * allowlist, so they survive even when filesystem.write=false. This test documents
- * that gap — those tools pass through unless a restrictive tool access profile
- * (not "unrestricted") blocks the filesystem category entirely.
+ * create_spreadsheet / create_document are in the isFilesystemWriteTool() list,
+ * so they are correctly removed when filesystem.write=false (balanced, strict,
+ * paranoid tiers).
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -330,60 +329,34 @@ describe('Security tier tool filtering (E2E)', { timeout: 15_000 }, () => {
   });
 
   // -----------------------------------------------------------------------
-  // 7. create_spreadsheet and create_document follow tool access profile,
-  //    NOT filesystem.write — they are not in the isFilesystemWriteTool list
+  // 7. create_spreadsheet and create_document follow filesystem.write
+  //    (now correctly in the isFilesystemWriteTool allowlist)
   // -----------------------------------------------------------------------
   describe('create_spreadsheet and create_document', () => {
-    it('should survive all tiers with unrestricted profile (not in isFilesystemWriteTool)', () => {
-      // These tool names are NOT recognized by isFilesystemWriteTool(), so the
-      // filesystem.write permission check never fires. With "unrestricted"
-      // profile the filesystem category is allowed, so they pass through.
-      for (const tier of ['dangerous', 'permissive', 'balanced', 'strict'] as SecurityTierName[]) {
+    it('should survive on dangerous and permissive tiers (filesystem.write=true)', () => {
+      for (const tier of ['dangerous', 'permissive'] as SecurityTierName[]) {
         const tools = surviving(tier);
         expect(tools).toContain('create_spreadsheet');
         expect(tools).toContain('create_document');
       }
     });
 
-    it('should be blocked on paranoid when filesystem category is profile-blocked', () => {
-      // On paranoid tier with "unrestricted" profile, the filesystem category
-      // is still allowed by the profile. But isFilesystemReadTool does NOT
-      // match these tool names, and isFilesystemWriteTool does NOT either.
-      // So the tools pass through even on paranoid with unrestricted profile.
-      // However, if we use a restrictive profile like "social-citizen" which
-      // blocks the filesystem category, they would be dropped.
-      const tier = SECURITY_TIERS.paranoid;
-      const permissions = getPermissionsForSet(tier.permissionSet);
-      const toolMap = buildBaseToolMap();
-
-      // With "social-citizen" profile (blocks filesystem category entirely),
-      // create_spreadsheet and create_document are dropped
-      const { toolMap: filtered } = filterToolMapByPolicy({
-        toolMap,
-        toolAccessProfile: 'social-citizen',
-        permissions,
-      });
-      expect(filtered.has('create_spreadsheet')).toBe(false);
-      expect(filtered.has('create_document')).toBe(false);
+    it('should be removed on balanced tier (filesystem.write=false)', () => {
+      const tools = surviving('balanced');
+      expect(tools).not.toContain('create_spreadsheet');
+      expect(tools).not.toContain('create_document');
     });
 
-    it('should be blocked by assistant profile on strict tier (system category blocked)', () => {
-      // The assistant profile blocks system category but allows filesystem.
-      // create_spreadsheet/create_document have filesystem category so they
-      // pass the profile check. They survive even with assistant profile.
-      const tier = SECURITY_TIERS.strict;
-      const permissions = getPermissionsForSet(tier.permissionSet);
-      const toolMap = buildBaseToolMap();
+    it('should be removed on strict tier (filesystem.write=false)', () => {
+      const tools = surviving('strict');
+      expect(tools).not.toContain('create_spreadsheet');
+      expect(tools).not.toContain('create_document');
+    });
 
-      const { toolMap: filtered } = filterToolMapByPolicy({
-        toolMap,
-        toolAccessProfile: 'assistant',
-        permissions,
-      });
-      // assistant profile allows filesystem category, and these tools are not
-      // caught by isFilesystemWriteTool, so they survive
-      expect(filtered.has('create_spreadsheet')).toBe(true);
-      expect(filtered.has('create_document')).toBe(true);
+    it('should be removed on paranoid tier (filesystem.write=false)', () => {
+      const tools = surviving('paranoid');
+      expect(tools).not.toContain('create_spreadsheet');
+      expect(tools).not.toContain('create_document');
     });
   });
 
