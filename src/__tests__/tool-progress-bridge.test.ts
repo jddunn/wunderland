@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { runToolCallingTurn, type ToolInstance } from '../cli/openai/tool-calling.js';
+import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
 
 function mockOpenAIChatCompletionSequence(messages: Array<Record<string, unknown>>) {
   const queue = messages.slice();

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AddressInfo } from 'node:net';
 
-vi.mock('../cli/openai/tool-calling.js', async () => {
-  const actual = await vi.importActual<any>('../cli/openai/tool-calling.js');
+vi.mock('../runtime/tool-calling.js', async () => {
+  const actual = await vi.importActual<any>('../runtime/tool-calling.js');
   return {
     ...actual,
     runToolCallingTurn: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock('../rag/http-proxy.js', () => ({
 }));
 
 import { createAgentHttpServer } from '../cli/commands/start/http-server.js';
-import { runToolCallingTurn } from '../cli/openai/tool-calling.js';
+import { runToolCallingTurn } from '../runtime/tool-calling.js';
 
 describe('createAgentHttpServer SSE chat streaming', () => {
   afterEach(() => {

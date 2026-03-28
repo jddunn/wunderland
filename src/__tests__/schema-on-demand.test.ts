@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ToolInstance } from '../cli/openai/tool-calling.js';
-import { createSchemaOnDemandTools } from '../cli/openai/schema-on-demand.js';
+import type { ToolInstance } from '../runtime/tool-calling.js';
+import { createSchemaOnDemandTools } from '../runtime/schema-on-demand.js';
 
 describe('createSchemaOnDemandTools', () => {
   it('loads a local curated pack by curated extension name', async () => {
