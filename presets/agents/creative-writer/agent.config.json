@@ -45,5 +45,8 @@
       "enabled": true,
       "maxVariants": 2
     }
+  },
+  "memory": {
+    "cognitiveMechanisms": {}
   }
 }

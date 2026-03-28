@@ -40,7 +40,41 @@ export interface MemoryAutoIngestPipelineConfig {
   embedFn?: (text: string) => Promise<number[]>;
   /** Agent ID for metadata tagging. */
   agentId: string;
+  /**
+   * Optional CognitiveMemoryManager. When present, facts route through
+   * encode() instead of vectorStore.upsert() for cognitive mechanism support
+   * (reconsolidation, schema encoding, source confidence tracking, etc.).
+   */
+  cognitiveMemoryManager?: {
+    encode(
+      input: string,
+      mood: { valence: number; arousal: number; dominance: number },
+      gmiMood: string,
+      options?: {
+        type?: string;
+        scope?: string;
+        scopeId?: string;
+        sourceType?: string;
+        contentSentiment?: number;
+        tags?: string[];
+        entities?: string[];
+      },
+    ): Promise<any>;
+  };
+  /** Mood provider for cognitive encoding. */
+  moodProvider?: () => { valence: number; arousal: number; dominance: number };
 }
+
+/** Maps auto-ingest fact categories to MemoryTrace types and source types. */
+const CATEGORY_TYPE_MAP: Record<string, { type: string; sourceType: string }> = {
+  user_preference: { type: 'semantic', sourceType: 'user_statement' },
+  knowledge: { type: 'semantic', sourceType: 'agent_inference' },
+  episodic: { type: 'episodic', sourceType: 'observation' },
+  goal: { type: 'episodic', sourceType: 'user_statement' },
+  correction: { type: 'semantic', sourceType: 'user_statement' },
+};
+
+const DEFAULT_MOOD = { valence: 0, arousal: 0, dominance: 0 };
 
 const EXTRACTION_SYSTEM_PROMPT = `You are a memory extraction system. Given a conversation exchange between a user and an assistant, extract important facts worth remembering for future conversations.
 
@@ -144,36 +178,60 @@ export class MemoryAutoIngestPipeline implements IMemoryAutoIngestPipeline {
       accepted.push(fact);
     }
 
-    // Ingest accepted facts into vector store
+    // Ingest accepted facts
     if (accepted.length > 0) {
-      try {
-        const documents = accepted.map((fact) => ({
-          id: uuidv4(),
-          embedding: [] as number[], // SqlVectorStore handles embedding if embedFn not provided
-          textContent: fact.content,
-          metadata: {
-            category: fact.category,
-            importance: fact.importance,
-            entities: fact.entities?.join(',') ?? '',
-            conversationId,
-            agentId: this.config.agentId,
-            timestamp: Date.now(),
-            source: 'auto_ingest',
-          },
-        }));
-
-        // If we have an embedding function, compute embeddings
-        if (this.config.embedFn) {
-          for (const doc of documents) {
-            doc.embedding = await this.config.embedFn(doc.textContent!);
+      if (this.config.cognitiveMemoryManager) {
+        // Bridge: route through CognitiveMemoryManager.encode() for mechanism support
+        const mood = this.config.moodProvider?.() ?? DEFAULT_MOOD;
+        for (const fact of accepted) {
+          try {
+            const mapping = CATEGORY_TYPE_MAP[fact.category] ?? CATEGORY_TYPE_MAP.episodic;
+            await this.config.cognitiveMemoryManager.encode(
+              fact.content,
+              mood,
+              'NEUTRAL',
+              {
+                type: mapping.type,
+                sourceType: mapping.sourceType,
+                entities: fact.entities,
+                contentSentiment: fact.importance,
+                tags: [fact.category, 'auto_ingest'],
+              },
+            );
+            result.factsStored++;
+          } catch {
+            result.factsSkipped++;
           }
         }
+      } else {
+        // Direct vector store path (original behavior)
+        try {
+          const documents = accepted.map((fact) => ({
+            id: uuidv4(),
+            embedding: [] as number[],
+            textContent: fact.content,
+            metadata: {
+              category: fact.category,
+              importance: fact.importance,
+              entities: fact.entities?.join(',') ?? '',
+              conversationId,
+              agentId: this.config.agentId,
+              timestamp: Date.now(),
+              source: 'auto_ingest',
+            },
+          }));
 
-        await this.config.vectorStore.upsert(COLLECTION_NAME, documents);
-        result.factsStored = accepted.length;
-      } catch {
-        // Storage failure — non-critical, skip
-        result.factsSkipped += accepted.length;
+          if (this.config.embedFn) {
+            for (const doc of documents) {
+              doc.embedding = await this.config.embedFn(doc.textContent!);
+            }
+          }
+
+          await this.config.vectorStore.upsert(COLLECTION_NAME, documents);
+          result.factsStored = accepted.length;
+        } catch {
+          result.factsSkipped += accepted.length;
+        }
       }
     }
 
