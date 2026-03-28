@@ -95,7 +95,7 @@ export class AgentsView {
         'escape': () => { if (this.modal) { this.modal = null; this.render(this.lastLines); return; } this.back(); },
         'backspace': () => { if (this.modal) { this.modal = null; this.render(this.lastLines); return; } this.back(); },
         'q': () => { if (this.modal) { this.modal = null; this.render(this.lastLines); return; } this.back(); },
-        'r': () => { if (this.modal) return; this.run(); },
+        'r': () => { if (this.modal) return; this.run().catch(() => {}); },
       },
     });
   }
@@ -103,12 +103,24 @@ export class AgentsView {
   async run(): Promise<void> {
     const g = glyphs();
 
-    await cleanStaleDaemons();
+    let daemons: Awaited<ReturnType<typeof readAllDaemons>> = [];
+    let localAgents: Awaited<ReturnType<typeof scanLocalAgents>> = [];
+    let history: ReturnType<typeof readAgentHistory> = [];
 
-    const daemons = await readAllDaemons();
+    try {
+      await cleanStaleDaemons();
+      daemons = await readAllDaemons();
+    } catch { /* daemon scan failed — show empty */ }
+
     const aliveDaemons = daemons.filter((d) => isDaemonAlive(d.pid));
-    const history = readAgentHistory(this.configDir);
-    const localAgents = await scanLocalAgents();
+
+    try {
+      history = readAgentHistory(this.configDir);
+    } catch { /* history unavailable */ }
+
+    try {
+      localAgents = await scanLocalAgents();
+    } catch { /* local scan failed */ }
 
     // Build unified list, deduplicating by configPath
     const seen = new Map<string, AgentEntry>();

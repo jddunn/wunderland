@@ -5,7 +5,7 @@
 
 import type { Screen } from '../screen.js';
 import type { KeybindingManager } from '../keybindings.js';
-import { accent, dim, muted, bright, success as sColor } from '../../ui/theme.js';
+import { accent, dim, muted, bright, success as sColor, warn as wColor } from '../../ui/theme.js';
 import { ansiPadEnd } from '../../ui/ansi-utils.js';
 import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
 import { wrapInFrame } from '../layout.js';
@@ -18,6 +18,12 @@ interface ExtEntry {
   displayName: string;
   category: string;
   available: boolean;
+  /** Whether the extension is enabled in agent.config.json. */
+  enabled: boolean;
+  /** Secret IDs required by this extension (e.g. 'openai.apiKey'). */
+  requiredSecrets: string[];
+  /** Whether all required API keys are present in the environment. */
+  secretsConfigured: boolean;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -29,6 +35,7 @@ export class ExtensionsView {
   private screen: Screen;
   private keys: KeybindingManager;
   private onBack: () => void;
+  private configDir?: string;
   private cursor = 0;
   private extensions: ExtEntry[] = [];
   private scrollOffset = 0;
@@ -36,9 +43,10 @@ export class ExtensionsView {
   private filter = '';
   private modal: null | { title: string; lines: string[] } = null;
 
-  constructor(opts: { screen: Screen; keys: KeybindingManager; onBack: () => void }) {
+  constructor(opts: { screen: Screen; keys: KeybindingManager; configDir?: string; onBack: () => void }) {
     this.screen = opts.screen;
     this.keys = opts.keys;
+    this.configDir = opts.configDir;
     this.onBack = opts.onBack;
 
     this.keys.push({
@@ -95,6 +103,11 @@ export class ExtensionsView {
           }
           this.back();
         },
+        'e': () => {
+          if (this.modal || this.searchMode) return true;
+          this.toggleExtension().catch(() => {});
+          return true;
+        },
         'q': () => { if (this.modal) { this.modal = null; this.render(); return true; } if (this.searchMode) return false; this.back(); return true; },
       },
     });
@@ -103,10 +116,24 @@ export class ExtensionsView {
   async run(): Promise<void> {
     try {
       const registry = await import('@framers/agentos-extensions-registry');
+      const { loadConfig } = await import('../../config/config-manager.js');
+      const config = await loadConfig(this.configDir);
+      const enabledTools = ((config?.extensions as any)?.tools as string[]) ?? [];
+
       const exts = await registry.getAvailableExtensions();
       this.extensions = exts.map((e: any) => ({
-        name: e.name, displayName: e.displayName,
-        category: e.category, available: e.available,
+        name: e.name,
+        displayName: e.displayName,
+        category: e.category,
+        available: e.available,
+        enabled: enabledTools.includes(e.name),
+        requiredSecrets: e.requiredSecrets ?? [],
+        secretsConfigured: (e.requiredSecrets ?? []).every(
+          (s: string) => {
+            const mapping = registry.SECRET_ENV_MAP?.[s];
+            return mapping ? !!process.env[mapping.envVar] : false;
+          },
+        ),
       }));
     } catch {
       this.extensions = [];
@@ -150,9 +177,17 @@ export class ExtensionsView {
         const ext = filtered[i];
         const selected = i === this.cursor;
         const cursor = selected ? accent(g.cursor) : ' ';
-        const icon = ext.available ? sColor(g.ok) : muted(g.circle);
+        const icon = ext.enabled
+          ? sColor(g.ok)
+          : ext.available
+            ? wColor(g.circle)
+            : muted(g.circle);
         const name = selected ? bright(ext.displayName) : ext.displayName;
-        const status = ext.available ? sColor('installed') : muted('not installed');
+        const status = ext.enabled
+          ? sColor('enabled')
+          : ext.available
+            ? wColor('disabled')
+            : muted('not installed');
         const category = muted(CATEGORY_LABELS[ext.category] || ext.category);
 
         lines.push(`  ${cursor} ${icon} ${ansiPadEnd(name, 28)} ${ansiPadEnd(category, 16)} ${status}`);
@@ -166,7 +201,7 @@ export class ExtensionsView {
     lines.push('');
     const hint = this.searchMode
       ? `${dim(upDown)} navigate  ${dim(enter)} details  ${dim('?')} help  ${dim('esc')} exit search`
-      : `${dim(upDown)} navigate  ${dim(enter)} details  ${dim('/')} search  ${dim('?')} help  ${dim('esc')} back`;
+      : `${dim(upDown)} navigate  ${dim(enter)} details  ${dim('e')} enable/disable  ${dim('/')} search  ${dim('?')} help  ${dim('esc')} back`;
     lines.push(`  ${hint}`);
 
     const framed = wrapInFrame(lines, cols, 'EXTENSIONS');
@@ -220,28 +255,68 @@ export class ExtensionsView {
     return filterSearch(this.extensions, q);
   }
 
-  private openDetails(): void {
-    const g = glyphs();
-    const filtered = this.getFilteredExtensions();
-    const ext = filtered[this.cursor];
+  /**
+   * Toggle the currently-selected extension between enabled and disabled.
+   * Persists the change to the user's config.json immediately.
+   */
+  private async toggleExtension(): Promise<void> {
+    const ext = this.getFilteredExtensions()[this.cursor];
     if (!ext) return;
 
-    const status = ext.available ? sColor(`installed ${g.ok}`) : muted('not installed');
-    const cat = CATEGORY_LABELS[ext.category] || ext.category;
+    try {
+      const { loadConfig, updateConfig } = await import('../../config/config-manager.js');
+      const config = await loadConfig(this.configDir);
+      const currentTools = ((config?.extensions as any)?.tools as string[]) ?? [];
+      const tools = currentTools.slice();
 
-    this.modal = {
-      title: 'Extension Details',
-      lines: [
-        `${muted('Name:')} ${bright(ext.displayName)}`,
-        `${muted('ID:')}   ${accent(ext.name)}`,
-        `${muted('Type:')} ${dim(cat)}`,
-        `${muted('Stat:')} ${status}`,
-        '',
-        `${muted('CLI:')} ${accent(`wunderland extensions info ${ext.name}`)}`,
-        `${muted('Enable:')} ${accent(`wunderland extensions enable ${ext.name}`)}`,
-        `${muted('Disable:')} ${accent(`wunderland extensions disable ${ext.name}`)}`,
-      ],
-    };
+      if (ext.enabled) {
+        const idx = tools.indexOf(ext.name);
+        if (idx >= 0) tools.splice(idx, 1);
+        ext.enabled = false;
+      } else {
+        if (!tools.includes(ext.name)) tools.push(ext.name);
+        ext.enabled = true;
+      }
+
+      const extensions = { ...(config?.extensions as any ?? {}), tools };
+      await updateConfig({ extensions }, this.configDir);
+      this.render();
+    } catch {
+      // Config write failed — ignore
+    }
+  }
+
+  private openDetails(): void {
+    const g = glyphs();
+    const ext = this.getFilteredExtensions()[this.cursor];
+    if (!ext) return;
+
+    const status = ext.enabled
+      ? sColor(`enabled ${g.ok}`)
+      : ext.available
+        ? wColor('disabled')
+        : muted('not installed');
+
+    const lines = [
+      `${muted('Name:')}   ${bright(ext.displayName)}`,
+      `${muted('ID:')}     ${accent(ext.name)}`,
+      `${muted('Type:')}   ${dim(CATEGORY_LABELS[ext.category] || ext.category)}`,
+      `${muted('Status:')} ${status}`,
+    ];
+
+    if (ext.requiredSecrets.length > 0) {
+      lines.push('');
+      lines.push(`${muted('API Keys:')}`);
+      for (const secret of ext.requiredSecrets) {
+        const icon = ext.secretsConfigured ? sColor(g.ok) : wColor(g.circle);
+        lines.push(`  ${icon} ${dim(secret)}`);
+      }
+    }
+
+    lines.push('');
+    lines.push(`${dim('e')} ${ext.enabled ? 'disable' : 'enable'}  ${dim('esc')} close`);
+
+    this.modal = { title: 'Extension Details', lines };
     this.render();
   }
 
@@ -268,14 +343,14 @@ export class ExtensionsView {
     const enter = ui.ascii ? 'Enter' : '⏎';
     return [
       `${bright('Navigation')}`,
-      `${accent(upDown)} move  ${accent(enter)} details`,
+      `${accent(upDown)} move  ${accent(enter)} details  ${accent('/')} search`,
       '',
-      `${bright('Search')}`,
-      `${accent('/')} start search  ${accent('esc')} exit search`,
+      `${bright('Actions')}`,
+      `${accent('e')} enable/disable extension`,
       '',
-      `${bright('Tips')}`,
-      `${dim('-')} Search matches id, name, category, and description (with fuzzy matching).`,
-      `${dim('-')} Details shows the CLI commands to manage an extension.`,
+      `${bright('Status')}`,
+      `${dim('-')} Green = enabled, Yellow = available but disabled`,
+      `${dim('-')} API keys are read from environment/.env files.`,
     ];
   }
 

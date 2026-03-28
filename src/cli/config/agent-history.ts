@@ -4,7 +4,7 @@
  * @module wunderland/cli/config/agent-history
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { getConfigDir, ensureConfigDir } from './config-manager.js';
@@ -30,7 +30,7 @@ export function readAgentHistory(configDirOverride?: string): AgentHistoryEntry[
   const filePath = getHistoryPath(configDirOverride);
   if (!existsSync(filePath)) return [];
   try {
-    const raw = require('node:fs').readFileSync(filePath, 'utf-8');
+    const raw = readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {

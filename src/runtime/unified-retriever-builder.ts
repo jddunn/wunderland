@@ -474,7 +474,7 @@ export function formatUnifiedRetrievalLog(result: UnifiedRetrieverBuildResult): 
  * @param sources - Source flags from a RetrievalPlan.
  * @returns Number of active sources.
  */
-function countActiveSources(sources: Record<string, boolean>): number {
+function countActiveSources(sources: Record<string, boolean> | object): number {
   return Object.values(sources).filter(Boolean).length;
 }
 
@@ -512,7 +512,7 @@ function formatSourceDiagnostics(diag: {
  * @param corpusPaths - Corpus paths for hash computation.
  */
 export async function persistBM25Index(
-  bm25Index: BM25Index,
+  _bm25Index: BM25Index,
   documents: Array<{ id: string; text: string; metadata?: Record<string, unknown> }>,
   agentDir: string,
   corpusPaths: string[],
