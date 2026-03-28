@@ -123,7 +123,11 @@ export class MissionStreamRenderer {
 
     if (t === 'mission:expansion_proposed') {
       if (this.mode !== 'quiet') {
-        console.log(`${C.blue}  🔧 expansion proposed: ${event.reason}${C.reset}`);
+        const reason =
+          (typeof event.reason === 'string' && event.reason) ||
+          ((event.patch as { reason?: unknown } | undefined)?.reason as string | undefined) ||
+          'expansion proposed';
+        console.log(`${C.blue}  🔧 expansion proposed: ${reason}${C.reset}`);
       }
       return;
     }

@@ -45,7 +45,7 @@ export const LLM_PROVIDERS = [
   { id: 'moonshot', label: 'Moonshot', envVar: 'MOONSHOT_API_KEY', signupUrl: 'https://platform.moonshot.cn/', docsUrl: 'https://platform.moonshot.cn/docs/overview', validationUrl: '', models: ['kimi-k2.5', 'kimi-k2-instant'] },
   { id: 'venice', label: 'Venice', envVar: 'VENICE_API_KEY', signupUrl: 'https://venice.ai/settings/api', docsUrl: 'https://venice.ai/', validationUrl: '', models: ['venice-default', 'venice-fast'] },
   { id: 'cloudflare-ai', label: 'Cloudflare AI Gateway', envVar: 'CLOUDFLARE_API_TOKEN', signupUrl: 'https://dash.cloudflare.com/', docsUrl: 'https://developers.cloudflare.com/ai-gateway/', validationUrl: '', models: ['(configurable)'] },
-  { id: 'xiaomi-mimo', label: 'Xiaomi Mimo', envVar: 'XIAOMI_API_KEY', signupUrl: 'https://dev.mi.com/mimo', docsUrl: 'https://dev.mi.com/mimo', validationUrl: '', models: ['mimo-v2-flash'] },
+  { id: 'xiaomi-mimo', label: 'Xiaomi MiMo', envVar: 'XIAOMI_API_KEY', signupUrl: 'https://github.com/MiModelO/MiMo', docsUrl: 'https://github.com/MiModelO/MiMo', validationUrl: '', models: ['MiMo-7B-RL'] },
 ] as const;
 
 // ── Tool API Key Providers ─────────────────────────────────────────────────

@@ -482,7 +482,8 @@ function printApiKeySuccess(displayName: string, envVar: string): void {
  * No API key needed — verifies that Claude Code CLI is installed and
  * authenticated, then persists the provider selection to config.
  */
-async function loginClaudeCodeCli(globals: GlobalFlags): Promise<void> {
+async function loginClaudeCodeCli(_globals: GlobalFlags): Promise<void> {
+  const g = glyphs();
   console.log();
   console.log(bright('  Claude Code CLI Provider'));
   console.log(dim('  ────────────────────────'));
@@ -497,9 +498,9 @@ async function loginClaudeCodeCli(globals: GlobalFlags): Promise<void> {
     const versionRaw = execSync('claude --version', { encoding: 'utf8' }).trim();
     const match = versionRaw.match(/(\d+\.\d+\.\d+)/);
     version = match ? match[1] : 'unknown';
-    console.log(sColor(`  ${glyphs.check} CLI installed    ${dim(cliPath)} (v${version})`));
+    console.log(sColor(`  ${g.ok} CLI installed    ${dim(cliPath)} (v${version})`));
   } catch {
-    console.log(accent(`  ${glyphs.cross} CLI not installed`));
+    console.log(accent(`  ${g.fail} CLI not installed`));
     console.log();
     console.log('  Install Claude Code:');
     console.log(bright('    npm install -g @anthropic-ai/claude-code'));
@@ -516,9 +517,9 @@ async function loginClaudeCodeCli(globals: GlobalFlags): Promise<void> {
       stdio: 'ignore',
       timeout: 30_000,
     });
-    console.log(sColor(`  ${glyphs.check} Authenticated`));
+    console.log(sColor(`  ${g.ok} Authenticated`));
   } catch {
-    console.log(accent(`  ${glyphs.cross} Not authenticated`));
+    console.log(accent(`  ${g.fail} Not authenticated`));
     console.log();
     console.log('  Action needed:');
     console.log(bright('    1. Open a new terminal'));
@@ -534,7 +535,7 @@ async function loginClaudeCodeCli(globals: GlobalFlags): Promise<void> {
     llmModel: 'claude-sonnet-4-20250514',
   });
 
-  console.log(sColor(`  ${glyphs.check} Model available  ${dim('claude-sonnet-4-20250514')}`));
+  console.log(sColor(`  ${g.ok} Model available  ${dim('claude-sonnet-4-20250514')}`));
   console.log();
   console.log(sColor('  Ready to use! No API key needed.'));
   console.log();
@@ -547,7 +548,8 @@ async function loginClaudeCodeCli(globals: GlobalFlags): Promise<void> {
  * No API key needed — verifies that Gemini CLI is installed and
  * authenticated, then persists the provider selection to config.
  */
-async function loginGeminiCli(globals: GlobalFlags): Promise<void> {
+async function loginGeminiCli(_globals: GlobalFlags): Promise<void> {
+  const g = glyphs();
   console.log();
   console.log(bright('  Gemini CLI Provider'));
   console.log(dim('  ────────────────────'));
@@ -562,9 +564,9 @@ async function loginGeminiCli(globals: GlobalFlags): Promise<void> {
     const versionRaw = execSync('gemini --version', { encoding: 'utf8' }).trim();
     const match = versionRaw.match(/(\d+\.\d+\.\d+)/);
     version = match ? match[1] : 'unknown';
-    console.log(sColor(`  ${glyphs.check} CLI installed    ${dim(cliPath)} (v${version})`));
+    console.log(sColor(`  ${g.ok} CLI installed    ${dim(cliPath)} (v${version})`));
   } catch {
-    console.log(accent(`  ${glyphs.cross} CLI not installed`));
+    console.log(accent(`  ${g.fail} CLI not installed`));
     console.log();
     console.log('  Install Gemini CLI:');
     console.log(bright('    npm install -g @google/gemini-cli'));
@@ -580,9 +582,9 @@ async function loginGeminiCli(globals: GlobalFlags): Promise<void> {
       stdio: 'ignore',
       timeout: 30_000,
     });
-    console.log(sColor(`  ${glyphs.check} Authenticated`));
+    console.log(sColor(`  ${g.ok} Authenticated`));
   } catch {
-    console.log(accent(`  ${glyphs.cross} Not authenticated`));
+    console.log(accent(`  ${g.fail} Not authenticated`));
     console.log();
     console.log('  Action needed:');
     console.log(bright('    1. Open a new terminal'));
@@ -598,7 +600,7 @@ async function loginGeminiCli(globals: GlobalFlags): Promise<void> {
     llmModel: 'gemini-2.5-flash',
   });
 
-  console.log(sColor(`  ${glyphs.check} Model available  ${dim('gemini-2.5-flash')}`));
+  console.log(sColor(`  ${g.ok} Model available  ${dim('gemini-2.5-flash')}`));
   console.log();
   console.log(sColor('  Ready to use! No API key needed.'));
   console.log();

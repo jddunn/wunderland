@@ -185,29 +185,27 @@ Time: ${violation.timestamp.toISOString()}
     }
 
     try {
-      // For now, just log the email (real SMTP integration would go here)
-      console.log(`[EMAIL NOTIFICATION]`);
-      console.log(`To: ${to}`);
-      console.log(`Subject: ${subject}`);
-      console.log(`Body:\n${body}`);
+      const smtpHost = (this as any).emailConfig?.smtpHost ?? process.env.SMTP_HOST;
+      const smtpPort = (this as any).emailConfig?.smtpPort ?? process.env.SMTP_PORT ?? 587;
+      const smtpUser = (this as any).emailConfig?.smtpUser ?? process.env.SMTP_USER;
+      const smtpPass = (this as any).emailConfig?.smtpPass ?? process.env.SMTP_PASS;
+      const fromAddress = (this as any).emailConfig?.from ?? process.env.SMTP_FROM ?? 'security@wunderland.sh';
 
-      // TODO: Implement actual SMTP sending using nodemailer or similar
-      // Example:
-      // const transporter = nodemailer.createTransport({
-      //   host: this.emailConfig.smtpHost,
-      //   port: this.emailConfig.smtpPort,
-      //   auth: {
-      //     user: this.emailConfig.smtpUser,
-      //     pass: this.emailConfig.smtpPass,
-      //   },
-      // });
-      //
-      // await transporter.sendMail({
-      //   from: this.emailConfig.from || 'security@wunderland.sh',
-      //   to,
-      //   subject,
-      //   text: body,
-      // });
+      if (smtpHost && smtpUser) {
+        const { createTransport } = await import('nodemailer');
+        const transporter = createTransport({
+          host: smtpHost,
+          port: Number(smtpPort),
+          secure: Number(smtpPort) === 465,
+          auth: { user: smtpUser, pass: smtpPass },
+        });
+        await transporter.sendMail({ from: fromAddress, to, subject, text: body });
+        console.log(`[EMAIL] Sent to ${to}: ${subject}`);
+      } else {
+        console.log(`[EMAIL NOTIFICATION] (SMTP not configured — logging only)`);
+        console.log(`To: ${to} | Subject: ${subject}`);
+        console.log(`Body:\n${body}`);
+      }
     } catch (err) {
       console.error('Failed to send email notification:', err);
     }

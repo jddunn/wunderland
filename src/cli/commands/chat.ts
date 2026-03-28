@@ -99,7 +99,7 @@ import {
 import { createLocalMemoryReadTool } from './start/local-memory-tool.js';
 import { createMemorySystem, type MemorySystem } from '../../memory/index.js';
 import { injectMemoryContext } from '../../memory/index.js';
-import { ContextWindowManager } from '@framers/agentos/memory';
+import { ContextWindowManager, MarkdownWorkingMemory } from '@framers/agentos/memory';
 import type { InfiniteContextConfig } from '@framers/agentos/memory';
 import {
   initCliQueryRouter,
@@ -1156,6 +1156,14 @@ export default async function cmdChat(
     }
   }
 
+  // ── Persistent Markdown Working Memory ──────────────────────────────
+  let markdownWorkingMemory: MarkdownWorkingMemory | undefined;
+  try {
+    const wmPath = path.join(workspaceBaseDir, 'agents', workspaceAgentId, 'working-memory.md');
+    markdownWorkingMemory = new MarkdownWorkingMemory(wmPath);
+    markdownWorkingMemory.ensureFile();
+  } catch { /* non-fatal */ }
+
   // ── Memory Retrieval System ───────────────────────────────────────
   let memorySystem: MemorySystem | null = null;
   if (agentStorageManager && cfg?.memory?.enabled !== false) {
@@ -1169,7 +1177,7 @@ export default async function cmdChat(
         traits: personality,
         llm: { providerId, apiKey: llmApiKey, baseUrl: llmBaseUrl },
         ollama: cfg?.ollama,
-        markdownMemory: undefined, // TODO: wire from extension-loader ctx
+        markdownMemory: markdownWorkingMemory,
         graphRAG,
         retrievalBudgetTokens: cfg?.memory?.retrievalBudgetTokens ?? 4000,
         agentId: seedId,

@@ -22,7 +22,7 @@ There are two layers:
    - Or config: `AgentOSConfig.observability` (recommended for per-instance control)
    - Files:
      - `packages/agentos/src/core/observability/otel.ts`
-     - `packages/agentos/src/api/AgentOSOrchestrator.ts`
+     - `packages/agentos/src/api/runtime/AgentOSOrchestrator.ts`
 
 ### Precedence
 
@@ -119,7 +119,7 @@ When `includeTraceInResponses` (or `AGENTOS_TRACE_IDS_IN_RESPONSES=true`) is ena
 }
 ```
 
-to selected chunk types (metadata updates, final responses, errors). See `packages/agentos/src/api/AgentOSOrchestrator.ts`.
+to selected chunk types (metadata updates, final responses, errors). See `packages/agentos/src/api/runtime/AgentOSOrchestrator.ts`.
 
 ## Logging (Pino) + OTEL Logs (Optional)
 
