@@ -101,12 +101,17 @@ async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
   const seedId = resolveSeedId(flags);
   const isDemo = !seedId;
 
-  // TODO: When backend API is ready, replace DEMO_AGENCIES with a fetch call to
-  // `${_getBackendBaseUrl()}/agencies?seedId=${seedId}` for live mode.
-  const agencies: AgencyEntry[] = DEMO_AGENCIES;
-
+  let agencies: AgencyEntry[] = DEMO_AGENCIES;
   if (!isDemo) {
-    console.log(dim('  Backend API integration pending — showing demo data'));
+    try {
+      const res = await fetch(`${_getBackendBaseUrl()}/agencies?seedId=${seedId}`);
+      if (res.ok) {
+        const data = await res.json() as { agencies?: AgencyEntry[] };
+        if (data.agencies?.length) agencies = data.agencies;
+      }
+    } catch {
+      // Backend unavailable — fall back to demo data
+    }
   }
 
   fmt.section('Agencies' + (isDemo ? dim(' (demo)') : ''));

@@ -254,6 +254,14 @@ export type WunderlandGraphLike =
       toIR: () => CompiledExecutionGraph;
     };
 
+export type WunderlandGraphLlmOverride = {
+  providerId?: WunderlandProviderId | string;
+  apiKey: string;
+  model?: string;
+  baseUrl?: string;
+  fallback?: LLMProviderConfig;
+};
+
 export type WunderlandApp = {
   session: (sessionId?: string) => WunderlandSession;
   diagnostics: () => WunderlandDiagnostics;
@@ -281,6 +289,7 @@ export type WunderlandApp = {
       userId?: string;
       tenantId?: string;
       toolFailureMode?: WunderlandToolFailureMode;
+      llmByProvider?: Record<string, WunderlandGraphLlmOverride>;
       debug?: boolean;
     },
   ) => Promise<unknown>;
@@ -292,6 +301,7 @@ export type WunderlandApp = {
       userId?: string;
       tenantId?: string;
       toolFailureMode?: WunderlandToolFailureMode;
+      llmByProvider?: Record<string, WunderlandGraphLlmOverride>;
       debug?: boolean;
     },
   ) => AsyncIterable<GraphEvent>;
