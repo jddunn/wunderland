@@ -419,6 +419,10 @@ export type WunderlandAgentConfig = {
     };
     /** Max context tokens for context window manager. */
     maxContextTokens?: number;
+    /** Optional cognitive mechanisms (reconsolidation, RIF, FOK, etc.).
+     *  When present, CognitiveMemoryManager is initialized and auto-ingest
+     *  facts route through cognitive encoding. @default undefined (disabled) */
+    cognitiveMechanisms?: import('@framers/agentos').CognitiveMechanismsConfig;
   };
   /** Optional security overrides that the runtime reads. */
   security?: Partial<{

@@ -1124,6 +1124,35 @@ export default async function cmdChat(
     );
   }
 
+  // ── Cognitive Memory (optional — when cognitiveMechanisms config present) ──
+  let cognitiveMemoryManager: any;
+  let cognitiveMoodProvider: (() => { valence: number; arousal: number; dominance: number }) | undefined;
+  if (cfg?.memory?.cognitiveMechanisms && agentStorageManager) {
+    try {
+      const { initializeCognitiveMemory } = await import('../../memory/CognitiveMemoryInitializer.js');
+      const result = await initializeCognitiveMemory({
+        cognitiveMechanisms: cfg.memory.cognitiveMechanisms,
+        vectorStore: agentStorageManager.getVectorStore(),
+        traits: personality,
+        agentId: seedId,
+        llm: { providerId, apiKey: llmApiKey, baseUrl: llmBaseUrl },
+      });
+      cognitiveMemoryManager = result.manager;
+      cognitiveMoodProvider = result.moodProvider;
+
+      // Bridge: wire cognitive manager into auto-ingest pipeline
+      if (autoIngestPipeline) {
+        (autoIngestPipeline as any).config.cognitiveMemoryManager = cognitiveMemoryManager;
+        (autoIngestPipeline as any).config.moodProvider = cognitiveMoodProvider;
+      }
+    } catch (err) {
+      console.debug(
+        '[wunderland/chat] Cognitive memory init failed (continuing without mechanisms):',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   // ── Memory Retrieval System ───────────────────────────────────────
   let memorySystem: MemorySystem | null = null;
   if (agentStorageManager && cfg?.memory?.enabled !== false) {
@@ -1141,6 +1170,8 @@ export default async function cmdChat(
         graphRAG,
         retrievalBudgetTokens: cfg?.memory?.retrievalBudgetTokens ?? 4000,
         agentId: seedId,
+        cognitiveMemoryManager,
+        moodProvider: cognitiveMoodProvider,
       });
     } catch {
       // Non-fatal — chat works without memory retrieval

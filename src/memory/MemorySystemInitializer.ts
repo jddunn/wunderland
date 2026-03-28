@@ -41,6 +41,21 @@ export interface MemorySystemConfig {
   retrievalBudgetTokens?: number;
   /** Agent ID for scoping. */
   agentId: string;
+  /** Optional CognitiveMemoryManager for mechanism-enhanced retrieval. */
+  cognitiveMemoryManager?: {
+    assembleForPrompt(
+      query: string,
+      tokenBudget: number,
+      mood: { valence: number; arousal: number; dominance: number },
+    ): Promise<{ contextText: string; tokensUsed: number; includedMemoryIds: string[] } | null>;
+    observe?(
+      role: 'user' | 'assistant' | 'system' | 'tool',
+      content: string,
+      mood?: { valence: number; arousal: number; dominance: number },
+    ): Promise<any>;
+  };
+  /** Mood provider for cognitive retrieval. */
+  moodProvider?: () => { valence: number; arousal: number; dominance: number };
 }
 
 export interface MemorySystem {
@@ -69,9 +84,24 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
   } = config;
 
   const collectionName = `auto_memories`;
+  const cogMgr = config.cognitiveMemoryManager;
+  const moodProvider = config.moodProvider ?? (() => ({ valence: 0, arousal: 0, dominance: 0 }));
 
   return {
     async retrieveForTurn(userInput: string): Promise<MemoryTurnResult | null> {
+      // Cognitive path: delegate to CognitiveMemoryManager
+      if (cogMgr) {
+        try {
+          const mood = moodProvider();
+          const result = await cogMgr.assembleForPrompt(userInput, retrievalBudgetTokens, mood);
+          if (!result?.contextText?.trim()) return null;
+          return { contextText: result.contextText, tokensUsed: result.tokensUsed };
+        } catch {
+          return null;
+        }
+      }
+
+      // Fallback: existing vector search path
       try {
         // 1. Query vector store for relevant memories (text-based search)
         const retrievedTexts: string[] = [];
@@ -159,9 +189,12 @@ export async function createMemorySystem(config: MemorySystemConfig): Promise<Me
       }
     },
 
-    async observe(_role: 'user' | 'assistant', _content: string): Promise<void> {
-      // Observation is already handled by auto-ingest pipeline and memory.observe()
-      // This is a passthrough for future CognitiveMemoryManager integration
+    async observe(role: 'user' | 'assistant', content: string): Promise<void> {
+      if (cogMgr?.observe) {
+        const mood = moodProvider();
+        await cogMgr.observe(role, content, mood);
+      }
+      // When no cognitive manager, this remains a no-op (auto-ingest handles extraction separately)
     },
   };
 }
