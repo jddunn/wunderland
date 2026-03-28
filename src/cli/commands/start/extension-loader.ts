@@ -142,7 +142,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
     // expand categories to extension IDs instead of using hardcoded defaults.
     const extensionCategories = cfg?.extensionCategories as string[] | undefined;
     if (extensionCategories && extensionCategories.length > 0 && !extensionsFromConfig?.tools) {
-      const { expandCategories } = await import('../extensions/categories.js');
+      const { expandCategories } = await import('../../extensions/categories.js');
       const categoryTools = expandCategories(extensionCategories as any);
       toolExtensions = normalizeExtensionList(categoryTools);
     } else {
