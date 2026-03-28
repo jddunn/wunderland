@@ -4,8 +4,9 @@
  * @module wunderland/cli/commands/chat
  */
 
+import { exec } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
@@ -13,6 +14,7 @@ import type { WunderlandProviderId, WunderlandAgentRagConfig } from '../../api/t
 import chalk from 'chalk';
 import {
   accent,
+  bright,
   success as sColor,
   warn as wColor,
   tool as tColor,
@@ -2037,7 +2039,44 @@ export default async function cmdChat(
     }
 
     if (reply) {
-      printAssistantReply(reply);
+      // ── Widget block detection ───────────────────────────────────────────
+      // When the agent emits :::widget fenced blocks containing self-contained
+      // HTML, extract each block, persist it to the agent workspace, open it
+      // in the user's default browser, and replace the raw markup in the
+      // terminal output with a short path indicator.
+      const widgetMatches = [...reply.matchAll(/:::widget\n([\s\S]*?)\n:::/g)];
+      for (let i = 0; i < widgetMatches.length; i++) {
+        const widgetHtml = widgetMatches[i][1];
+        const titleMatch = widgetHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const title = titleMatch ? titleMatch[1].trim() : `widget-${i + 1}`;
+        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+        const widgetsDir = path.join(process.cwd(), 'widgets');
+        await mkdir(widgetsDir, { recursive: true });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const filename = `${timestamp}-${slug}.html`;
+        const filePath = path.join(widgetsDir, filename);
+        await writeFile(filePath, widgetHtml, 'utf-8');
+
+        // Print widget info below the chat frame
+        console.log();
+        console.log(`  ${accent('\u25C6')} Widget: ${bright(title)}`);
+        console.log(`    ${dim('File:')} ${filePath}`);
+
+        // Open in the user's default browser (fire-and-forget)
+        const openCmd = process.platform === 'darwin' ? 'open'
+          : process.platform === 'win32' ? 'start'
+          : 'xdg-open';
+        exec(`${openCmd} "${filePath}"`);
+      }
+
+      // Strip widget blocks from the terminal display so the user sees a
+      // clean placeholder instead of raw HTML.
+      const displayReply = widgetMatches.length > 0
+        ? reply.replace(/:::widget\n[\s\S]*?\n:::/g, '\n  [Interactive Widget \u2014 opened in browser]\n')
+        : reply;
+
+      printAssistantReply(displayReply);
       // If this turn originated from a messaging channel, send the reply back
       if (replyTarget) {
         try {
