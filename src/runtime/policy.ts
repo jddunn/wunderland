@@ -195,7 +195,7 @@ function isFilesystemReadTool(toolName: string): boolean {
 }
 
 function isFilesystemWriteTool(toolName: string): boolean {
-  return toolName === 'file_write' || toolName === 'file_append' || toolName === 'file_delete' || toolName === 'write_file';
+  return toolName === 'file_write' || toolName === 'file_append' || toolName === 'file_delete' || toolName === 'write_file' || toolName === 'create_spreadsheet' || toolName === 'create_document';
 }
 
 function isCliExecutionTool(toolName: string): boolean {
