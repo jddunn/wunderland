@@ -546,7 +546,7 @@ export default async function cmdChat(
         'content-extraction', 'credential-vault', 'giphy', 'image-search',
         'image-generation', 'video-generation', 'audio-generation',
         'vision-pipeline', 'news-search', 'weather', 'skills',
-        'deep-research', 'github', 'web-scraper',
+        'deep-research', 'github', 'web-scraper', 'document-export',
       ],
       voice: getDefaultVoiceExtensions(),
       productivity: [] as string[],
