@@ -149,9 +149,9 @@ async function runNaturalLanguageMission(
 ): Promise<void> {
   // Lazy imports to avoid loading heavy modules for help/explain
   const { MissionPlanner } = await import('@framers/agentos/orchestration/planning/MissionPlanner');
-  const { ProviderAssignmentEngine } = await import('@framers/agentos/orchestration/planning/ProviderAssignmentEngine');
   const { DEFAULT_THRESHOLDS } = await import('@framers/agentos/orchestration/planning/types');
   const { buildSplitCallers } = await import('@framers/agentos/orchestration/planning/buildLlmCaller');
+  const { resolveModelOption } = await import('@framers/agentos');
   const { MissionStreamRenderer } = await import('../renderers/MissionStreamRenderer.js');
   const { createWunderland } = await import('../../public/index.js');
 
@@ -218,28 +218,45 @@ async function runNaturalLanguageMission(
       console.log(`  Execution model: ${resolvedExecModel}`);
     }
 
-    // Detect available providers by scanning env vars + CLI binaries
-    const { autoDetectProvider } = await import('@framers/agentos/api/provider-defaults');
+    // Detect available execution providers and build node-level runtime overrides.
     const availableProviders: string[] = [];
-    const providerEnvMap: Array<{ env: string; id: string }> = [
-      { env: 'OPENROUTER_API_KEY', id: 'openrouter' },
-      { env: 'OPENAI_API_KEY', id: 'openai' },
-      { env: 'ANTHROPIC_API_KEY', id: 'anthropic' },
-      { env: 'GEMINI_API_KEY', id: 'gemini' },
-      { env: 'GROQ_API_KEY', id: 'groq' },
-      { env: 'TOGETHER_API_KEY', id: 'together' },
-      { env: 'MISTRAL_API_KEY', id: 'mistral' },
-      { env: 'XAI_API_KEY', id: 'xai' },
-    ];
-    for (const { env, id } of providerEnvMap) {
-      if (process.env[env]) availableProviders.push(id);
+    const providerConfigs: Record<string, { providerId?: string; apiKey: string; model?: string; baseUrl?: string }> = {};
+    const providerEnvMap = [
+      { env: 'OPENROUTER_API_KEY', id: 'openrouter', runtimeId: 'openrouter', defaultBaseUrl: 'https://openrouter.ai/api/v1' },
+      { env: 'OPENAI_API_KEY', id: 'openai', runtimeId: 'openai', baseUrlEnv: 'OPENAI_BASE_URL' },
+      { env: 'ANTHROPIC_API_KEY', id: 'anthropic', runtimeId: 'anthropic', baseUrlEnv: 'ANTHROPIC_BASE_URL' },
+      { env: 'GEMINI_API_KEY', id: 'gemini', runtimeId: 'gemini', baseUrlEnv: 'GEMINI_BASE_URL', defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+      { env: 'GROQ_API_KEY', id: 'groq', runtimeId: 'openai', baseUrlEnv: 'GROQ_BASE_URL', defaultBaseUrl: 'https://api.groq.com/openai/v1' },
+      { env: 'TOGETHER_API_KEY', id: 'together', runtimeId: 'openai', baseUrlEnv: 'TOGETHER_BASE_URL', defaultBaseUrl: 'https://api.together.xyz/v1' },
+      { env: 'MISTRAL_API_KEY', id: 'mistral', runtimeId: 'openai', baseUrlEnv: 'MISTRAL_BASE_URL', defaultBaseUrl: 'https://api.mistral.ai/v1' },
+      { env: 'XAI_API_KEY', id: 'xai', runtimeId: 'openai', baseUrlEnv: 'XAI_BASE_URL', defaultBaseUrl: 'https://api.x.ai/v1' },
+      { env: 'OLLAMA_BASE_URL', id: 'ollama', runtimeId: 'ollama', baseUrlEnv: 'OLLAMA_BASE_URL', defaultBaseUrl: 'http://localhost:11434/v1', apiKeyLiteral: 'ollama' },
+    ] as const;
+    for (const candidate of providerEnvMap) {
+      if (!process.env[candidate.env]) continue;
+      const resolved = resolveModelOption({ provider: candidate.id }, 'text');
+      const baseUrl =
+        (candidate.baseUrlEnv ? process.env[candidate.baseUrlEnv] : undefined) ??
+        candidate.defaultBaseUrl;
+      providerConfigs[candidate.id] = {
+        providerId: candidate.runtimeId,
+        apiKey: candidate.apiKeyLiteral ?? String(process.env[candidate.env] || '').trim(),
+        model: resolved.modelId,
+        baseUrl,
+      };
+      availableProviders.push(candidate.id);
     }
-    // Also detect CLI providers (claude, gemini binaries on PATH)
-    const autoDetected = autoDetectProvider?.('text');
-    if (autoDetected && !availableProviders.includes(autoDetected)) {
-      availableProviders.push(autoDetected);
+    if (!providerConfigs[baseRuntime.llm.providerId]) {
+      providerConfigs[baseRuntime.llm.providerId] = {
+        providerId: baseRuntime.llm.providerId,
+        apiKey: String(baseRuntime.llm.apiKey ?? ''),
+        model: baseRuntime.llm.model,
+        baseUrl: baseRuntime.llm.baseUrl,
+      };
     }
-    if (availableProviders.length === 0) availableProviders.push('openai');
+    if (!availableProviders.includes(baseRuntime.llm.providerId)) {
+      availableProviders.push(baseRuntime.llm.providerId);
+    }
 
     // Discover available tools from the wunderland runtime
     const toolList = (app.listTools?.() ?? []).map((t: { name: string; description: string }) => ({
@@ -282,18 +299,10 @@ async function runNaturalLanguageMission(
       (event) => renderer.render(event as any),
     );
 
-    // Assign providers to planned nodes
-    const assignmentEngine = new ProviderAssignmentEngine(availableProviders);
-    const nodesWithComplexity = result.compiledGraph.nodes.map((n: any) => ({
-      ...n,
-      complexity: n.complexity ?? 0.5,
-    }));
-    const assignments = assignmentEngine.assign(nodesWithComplexity, strategyConfig);
-
     // Log assignments in verbose mode
     if (verbose) {
       console.log('\n  Provider assignments:');
-      for (const a of assignments) {
+      for (const a of result.selectedBranch.providerAssignments) {
         console.log(`    ${a.nodeId}: ${a.provider}/${a.model} (complexity: ${a.complexity.toFixed(2)})`);
       }
     }
@@ -301,7 +310,7 @@ async function runNaturalLanguageMission(
     // Execute the compiled graph through the wunderland runtime
     const startTime = Date.now();
 
-    for await (const event of app.streamGraph(result.compiledGraph, {})) {
+    for await (const event of app.streamGraph(result.compiledGraph, {}, { llmByProvider: providerConfigs })) {
       renderer.render(event as any);
     }
 
