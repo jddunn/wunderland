@@ -136,6 +136,20 @@ const CREDENTIAL_MAP: Array<{
     packageName: '@framers/agentos-ext-image-generation',
     displayName: 'Image Generation (BFL)',
   },
+  {
+    envVars: ['OMDB_API_KEY'],
+    allRequired: false,
+    extensionId: 'omdb',
+    packageName: '@framers/agentos-ext-omdb',
+    displayName: 'OMDB (Movie Database)',
+  },
+  {
+    envVars: ['CLEARBIT_API_KEY'],
+    allRequired: false,
+    extensionId: 'clearbit',
+    packageName: '@framers/agentos-ext-clearbit',
+    displayName: 'Clearbit Enrichment',
+  },
 ];
 
 /**
