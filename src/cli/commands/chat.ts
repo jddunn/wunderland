@@ -25,7 +25,7 @@ import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
-import { resolveDefaultSkillsDirs } from '../../skills/index.js';
+// resolveDefaultSkillsDirs is now handled by AgentBootstrap
 import {
   runToolCallingTurn,
   streamToolCallingTurn,
@@ -46,7 +46,7 @@ import {
 } from '../../runtime/research-classifier.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../observability/session-text-log.js';
-import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
+// WunderlandAdaptiveExecutionRuntime is now created by AgentBootstrap
 import { resolveStrictToolNames } from '../../runtime/tool-function-names.js';
 import {
   filterToolMapByPolicy,
@@ -59,20 +59,15 @@ import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
 import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 import {
-  createWunderlandSeed,
-  DEFAULT_INFERENCE_HIERARCHY,
-  DEFAULT_SECURITY_PROFILE,
   createStepUpAuthConfigFromTier,
 } from '../../core/index.js';
-import { resolveSkillContext } from '../../core/resolve-skill-context.js';
 import {
   WunderlandDiscoveryManager,
-  type WunderlandDiscoveryConfig,
 } from '../../discovery/index.js';
 import {
-  buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
 } from '../../config/effective-agent-config.js';
+import { AgentBootstrap } from '../../bootstrap/index.js';
 import { loadConfig } from '../config/config-manager.js';
 import { normalizeExtensionList } from '../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../extensions/settings.js';
@@ -965,43 +960,51 @@ export default async function cmdChat(
     }
   }
 
-  // Capability discovery — semantic search + graph re-ranking
-  const discoveryOpts: WunderlandDiscoveryConfig = { ...buildDiscoveryOptionsFromAgentConfig(cfg ?? {}), verbose };
-  // Skills — load from filesystem dirs + config-declared skills (BEFORE discovery so we can pass entries)
-  let skillsPrompt = '';
-  let skillEntries: Array<{
-    name: string;
-    description: string;
-    content: string;
-    category?: string;
-    tags?: string[];
-  }> = [];
-  if (enableSkills) {
-    const resolvedSkills = await resolveSkillContext({
-      filesystemDirs: resolveDefaultSkillsDirs({
-        cwd: process.cwd(),
-        skillsDirFlag: typeof flags['skills-dir'] === 'string' ? flags['skills-dir'] : undefined,
-      }),
-      curatedSkills: Array.isArray(cfg?.skills) && cfg.skills.length > 0 ? (cfg.skills as string[]) : undefined,
-      platform: process.platform,
-      logger: {
-        warn: (msg: string, meta?: unknown) => console.warn(msg, meta ?? ''),
-      },
-      warningPrefix: '[wunderland/chat]',
-    });
+  // ── Shared bootstrap (seed, security pipeline, skills, discovery, adaptive runtime) ──
+  // Delegates seed creation, security pipeline init, skills resolution,
+  // discovery init, and adaptive runtime to the shared AgentBootstrap.
+  // Tool loading stays CLI-specific (above) because the CLI has category-aware
+  // extension loading, channel adapters, wallet extension, and global config merges.
+  const cliBootstrap = await AgentBootstrap.create({
+    agentConfig: cfg ?? {},
+    providerId,
+    apiKey: llmApiKey,
+    baseUrl: llmBaseUrl,
+    mode: 'chat',
+    lazyTools: true, // CLI manages its own tool loading above
+    autoApproveToolCalls,
+    workspaceId: workspaceAgentId,
+    workspaceBaseDir: workspaceBaseDir,
+    workingDirectory: process.cwd(),
+    dangerouslySkipCommandSafety,
+    skipMemory: true, // CLI has its own storage/memory with auto-ingest, GraphRAG, etc.
+    disableSkills: !enableSkills,
+    skillsDirFlag: typeof flags['skills-dir'] === 'string' ? flags['skills-dir'] : undefined,
+    policyDefaults: cliDefaults,
+    verbose,
+    logger: {
+      warn: (msg: string, meta?: unknown) => console.warn(msg, meta ?? ''),
+      debug: (msg: string, meta?: unknown) => console.debug(msg, meta ?? ''),
+    },
+  });
 
-    skillsPrompt = resolvedSkills.skillsPrompt;
-    skillEntries = resolvedSkills.skillEntries;
-  }
+  const { seed, seedId, activePersonaId } = cliBootstrap;
+  const displayName = resolveAgentDisplayName({
+    displayName: cfg?.displayName,
+    agentName: cfg?.agentName,
+    globalAgentName: globalConfig.agentName,
+    seedId,
+    fallback: 'Wunderland CLI',
+  });
+  const personality = cfg?.personality || {};
 
-  // Discovery — initialized after skills so skillEntries can be indexed
-  discoveryManager = new WunderlandDiscoveryManager(discoveryOpts);
-  try {
-    await discoveryManager.initialize({
-      toolMap,
-      skillEntries: skillEntries.length > 0 ? skillEntries : undefined,
-      llmConfig: { providerId, apiKey: llmApiKey, baseUrl: llmBaseUrl },
-    });
+  // Merge bootstrap's discovery meta tool + skills into CLI tool map
+  discoveryManager = cliBootstrap.discoveryManager ?? null;
+  if (discoveryManager) {
+    // Re-initialize discovery with the CLI's richer tool map
+    try {
+      await discoveryManager.reindex?.({ toolMap });
+    } catch { /* non-fatal */ }
     const metaTool = discoveryManager.getMetaTool();
     if (metaTool) {
       toolMap.set(metaTool.name, {
@@ -1013,73 +1016,11 @@ export default async function cmdChat(
         execute: metaTool.execute as any,
       });
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    fmt.warning(`Discovery initialization failed (continuing without): ${msg}`);
   }
 
-  const cliStorageDefaults = { quiet: true, priority: ['sqljs' as const] };
-  const adaptiveRuntime = new WunderlandAdaptiveExecutionRuntime({
-    toolFailureMode: cfg?.toolFailureMode,
-    taskOutcomeTelemetry: {
-      ...cfg?.taskOutcomeTelemetry,
-      storage: { ...cliStorageDefaults, ...cfg?.taskOutcomeTelemetry?.storage },
-    },
-    adaptiveExecution: cfg?.adaptiveExecution,
-    logger: console,
-  });
-  await adaptiveRuntime.initialize();
-
-  const seedId = cfg?.seedId ? String(cfg.seedId) : `seed_chat_${Date.now()}`;
-  const displayName = resolveAgentDisplayName({
-    displayName: cfg?.displayName,
-    agentName: cfg?.agentName,
-    globalAgentName: globalConfig.agentName,
-    seedId,
-    fallback: 'Wunderland CLI',
-  });
-  const bio = cfg?.bio ? String(cfg.bio) : 'Interactive terminal assistant';
-  const personality = cfg?.personality || {};
-  const seed = createWunderlandSeed({
-    seedId,
-    name: displayName,
-    description: bio,
-    hexacoTraits: {
-      honesty_humility: Number.isFinite(personality.honesty) ? personality.honesty : 0.8,
-      emotionality: Number.isFinite(personality.emotionality) ? personality.emotionality : 0.5,
-      extraversion: Number.isFinite(personality.extraversion) ? personality.extraversion : 0.6,
-      agreeableness: Number.isFinite(personality.agreeableness) ? personality.agreeableness : 0.7,
-      conscientiousness: Number.isFinite(personality.conscientiousness)
-        ? personality.conscientiousness
-        : 0.8,
-      openness: Number.isFinite(personality.openness) ? personality.openness : 0.7,
-    },
-    baseSystemPrompt: typeof cfg?.systemPrompt === 'string' ? cfg.systemPrompt : undefined,
-    securityProfile: DEFAULT_SECURITY_PROFILE,
-    inferenceHierarchy: DEFAULT_INFERENCE_HIERARCHY,
-    stepUpAuthConfig: createStepUpAuthConfigFromTier(policy.securityTier ?? 'balanced'),
-  });
-  const activePersonaId =
-    typeof cfg?.selectedPersonaId === 'string' && cfg.selectedPersonaId.trim()
-      ? cfg.selectedPersonaId.trim()
-      : seedId;
-
-  // ── Content Security Pipeline (optional) ──────────────────────────────────
-  // Initializes the WunderlandSecurityPipeline singleton for content-level
-  // guardrails. Fail-safe: if creation fails, chat continues without them.
-  let guardrailSummary: { active: string[]; total: number } | null = null;
-  try {
-    const { initializeSecurityPipeline } = await import('../../runtime/tool-helpers.js');
-    guardrailSummary = await initializeSecurityPipeline({
-      securityTier: policy.securityTier,
-      guardrailPackOverrides: policy.guardrailPackOverrides,
-      disableGuardrailPacks: policy.disableGuardrailPacks,
-      enableOnlyPacks: policy.enableOnlyGuardrailPacks,
-      seedId,
-    });
-  } catch {
-    // Non-fatal — content guardrails not available.
-  }
+  const adaptiveRuntime = cliBootstrap.adaptiveRuntime!;
+  const skillsPrompt = cliBootstrap.skillsPrompt ?? '';
+  const guardrailSummary = cliBootstrap.securityPipelineSummary ?? null;
 
   // ── Per-agent storage + auto-ingest pipeline ──────────────────────────────
   let agentStorageManager: AgentStorageManager | undefined;
@@ -2466,9 +2407,10 @@ export default async function cmdChat(
   // ── Graceful shutdown ──
   for (const cleanup of channelCleanups) cleanup();
   rl.close();
-  await discoveryManager.close();
+  await discoveryManager?.close();
   await adaptiveRuntime.close();
   if (agentStorageManager) await agentStorageManager.shutdown().catch(() => {});
+  await cliBootstrap.shutdown().catch(() => {});
   await shutdownWunderlandOtel();
 
   // Session ended banner
