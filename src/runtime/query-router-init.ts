@@ -421,11 +421,8 @@ export async function initCliQueryRouter(
   initPromise = (async (): Promise<QueryRouter | null> => {
     const config = buildCliQueryRouterConfig(opts);
 
-    // Bail early if we have no corpus paths — nothing to index.
-    if (config.knowledgeCorpus.length === 0) {
-      logger.debug('[QueryRouter] No corpus paths found, skipping init.');
-      return null;
-    }
+    // Note: even with empty knowledgeCorpus, the QueryRouter loads bundled
+    // platform knowledge (243 entries) so it can still answer platform questions.
 
     // Bail early if no API key is available — classifier/generator need one.
     if (!config.apiKey) {
