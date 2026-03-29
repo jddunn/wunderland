@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
-import * as os from 'node:os';
+// os module available if needed for future hostname/tmpdir usage
 
 import { HUB_PAGE_HTML } from './hub-html.js';
 import type { DashboardDeps } from './types.js';
@@ -383,7 +383,7 @@ async function handleStopAgent(
 async function handleSpawn(
   req: IncomingMessage,
   res: ServerResponse,
-  deps: DashboardDeps,
+  _deps: DashboardDeps,
 ): Promise<boolean> {
   let body: { description?: string; port?: number };
   try {
@@ -406,24 +406,41 @@ async function handleSpawn(
     /* Lazy-import the NL agent builder. */
     const { extractAgentConfig } = await import('../../../../ai/NaturalLanguageAgentBuilder.js');
 
-    /* Resolve LLM provider — reuse env vars from the dashboard process. */
-    const llmApiKey = process.env['OPENAI_API_KEY']
-      || process.env['OPENROUTER_API_KEY']
-      || process.env['ANTHROPIC_API_KEY']
-      || '';
-
-    if (!llmApiKey) {
+    /* Build a simple LLM invoker from env vars (non-interactive). */
+    const openaiKey = process.env['OPENAI_API_KEY'] || '';
+    const orKey = process.env['OPENROUTER_API_KEY'] || '';
+    const anthropicKey = process.env['ANTHROPIC_API_KEY'] || '';
+    if (!openaiKey && !orKey && !anthropicKey) {
       sendJson(res, 500, { error: 'No LLM API key found in environment (OPENAI_API_KEY, OPENROUTER_API_KEY, or ANTHROPIC_API_KEY)' });
       return true;
     }
+    const baseUrl = orKey ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1';
+    const apiKey = orKey || openaiKey;
+    const llmModel = orKey ? 'openai/gpt-4o' : 'gpt-4o';
 
-    const providerConfig = {
-      apiKey: llmApiKey,
-      model: process.env['OPENROUTER_API_KEY'] ? 'openai/gpt-4o' : 'gpt-4o',
-      ...(process.env['OPENROUTER_API_KEY'] ? { baseUrl: 'https://openrouter.ai/api/v1' } : {}),
+    const invoker = async (prompt: string): Promise<string> => {
+      if (anthropicKey && !apiKey) {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, temperature: 0.1, messages: [{ role: 'user', content: prompt }] }),
+        });
+        const text = await r.text();
+        if (!r.ok) throw new Error(`Anthropic error (${r.status}): ${text.slice(0, 300)}`);
+        const d = JSON.parse(text);
+        return d?.content?.find((b: any) => b?.type === 'text')?.text || '';
+      }
+      const r = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: llmModel, temperature: 0.1, max_tokens: 2048, messages: [{ role: 'user', content: prompt }] }),
+      });
+      const text = await r.text();
+      if (!r.ok) throw new Error(`LLM error (${r.status}): ${text.slice(0, 300)}`);
+      return JSON.parse(text)?.choices?.[0]?.message?.content || '';
     };
 
-    const config = await extractAgentConfig(description, providerConfig);
+    const config = await extractAgentConfig(description, invoker);
 
     /* Write agent files to a directory. */
     const safeName = (config.displayName || 'agent')
@@ -438,7 +455,7 @@ async function handleSpawn(
       seedId: config.seedId || `seed_${safeName.replace(/-/g, '_')}_${Date.now().toString(36)}`,
       displayName: config.displayName || safeName,
       systemPrompt: config.systemPrompt || `You are ${config.displayName || 'an AI assistant'}.`,
-      tools: config.tools || [],
+      extensions: config.extensions || {},
       channels: config.channels || [],
     };
 
