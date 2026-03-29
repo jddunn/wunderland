@@ -2,11 +2,11 @@
  * @fileoverview `wunderland image` — image generation via AgentOS providers.
  * @module wunderland/cli/commands/image
  */
-import type { GlobalFlags } from '../types.js';
-import { accent, dim } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
-import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent, dim } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
+import { loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
+import { shutdownWunderlandOtel, startWunderlandOtel } from '../../../observability/otel.js';
 
 /**
  * Handles the `wunderland image` CLI command.
@@ -68,7 +68,7 @@ export default async function cmdImage(
 
 	    try {
 	      const { generateImage } = await import('@framers/agentos');
-        const { recordWunderlandTokenUsage } = await import('../../observability/token-usage.js');
+        const { recordWunderlandTokenUsage } = await import('../../../observability/token-usage.js');
 	      const request: Record<string, unknown> = { prompt };
 	      if (provider) request['provider'] = provider;
 	      if (model) request['model'] = model;
