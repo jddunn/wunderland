@@ -10,7 +10,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HumanInteractionManager } from '@framers/agentos';
 
-import type { ToolInstance } from '../../../openai/tool-calling.js';
+import type { ToolInstance } from '../../../../runtime/tool-calling.js';
 import type { WunderlandSessionTextLogger } from '../../../../observability/session-text-log.js';
 
 /**

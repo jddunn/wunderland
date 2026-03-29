@@ -8,7 +8,7 @@ import { resolveStrictToolNames } from '../../../runtime/tool-function-names.js'
 import {
   normalizeRuntimePolicy,
   getPermissionsForSet,
-} from '../../security/runtime-policy.js';
+} from '../../../runtime/policy.js';
 import { startWunderlandOtel } from '../../observability/otel.js';
 import {
   createWunderlandSeed,
