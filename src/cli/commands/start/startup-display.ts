@@ -137,8 +137,15 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
   fmt.kvPair('LLM Provider', providerId);
   fmt.kvPair('Model', model);
   fmt.kvPair('API Key', canUseLLM ? sColor('configured') : wColor('not set'));
-  if (providerId === 'openai' && openrouterFallback) {
-    fmt.kvPair('Fallback', sColor('OpenRouter (auto)'));
+  if (openrouterFallback) {
+    const fbModel = openrouterFallback.model || 'auto';
+    const fbLabel = openrouterFallback.baseUrl?.includes('openrouter') ? 'OpenRouter'
+      : openrouterFallback.baseUrl?.includes('anthropic') ? 'Anthropic'
+      : fbModel.startsWith('gemini') ? 'Gemini'
+      : fbModel.startsWith('claude') ? 'Anthropic'
+      : fbModel.startsWith('gpt') ? 'OpenAI'
+      : 'auto';
+    fmt.kvPair('Fallback', sColor(`${fbLabel} (${fbModel})`));
   }
   const activePort = ctx.port;
   fmt.kvPair('Port', String(activePort));
