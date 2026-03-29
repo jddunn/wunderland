@@ -88,16 +88,28 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   const portRaw = typeof flags['port'] === 'string' ? flags['port'] : (process.env['PORT'] || '');
   const port = Number(portRaw) || 3777;
 
-  // OpenRouter fallback — when OPENROUTER_API_KEY is set, use it as automatic fallback
+  // Build fallback chain from ALL available API keys (skip the primary provider)
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
-  const openrouterFallback: LLMProviderConfig | undefined = openrouterApiKey
-    ? {
-        apiKey: openrouterApiKey,
-        model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
-      }
-    : undefined;
+  const fallbackCandidates: Array<{ id: string; config: LLMProviderConfig }> = [];
+  if (process.env['OPENAI_API_KEY'] && providerId !== 'openai') {
+    fallbackCandidates.push({ id: 'openai', config: { apiKey: process.env['OPENAI_API_KEY'], model: 'gpt-4o-mini' } });
+  }
+  if (process.env['ANTHROPIC_API_KEY'] && providerId !== 'anthropic') {
+    fallbackCandidates.push({ id: 'anthropic', config: { apiKey: process.env['ANTHROPIC_API_KEY'], model: 'claude-haiku-4-5-20251001', baseUrl: 'https://api.anthropic.com/v1' } });
+  }
+  if (openrouterApiKey && providerId !== 'openrouter') {
+    fallbackCandidates.push({ id: 'openrouter', config: {
+      apiKey: openrouterApiKey,
+      model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
+    } });
+  }
+  if (process.env['GEMINI_API_KEY'] && providerId !== 'gemini') {
+    fallbackCandidates.push({ id: 'gemini', config: { apiKey: process.env['GEMINI_API_KEY'], model: 'gemini-2.5-flash' } });
+  }
+  // Use first available candidate as the fallback (cheap models preferred)
+  const openrouterFallback: LLMProviderConfig | undefined = fallbackCandidates[0]?.config;
 
   const dangerouslySkipPermissions = flags['dangerously-skip-permissions'] === true;
   const dangerouslySkipCommandSafety =
