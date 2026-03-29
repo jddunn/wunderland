@@ -1732,6 +1732,33 @@ export default async function cmdChat(
             content: contextParts.join('\n'),
           });
         }
+
+        // Surface capability recommendations to the LLM context when present
+        if (routerResult.recommendations) {
+          const recs = routerResult.recommendations;
+          if (recs.skills.length || recs.tools.length || recs.extensions.length) {
+            const capParts = [
+              ...recs.skills.map((s: { skillId: string }) => `skill:${s.skillId}`),
+              ...recs.tools.map((t: { toolId: string }) => `tool:${t.toolId}`),
+              ...recs.extensions.map((e: { extensionId: string }) => `ext:${e.extensionId}`),
+            ];
+
+            // Remove any previous recommendation injection
+            for (let i = messages.length - 1; i >= 1; i--) {
+              if (
+                typeof messages[i]?.content === 'string' &&
+                String(messages[i]!.content).startsWith('[Recommended Capabilities]')
+              ) {
+                messages.splice(i, 1);
+              }
+            }
+
+            messages.splice(1, 0, {
+              role: 'system',
+              content: `[Recommended Capabilities]\nThe following capabilities were identified as relevant for this query: ${capParts.join(', ')}`,
+            });
+          }
+        }
       }
     } catch {
       // Non-fatal — QueryRouter failure does not block the chat turn
