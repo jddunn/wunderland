@@ -3,9 +3,9 @@
  * @module wunderland/cli/commands/auth-status
  */
 
-import type { GlobalFlags } from '../types.js';
-import { accent, success as sColor, warn as wColor, error as eColor } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent, success as sColor, warn as wColor, error as eColor } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
 
 export default async function cmdAuthStatus(
   _args: string[],
