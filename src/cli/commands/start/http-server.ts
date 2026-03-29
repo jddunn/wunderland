@@ -7,7 +7,7 @@
  * Keeps only lifecycle concerns (server creation, middleware wiring).
  */
 
-import { createServer } from 'node:http';
+import { createServer, type ServerResponse } from 'node:http';
 import { maybeProxyAgentosRagRequest } from '../../../rag/http-proxy.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../../observability/session-text-log.js';
 import { dispatchRoute } from './routes/index.js';
@@ -76,6 +76,19 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
     }),
   );
 
+  /* ── Dashboard event SSE infrastructure ───────────────────────────────── */
+  const eventSseClients = new Set<ServerResponse>();
+  const broadcastAgentEvent = (payload: Record<string, unknown>) => {
+    const data = JSON.stringify(payload);
+    for (const client of Array.from(eventSseClients)) {
+      try {
+        client.write(`event: agent_event\ndata: ${data}\n\n`);
+      } catch {
+        eventSseClients.delete(client);
+      }
+    }
+  };
+
   /* ── Assemble shared deps for extracted route handlers ─────────────────── */
   const routeDeps: CliServerDeps = {
     seedId,
@@ -123,6 +136,9 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
     adapterByPlatform,
     loadedHttpHandlers,
     sessionTextLogger,
+    activePacks: ctx.activePacks ?? [],
+    eventSseClients,
+    broadcastAgentEvent,
   };
 
   const server = createServer(async (req, res) => {

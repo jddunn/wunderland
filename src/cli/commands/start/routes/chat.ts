@@ -349,8 +349,14 @@ export async function handleChatRoutes(
         strictToolNames,
         toolFailureMode: adaptiveDecision.toolFailureMode,
         ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
-        onToolCall: () => {
+        onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
           toolCallCount += 1;
+          deps.broadcastAgentEvent?.({
+            type: 'tool_call',
+            toolName: tool?.name ?? 'unknown',
+            message: 'Tool invoked',
+            args,
+          });
         },
         askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
           if (autoApproveToolCalls) return true;
