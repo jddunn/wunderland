@@ -570,8 +570,22 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${accent('--dangerously-skip-permissions')} ${dim('skip permission checks')}`);
     console.log(`     ${accent('--dangerously-skip-command-safety')} ${dim('disable shell safety checks')}`);
     console.log();
+    console.log(`  ${accent('6 Guardrail Extension Packs:')}`);
+    console.log(`    ${g.bullet} ${bright('PII Redaction')}            ${dim('4-tier PII detection + redaction')}`);
+    console.log(`    ${g.bullet} ${bright('ML Classifiers')}           ${dim('Toxicity, injection, NSFW via ONNX/LLM')}`);
+    console.log(`    ${g.bullet} ${bright('Topicality')}               ${dim('On-topic enforcement + drift detection')}`);
+    console.log(`    ${g.bullet} ${bright('Code Safety')}              ${dim('25 OWASP regex rules')}`);
+    console.log(`    ${g.bullet} ${bright('Grounding Guard')}          ${dim('RAG hallucination detection via NLI')}`);
+    console.log(`    ${g.bullet} ${bright('Content Policy Rewriter')}  ${dim('LLM judge + rewriter, 8 categories, 4 presets')}`);
+    console.log();
+    console.log(`  ${dim('Content policy presets:')}`);
+    console.log(`     ${accent('uncensored')}       ${dim('all categories disabled')}`);
+    console.log(`     ${accent('uncensored-safe')}  ${dim('only illegal_harmful enabled')}`);
+    console.log(`     ${accent('family-friendly')}  ${dim('all categories, sanitize mode')}`);
+    console.log(`     ${accent('enterprise')}       ${dim('all categories + custom rules')}`);
+    console.log();
     console.log(`  ${hr()}`);
-    console.log(`  ${dim('See also:')} ${accent(URLS.docs)}`);
+    console.log(`  ${dim('See also:')} ${accent('wunderland help memory')}${dim(',')} ${accent('wunderland help personality')}`);
     console.log();
     return;
   }
