@@ -1,0 +1,90 @@
+name: research-report
+description: "Multi-agent research pipeline that produces a PDF report and slide deck"
+goal: "Research {topic} from multiple angles, synthesize findings, and export as PDF report + PPTX presentation"
+input:
+  topic: { type: string, required: true }
+  audience: { type: string, default: "executive" }
+  theme: { type: string, default: "corporate" }
+returns:
+  report_pdf: { type: object, description: "document_export output for the PDF report" }
+  slides_pptx: { type: object, description: "document_export output for the slide deck" }
+  sources: { type: array, items: { type: object } }
+
+planner:
+  strategy: parallel-then-linear
+  maxSteps: 12
+  maxIterations: 2
+
+phases:
+  # Phase 1: Parallel research from three different angles
+  - name: research
+    description: "Gather information from multiple sources in parallel"
+    parallel: true
+    steps:
+      - name: web-research
+        tool: deep_research
+        input:
+          query: "comprehensive overview of {topic}"
+          depth: moderate
+          sources: [web, news]
+      - name: academic-research
+        tool: deep_research
+        input:
+          query: "{topic} academic analysis and expert opinions"
+          depth: moderate
+          sources: [web, academic]
+      - name: competitive-research
+        tool: web_search
+        input:
+          query: "{topic} trends data statistics 2026"
+          multiSearch: true
+
+  # Phase 2: Synthesize and quality-check
+  - name: analysis
+    description: "Synthesize findings into a structured report and verify quality"
+    steps:
+      - name: synthesize
+        prompt: |
+          Synthesize the research from all three sources into a structured report for a {audience} audience.
+          Organize into: Executive Summary, Key Findings (3-5), Detailed Analysis (with data tables where available),
+          Trends & Outlook, and Recommendations.
+          Include inline citations to sources.
+      - name: quality-check
+        tool: self_evaluate
+        input:
+          criteria: [accuracy, completeness, coherence, citation_quality]
+
+  # Phase 3: Export deliverables
+  - name: export
+    description: "Generate PDF report and PPTX slide deck"
+    steps:
+      - name: generate-pdf
+        tool: document_export
+        input:
+          format: pdf
+          content:
+            title: "Research Report: {topic}"
+            subtitle: "Prepared for {audience} stakeholders"
+            author: "Research Agent"
+            theme: "{theme}"
+            sections: "{{synthesized_sections}}"
+          options:
+            pageSize: a4
+            coverPage: true
+            pageNumbers: true
+      - name: generate-slides
+        tool: document_export
+        input:
+          format: pptx
+          content:
+            title: "{topic}"
+            subtitle: "Research Findings & Recommendations"
+            author: "Research Agent"
+            theme: "{theme}"
+            sections: "{{slide_sections}}"
+          options:
+            coverPage: true
+
+policy:
+  guardrails: [grounding-guard, pii-redaction]
+  skills: [document-export, deep-research, web-search]
