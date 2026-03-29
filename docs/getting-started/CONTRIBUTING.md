@@ -65,7 +65,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
    * TypeScript Vue Plugin
 
 ## Development Workflow
-1. Create a feature branch from `main`:
+1. Create a feature branch from `master`:
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -81,7 +81,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
    git push origin feature/your-feature-name
    ```
 
-4. Submit a pull request to the `main` branch of the original repository.
+4. Submit a pull request to the `master` branch of the original repository.
 
 ## Pull Request Process
 1. Ensure your PR includes a clear description of the changes and why they're needed.

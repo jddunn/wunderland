@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.41.0] - 2026-03-28
+
+### Changed
+- refactor: extract `AgentBootstrap` (`src/bootstrap/`) as single source of truth for agent initialization, shared by CLI chat, public API, and HTTP API
+- refactor: split `cli/commands/chat.ts` god object into `ChatREPL.ts` (interactive loop) and `ChatStreamRenderer.ts` (stream rendering)
+- refactor: split `runtime/tool-calling.ts` into `ToolApprovalHandler.ts` (approval flow) and `ToolStreamProcessor.ts` (stream processing)
+- refactor: extract `api/routes/` (chat, agents, health, social, config) from `api/server.ts`
+- refactor: extract `cli/commands/start/routes/` (chat, agents, health, social, config, html-pages, helpers) from `cli/commands/start/http-server.ts`
+- refactor: group auth commands into `cli/commands/auth/` (login, logout, auth-status)
+- refactor: group AI commands into `cli/commands/ai/` (image, video, audio, vision, structured)
+- refactor: group agent commands into `cli/commands/agent/` (agents, ps, stop, logs, monitor, serve)
+- refactor: move `cli/security/env-secrets.ts` to `security/env-secrets.ts`
+- refactor: delete back-compat shims (`cli/openai/tool-calling.ts`, `cli/config/workspace.ts`, `cli/security/runtime-policy.ts`)
+- refactor: delete dead `cli/observability/otel.ts` shim
+- refactor: delete duplicate `CronScheduler.spec.ts`
+- refactor: delete vestigial `types/discord-js-optional.d.ts` stub
+- docs: update architecture docs, README, and feature docs to reflect restructuring
+
 ## [0.40.0] - 2026-03-14
 
 ### Added
