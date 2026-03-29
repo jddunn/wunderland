@@ -52,14 +52,6 @@ interface PlatformKnowledge {
   troubleshooting: number;
 }
 
-/** QueryRouter corpus stats. */
-interface CorpusStats {
-  initialized: boolean;
-  chunkCount: number;
-  embeddingDimension: number;
-  platformKnowledge: PlatformKnowledge;
-}
-
 // ── DiscoveryView ──────────────────────────────────────────────────────────
 
 export class DiscoveryView {
@@ -118,7 +110,7 @@ export class DiscoveryView {
   /** Build and display the discovery dashboard. */
   async run(): Promise<void> {
     const g = glyphs();
-    const ui = getUiRuntime();
+    void getUiRuntime(); // touch UI runtime for side-effect initialization
 
     await loadDotEnvIntoProcessUpward({
       startDir: process.cwd(),
@@ -181,13 +173,15 @@ export class DiscoveryView {
 
     // ── QueryRouter Status ───────────────────────────────────────────
     lines.push(`  ${iColor(g.bulletHollow)} ${bright('QueryRouter')}`);
-    const routerEnabled = config.rag?.queryRouter?.enabled !== false;
+    const ragAny = config.rag as Record<string, unknown> | undefined;
+    const routerEnabled = (ragAny?.queryRouter as Record<string, unknown> | undefined)?.enabled !== false;
     if (routerEnabled) {
       lines.push(
         `    ${muted('Status'.padEnd(20))} ${sColor('enabled')} ${dim('(initialises on chat/start)')}`,
       );
-      const classifierMode = config.rag?.queryRouter?.classifierMode || 'hybrid';
-      const defaultStrategy = config.rag?.queryRouter?.defaultStrategy || 'moderate';
+      const qrConfig = ragAny?.queryRouter as Record<string, unknown> | undefined;
+      const classifierMode = (qrConfig?.classifierMode as string) || 'hybrid';
+      const defaultStrategy = (qrConfig?.defaultStrategy as string) || 'moderate';
       lines.push(
         `    ${muted('Classifier'.padEnd(20))} ${accent(classifierMode)}`,
       );
@@ -246,7 +240,7 @@ export class DiscoveryView {
    * Resolve discovery config from the local agent.config.json.
    * Falls back to sensible defaults when no local config exists.
    */
-  private async resolveDiscoveryStats(config: any): Promise<DiscoveryStats> {
+  private async resolveDiscoveryStats(_config?: unknown): Promise<DiscoveryStats> {
     const defaults: DiscoveryStats = {
       enabled: false,
       recallProfile: 'balanced',
@@ -276,7 +270,7 @@ export class DiscoveryView {
           graphNodes: 0,
           graphEdges: 0,
           presetCoOccurrences: 0,
-          manifestDirs: cfg.discovery.manifestDirs || [],
+          manifestDirs: (cfg.discovery as Record<string, unknown>).manifestDirs as string[] || [],
         };
       }
     } catch {
@@ -316,7 +310,6 @@ export class DiscoveryView {
   }
 
   private getHelpLines(): string[] {
-    const g = glyphs();
     return [
       `${bright('Discovery & Catalog')}`,
       `${dim('-')} Shows capability discovery engine status and config.`,
