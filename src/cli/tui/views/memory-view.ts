@@ -40,7 +40,6 @@ export class MemoryView {
   private keys: KeybindingManager;
   private onBack: () => void;
   private modal: null | { title: string; lines: string[] } = null;
-  private lastLines: string[] = [];
 
   constructor(opts: { screen: Screen; keys: KeybindingManager; onBack: () => void }) {
     this.screen = opts.screen;
@@ -49,15 +48,15 @@ export class MemoryView {
 
     this.keys.push({
       name: 'memory-view',
-      bindings: [
-        { key: 'q', handler: () => this.back() },
-        { key: 'escape', handler: () => this.modal ? (this.modal = null, this.paint()) : this.back() },
-      ],
+      bindings: {
+        q: () => this.back(),
+        escape: () => { if (this.modal) { this.modal = null; void this.paint(); } else { this.back(); } },
+      },
     });
   }
 
   private back(): void {
-    this.keys.pop('memory-view');
+    this.keys.pop();
     this.onBack();
   }
 
@@ -146,15 +145,23 @@ export class MemoryView {
     lines.push('');
     lines.push(dim(`  ${g.bullet} q/Esc: back`));
 
-    this.lastLines = lines;
 
-    const frame = wrapInFrame(lines, { title: 'Memory', style: 'brand' });
-    this.screen.clear();
+    const { cols, rows } = this.screen.getSize();
+    const framed = wrapInFrame(lines, cols, 'MEMORY');
     if (this.modal) {
-      const overlay = renderOverlayBox(this.modal.title, this.modal.lines, 60);
-      this.screen.write(stampOverlay(frame, overlay, 4, 6));
+      const stamped = stampOverlay({
+        screenLines: framed,
+        overlayLines: renderOverlayBox({
+          title: this.modal.title,
+          width: Math.min(60, cols - 4),
+          lines: this.modal.lines,
+        }),
+        cols,
+        rows,
+      });
+      this.screen.render(stamped.join('\n'));
     } else {
-      this.screen.write(frame);
+      this.screen.render(framed.join('\n'));
     }
   }
 }
