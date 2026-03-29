@@ -9,7 +9,7 @@ import {
   normalizeRuntimePolicy,
   getPermissionsForSet,
 } from '../../../runtime/policy.js';
-import { startWunderlandOtel } from '../../observability/otel.js';
+import { startWunderlandOtel } from '../../../observability/otel.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,

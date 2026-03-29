@@ -19,7 +19,7 @@ import {
   type NormalizedRuntimePolicy,
 } from '../runtime/policy.js';
 import { resolveDefaultSkillsDirs } from '../skills/index.js';
-import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
+import { createEnvSecretResolver } from '../security/env-secrets.js';
 import { createSchemaOnDemandTools } from '../runtime/schema-on-demand.js';
 import type { ToolInstance } from '../runtime/tool-helpers.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';

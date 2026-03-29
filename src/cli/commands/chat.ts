@@ -39,7 +39,7 @@ import {
   shouldInjectResearch,
   type ResearchDepth,
 } from '../../runtime/research-classifier.js';
-import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
+import { startWunderlandOtel, shutdownWunderlandOtel } from '../../observability/otel.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../observability/session-text-log.js';
 // WunderlandAdaptiveExecutionRuntime is now created by AgentBootstrap
 import { resolveStrictToolNames } from '../../runtime/tool-function-names.js';
@@ -51,7 +51,7 @@ import {
 import { isValidSecurityTier, SECURITY_TIERS } from '../../security/SecurityTiers.js';
 import { isValidToolAccessProfile } from '../../social/ToolAccessProfiles.js';
 import { verifySealedConfig } from '../seal-utils.js';
-import { createEnvSecretResolver } from '../security/env-secrets.js';
+import { createEnvSecretResolver } from '../../security/env-secrets.js';
 import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 import {
   createStepUpAuthConfigFromTier,

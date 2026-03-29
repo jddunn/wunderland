@@ -53,7 +53,7 @@ import {
   normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
 } from '../runtime/policy.js';
-import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
+import { createEnvSecretResolver } from '../security/env-secrets.js';
 import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 import { buildOllamaRuntimeOptions } from '../runtime/ollama-options.js';

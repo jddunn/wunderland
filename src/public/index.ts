@@ -44,7 +44,7 @@ import {
   type NormalizedRuntimePolicy,
 } from '../runtime/policy.js';
 import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
-import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
+import { createEnvSecretResolver } from '../security/env-secrets.js';
 import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 
 import type {
