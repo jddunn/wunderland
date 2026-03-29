@@ -15,8 +15,32 @@
 import { resolveRuntimeConfig } from './workflows.js';
 import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
 import type { GlobalFlags } from '../types.js';
+import type { ProviderStrategyConfig, ProviderStrategyName } from '@framers/agentos/orchestration';
 
 const SUBCOMMANDS = new Set(['run', 'explain', 'help']);
+
+type MissionProviderCandidate = {
+  env: string;
+  id: string;
+  runtimeId: string;
+  baseUrlEnv?: string;
+  defaultBaseUrl?: string;
+  apiKeyLiteral?: string;
+};
+
+function resolveProviderBaseUrl(
+  candidate: MissionProviderCandidate,
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  return (candidate.baseUrlEnv ? env[candidate.baseUrlEnv] : undefined) ?? candidate.defaultBaseUrl;
+}
+
+function resolveProviderApiKey(
+  candidate: MissionProviderCandidate,
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  return candidate.apiKeyLiteral ?? env[candidate.env];
+}
 
 export default async function missionCommand(
   args: string[],
@@ -68,13 +92,15 @@ export default async function missionCommand(
       }
 
 	      const baseRuntime = resolveRuntimeConfig();
+        const runtimeProviderId = String(baseRuntime.llm.providerId ?? 'openai');
+        const runtimeModel = String(baseRuntime.llm.model);
 	      await startWunderlandOtel({ serviceName: 'wunderland-mission' });
 	      const app = await createWunderland({
           configDirOverride: globals?.config,
 	        llm: {
-          providerId: baseRuntime.llm.providerId as any,
+          providerId: runtimeProviderId as any,
           apiKey: baseRuntime.llm.apiKey as any,
-          model: baseRuntime.llm.model,
+          model: runtimeModel,
           baseUrl: baseRuntime.llm.baseUrl,
         },
         tools: 'curated',
@@ -148,9 +174,14 @@ async function runNaturalLanguageMission(
   globals?: GlobalFlags,
 ): Promise<void> {
   // Lazy imports to avoid loading heavy modules for help/explain
-  const { MissionPlanner } = await import('@framers/agentos/orchestration/planning/MissionPlanner');
-  const { DEFAULT_THRESHOLDS } = await import('@framers/agentos/orchestration/planning/types');
-  const { buildSplitCallers } = await import('@framers/agentos/orchestration/planning/buildLlmCaller');
+  const {
+    DEFAULT_THRESHOLDS,
+    ManageGraphTool,
+    MissionPlanner,
+    RequestExpansionTool,
+    buildSplitCallers,
+    createMissionExpansionHandler,
+  } = await import('@framers/agentos/orchestration');
   const { resolveModelOption } = await import('@framers/agentos');
   const { MissionStreamRenderer } = await import('../renderers/MissionStreamRenderer.js');
   const { createWunderland } = await import('../../public/index.js');
@@ -166,7 +197,6 @@ async function runNaturalLanguageMission(
   const verbose = flags['verbose'] === true;
   const json = flags['json'] === true;
   const quiet = flags['quiet'] === true;
-  const resume = flags['resume'] as string | undefined;
 
   // Determine output mode
   const outputMode = json ? 'json' as const : quiet ? 'quiet' as const : verbose ? 'verbose' as const : 'default' as const;
@@ -175,16 +205,27 @@ async function runNaturalLanguageMission(
   // Build wunderland runtime for LLM access
   await startWunderlandOtel({ serviceName: 'wunderland-mission' });
   const baseRuntime = resolveRuntimeConfig();
+  const runtimeProviderId = String(baseRuntime.llm.providerId ?? 'openai');
+  const runtimeModel = String(baseRuntime.llm.model);
+  const runtimeApiKey = await Promise.resolve(baseRuntime.llm.apiKey);
   const app = await createWunderland({
     configDirOverride: globals?.config,
     llm: {
-      providerId: baseRuntime.llm.providerId as any,
+      providerId: runtimeProviderId as any,
       apiKey: baseRuntime.llm.apiKey as any,
-      model: baseRuntime.llm.model,
+      model: runtimeModel,
       baseUrl: baseRuntime.llm.baseUrl,
     },
-    tools: 'curated',
-    approvals: { mode: autonomy === 'autonomous' ? 'auto-all' : 'auto-safe' },
+    tools: {
+      curated: {},
+      custom: [new RequestExpansionTool(), new ManageGraphTool()],
+    },
+    approvals: {
+      mode: autonomy === 'autonomous' ? 'auto-all' : 'custom',
+      onRequest: async (approval) =>
+        approval.tool.name === 'request_expansion'
+        || approval.tool.name === 'manage_graph',
+    },
   });
 
   try {
@@ -198,16 +239,16 @@ async function runNaturalLanguageMission(
     const { plannerCaller, executionCaller, plannerModel: resolvedPlannerModel, executionModel: resolvedExecModel } =
       await buildSplitCallers(
         {
-          provider: plannerProvider ?? baseRuntime.llm.providerId,
-          model: plannerModel ?? baseRuntime.llm.model,
-          apiKey: baseRuntime.llm.apiKey,
+          provider: plannerProvider ?? runtimeProviderId,
+          model: plannerModel ?? runtimeModel,
+          apiKey: runtimeApiKey,
           baseUrl: baseRuntime.llm.baseUrl,
         },
         executionModelFlag
           ? {
-              provider: execProvider ?? baseRuntime.llm.providerId,
-              model: execModel ?? baseRuntime.llm.model,
-              apiKey: baseRuntime.llm.apiKey,
+              provider: execProvider ?? runtimeProviderId,
+              model: execModel ?? runtimeModel,
+              apiKey: runtimeApiKey,
               baseUrl: baseRuntime.llm.baseUrl,
             }
           : undefined, // Same as planner if not specified
@@ -231,44 +272,44 @@ async function runNaturalLanguageMission(
       { env: 'MISTRAL_API_KEY', id: 'mistral', runtimeId: 'openai', baseUrlEnv: 'MISTRAL_BASE_URL', defaultBaseUrl: 'https://api.mistral.ai/v1' },
       { env: 'XAI_API_KEY', id: 'xai', runtimeId: 'openai', baseUrlEnv: 'XAI_BASE_URL', defaultBaseUrl: 'https://api.x.ai/v1' },
       { env: 'OLLAMA_BASE_URL', id: 'ollama', runtimeId: 'ollama', baseUrlEnv: 'OLLAMA_BASE_URL', defaultBaseUrl: 'http://localhost:11434/v1', apiKeyLiteral: 'ollama' },
-    ] as const;
+    ] as const satisfies readonly MissionProviderCandidate[];
     for (const candidate of providerEnvMap) {
       if (!process.env[candidate.env]) continue;
       const resolved = resolveModelOption({ provider: candidate.id }, 'text');
-      const baseUrl =
-        (candidate.baseUrlEnv ? process.env[candidate.baseUrlEnv] : undefined) ??
-        candidate.defaultBaseUrl;
+      const baseUrl = resolveProviderBaseUrl(candidate, process.env);
       providerConfigs[candidate.id] = {
         providerId: candidate.runtimeId,
-        apiKey: candidate.apiKeyLiteral ?? String(process.env[candidate.env] || '').trim(),
+        apiKey: String(resolveProviderApiKey(candidate, process.env) || '').trim(),
         model: resolved.modelId,
         baseUrl,
       };
       availableProviders.push(candidate.id);
     }
-    if (!providerConfigs[baseRuntime.llm.providerId]) {
-      providerConfigs[baseRuntime.llm.providerId] = {
-        providerId: baseRuntime.llm.providerId,
-        apiKey: String(baseRuntime.llm.apiKey ?? ''),
-        model: baseRuntime.llm.model,
+    if (!providerConfigs[runtimeProviderId]) {
+      providerConfigs[runtimeProviderId] = {
+        providerId: runtimeProviderId,
+        apiKey: runtimeApiKey,
+        model: runtimeModel,
         baseUrl: baseRuntime.llm.baseUrl,
       };
     }
-    if (!availableProviders.includes(baseRuntime.llm.providerId)) {
-      availableProviders.push(baseRuntime.llm.providerId);
+    if (!availableProviders.includes(runtimeProviderId)) {
+      availableProviders.push(runtimeProviderId);
     }
 
     // Discover available tools from the wunderland runtime
-    const toolList = (app.listTools?.() ?? []).map((t: { name: string; description: string }) => ({
+    const toolList = ((app as {
+      listTools?: () => Array<{ name: string; description: string }>;
+    }).listTools?.() ?? []).map((t) => ({
       name: t.name,
       description: t.description,
     }));
 
     // Parse explicit provider assignments from strategy string
     // e.g. "claude for research, gpt-4o for writing" or just "balanced"
-    let strategyConfig: { strategy: string; assignments?: Record<string, { provider: string; model?: string }>; fallback?: string };
+    let strategyConfig: ProviderStrategyConfig;
     if (['best', 'cheapest', 'balanced'].includes(providerStrategy)) {
-      strategyConfig = { strategy: providerStrategy };
+      strategyConfig = { strategy: providerStrategy as ProviderStrategyName };
     } else {
       // Treat as NL provider assignment — pass through, planner will parse
       strategyConfig = { strategy: 'mixed', fallback: 'balanced' };
@@ -309,8 +350,27 @@ async function runNaturalLanguageMission(
 
     // Execute the compiled graph through the wunderland runtime
     const startTime = Date.now();
+    const expansionHandler = createMissionExpansionHandler({
+      autonomy,
+      thresholds: { ...DEFAULT_THRESHOLDS, maxTotalCost: costCap, maxAgentCount: maxAgents },
+      llmCaller: plannerCaller,
+      costCap,
+      maxAgents,
+      availableTools: toolList,
+      availableProviders,
+      providerStrategy: strategyConfig,
+      defaultLlm: {
+        providerId: runtimeProviderId,
+        model: runtimeModel,
+      },
+      initialEstimatedCost: result.selectedBranch.estimatedCost,
+    });
 
-    for await (const event of app.streamGraph(result.compiledGraph, {}, { llmByProvider: providerConfigs })) {
+    for await (const event of app.streamGraph(result.compiledGraph, {}, {
+      llmByProvider: providerConfigs,
+      expansionHandler,
+      reevalInterval: 3,
+    })) {
       renderer.render(event as any);
     }
 

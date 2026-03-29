@@ -161,8 +161,11 @@ export async function runToolCallingTurn(opts: {
     args: Record<string, unknown>;
     success: boolean;
     error?: string;
+    output?: unknown;
     durationMs: number;
   }) => void;
+  /** Called when the LLM emits streamed text before the turn completes. */
+  onTextDelta?: (content: string) => void;
   /** Optional pre-configured authorization manager. Created automatically if not provided. */
   authorizationManager?: StepUpAuthorizationManager;
   /** Override the API base URL for the primary provider. */
@@ -764,6 +767,7 @@ export async function runToolCallingTurn(opts: {
           args,
           success: result?.success === true,
           error: result?.success ? undefined : (result?.error || 'Tool failed'),
+          output: result?.success ? result.output : undefined,
           durationMs,
         });
       } catch { /* ignore callback errors */ }
@@ -983,6 +987,7 @@ export async function runToolCallingTurn(opts: {
         // finalText captures it for the loop_complete handler.
         pendingText += event.content;
         finalText += event.content;
+        opts.onTextDelta?.(event.content);
         break;
       }
 
@@ -1121,6 +1126,7 @@ export interface StreamToolCallingTurnOpts {
     args: Record<string, unknown>;
     success: boolean;
     error?: string;
+    output?: unknown;
     durationMs: number;
   }) => void;
   /** Pre-configured authorization manager (skips internal creation). */
@@ -1594,6 +1600,7 @@ export async function* streamToolCallingTurn(
             args,
             success: result?.success === true,
             error: result?.success ? undefined : (result?.error || 'Tool failed'),
+            output: result?.success ? result.output : undefined,
             durationMs,
           });
         } catch { /* ignore */ }

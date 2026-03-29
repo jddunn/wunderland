@@ -13,7 +13,7 @@ import type {
   GuardrailOutputPayload,
   GuardrailEvaluationResult,
   GuardrailAction,
-} from '@framers/agentos/core/guardrails/index';
+} from '@framers/agentos/safety/guardrails';
 import {
   type InputClassificationResult,
   type InputClassificationCategory,
