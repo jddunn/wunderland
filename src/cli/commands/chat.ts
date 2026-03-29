@@ -490,7 +490,7 @@ export default async function cmdChat(
   const dangerouslySkipCommandSafety =
     flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
   const autoApproveToolCalls =
-    globals.autoApproveTools || dangerouslySkipPermissions || overdriveMode || policy.executionMode === 'autonomous';
+    globals.autoApproveTools || dangerouslySkipPermissions || overdriveMode || policy.executionMode === 'autonomous' || policy.securityTier === 'permissive' || policy.securityTier === 'dangerous';
   const enableSkills = flags['no-skills'] !== true;
   const enableQueryRouter = flags['no-query-router'] !== true;
   const lazyTools = flags['lazy-tools'] === true;
