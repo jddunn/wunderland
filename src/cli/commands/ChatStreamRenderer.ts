@@ -148,6 +148,11 @@ export class ChatStreamRenderer {
     };
     sources?: unknown[];
     fallbacksUsed?: string[];
+    recommendations?: {
+      skills: Array<{ skillId: string }>;
+      tools: Array<{ toolId: string }>;
+      extensions: Array<{ extensionId: string }>;
+    };
   }, durationMs: number): void {
     if (!this.verbose) return;
     const c = routerResult.classification;
@@ -155,8 +160,20 @@ export class ChatStreamRenderer {
     const fallbacks = routerResult.fallbacksUsed?.length
       ? ` fallbacks=[${routerResult.fallbacksUsed.join(',')}]`
       : '';
+
+    // Format capability recommendations for the diagnostic line
+    let recsLabel = '';
+    if (routerResult.recommendations) {
+      const r = routerResult.recommendations;
+      const recParts: string[] = [];
+      if (r.skills.length) recParts.push(`skills=[${r.skills.map((s) => s.skillId).join(',')}]`);
+      if (r.tools.length) recParts.push(`tools=[${r.tools.map((t) => t.toolId).join(',')}]`);
+      if (r.extensions.length) recParts.push(`exts=[${r.extensions.map((e) => e.extensionId).join(',')}]`);
+      if (recParts.length) recsLabel = ` recs={${recParts.join(' ')}}`;
+    }
+
     console.log(
-      `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[QueryRouter] tier=${c.tier} confidence=${c.confidence.toFixed(2)} strategy=${c.strategy} sources=${srcCount}${fallbacks} reasoning="${c.reasoning}" | ${durationMs}ms`)}`
+      `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[QueryRouter] tier=${c.tier} confidence=${c.confidence.toFixed(2)} strategy=${c.strategy} sources=${srcCount}${fallbacks}${recsLabel} reasoning="${c.reasoning}" | ${durationMs}ms`)}`
     );
   }
 
