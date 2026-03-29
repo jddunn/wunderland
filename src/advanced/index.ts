@@ -90,7 +90,28 @@ export * from '../structured/index.js';
 export * from '../knowledge/index.js';
 
 // Planning engine exports
-export * from '../planning/index.js';
+export { PlanningEngine } from '../planning/index.js';
+export type {
+  IPlanningEngine,
+  ExecutionPlan,
+  PlanStep,
+  PlanStepResult,
+  PlanStepStatus,
+  PlanAction,
+  PlanActionType,
+  PlanningOptions,
+  PlanningContext,
+  PlanningStrategy,
+  TaskDecomposition,
+  SubTask,
+  ExecutionFeedback,
+  AutonomousLoopOptions,
+  LoopProgress,
+  PlanValidationResult,
+  ExecutionState,
+  ExecutionSummary,
+  PlanMetadata,
+} from '../planning/index.js';
 
 // Evaluation exports
 export * from '../evaluation/index.js';

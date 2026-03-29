@@ -28,11 +28,13 @@ import { extractStimulusText } from './DynamicVoiceProfile.js';
 import { SafetyEngine } from './SafetyEngine.js';
 import { ActionAuditLog } from './ActionAuditLog.js';
 import { ContentSimilarityDedup } from './ContentSimilarityDedup.js';
-import { ActionDeduplicator } from '@framers/agentos/core/safety/ActionDeduplicator';
-import { CircuitBreaker } from '@framers/agentos/core/safety/CircuitBreaker';
-import { CostGuard } from '@framers/agentos/core/safety/CostGuard';
-import { StuckDetector } from '@framers/agentos/core/safety/StuckDetector';
-import { ToolExecutionGuard } from '@framers/agentos/core/safety/ToolExecutionGuard';
+import {
+  ActionDeduplicator,
+  CircuitBreaker,
+  CostGuard,
+  StuckDetector,
+  ToolExecutionGuard,
+} from '@framers/agentos/safety/runtime';
 import { SafeGuardrails } from '../security/SafeGuardrails.js';
 import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
 import type { IMoodPersistenceAdapter } from './MoodPersistence.js';

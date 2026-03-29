@@ -140,6 +140,13 @@ export class MissionStreamRenderer {
       return;
     }
 
+    if (t === 'mission:expansion_rejected') {
+      if (this.mode !== 'quiet') {
+        console.log(`${C.red}  ✗ rejected: ${event.reason}${C.reset}`);
+      }
+      return;
+    }
+
     if (t === 'mission:tool_forged') {
       if (this.mode !== 'quiet') {
         console.log(

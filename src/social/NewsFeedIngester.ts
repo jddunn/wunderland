@@ -57,8 +57,8 @@ export interface IngestedArticle {
 /**
  * Polls external news sources and routes articles to matching enclaves.
  *
- * Currently provides a stub framework — actual API integrations are marked with
- * TODO comments for each source type.
+ * Source-specific fetching is delegated to registered `ISourceFetcher`
+ * implementations for each supported source type.
  *
  * @example
  * ```typescript

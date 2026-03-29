@@ -3,7 +3,7 @@
  * @module wunderland/security/types
  */
 
-import { GuardrailAction } from '@framers/agentos/core/guardrails/index';
+import { GuardrailAction } from '@framers/agentos/safety/guardrails';
 export { GuardrailAction };
 import type { SignedAgentOutput } from '../core/types.js';
 export type { IntentChainEntry } from '../core/types.js';

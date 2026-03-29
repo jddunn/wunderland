@@ -40,6 +40,11 @@ export interface NotificationManagerConfig {
   enableConsoleWarnings?: boolean;
 }
 
+interface NotificationDeliveryResult {
+  success: boolean;
+  error?: string;
+}
+
 /**
  * Notification manager for permission violations
  */
@@ -137,7 +142,7 @@ Time: ${violation.timestamp.toISOString()}
   private async sendWebhook(
     webhook: WebhookConfig,
     payload: Record<string, unknown>
-  ): Promise<void> {
+  ): Promise<NotificationDeliveryResult> {
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt < (webhook.retries || 3); attempt++) {
@@ -157,7 +162,7 @@ Time: ${violation.timestamp.toISOString()}
         }
 
         // Success
-        return;
+        return { success: true };
       } catch (err) {
         lastError = err as Error;
 
@@ -170,6 +175,10 @@ Time: ${violation.timestamp.toISOString()}
 
     // All retries failed
     console.error(`Failed to send webhook to ${webhook.url}:`, lastError);
+    return {
+      success: false,
+      error: lastError?.message ?? `Failed to send webhook to ${webhook.url}`,
+    };
   }
 
   /**
@@ -178,10 +187,14 @@ Time: ${violation.timestamp.toISOString()}
    * Note: This is a basic implementation. For production, use a proper
    * email service like SendGrid, AWS SES, or Mailgun.
    */
-  private async sendEmail(to: string, subject: string, body: string): Promise<void> {
+  private async sendEmail(
+    to: string,
+    subject: string,
+    body: string,
+  ): Promise<NotificationDeliveryResult> {
     if (!this.emailConfig) {
       console.warn('Email config not set, skipping email notification');
-      return;
+      return { success: false, error: 'Email config not set' };
     }
 
     try {
@@ -201,13 +214,19 @@ Time: ${violation.timestamp.toISOString()}
         });
         await transporter.sendMail({ from: fromAddress, to, subject, text: body });
         console.log(`[EMAIL] Sent to ${to}: ${subject}`);
+        return { success: true };
       } else {
         console.log(`[EMAIL NOTIFICATION] (SMTP not configured — logging only)`);
         console.log(`To: ${to} | Subject: ${subject}`);
         console.log(`Body:\n${body}`);
+        return { success: true };
       }
     } catch (err) {
       console.error('Failed to send email notification:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   }
 
@@ -232,34 +251,27 @@ Time: ${violation.timestamp.toISOString()}
 
     // Test webhooks
     for (const webhook of this.webhooks) {
-      try {
-        await this.sendWebhook(webhook, {
-          event: 'test',
-          message: 'Wunderland notification test',
-          timestamp: new Date().toISOString(),
-        });
-        results.webhooks.push({ url: webhook.url, success: true });
-      } catch (err) {
-        results.webhooks.push({
-          url: webhook.url,
-          success: false,
-          error: (err as Error).message,
-        });
-      }
+      const delivery = await this.sendWebhook(webhook, {
+        event: 'test',
+        message: 'Wunderland notification test',
+        timestamp: new Date().toISOString(),
+      });
+      results.webhooks.push({
+        url: webhook.url,
+        success: delivery.success,
+        error: delivery.error,
+      });
     }
 
     // Test email
     if (this.emailConfig) {
-      try {
-        await this.sendEmail(
-          this.emailConfig.to,
-          '[TEST] Wunderland Security Notification',
-          'This is a test notification from Wunderland security system.'
-        );
-        results.email.success = true;
-      } catch (err) {
-        results.email.error = (err as Error).message;
-      }
+      const delivery = await this.sendEmail(
+        this.emailConfig.to,
+        '[TEST] Wunderland Security Notification',
+        'This is a test notification from Wunderland security system.'
+      );
+      results.email.success = delivery.success;
+      results.email.error = delivery.error;
     }
 
     return results;

@@ -442,7 +442,7 @@ async function cmdCreate(
  */
 async function cmdCreateNL(
   description: string,
-  flags: Record<string, string | boolean>,
+  _flags: Record<string, string | boolean>,
   globals: GlobalFlags,
 ): Promise<void> {
   fmt.section('Natural Language Agency Builder');
@@ -494,7 +494,7 @@ async function cmdCreateNL(
   // Confirm (unless --yes)
   if (!globals.yes) {
     try {
-      const { default: prompts } = await import('@clack/prompts');
+      const prompts = await import('@clack/prompts');
       const confirm = await prompts.confirm({ message: 'Write this agency block to agent.config.json?' });
       if (prompts.isCancel(confirm) || !confirm) {
         console.log(dim('  Cancelled.'));
