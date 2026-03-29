@@ -642,6 +642,7 @@ export class ChatREPL {
           rLines.push(frameLine(`   Embedding dim: ${stats.embeddingDimension}`, iw));
           rLines.push(frameLine(`   Rerank:        ${stats.rerankRuntimeMode}`, iw));
           rLines.push(frameLine(`   Deep research: ${stats.deepResearchEnabled ? sColor('yes') : wColor('no')} (${stats.deepResearchRuntimeMode})`, iw));
+          rLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Platform knowledge')}: 243 entries (105 tools, 79 skills, 30 FAQ, 14 API, 15 troubleshooting)`, iw));
         } else {
           rLines.push(frameLine(`   Enabled:       ${wColor('pending')} (init in progress or failed)`, iw));
           rLines.push(frameLine(`   ${muted('The router initialises in the background. Try again shortly.')}`, iw));
