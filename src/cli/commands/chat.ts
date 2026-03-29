@@ -111,6 +111,12 @@ import {
 import { ChatREPL, type ChannelAdapterInstance } from './ChatREPL.js';
 import { ChatStreamRenderer } from './ChatStreamRenderer.js';
 
+type QueryResultRecommendations = {
+  skills: Array<{ skillId: string }>;
+  tools: Array<{ toolId: string }>;
+  extensions: Array<{ extensionId: string }>;
+};
+
 // ── Command ─────────────────────────────────────────────────────────────────
 
 export default async function cmdChat(
@@ -1734,8 +1740,8 @@ export default async function cmdChat(
         }
 
         // Surface capability recommendations to the LLM context when present
-        if (routerResult.recommendations) {
-          const recs = routerResult.recommendations;
+        const recs = (routerResult as QueryResult & { recommendations?: QueryResultRecommendations }).recommendations;
+        if (recs) {
           if (recs.skills.length || recs.tools.length || recs.extensions.length) {
             const capParts = [
               ...recs.skills.map((s: { skillId: string }) => `skill:${s.skillId}`),
