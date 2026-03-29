@@ -50,6 +50,17 @@ export async function loadAndValidateConfig(
   const globalConfig = await loadConfig(globals.config);
   ctx.globalConfig = globalConfig;
 
+  // Inject Gmail credentials from ~/.wunderland/config.json into process.env
+  // so the Gmail extension auto-activates after `wunderland connect gmail`.
+  if (globalConfig?.google) {
+    if (globalConfig.google.clientId && !process.env.GOOGLE_CLIENT_ID)
+      process.env.GOOGLE_CLIENT_ID = globalConfig.google.clientId;
+    if (globalConfig.google.clientSecret && !process.env.GOOGLE_CLIENT_SECRET)
+      process.env.GOOGLE_CLIENT_SECRET = globalConfig.google.clientSecret;
+    if (globalConfig.google.refreshToken && !process.env.GOOGLE_REFRESH_TOKEN)
+      process.env.GOOGLE_REFRESH_TOKEN = globalConfig.google.refreshToken;
+  }
+
   let configRaw = '';
   let cfg: any;
 
