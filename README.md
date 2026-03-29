@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/wunderland"><img src="https://img.shields.io/npm/v/wunderland?style=flat-square&logo=npm&color=cb3837" alt="npm version" /></a>
   <a href="https://github.com/jddunn/wunderland/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/jddunn/wunderland/ci.yml?style=flat-square&logo=github&label=CI" alt="CI" /></a>
-  <a href="https://github.com/jddunn/wunderland/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/tests-850%2B_passed-brightgreen?style=flat-square&logo=vitest" alt="tests" /></a>
+  <a href="https://github.com/jddunn/wunderland/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/tests-2%2C065%2B_passed-brightgreen?style=flat-square&logo=vitest" alt="tests" /></a>
   <a href="https://codecov.io/gh/jddunn/wunderland"><img src="https://codecov.io/gh/jddunn/wunderland/graph/badge.svg" alt="codecov" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.4+-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License: MIT" /></a>
