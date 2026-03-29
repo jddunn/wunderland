@@ -12,7 +12,7 @@ import {
   normalizeRuntimePolicy,
   filterToolMapByPolicy,
   getPermissionsForSet,
-} from '../security/runtime-policy.js';
+} from '../../runtime/policy.js';
 
 // ── Normalizers ─────────────────────────────────────────────────────────────
 

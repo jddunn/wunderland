@@ -4,7 +4,7 @@
  */
 
 import * as path from 'node:path';
-import type { LLMProviderConfig } from '../../openai/tool-calling.js';
+import type { LLMProviderConfig } from '../../../runtime/tool-calling.js';
 import * as fmt from '../../ui/format.js';
 import {
   isLocalOllamaBaseUrl,
@@ -17,7 +17,7 @@ import {
   resolveWunderlandProviderId,
   resolveWunderlandTextModel,
 } from '../../../config/provider-defaults.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../config/workspace.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime/workspace.js';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
   const { flags, globals, cfg, policy, seedId } = ctx;

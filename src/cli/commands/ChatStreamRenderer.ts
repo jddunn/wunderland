@@ -23,7 +23,7 @@ import * as fmt from '../ui/format.js';
 import {
   truncateString,
   type ToolInstance,
-} from '../openai/tool-calling.js';
+} from '../../runtime/tool-calling.js';
 import {
   chatFrameGlyphs,
   frameBorder,

@@ -15,7 +15,7 @@ import { accent, dim, muted } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadConfig } from '../config/config-manager.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime/workspace.js';
 import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
