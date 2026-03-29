@@ -140,6 +140,34 @@ export default async function cmdStatus(
       if (Array.isArray(availablePersonas) && availablePersonas.length > 0) {
         agentLines.push(`${muted('Persona Registry'.padEnd(20))} ${dim(`${availablePersonas.length} available`)}`);
       }
+
+      // Memory & Cognitive Mechanisms
+      const mem = cfg.memory as Record<string, any> | undefined;
+      if (mem) {
+        const memEnabled = mem.enabled !== false;
+        agentLines.push(`${muted('Memory'.padEnd(20))} ${memEnabled ? sColor('enabled') : muted('disabled')}`);
+        if (memEnabled) {
+          agentLines.push(`${muted('  Budget'.padEnd(20))} ${mem.retrievalBudgetTokens ?? 4000} tokens`);
+          agentLines.push(`${muted('  Infinite Context'.padEnd(20))} ${mem.infiniteContext?.enabled ? sColor('on') : muted('off')}${mem.infiniteContext?.strategy ? dim(` (${mem.infiniteContext.strategy})`) : ''}`);
+          if (mem.cognitiveMechanisms) {
+            const mechKeys = Object.keys(mem.cognitiveMechanisms);
+            const activeCount = mechKeys.length === 0 ? 8 : mechKeys.filter(k => (mem.cognitiveMechanisms as any)[k]?.enabled !== false).length;
+            agentLines.push(`${muted('  Mechanisms'.padEnd(20))} ${sColor(`${activeCount} active`)} ${dim('(HEXACO-modulated)')}`);
+          } else {
+            agentLines.push(`${muted('  Mechanisms'.padEnd(20))} ${muted('disabled')}`);
+          }
+        }
+      }
+
+      // HEXACO Personality Traits
+      const traits = cfg.personality as Record<string, number> | undefined;
+      if (traits && Object.keys(traits).length > 0) {
+        const traitStr = Object.entries(traits)
+          .filter(([, v]) => typeof v === 'number')
+          .map(([k, v]) => `${k[0].toUpperCase()}=${v.toFixed(1)}`)
+          .join(' ');
+        agentLines.push(`${muted('HEXACO Traits'.padEnd(20))} ${dim(traitStr)}`);
+      }
     } catch {
       agentLines.push(`${muted('Config'.padEnd(20))} ${wColor('error reading agent.config.json')}`);
     }

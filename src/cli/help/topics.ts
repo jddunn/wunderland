@@ -988,6 +988,96 @@ export function printHelpTopic(topicRaw: string): void {
     return;
   }
 
+  if (resolved === 'memory') {
+    printTitle('Memory & Cognitive Mechanisms');
+    console.log(`  ${bright('AgentOS cognitive memory models how biological memory works:')}`);
+    console.log(`  ${dim('encoding, decay, retrieval, consolidation — all personality-modulated.')}`);
+    console.log();
+    console.log(`  ${accent('Memory Types')} ${dim('(Tulving\'s taxonomy)')}`);
+    console.log(`    ${g.bullet} ${bright('episodic')}     ${dim('Conversation events, interactions')}`);
+    console.log(`    ${g.bullet} ${bright('semantic')}     ${dim('Learned facts, preferences, schemas')}`);
+    console.log(`    ${g.bullet} ${bright('procedural')}   ${dim('Workflows, tool usage patterns')}`);
+    console.log(`    ${g.bullet} ${bright('prospective')}  ${dim('Goals, reminders, planned actions')}`);
+    console.log(`    ${g.bullet} ${bright('working')}      ${dim('Current session state (7±2 slots)')}`);
+    console.log();
+    console.log(`  ${accent('8 Cognitive Mechanisms')} ${dim('(all optional, HEXACO-modulated)')}`);
+    console.log(`    ${g.bullet} ${bright('Reconsolidation')}           ${dim('Memories drift toward current mood on retrieval')}`);
+    console.log(`    ${g.bullet} ${bright('Retrieval-Induced Forgetting')} ${dim('Retrieved memories suppress competitors')}`);
+    console.log(`    ${g.bullet} ${bright('Involuntary Recall')}        ${dim('Random surfacing of old memories')}`);
+    console.log(`    ${g.bullet} ${bright('Metacognitive FOK')}         ${dim('Tip-of-tongue "I partially know this" signals')}`);
+    console.log(`    ${g.bullet} ${bright('Temporal Gist')}             ${dim('Old traces compress to core assertions')}`);
+    console.log(`    ${g.bullet} ${bright('Schema Encoding')}           ${dim('Novel input boosted, familiar encoded efficiently')}`);
+    console.log(`    ${g.bullet} ${bright('Source Confidence Decay')}   ${dim('Agent inferences fade faster than observations')}`);
+    console.log(`    ${g.bullet} ${bright('Emotion Regulation')}        ${dim('Reappraisal + suppression during consolidation')}`);
+    console.log();
+    console.log(`  ${accent('Configuration')} ${dim('(agent.config.json)')}`);
+    console.log(`    ${dim('{')}  ${accent('"memory"')}: {`);
+    console.log(`         ${accent('"enabled"')}: true,`);
+    console.log(`         ${accent('"retrievalBudgetTokens"')}: 4000,`);
+    console.log(`         ${accent('"cognitiveMechanisms"')}: {},           ${dim('← enables all 8 with defaults')}`);
+    console.log(`         ${accent('"infiniteContext"')}: { "enabled": true, "strategy": "sliding" }`);
+    console.log(`       }`);
+    console.log(`    ${dim('}')}`);
+    console.log();
+    console.log(`  ${accent('Disable all mechanisms:')}`);
+    console.log(`    ${dim('Omit')} ${accent('"cognitiveMechanisms"')} ${dim('from config — engine never instantiated.')}`);
+    console.log();
+    console.log(`  ${accent('Disable individual mechanism:')}`);
+    console.log(`    ${dim('"cognitiveMechanisms": {')} ${accent('"reconsolidation": { "enabled": false }')} ${dim('}')}`);
+    console.log();
+    console.log(`  ${accent('Related commands:')}`);
+    console.log(`    ${muted('$')} ${accent('wunderland rag query "topic" --memory')}  ${dim('Search cognitive memory')}`);
+    console.log(`    ${muted('$')} ${accent('wunderland rag query --memory-types episodic,semantic')}`);
+    console.log(`    ${muted('$')} ${accent('wunderland status')}                     ${dim('Shows memory config')}`);
+    console.log(`    ${muted('$')} ${accent('wunderland doctor')}                     ${dim('Checks memory health')}`);
+    console.log();
+    console.log(`  ${dim('Docs:')} ${accent(URLS.docs + '/memory/cognitive-mechanisms')}`);
+    console.log(hr());
+    return;
+  }
+
+  if (resolved === 'personality') {
+    printTitle('Personality (HEXACO)');
+    console.log(`  ${bright('HEXACO personality traits modulate encoding, retrieval, decay, and mechanisms.')}`);
+    console.log(`  ${dim('Completely optional — omit for purely objective behavior.')}`);
+    console.log();
+    console.log(`  ${accent('6 Traits')} ${dim('(each 0.0–1.0, default 0.5 = neutral)')}`);
+    console.log(`    ${g.bullet} ${bright('honesty')}           ${dim('Source skepticism, factual rigor')}`);
+    console.log(`    ${g.bullet} ${bright('emotionality')}      ${dim('Emotional warmth, reconsolidation drift rate')}`);
+    console.log(`    ${g.bullet} ${bright('extraversion')}      ${dim('FOK confidence, verbosity')}`);
+    console.log(`    ${g.bullet} ${bright('agreeableness')}     ${dim('Emotion regulation, diplomatic framing')}`);
+    console.log(`    ${g.bullet} ${bright('conscientiousness')} ${dim('RIF strength, thoroughness, detail')}`);
+    console.log(`    ${g.bullet} ${bright('openness')}          ${dim('Involuntary recall, novelty boost')}`);
+    console.log();
+    console.log(`  ${accent('Configuration')} ${dim('(agent.config.json)')}`);
+    console.log(`    ${dim('{')}  ${accent('"personality"')}: {`);
+    console.log(`         ${accent('"honesty"')}: 0.8,`);
+    console.log(`         ${accent('"emotionality"')}: 0.6,`);
+    console.log(`         ${accent('"extraversion"')}: 0.7,`);
+    console.log(`         ${accent('"agreeableness"')}: 0.85,`);
+    console.log(`         ${accent('"conscientiousness"')}: 0.9,`);
+    console.log(`         ${accent('"openness"')}: 0.75`);
+    console.log(`       }`);
+    console.log(`    ${dim('}')}`);
+    console.log();
+    console.log(`  ${accent('Disable personality')} ${dim('(purely objective agent):')}`);
+    console.log(`    ${dim('Omit')} ${accent('"personality"')} ${dim('entirely — all weights default to 0.5 (uniform).')}`);
+    console.log(`    ${dim('Memory uses uniform encoding, mechanisms use default params, no trait injection.')}`);
+    console.log();
+    console.log(`  ${accent('HEXACO Presets')} ${dim('(quick configuration):')}`);
+    console.log(`    ${muted('$')} ${accent('wunderland init myagent --preset research-assistant')}`);
+    console.log(`    ${dim('Sets: honesty=0.9, emotionality=0.3, conscientiousness=0.95, openness=0.85')}`);
+    console.log();
+    console.log(`    ${muted('$')} ${accent('wunderland init myagent --preset creative-writer')}`);
+    console.log(`    ${dim('Sets: emotionality=0.8, openness=0.98, conscientiousness=0.5')}`);
+    console.log();
+    console.log(`    ${muted('$')} ${accent('wunderland list-presets')}  ${dim('Show all available presets with traits')}`);
+    console.log();
+    console.log(`  ${dim('Docs:')} ${accent(URLS.docs + '/memory/cognitive-mechanisms#hexaco-personality-modulation')}`);
+    console.log(hr());
+    return;
+  }
+
   if (resolved === 'faq') {
     printTitle('Frequently Asked Questions');
     console.log();

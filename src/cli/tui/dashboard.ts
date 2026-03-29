@@ -66,6 +66,7 @@ const ACTIONS: QuickAction[] = [
   { label: 'View status',         command: 'status',     hint: 'wunderland status',     shortcut: 's' },
   { label: 'List agents',          command: 'agents',     hint: 'wunderland agents',     shortcut: 'a' },
   { label: 'Discovery & Catalog', command: 'discovery',  hint: 'wunderland discovery',  shortcut: '8' },
+  { label: 'Memory & Mechanisms', command: 'memory',     hint: 'wunderland help memory', shortcut: 'm' },
   { label: 'Help',                command: 'help',       hint: 'press h or ?',          shortcut: 'h' },
   { label: 'Tour / onboarding',   command: 'tour',       hint: 'press t',               shortcut: 't' },
 ];
@@ -158,6 +159,7 @@ export class Dashboard {
         's':       () => { if (this.searchMode) return false; this.onSelect('status'); return true; },
         'v':       () => { if (this.searchMode) return false; this.onSelect('voice'); return true; },
         'a':       () => { if (this.searchMode) return false; this.onSelect('agents'); return true; },
+        'm':       () => { if (this.searchMode) return false; this.onSelect('memory'); return true; },
         'h':       () => { if (this.searchMode) return false; this.openHelp(); return true; },
         'r':       () => { if (this.searchMode) return false; this.refresh(); return true; },
         '1':       () => { if (this.searchMode) return false; this.selectIndex(0); return true; },
