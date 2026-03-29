@@ -140,7 +140,7 @@ async function addChannelById(platformId: string, globals: GlobalFlags): Promise
 
     if (authMethod === 'oauth') {
       try {
-        const loginMod = await import('./login.js');
+        const loginMod = await import('./auth/login.js');
         const loginFlags: Record<string, string | boolean> = { provider: normalizedPlatformId };
         await loginMod.default([], loginFlags, globals);
       } catch (err) {
