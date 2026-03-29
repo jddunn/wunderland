@@ -63,6 +63,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('logs')} ${d('[seedId]')}        Tail agent logs
       ${w('stop')} ${d('[seedId]')}        Stop a running agent
       ${w('monitor')}               Live dashboard of running agents
+      ${w('dashboard')}              Multi-agent web dashboard (port 4444)
 
     ${w('Configure')}
       ${w('channels')}              List/add/remove channels
@@ -306,6 +307,20 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     summary: 'Show a live dashboard of running agents.',
     usage: ['wunderland monitor'],
     examples: ['wunderland monitor'],
+  },
+  dashboard: {
+    summary: 'Launch the multi-agent web dashboard (Wunderland Hub).',
+    usage: ['wunderland dashboard [--port <number>] [--secret <string>]'],
+    examples: [
+      'wunderland dashboard',
+      'wunderland dashboard --port 5555',
+      'wunderland dashboard --secret my-secret',
+    ],
+    notes: [
+      'Default port: 4444. Open http://localhost:4444/ in your browser.',
+      'Admin secret is printed in the terminal — paste it to authenticate.',
+      'Agents tab: view, start, stop agents. Spawn tab: create agents from NL.',
+    ],
   },
   channels: {
     summary: 'Manage channel integrations for the current agent.',
@@ -702,6 +717,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   logs:              () => import('./commands/agent/logs.js'),
   stop:              () => import('./commands/agent/stop.js'),
   monitor:           () => import('./commands/agent/monitor.js'),
+  dashboard:         () => import('./commands/dashboard/index.js'),
   cloud:             () => import('./commands/cloud.js'),
   domains:           () => import('./commands/domains.js'),
   login:             () => import('./commands/auth/login.js'),
