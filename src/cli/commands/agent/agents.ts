@@ -8,11 +8,11 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import type { GlobalFlags } from '../types.js';
-import { accent, dim, success as sColor } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
-import { readAllDaemons, cleanStaleDaemons, isDaemonAlive } from '../daemon/daemon-state.js';
-import { readAgentHistory } from '../config/agent-history.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent, dim, success as sColor } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
+import { readAllDaemons, cleanStaleDaemons, isDaemonAlive } from '../../daemon/daemon-state.js';
+import { readAgentHistory } from '../../config/agent-history.js';
 
 interface AgentEntry {
   name: string;

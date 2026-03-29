@@ -7,10 +7,10 @@ import { existsSync } from 'node:fs';
 import { readFile, stat, open } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import * as path from 'node:path';
-import type { GlobalFlags } from '../types.js';
-import { accent } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
-import { getDaemonDir, resolveDaemon } from '../daemon/daemon-state.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
+import { getDaemonDir, resolveDaemon } from '../../daemon/daemon-state.js';
 
 const DEFAULT_LINES = 50;
 

@@ -3,16 +3,16 @@
  * @module wunderland/cli/commands/ps
  */
 
-import type { GlobalFlags } from '../types.js';
-import { accent, dim, success as sColor, warn as wColor, info as iColor } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent, dim, success as sColor, warn as wColor, info as iColor } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
 import {
   cleanStaleDaemons,
   readAllDaemons,
   isDaemonAlive,
   formatUptime,
   fetchDaemonHealth,
-} from '../daemon/daemon-state.js';
+} from '../../daemon/daemon-state.js';
 
 export default async function cmdPs(
   _args: string[],
