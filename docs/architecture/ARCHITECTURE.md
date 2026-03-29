@@ -250,6 +250,115 @@ Generated TypeDoc mirrors the exported surface and is the authoritative referenc
 
 ---
 
+## Wunderland Package Architecture
+
+The Wunderland package (`packages/wunderland/`) is the CLI + SDK layer built on top of AgentOS. It adds security tiers, HEXACO personality, agent presets, capability discovery, and a full CLI.
+
+### Agent initialization (AgentBootstrap)
+
+`src/bootstrap/AgentBootstrap.ts` is the single source of truth for agent initialization. Three consumers delegate to it:
+
+| Consumer | Entry Point | Description |
+| --- | --- | --- |
+| CLI `chat` | `src/cli/commands/chat.ts` | Interactive REPL via `ChatREPL.ts` |
+| Public library API | `src/public/createWunderland.ts` | `createWunderland()` for in-process embedding |
+| HTTP API server | `src/api/server.ts` | Express-based REST API |
+
+AgentBootstrap resolves config, loads extensions/skills/tools, wires the security pipeline, and returns an initialized agent runtime. Previously each consumer duplicated this logic.
+
+### God object decomposition
+
+Several large files have been split into focused modules:
+
+| Original | Extracted | Purpose |
+| --- | --- | --- |
+| `cli/commands/chat.ts` | `ChatREPL.ts`, `ChatStreamRenderer.ts` | Interactive loop and stream rendering |
+| `runtime/tool-calling.ts` | `ToolApprovalHandler.ts`, `ToolStreamProcessor.ts` | Approval flow and stream processing |
+| `api/server.ts` | `api/routes/{chat,agents,health,social,config}.ts` | Route handlers |
+| `cli/commands/start/http-server.ts` | `cli/commands/start/routes/{chat,agents,health,social,config,html-pages,helpers}.ts` | CLI server routes |
+
+### CLI command grouping
+
+Commands are organized into domain directories:
+
+| Directory | Commands |
+| --- | --- |
+| `cli/commands/auth/` | `login`, `logout`, `auth-status` |
+| `cli/commands/ai/` | `image`, `video`, `audio`, `vision`, `structured` |
+| `cli/commands/agent/` | `agents`, `ps`, `stop`, `logs`, `monitor`, `serve` |
+| `cli/commands/start/routes/` | CLI server route handlers |
+
+### Module relocations
+
+| Old Path | New Path | Reason |
+| --- | --- | --- |
+| `cli/security/env-secrets.ts` | `security/env-secrets.ts` | Security concern, not CLI-specific |
+| `cli/openai/tool-calling.ts` | `runtime/tool-calling.ts` | Shared runtime, not CLI-specific (deleted back-compat shim) |
+| `cli/config/workspace.ts` | `runtime/workspace.ts` | Shared runtime (deleted back-compat shim) |
+| `cli/security/runtime-policy.ts` | `runtime/policy.ts` | Shared runtime (deleted back-compat shim) |
+| `cli/observability/otel.ts` | `observability/` | Dead shim deleted; config remains at `cli/observability/otel-config.ts` |
+
+### Source tree (top-level)
+
+```
+src/
+  advanced/           Re-export barrel for deep imports
+  agency/             Agency facade (re-exports agentos)
+  ai/                 AI generation utilities
+  api/                HTTP API server
+    routes/           Route handlers (chat, agents, health, social, config)
+  authorization/      Step-up HITL authorization
+  bootstrap/          AgentBootstrap - shared agent initialization
+  browser/            Playwright browser automation
+  cli/                CLI interface
+    commands/
+      agent/          Agent management (agents, ps, stop, logs, monitor, serve)
+      ai/             AI generation (image, video, audio, vision, structured)
+      auth/           Authentication (login, logout, auth-status)
+      start/          Server startup
+        routes/       CLI server route handlers
+      ...             Other commands (chat, rag, workflows, etc.)
+    tui/              Terminal dashboard
+    ui/               Terminal formatting
+    wizards/          Setup wizards
+    help/             Help topics
+    ollama/           Ollama lifecycle
+    daemon/           Background process management
+  config/             Agent config schema and loading
+  core/               WunderlandSeed, presets, HEXACO, types
+  discord/            Discord handlers
+  discovery/          Capability discovery
+  evaluation/         Eval facade
+  guardrails/         Guardrails facade
+  inference/          Hierarchical inference router
+  jobs/               Job evaluator, bid lifecycle
+  knowledge/          Knowledge graph facade
+  marketplace/        Marketplace facade
+  memory/             Cognitive memory initializer
+  observability/      OpenTelemetry, usage tracking
+  orchestration/      YAML workflow compiler
+  pairing/            Pairing manager
+  planning/           Planning facade
+  provenance/         Provenance facade
+  public/             Library-first createWunderland() API
+  rag/                RAG client, HyDE
+  runtime/            Tool calling, approval, stream processing, system prompts, LLM adapters
+  scheduling/         CronScheduler
+  security/           Security tiers, env secrets, notification
+  skills/             Skills facade
+  social/             Wonderland social platform
+  storage/            Agent storage, memory auto-ingest
+  structured/         Structured output facade
+  tools/              Built-in tools
+  types/              Type stubs
+  utils/              Shared utilities
+  voice/              Streaming voice pipeline
+  wallet/             Wallet config types
+  workflows/          Workflows facade
+```
+
+---
+
 AgentOS is designed to be embedded in multiple surfaces�server-side APIs, desktop apps, or even mobile runtimes with JS engines. Use this document together with the TypeDoc output and integration examples to adapt the runtime to your product�s needs.
 
 ## 10. Extension roadmap & multi-agent workflows

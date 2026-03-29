@@ -222,5 +222,6 @@ WUNDERLAND_OTEL_LOGS_ENABLED=true
 
 Code:
 
-- OTEL bootstrap: `packages/wunderland/src/cli/observability/otel.ts`
-- LLM/tool spans: `packages/wunderland/src/cli/openai/tool-calling.ts`
+- OTEL config: `packages/wunderland/src/cli/observability/otel-config.ts`
+- OTEL bootstrap: `packages/wunderland/src/observability/` (runtime-level)
+- LLM/tool spans: `packages/wunderland/src/runtime/tool-calling.ts`
