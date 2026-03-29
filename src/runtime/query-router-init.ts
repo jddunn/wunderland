@@ -175,7 +175,7 @@ function getBuiltInCorpusPaths(): string[] {
     resolve(REPO_ROOT, 'apps/wunderland-live-docs/docs/'),
     resolve(REPO_ROOT, 'packages/wunderland/docs/'),
     resolve(REPO_ROOT, 'docs/'),
-    resolve(REPO_ROOT, 'packages/agentos-skills-registry/registry/curated/'),
+    resolve(REPO_ROOT, 'packages/agentos-skills/registry/curated/'),
   ].filter((p) => existsSync(p));
 }
 

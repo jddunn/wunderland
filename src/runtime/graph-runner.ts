@@ -18,6 +18,7 @@
 
 import {
   type CompiledExecutionGraph,
+  type GraphExpansionHandler,
   type GraphNode,
   type GraphState,
   type GraphEvent,
@@ -26,7 +27,7 @@ import {
   GraphRuntime,
   NodeExecutor,
   type NodeExecutionResult,
-} from '@framers/agentos/orchestration';
+} from './agentos-runtime.js';
 
 import { runToolCallingTurn, safeJsonStringify, type LLMProviderConfig, type ToolInstance } from './tool-calling.js';
 
@@ -60,6 +61,8 @@ export interface WunderlandGraphRunConfig {
   toolContext: Record<string, unknown>;
   askPermission: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
   checkpointStore?: ICheckpointStore;
+  expansionHandler?: GraphExpansionHandler;
+  reevalInterval?: number;
   strictToolNames?: boolean;
   debug?: boolean;
 }
@@ -81,6 +84,36 @@ function stripJsonFence(text: string): string {
   const trimmed = text.trim();
   const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   return match ? match[1]!.trim() : trimmed;
+}
+
+function toGraphExpansionRequest(
+  toolName: string,
+  args: Record<string, unknown>,
+): NonNullable<NodeExecutionResult['expansionRequests']>[number] | null {
+  if (toolName === 'request_expansion' && typeof args.need === 'string') {
+    return {
+      trigger: 'agent_request',
+      reason: args.need,
+      request: {
+        need: args.need,
+        urgency: typeof args.urgency === 'string' ? args.urgency : 'would_improve',
+      },
+    };
+  }
+
+  if (toolName === 'manage_graph' && typeof args.action === 'string') {
+    return {
+      trigger: 'supervisor_manage',
+      reason: typeof args.reason === 'string' ? args.reason : args.action,
+      request: {
+        action: args.action,
+        spec: isRecord(args.spec) ? args.spec : {},
+        reason: typeof args.reason === 'string' ? args.reason : args.action,
+      },
+    };
+  }
+
+  return null;
 }
 
 function parseStructuredPayload(value: unknown): GraphPayload {
@@ -288,6 +321,8 @@ class WunderlandNodeExecutor extends NodeExecutor {
         node.executionMode === 'single_turn'
           ? 1
           : Math.max(1, node.executorConfig.maxInternalIterations ?? 4);
+      const emittedEvents: GraphEvent[] = [];
+      const expansionRequests: NonNullable<NodeExecutionResult['expansionRequests']> = [];
 
       const reply = await runToolCallingTurn({
         providerId: llm.providerId,
@@ -304,12 +339,45 @@ class WunderlandNodeExecutor extends NodeExecutor {
         fallback: llm.fallback,
         getApiKey: llm.getApiKey,
         ollamaOptions: llm.ollamaOptions,
+        onTextDelta: (content) => {
+          emittedEvents.push({ type: 'text_delta', nodeId: node.id, content });
+        },
+        onToolCall: (tool, args) => {
+          emittedEvents.push({
+            type: 'tool_call',
+            nodeId: node.id,
+            toolName: tool.name,
+            args,
+          });
+        },
+        onToolResult: (info) => {
+          emittedEvents.push({
+            type: 'tool_result',
+            nodeId: node.id,
+            toolName: info.toolName,
+            result: {
+              success: info.success,
+              durationMs: info.durationMs,
+              ...(info.output !== undefined ? { output: info.output } : {}),
+              ...(info.error ? { error: info.error } : {}),
+            },
+          });
+
+          if (info.success) {
+            const request = toGraphExpansionRequest(info.toolName, info.args);
+            if (request) {
+              expansionRequests.push(request);
+            }
+          }
+        },
         debug: this.config.debug,
       });
 
       return normalizeNodeResult(node, {
         success: true,
         output: reply,
+        events: emittedEvents,
+        ...(expansionRequests.length > 0 ? { expansionRequests } : {}),
       });
     }
 
@@ -336,6 +404,8 @@ export function createWunderlandGraphRuntime(config: WunderlandGraphRunConfig): 
   return new GraphRuntime({
     checkpointStore: config.checkpointStore ?? new InMemoryCheckpointStore(),
     nodeExecutor: new WunderlandNodeExecutor(config),
+    expansionHandler: config.expansionHandler,
+    reevalInterval: config.reevalInterval,
   });
 }
 
@@ -355,4 +425,22 @@ export async function* streamWunderlandGraph(
 ): AsyncIterable<GraphEvent> {
   const runtime = createWunderlandGraphRuntime(config);
   yield* runtime.stream(resolveCompiledGraph(graph), input);
+}
+
+export async function resumeWunderlandGraph(
+  graph: WunderlandGraphLike,
+  runOrCheckpointId: string,
+  config: WunderlandGraphRunConfig,
+): Promise<unknown> {
+  const runtime = createWunderlandGraphRuntime(config);
+  return runtime.resume(resolveCompiledGraph(graph), runOrCheckpointId);
+}
+
+export async function* streamResumeWunderlandGraph(
+  graph: WunderlandGraphLike,
+  runOrCheckpointId: string,
+  config: WunderlandGraphRunConfig,
+): AsyncIterable<GraphEvent> {
+  const runtime = createWunderlandGraphRuntime(config);
+  yield* runtime.streamResume(resolveCompiledGraph(graph), runOrCheckpointId);
 }

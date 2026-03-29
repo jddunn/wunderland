@@ -29,7 +29,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import { accent, success as sColor, dim, info as iColor } from '../ui/theme.js';
+import { accent, success as sColor, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward, mergeEnv } from '../config/env-manager.js';
@@ -212,7 +212,7 @@ async function createLLMInvoker(globals: GlobalFlags): Promise<{
  * @param llmModel - Model name for the OPENAI_MODEL line.
  * @returns The serialized .env file contents.
  */
-function buildAutoEnv(port: number, llmProvider: string, llmModel: string): string {
+function buildAutoEnv(port: number, _llmProvider: string, llmModel: string): string {
   const lines: string[] = [
     '# Auto-populated by wunderland spawn',
     `# Generated ${new Date().toISOString()}`,

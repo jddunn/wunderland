@@ -8,8 +8,10 @@ import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 import type {
   AgentGraph as AgentGraphBuilder,
   CompiledExecutionGraph,
+  GraphExpansionHandler,
   GraphEvent,
   GraphState,
+  ICheckpointStore,
   MemoryConsistencyMode,
   StateReducers,
   WorkflowBuilder as AgentWorkflowBuilder,
@@ -290,6 +292,9 @@ export type WunderlandApp = {
       tenantId?: string;
       toolFailureMode?: WunderlandToolFailureMode;
       llmByProvider?: Record<string, WunderlandGraphLlmOverride>;
+      checkpointStore?: ICheckpointStore;
+      expansionHandler?: GraphExpansionHandler;
+      reevalInterval?: number;
       debug?: boolean;
     },
   ) => Promise<unknown>;
@@ -302,6 +307,39 @@ export type WunderlandApp = {
       tenantId?: string;
       toolFailureMode?: WunderlandToolFailureMode;
       llmByProvider?: Record<string, WunderlandGraphLlmOverride>;
+      checkpointStore?: ICheckpointStore;
+      expansionHandler?: GraphExpansionHandler;
+      reevalInterval?: number;
+      debug?: boolean;
+    },
+  ) => AsyncIterable<GraphEvent>;
+  resumeGraph: (
+    graph: WunderlandGraphLike,
+    checkpointId: string,
+    opts?: {
+      sessionId?: string;
+      userId?: string;
+      tenantId?: string;
+      toolFailureMode?: WunderlandToolFailureMode;
+      llmByProvider?: Record<string, WunderlandGraphLlmOverride>;
+      checkpointStore?: ICheckpointStore;
+      expansionHandler?: GraphExpansionHandler;
+      reevalInterval?: number;
+      debug?: boolean;
+    },
+  ) => Promise<unknown>;
+  streamResumeGraph: (
+    graph: WunderlandGraphLike,
+    checkpointId: string,
+    opts?: {
+      sessionId?: string;
+      userId?: string;
+      tenantId?: string;
+      toolFailureMode?: WunderlandToolFailureMode;
+      llmByProvider?: Record<string, WunderlandGraphLlmOverride>;
+      checkpointStore?: ICheckpointStore;
+      expansionHandler?: GraphExpansionHandler;
+      reevalInterval?: number;
       debug?: boolean;
     },
   ) => AsyncIterable<GraphEvent>;

@@ -12,6 +12,10 @@
  * @module wunderland/memory/CognitiveMemoryInitializer
  */
 
+import { mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { CognitiveMechanismsConfig } from '@framers/agentos';
 
 /** Input config for cognitive memory initialization. */
@@ -71,28 +75,54 @@ export async function initializeCognitiveMemory(
   const {
     CognitiveMemoryManager,
     SqliteKnowledgeGraph,
+    SqliteBrain,
   } = await import('@framers/agentos/memory');
+  const { InMemoryWorkingMemory } = await import(
+    '@framers/agentos/cognitive_substrate/memory/InMemoryWorkingMemory'
+  );
 
-  // Create lightweight knowledge graph (in-memory for now)
-  const knowledgeGraph = new SqliteKnowledgeGraph();
-  if (typeof (knowledgeGraph as any).initialize === 'function') {
-    await (knowledgeGraph as any).initialize();
-  }
+  const brainDir = join(tmpdir(), 'wunderland-cognitive-memory');
+  await mkdir(brainDir, { recursive: true });
+  const brain = await SqliteBrain.open(join(brainDir, `${config.agentId}.sqlite`));
+  const knowledgeGraph = new SqliteKnowledgeGraph(brain);
+  await knowledgeGraph.initialize();
 
   // Create embedding manager from LLM config
-  const { EmbeddingManager } = await import('@framers/agentos');
+  const { AIModelProviderManager, EmbeddingManager } = await import('@framers/agentos');
+  const providerManager = new AIModelProviderManager();
+  await providerManager.initialize({
+    providers: [
+      {
+        providerId: config.llm.providerId,
+        enabled: true,
+        isDefault: true,
+        config: {
+          apiKey: config.llm.apiKey,
+          ...(config.llm.baseUrl ? { baseURL: config.llm.baseUrl, baseUrl: config.llm.baseUrl } : {}),
+        },
+      },
+    ],
+  });
+
   const embeddingManager = new EmbeddingManager();
-  try {
-    await embeddingManager.initialize(
-      { models: [{ modelId: 'default', providerId: config.llm.providerId, dimension: 1536 }] },
-    );
-  } catch {
-    // EmbeddingManager may not need explicit init with some providers
-  }
+  await embeddingManager.initialize(
+    {
+      defaultModelId: 'default',
+      embeddingModels: [
+        {
+          modelId: 'default',
+          providerId: config.llm.providerId,
+          dimension: 1536,
+          isDefault: true,
+        },
+      ],
+    },
+    providerManager,
+  );
 
   // Working memory (lightweight in-memory for cognitive pipeline)
-  const { InMemoryWorkingMemory } = await import('@framers/agentos');
   const workingMemory = new InMemoryWorkingMemory();
+  await workingMemory.initialize(config.agentId);
 
   const moodProvider = config.moodProvider ?? (() => DEFAULT_MOOD);
 
@@ -110,5 +140,21 @@ export async function initializeCognitiveMemory(
     cognitiveMechanisms: config.cognitiveMechanisms,
   });
 
-  return { manager: manager as any, moodProvider };
+  return {
+    manager: {
+      encode: (...args: any[]) => (manager.encode as any).apply(manager, args),
+      retrieve: (...args: any[]) => (manager.retrieve as any).apply(manager, args),
+      assembleForPrompt: (...args: any[]) => (manager.assembleForPrompt as any).apply(manager, args),
+      ...(typeof (manager as any).observe === 'function'
+        ? {
+            observe: (...args: any[]) => (manager as any).observe.apply(manager, args),
+          }
+        : {}),
+      shutdown: async () => {
+        await manager.shutdown();
+        await brain.close();
+      },
+    },
+    moodProvider,
+  };
 }

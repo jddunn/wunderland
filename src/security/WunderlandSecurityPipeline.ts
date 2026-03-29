@@ -12,7 +12,7 @@ import type {
   GuardrailInputPayload,
   GuardrailOutputPayload,
   GuardrailEvaluationResult,
-} from '@framers/agentos/core/guardrails/index';
+} from '@framers/agentos/safety/guardrails';
 import { PreLLMClassifier } from './PreLLMClassifier.js';
 import { DualLLMAuditor } from './DualLLMAuditor.js';
 import { SignedOutputVerifier, IntentChainTracker } from './SignedOutputVerifier.js';

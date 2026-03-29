@@ -24,7 +24,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Module mocks — stub transitive dependencies that fail to resolve in vitest
 // ---------------------------------------------------------------------------
 
-vi.mock('@framers/agentos/core/guardrails/index', () => ({
+vi.mock('@framers/agentos/safety/guardrails', () => ({
   GuardrailAction: { PASS: 'pass', BLOCK: 'block', FLAG: 'flag', REDACT: 'redact' },
 }));
 
