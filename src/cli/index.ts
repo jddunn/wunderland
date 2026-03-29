@@ -582,14 +582,19 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
   },
   connect: {
     summary: 'Connect external services (Gmail, WhatsApp, Slack, Signal) via OAuth or setup wizard.',
-    usage: ['wunderland connect <service>'],
+    usage: ['wunderland connect <service> [--credentials <path>]'],
     examples: [
       'wunderland connect gmail',
+      'wunderland connect gmail --credentials ~/Downloads/client_secret_*.json',
       'wunderland connect whatsapp',
       'wunderland connect slack',
       'wunderland connect signal',
     ],
-    notes: ['Opens your browser for secure OAuth authorization (Gmail, WhatsApp Meta, Slack) or runs an interactive setup wizard (WhatsApp Twilio, Signal).'],
+    notes: [
+      'Opens your browser for secure OAuth authorization (Gmail, WhatsApp Meta, Slack) or runs an interactive setup wizard (WhatsApp Twilio, Signal).',
+      'Gmail supports auto-discovery of client_secret*.json in ~/Downloads when no credentials are configured.',
+      '--credentials accepts a Google OAuth client secret JSON ({"installed": {...}} or {"web": {...}} format).',
+    ],
   },
   new: {
     summary: 'Interactive agent creation — describe in plain English, choose a preset, start blank, or import.',
@@ -780,6 +785,11 @@ async function routeNaturalLanguage(
     case 'mission': {
       const mod = await import('./commands/mission.js');
       await mod.default([nlInput], flags, globals);
+      break;
+    }
+    case 'connect': {
+      const mod = await import('./commands/connect.js');
+      await mod.default(['gmail'], flags);
       break;
     }
     case 'chat':
