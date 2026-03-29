@@ -3,9 +3,9 @@
  * @module wunderland/cli/commands/logout
  */
 
-import type { GlobalFlags } from '../types.js';
-import { accent } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
 
 export default async function cmdLogout(
   _args: string[],

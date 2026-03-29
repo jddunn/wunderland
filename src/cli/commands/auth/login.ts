@@ -18,13 +18,13 @@
  * @module wunderland/cli/commands/login
  */
 
-import type { GlobalFlags } from '../types.js';
-import { LLM_PROVIDERS } from '../constants.js';
-import { accent, success as sColor, dim, muted, bright } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
-import { glyphs } from '../ui/glyphs.js';
-import { updateConfig } from '../config/config-manager.js';
-import { mergeEnv } from '../config/env-manager.js';
+import type { GlobalFlags } from '../../types.js';
+import { LLM_PROVIDERS } from '../../constants.js';
+import { accent, success as sColor, dim, muted, bright } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
+import { glyphs } from '../../ui/glyphs.js';
+import { updateConfig } from '../../config/config-manager.js';
+import { mergeEnv } from '../../config/env-manager.js';
 
 // ── All providers (LLM + social channels) ────────────────────────────────────
 
