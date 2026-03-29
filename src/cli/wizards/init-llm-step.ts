@@ -223,27 +223,8 @@ export async function runInitLlmStep(opts: InitLlmStepOptions = {}): Promise<Ini
     selectedProvider = 'openai';
   }
 
-  // ── Select default provider if multiple keys ──────────────────────────────
-  if (detected.length > 1 && Object.keys(apiKeys).length > 1) {
-    const providerChoices = detected
-      .filter((d) => d.envVar in apiKeys)
-      .map((d, i) => ({
-        value: d.id,
-        label: d.label,
-        hint: i === 0 ? 'recommended' : undefined,
-      }));
-
-    if (providerChoices.length > 1) {
-      const picked = await p.select({
-        message: 'Default LLM provider:',
-        options: providerChoices,
-      });
-
-      if (!p.isCancel(picked)) {
-        selectedProvider = picked as string;
-      }
-    }
-  }
+  // Skip duplicate provider selection — user already chose at the
+  // "Multiple API keys detected" prompt above (line 156).
 
   // ── Select model (or auto-setup for Ollama) ──────────────────────────────
   let selectedModel = '';
