@@ -21,7 +21,7 @@ import {
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../config/workspace.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime/workspace.js';
 // resolveDefaultSkillsDirs is now handled by AgentBootstrap
 import {
   runToolCallingTurn,
@@ -29,7 +29,7 @@ import {
   getGuardrailsInstance,
   type ToolInstance,
   type LLMProviderConfig,
-} from '../openai/tool-calling.js';
+} from '../../runtime/tool-calling.js';
 import { createSchemaOnDemandTools } from '../../runtime/schema-on-demand.js';
 import { ToolFailureLearner } from '../../runtime/tool-failure-learner.js';
 import {
@@ -47,7 +47,7 @@ import {
   filterToolMapByPolicy,
   getPermissionsForSet,
   normalizeRuntimePolicy,
-} from '../security/runtime-policy.js';
+} from '../../runtime/policy.js';
 import { isValidSecurityTier, SECURITY_TIERS } from '../../security/SecurityTiers.js';
 import { isValidToolAccessProfile } from '../../social/ToolAccessProfiles.js';
 import { verifySealedConfig } from '../seal-utils.js';

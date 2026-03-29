@@ -24,7 +24,7 @@ import { glyphs } from '../ui/glyphs.js';
 import {
   safeJsonStringify,
   type ToolInstance,
-} from '../openai/tool-calling.js';
+} from '../../runtime/tool-calling.js';
 import {
   chatFrameGlyphs,
   getChatWidth,

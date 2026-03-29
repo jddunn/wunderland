@@ -18,7 +18,7 @@ import {
   runToolCallingTurn,
   safeJsonStringify,
   type ToolInstance,
-} from '../../../openai/tool-calling.js';
+} from '../../../../runtime/tool-calling.js';
 import {
   classifyResearchDepth,
   buildResearchPrefix,
