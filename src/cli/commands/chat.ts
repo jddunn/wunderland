@@ -1634,6 +1634,11 @@ export default async function cmdChat(
         }
       },
       requestPermission: async (req) => {
+        // At permissive/dangerous tiers (autoApproveToolCalls=true), auto-grant
+        // folder access without prompting — avoids duplicate HITL approval.
+        if (autoApproveToolCalls) {
+          return true;
+        }
         return repl.askFolderPermission(req);
       },
     });
