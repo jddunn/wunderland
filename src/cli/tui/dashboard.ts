@@ -65,6 +65,7 @@ const ACTIONS: QuickAction[] = [
   { label: 'Voice providers',     command: 'voice',      hint: 'wunderland voice',      shortcut: 'v' },
   { label: 'View status',         command: 'status',     hint: 'wunderland status',     shortcut: 's' },
   { label: 'List agents',          command: 'agents',     hint: 'wunderland agents',     shortcut: 'a' },
+  { label: 'Discovery & Catalog', command: 'discovery',  hint: 'wunderland discovery',  shortcut: '8' },
   { label: 'Help',                command: 'help',       hint: 'press h or ?',          shortcut: 'h' },
   { label: 'Tour / onboarding',   command: 'tour',       hint: 'press t',               shortcut: 't' },
 ];
@@ -166,6 +167,7 @@ export class Dashboard {
         '5':       () => { if (this.searchMode) return false; this.selectIndex(5); return true; },
         '6':       () => { if (this.searchMode) return false; this.selectIndex(6); return true; },
         '7':       () => { if (this.searchMode) return false; this.selectIndex(7); return true; },
+        '8':       () => { if (this.searchMode) return false; this.selectIndex(11); return true; },
       },
     });
   }
