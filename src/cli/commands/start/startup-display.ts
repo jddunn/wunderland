@@ -161,10 +161,11 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
     fmt.kvPair('Ollama', sColor('http://localhost:11434'));
   }
   fmt.blank();
-  fmt.ok(`Health: ${iColor(`http://localhost:${activePort}/health`)}`);
-  fmt.ok(`Chat:   ${iColor(`POST http://localhost:${activePort}/chat`)}`);
-  fmt.ok(`HITL:   ${iColor(`http://localhost:${activePort}/hitl`)}`);
-  fmt.ok(`Pairing: ${iColor(`http://localhost:${activePort}/pairing`)}`);
+  fmt.ok(`Dashboard: ${iColor(`http://localhost:${activePort}/`)}`);
+  fmt.ok(`Health:    ${iColor(`http://localhost:${activePort}/health`)}`);
+  fmt.ok(`Chat:      ${iColor(`POST http://localhost:${activePort}/chat`)}`);
+  fmt.ok(`HITL:      ${iColor(`http://localhost:${activePort}/hitl`)}`);
+  fmt.ok(`Pairing:   ${iColor(`http://localhost:${activePort}/pairing`)}`);
   if (!autoApproveToolCalls) {
     fmt.note(`CLI HITL: ${accent(`wunderland hitl watch --server http://localhost:${activePort} --secret ${hitlSecret}`)}`);
   }

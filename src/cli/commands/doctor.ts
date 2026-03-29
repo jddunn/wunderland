@@ -342,6 +342,67 @@ export default async function cmdDoctor(
   }
   console.log();
 
+  // 10. Memory & Cognitive Mechanisms
+  console.log(`  ${iColor(g.bulletHollow)} ${bright('Memory & Cognitive Mechanisms')}`);
+  {
+    const localCfgPath = path.resolve(process.cwd(), 'agent.config.json');
+    if (existsSync(localCfgPath)) {
+      try {
+        const { readFile } = await import('node:fs/promises');
+        const raw = JSON.parse(await readFile(localCfgPath, 'utf8'));
+        const mem = raw.memory as Record<string, any> | undefined;
+        const personality = raw.personality as Record<string, number> | undefined;
+
+        if (mem?.enabled !== false) {
+          console.log(`    ${sColor(g.ok)} Memory: enabled`);
+          console.log(`    ${sColor(g.ok)} Retrieval budget: ${mem?.retrievalBudgetTokens ?? 4000} tokens`);
+
+          if (mem?.infiniteContext?.enabled) {
+            console.log(`    ${sColor(g.ok)} Infinite context: ${mem.infiniteContext.strategy || 'sliding'}`);
+          } else {
+            console.log(`    ${muted(g.circle)} Infinite context: disabled`);
+          }
+
+          if (mem?.cognitiveMechanisms) {
+            const keys = Object.keys(mem.cognitiveMechanisms);
+            const active = keys.length === 0 ? 8 : keys.filter(k => (mem.cognitiveMechanisms as any)[k]?.enabled !== false).length;
+            console.log(`    ${sColor(g.ok)} Cognitive mechanisms: ${active} active (HEXACO-modulated)`);
+          } else {
+            console.log(`    ${muted(g.circle)} Cognitive mechanisms: not configured`);
+          }
+        } else {
+          console.log(`    ${wColor(g.warn)} Memory: disabled in config`);
+        }
+
+        if (personality && Object.keys(personality).length > 0) {
+          const traitStr = Object.entries(personality)
+            .filter(([, v]) => typeof v === 'number')
+            .map(([k, v]) => `${k}=${v}`)
+            .join(', ');
+          console.log(`    ${sColor(g.ok)} HEXACO personality: ${traitStr}`);
+        } else {
+          console.log(`    ${muted(g.circle)} Personality: not set (uniform/objective mode)`);
+        }
+
+        // Check storage backend
+        const storagePath = raw.storage?.dbPath;
+        if (storagePath) {
+          const fullPath = path.resolve(process.cwd(), storagePath);
+          if (existsSync(fullPath)) {
+            console.log(`    ${sColor(g.ok)} Storage: ${dim(storagePath)}`);
+          } else {
+            console.log(`    ${wColor(g.warn)} Storage: ${storagePath} ${muted('(file not found — will be created on first run)')}`);
+          }
+        }
+      } catch {
+        console.log(`    ${wColor(g.warn)} Could not parse agent.config.json`);
+      }
+    } else {
+      console.log(`    ${muted(g.circle)} No agent.config.json — memory checks skipped`);
+    }
+  }
+  console.log();
+
   // Summary
   progress.complete();
   fmt.blank();

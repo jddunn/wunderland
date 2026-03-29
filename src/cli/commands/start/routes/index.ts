@@ -11,12 +11,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CliServerDeps } from './types.js';
 
 export type { CliServerDeps, RouteHandlerResult } from './types.js';
+export { handleDashboardRoutes } from './dashboard.js';
 export { handleConfigRoutes } from './config.js';
 export { handleSocialRoutes, handleFeedRoutes } from './social.js';
 export { handleHealthRoutes, handleHitlRoutes } from './health.js';
 export { handleChatRoutes } from './chat.js';
 
 /* ── re-import for the dispatch helper ─────────────────────────────────────── */
+import { handleDashboardRoutes } from './dashboard.js';
 import { handleConfigRoutes } from './config.js';
 import { handleSocialRoutes, handleFeedRoutes } from './social.js';
 import { handleHealthRoutes, handleHitlRoutes } from './health.js';
@@ -27,12 +29,13 @@ import { handleChatRoutes } from './chat.js';
  * wins and no further groups are attempted.
  *
  * Order:
- *  1. Config / personas  (sync, fast path)
- *  2. Pairing / social   (async)
- *  3. HITL               (async)
- *  4. Health / info       (sync, fast path)
- *  5. Chat                (async, heavy)
- *  6. Feed ingestion      (async)
+ *  0. Dashboard           (GET /, /api/extensions, /api/events/stream, /api/graph)
+ *  1. Config / personas   (sync, fast path)
+ *  2. Pairing / social    (async)
+ *  3. HITL                (async)
+ *  4. Health / info        (sync, fast path)
+ *  5. Chat                 (async, heavy)
+ *  6. Feed ingestion       (async)
  *
  * @returns `true` if any handler claimed the request, `false` otherwise.
  */
@@ -42,6 +45,9 @@ export async function dispatchRoute(
   url: URL,
   deps: CliServerDeps,
 ): Promise<boolean> {
+  /* 0. Dashboard */
+  if (await handleDashboardRoutes(req, res, url, deps)) return true;
+
   /* 1. Config / personas */
   if (handleConfigRoutes(req, res, url, deps)) return true;
 
