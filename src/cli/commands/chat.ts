@@ -128,6 +128,17 @@ export default async function cmdChat(
 
   const globalConfig = await loadConfig(globals.config);
 
+  // Inject Gmail credentials from ~/.wunderland/config.json into process.env
+  // so the Gmail extension auto-activates after `wunderland connect gmail`.
+  if (globalConfig?.google) {
+    if (globalConfig.google.clientId && !process.env.GOOGLE_CLIENT_ID)
+      process.env.GOOGLE_CLIENT_ID = globalConfig.google.clientId;
+    if (globalConfig.google.clientSecret && !process.env.GOOGLE_CLIENT_SECRET)
+      process.env.GOOGLE_CLIENT_SECRET = globalConfig.google.clientSecret;
+    if (globalConfig.google.refreshToken && !process.env.GOOGLE_REFRESH_TOKEN)
+      process.env.GOOGLE_REFRESH_TOKEN = globalConfig.google.refreshToken;
+  }
+
   const configPath = path.resolve(process.cwd(), 'agent.config.json');
   const sealedPath = path.resolve(process.cwd(), 'sealed.json');
   let cfg: any | null = null;
