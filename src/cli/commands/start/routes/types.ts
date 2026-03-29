@@ -78,6 +78,14 @@ export interface CliServerDeps {
 
   /* ── observability ────────────────────────────────────────────────────── */
   sessionTextLogger: WunderlandSessionTextLogger;
+
+  /* ── dashboard ──────────────────────────────────────────────────────── */
+  /** Extension packs loaded at startup (used by dashboard extensions tab). */
+  activePacks?: any[];
+  /** Connected SSE clients for the agent event stream. */
+  eventSseClients?: Set<import('node:http').ServerResponse>;
+  /** Push an agent event to all connected dashboard SSE clients. */
+  broadcastAgentEvent?: (payload: Record<string, unknown>) => void;
 }
 
 /**
