@@ -121,14 +121,14 @@ async function readRecordedAgentOSUsageEventsCompat(
 
   try {
     const result = await readRecordedAgentOSUsageEventsRaw({ path: ledgerPath });
-    if (Array.isArray(result)) return result as AgentOSUsageEvent[];
+    if (Array.isArray(result)) return result as unknown as AgentOSUsageEvent[];
   } catch {
     // Fall through to legacy string-path signature.
   }
 
   try {
-    const result = await readRecordedAgentOSUsageEventsRaw(ledgerPath);
-    return Array.isArray(result) ? result as AgentOSUsageEvent[] : [];
+    const result = await readRecordedAgentOSUsageEventsRaw(ledgerPath as any);
+    return Array.isArray(result) ? result as unknown as AgentOSUsageEvent[] : [];
   } catch {
     return [];
   }
@@ -145,7 +145,7 @@ async function clearRecordedAgentOSUsageCompat(ledgerPath: string): Promise<void
   }
 
   try {
-    await clearRecordedAgentOSUsageRaw(ledgerPath);
+    await clearRecordedAgentOSUsageRaw(ledgerPath as any);
   } catch {
     // Best effort cleanup only.
   }
