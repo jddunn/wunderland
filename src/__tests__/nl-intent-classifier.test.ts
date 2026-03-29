@@ -140,6 +140,52 @@ describe('NL Intent Classifier', () => {
     });
   });
 
+  // ── Connect / credential setup intents ──────────────────────────────
+
+  describe('connect intent', () => {
+    it('classifies "set up gmail" as connect', () => {
+      expect(classifyIntent('set up gmail')).toBe('connect');
+    });
+
+    it('classifies "connect my email" as connect', () => {
+      expect(classifyIntent('connect my email')).toBe('connect');
+    });
+
+    it('classifies "I have a client secret file to use" as connect', () => {
+      expect(classifyIntent('I have a client secret file to use')).toBe('connect');
+    });
+
+    it('classifies "configure slack integration" as connect', () => {
+      expect(classifyIntent('configure slack integration')).toBe('connect');
+    });
+
+    it('classifies "link my google calendar" as connect', () => {
+      expect(classifyIntent('link my google calendar')).toBe('connect');
+    });
+
+    it('classifies "add whatsapp to my agent" as connect', () => {
+      expect(classifyIntent('add whatsapp to my agent')).toBe('connect');
+    });
+
+    it('classifies "enable signal messaging" as connect', () => {
+      expect(classifyIntent('enable signal messaging')).toBe('connect');
+    });
+
+    it('classifies "use the client secret I downloaded" as connect', () => {
+      expect(classifyIntent('use the client secret I downloaded')).toBe('connect');
+    });
+
+    it('routes credential questions to help/chat, not connect', () => {
+      const intent = classifyIntent('what credentials do I need for web search?');
+      expect(intent).not.toBe('connect');
+    });
+
+    it('routes general API key questions to help, not connect', () => {
+      const intent = classifyIntent('how do I add my API keys?');
+      expect(intent).not.toBe('connect');
+    });
+  });
+
   // ── Chat / fallback intents ────────────────────────────────────────────
 
   describe('chat fallback intents', () => {
@@ -167,9 +213,9 @@ describe('NL Intent Classifier', () => {
   // ── INTENT_LABELS ──────────────────────────────────────────────────────
 
   describe('INTENT_LABELS', () => {
-    it('maps all five intents to labels and commands', () => {
+    it('maps all six intents to labels and commands', () => {
       expect(Object.keys(INTENT_LABELS)).toEqual(
-        expect.arrayContaining(['create', 'agency', 'mission', 'chat', 'help'])
+        expect.arrayContaining(['create', 'agency', 'mission', 'connect', 'chat', 'help'])
       );
     });
 

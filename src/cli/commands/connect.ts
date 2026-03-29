@@ -63,7 +63,7 @@ async function openBrowser(url: string): Promise<void> {
  * @returns Extracted `clientId` and `clientSecret`.
  * @throws If the file is missing, malformed, or lacks required fields.
  */
-function parseGoogleCredentialsFile(filePath: string): { clientId: string; clientSecret: string } {
+export function parseGoogleCredentialsFile(filePath: string): { clientId: string; clientSecret: string } {
   const resolved = path.resolve(filePath);
   const raw = readFileSync(resolved, 'utf-8');
   const json = JSON.parse(raw);
