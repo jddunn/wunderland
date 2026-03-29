@@ -98,6 +98,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('rag')}                   RAG memory management
       ${w('evaluate')}              Evaluation suite
       ${w('knowledge')}             Knowledge graph
+      ${w('discovery')}             Capability discovery & platform knowledge
       ${w('provenance')}            Audit trail & provenance
       ${w('marketplace')}           Marketplace search/install
       ${w('emergent')}              Runtime-forged tool management
@@ -568,6 +569,55 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
       'wunderland connect signal',
     ],
     notes: ['Opens your browser for secure OAuth authorization (Gmail, WhatsApp Meta, Slack) or runs an interactive setup wizard (WhatsApp Twilio, Signal).'],
+  },
+  new: {
+    summary: 'Interactive agent creation — describe in plain English, choose a preset, start blank, or import.',
+    usage: ['wunderland new [--preset <name>] [--dir <path>]'],
+    examples: [
+      'wunderland new',
+      'wunderland new --preset research-assistant',
+    ],
+    notes: [
+      'Prompts you for a creation method: natural-language description, preset, blank, or import from manifest.',
+      'Equivalent to running `wunderland create` interactively with more options.',
+    ],
+  },
+  mission: {
+    summary: 'Run goal-directed multi-agent missions with LLM-based planner decomposition.',
+    usage: [
+      'wunderland mission run <file.yaml> [--input key=value ...]',
+      'wunderland mission explain <file.yaml>',
+      'wunderland mission list',
+    ],
+    examples: [
+      'wunderland mission run examples/mission-deep-research.yaml --input topic="quantum computing"',
+      'wunderland mission explain examples/mission-deep-research.yaml',
+      'wunderland mission list',
+    ],
+    notes: [
+      'Missions describe a goal in natural language; a planner decomposes it into steps at runtime.',
+      'Missions compile to the same AgentGraph IR as workflow() definitions.',
+      'See also: wunderland help missions',
+    ],
+  },
+  discovery: {
+    summary: 'Inspect the capability discovery engine, platform knowledge base, and catalog.',
+    usage: ['wunderland discovery'],
+    examples: ['wunderland discovery'],
+    notes: [
+      'Opens the discovery dashboard in TUI mode (press 8 in the dashboard).',
+      'In chat mode, use /discover for capability stats and /router for QueryRouter status.',
+      'For a full guide: wunderland help discovery',
+    ],
+  },
+  quickstart: {
+    summary: 'Auto-detect environment, scaffold agent config, and get to a runnable agent fast.',
+    usage: ['wunderland quickstart [--dir <path>] [--yes]'],
+    examples: ['wunderland quickstart', 'wunderland quickstart --dir ./my-agent --yes'],
+    notes: [
+      'Detects available API keys, local hardware (GPU/RAM), and picks the best provider.',
+      'Scaffolds agent.config.json, .env, and optionally installs Ollama for local use.',
+    ],
   },
 };
 

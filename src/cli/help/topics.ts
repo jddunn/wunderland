@@ -32,7 +32,10 @@ export type HelpTopicId =
   | 'slack'
   | 'signal'
   | 'emergent'
-  | 'retrieval';
+  | 'retrieval'
+  | 'discovery'
+  | 'memory'
+  | 'personality';
 
 export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: string }> = [
   {
@@ -146,6 +149,21 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     summary: 'Multi-source retrieval: strategy tiers, HyDE, BM25, RAPTOR, GraphRAG, memory.',
   },
   {
+    id: 'discovery',
+    title: 'Discovery & Platform Knowledge',
+    summary: 'Capability discovery engine, platform knowledge base, and catalog browser.',
+  },
+  {
+    id: 'memory',
+    title: 'Memory & Cognitive Mechanisms',
+    summary: 'Cognitive memory types, 8 neuroscience mechanisms, infinite context, retrieval budget.',
+  },
+  {
+    id: 'personality',
+    title: 'Personality (HEXACO)',
+    summary: 'HEXACO traits, presets, on/off configuration, per-session overrides.',
+  },
+  {
     id: 'faq',
     title: 'FAQ',
     summary: 'Frequently asked questions about setup, voice, LLMs, and more.',
@@ -196,6 +214,9 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'image-editing' || topic === 'img2img' || topic === 'inpainting' || topic === 'upscale' || topic === 'upscaling') return 'image-editing';
     if (topic === 'emergent' || topic === 'emergent-tools' || topic === 'forge' || topic === 'forged-tools') return 'emergent';
     if (topic === 'retrieval' || topic === 'rag' || topic === 'unified-retrieval' || topic === 'hyde' || topic === 'bm25' || topic === 'raptor' || topic === 'hybrid-search' || topic === 'query-router') return 'retrieval';
+    if (topic === 'discovery' || topic === 'discover' || topic === 'platform-knowledge' || topic === 'catalog' || topic === 'capabilities') return 'discovery';
+    if (topic === 'memory' || topic === 'cognitive-memory' || topic === 'cognitive-mechanisms' || topic === 'mechanisms' || topic === 'infinite-context' || topic === 'consolidation' || topic === 'decay' || topic === 'ebbinghaus') return 'memory';
+    if (topic === 'personality' || topic === 'hexaco' || topic === 'traits' || topic === 'persona' || topic === 'personas') return 'personality';
     if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
   })();
@@ -928,6 +949,45 @@ export function printHelpTopic(topicRaw: string): void {
     return;
   }
 
+  if (resolved === 'discovery') {
+    printTitle('Discovery & Platform Knowledge');
+    console.log(`  ${bright('Wunderland ships with a built-in platform knowledge base and capability')}`);
+    console.log(`  ${bright('discovery engine. Agents can query tools, skills, FAQ, API docs, and')}`);
+    console.log(`  ${bright('troubleshooting guides without any extra configuration.')}`);
+    console.log();
+    console.log(`  ${iColor('1')} ${bright('Platform Knowledge')}`);
+    console.log(`     ${dim('A curated corpus of entries covering tools, skills, FAQ, API reference,')}`);
+    console.log(`     ${dim('and troubleshooting guides. Loaded automatically when the QueryRouter')}`);
+    console.log(`     ${dim('initialises during')} ${accent('wunderland chat')} ${dim('or')} ${accent('wunderland start')}.`);
+    console.log();
+    console.log(`  ${iColor('2')} ${bright('Capability Discovery Engine')}`);
+    console.log(`     ${dim('Three-tier semantic discovery replacing static tool/skill dumps (~90% token reduction):')}`);
+    console.log(`     ${accent('Tier 0')}  ${dim('Category summaries (~150 tokens, always injected)')}`);
+    console.log(`     ${accent('Tier 1')}  ${dim('Top-5 semantic matches (~200 tokens, on query)')}`);
+    console.log(`     ${accent('Tier 2')}  ${dim('Full schemas (~1500 tokens, on demand)')}`);
+    console.log();
+    console.log(`  ${iColor('3')} ${bright('Extension / Skill Catalog')}`);
+    console.log(`     ${dim('105+ extensions and 69 curated skills indexed in a graphology-based')}`);
+    console.log(`     ${dim('capability graph with co-occurrence, dependency, and tag edges.')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Chat Commands:')}`);
+    console.log(`     ${accent('/discover')}     ${dim('Show discovery stats (capabilities, graph, manifest dirs)')}`);
+    console.log(`     ${accent('/router')}       ${dim('Show QueryRouter status, platform knowledge, recommendations')}`);
+    console.log();
+    console.log(`  ${bright('TUI Dashboard:')}`);
+    console.log(`     ${muted('$')} ${accent('wunderland')} ${dim('then press')} ${accent('8')} ${dim('or select "Discovery & Catalog"')}`);
+    console.log();
+    console.log(`  ${bright('Configuration (agent.config.json):')}`);
+    console.log(`     ${accent('discovery.enabled: true')}            ${dim('Enable capability discovery')}`);
+    console.log(`     ${accent('discovery.recallProfile: "aggressive"')} ${dim('balanced | aggressive | conservative')}`);
+    console.log(`     ${accent('rag.queryRouter.enabled: true')}      ${dim('Enable platform knowledge retrieval')}`);
+    console.log();
+    console.log(`  ${dim('See also:')} ${accent('wunderland help retrieval')}${dim(',')} ${accent('wunderland help faq')}`);
+    console.log();
+    return;
+  }
+
   if (resolved === 'faq') {
     printTitle('Frequently Asked Questions');
     console.log();
@@ -984,7 +1044,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log();
 
     console.log(`  ${hr()}`);
-    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, retrieval, email, whatsapp, slack, signal, presets, security, tui, ui, export')}`);
+    console.log(`  ${dim('More help:')} ${accent('wunderland help <topic>')} ${dim('— topics: getting-started, auth, voice, llm, retrieval, discovery, email, whatsapp, slack, signal, presets, security, tui, ui, export')}`);
     console.log(`  ${dim('Full docs:')} ${accent(URLS.docs)}`);
     console.log();
     return;
