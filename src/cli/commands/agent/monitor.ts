@@ -4,9 +4,9 @@
  * @module wunderland/cli/commands/monitor
  */
 
-import type { GlobalFlags } from '../types.js';
-import { accent, dim, success as sColor, warn as wColor, info as iColor } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent, dim, success as sColor, warn as wColor, info as iColor } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
 import {
   cleanStaleDaemons,
   readAllDaemons,
@@ -14,7 +14,7 @@ import {
   formatUptime,
   fetchDaemonHealth,
   type HealthResponse,
-} from '../daemon/daemon-state.js';
+} from '../../daemon/daemon-state.js';
 
 const REFRESH_INTERVAL_MS = 5_000;
 

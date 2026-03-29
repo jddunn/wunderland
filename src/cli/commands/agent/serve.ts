@@ -11,17 +11,17 @@ import { existsSync } from 'node:fs';
 import { readFile, mkdir, open } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
-import type { GlobalFlags } from '../types.js';
-import { accent, success as sColor, info as iColor } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
-import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent, success as sColor, info as iColor } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
+import { resolveAgentDisplayName } from '../../../runtime/agent-identity.js';
 import {
   getDaemonDir,
   readDaemonInfo,
   writeDaemonInfo,
   isDaemonAlive,
   pollHealth,
-} from '../daemon/daemon-state.js';
+} from '../../daemon/daemon-state.js';
 
 const DEFAULT_PORT = 3777;
 const HEALTH_POLL_TIMEOUT_MS = 30_000;
@@ -272,7 +272,7 @@ async function spawnWatchdog(config: {
 
   if (wdPid) {
     // Update daemon.json with watchdog PID.
-    const { updateDaemonInfo } = await import('../daemon/daemon-state.js');
+    const { updateDaemonInfo } = await import('../../daemon/daemon-state.js');
     await updateDaemonInfo(config.seedId, { watchdogPid: wdPid });
   }
 
