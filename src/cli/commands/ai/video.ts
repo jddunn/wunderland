@@ -2,11 +2,11 @@
  * @fileoverview `wunderland video` — video generation and analysis via AgentOS providers.
  * @module wunderland/cli/commands/video
  */
-import type { GlobalFlags } from '../types.js';
-import { accent, dim } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
-import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent, dim } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
+import { loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
+import { shutdownWunderlandOtel, startWunderlandOtel } from '../../../observability/otel.js';
 
 /**
  * Handles the `wunderland video` CLI command.
@@ -65,7 +65,7 @@ export default async function cmdVideo(
 
     try {
       const { generateVideo } = await import('@framers/agentos');
-      const { recordWunderlandTokenUsage } = await import('../../observability/token-usage.js');
+      const { recordWunderlandTokenUsage } = await import('../../../observability/token-usage.js');
       const request: Record<string, unknown> = { prompt };
       if (provider) request['provider'] = provider;
       if (model) request['model'] = model;
