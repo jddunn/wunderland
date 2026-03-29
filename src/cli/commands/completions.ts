@@ -25,6 +25,7 @@ const COMMANDS: [cmd: string, desc: string][] = [
   ['chat', 'Interactive terminal assistant'],
   ['hitl', 'Watch/resolve approvals & checkpoints'],
   ['doctor', 'Health check: keys, tools, connectivity'],
+  ['connect', 'Connect Gmail, WhatsApp, Slack, Signal via OAuth'],
   ['channels', 'List/add/remove channels'],
   ['config', 'Read/write config values'],
   ['status', 'Agent & connection status'],
