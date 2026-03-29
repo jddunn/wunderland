@@ -4,11 +4,11 @@
  * then uses generateText to extract a JSON object matching that schema.
  * @module wunderland/cli/commands/structured
  */
-import type { GlobalFlags } from '../types.js';
-import { accent, dim } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
-import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent, dim } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
+import { loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
+import { shutdownWunderlandOtel, startWunderlandOtel } from '../../../observability/otel.js';
 
 /**
  * Handles the `wunderland structured` CLI command.
@@ -86,7 +86,7 @@ export default async function cmdStructured(
 
 	    try {
 	      const { generateText } = await import('@framers/agentos');
-        const { recordWunderlandTokenUsage } = await import('../../observability/token-usage.js');
+        const { recordWunderlandTokenUsage } = await import('../../../observability/token-usage.js');
 	      const provider = flags.provider as string | undefined;
 
 	      const prompt = [

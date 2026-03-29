@@ -657,11 +657,11 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   quickstart:        () => import('./commands/quickstart.js'),
   new:               () => import('./commands/new.js'),
   connect:           () => import('./commands/connect.js'),
-  image:             () => import('./commands/image.js'),
-  video:             () => import('./commands/video.js'),
-  audio:             () => import('./commands/audio.js'),
-  vision:            () => import('./commands/vision.js'),
-  structured:        () => import('./commands/structured.js'),
+  image:             () => import('./commands/ai/image.js'),
+  video:             () => import('./commands/ai/video.js'),
+  audio:             () => import('./commands/ai/audio.js'),
+  vision:            () => import('./commands/ai/vision.js'),
+  structured:        () => import('./commands/ai/structured.js'),
 };
 
 /** Full-banner commands (show large ASCII art). */
