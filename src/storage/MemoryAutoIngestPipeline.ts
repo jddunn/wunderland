@@ -93,6 +93,9 @@ Rules:
 - "episodic" for notable events or experiences mentioned
 - "knowledge" for factual information shared
 - Return an empty array [] if nothing worth remembering
+- NEVER store raw profanity, slurs, or insults as user facts. Users may express frustration toward the AI — this is normal human behavior, not a user attribute. Summarize the emotional context instead (e.g., "user was frustrated with response quality" NOT "user called assistant a [slur]")
+- Distinguish between statements ABOUT the user vs statements DIRECTED AT the AI. "I'm a software engineer" is a user fact. "You're useless" is feedback about the assistant, not a user attribute
+- Do NOT store anything that could be used to characterize or incriminate the user based on their emotional outbursts toward an AI
 
 Output ONLY valid JSON array, no markdown or explanation.`;
 
