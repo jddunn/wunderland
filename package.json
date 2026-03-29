@@ -135,7 +135,7 @@
     "@framers/agentos-ext-voice-synthesis": ">=1.0.0",
     "@framers/agentos-ext-web-browser": "^1.2.1",
     "@framers/agentos-ext-web-search": "^1.1.1",
-    "@framers/agentos-extensions-registry": ">=0.14.1",
+    "@framers/agentos-extensions-registry": ">=0.15.0",
     "@framers/sql-storage-adapter": "^0.6.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.201.1",
@@ -184,7 +184,7 @@
     }
   },
   "optionalDependencies": {
-    "@framers/agentos-skills-registry": ">=0.17.2",
+    "@framers/agentos-skills-registry": ">=0.18.0",
     "@framers/agentos-ext-streaming-stt-deepgram": ">=0.1.0",
     "@framers/agentos-ext-streaming-stt-whisper": ">=0.1.0",
     "@framers/agentos-ext-streaming-tts-openai": ">=0.1.0",
