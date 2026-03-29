@@ -68,7 +68,7 @@ function getSecretCatalog(): SecretDef[] {
 
 /**
  * Convert a secret ID (e.g. "openai.apiKey") to its canonical env var name.
- * Mirrors the logic in `cli/security/env-secrets.ts`.
+ * Mirrors the logic in `security/env-secrets.ts`.
  */
 function secretIdToEnvVar(secretId: string): string {
   // Custom overrides matching the Rabbithole self-hosted page
