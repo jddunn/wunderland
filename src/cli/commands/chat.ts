@@ -1,25 +1,22 @@
 /**
  * @fileoverview `wunderland chat` — interactive terminal assistant with tool calling.
- * Ported from bin/wunderland.js cmdChat() with colored output.
+ *
+ * This module is the command entry point. It handles CLI arg parsing,
+ * agent bootstrap, extension loading, and then delegates the interactive
+ * session to {@link ChatREPL} and rendering to {@link ChatStreamRenderer}.
+ *
  * @module wunderland/cli/commands/chat
  */
 
-import { exec } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { createInterface } from 'node:readline/promises';
+import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
 import type { WunderlandProviderId, WunderlandAgentRagConfig } from '../../api/types.js';
 import chalk from 'chalk';
 import {
   accent,
-  bright,
-  success as sColor,
   warn as wColor,
-  tool as tColor,
-  muted,
-  dim,
 } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
@@ -29,8 +26,6 @@ import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../confi
 import {
   runToolCallingTurn,
   streamToolCallingTurn,
-  safeJsonStringify,
-  truncateString,
   getGuardrailsInstance,
   type ToolInstance,
   type LLMProviderConfig,
@@ -108,14 +103,13 @@ import type { QueryRouter, QueryResult, ConversationMessage } from '@framers/age
 import {
   chatFrameGlyphs,
   getChatWidth,
-  frameLine,
   frameBorder,
   C,
   printChatHeader,
-  printAssistantReply,
-  chatPrompt,
   toToolInstance,
 } from './chat-ui.js';
+import { ChatREPL, type ChannelAdapterInstance } from './ChatREPL.js';
+import { ChatStreamRenderer } from './ChatStreamRenderer.js';
 
 // ── Command ─────────────────────────────────────────────────────────────────
 
@@ -495,15 +489,6 @@ export default async function cmdChat(
   let schemaOnDemandOptions: Record<string, Record<string, unknown>> = {};
 
   // Channel adapter instances (populated during extension loading)
-  interface ChannelAdapterInstance {
-    platform: string;
-    displayName?: string;
-    on: (handler: (event: any) => void, eventTypes?: string[]) => () => void;
-    sendMessage: (conversationId: string, content: any) => Promise<any>;
-    sendTypingIndicator?: (conversationId: string, isTyping: boolean) => Promise<void>;
-    getConnectionInfo?: () => { status: string };
-    shutdown?: () => Promise<void>;
-  }
   const channelAdapters: ChannelAdapterInstance[] = [];
 
   // ── Capture startup output into a bordered panel ────────────────────────
@@ -1332,7 +1317,6 @@ export default async function cmdChat(
     }),
   );
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
   const messages: Array<Record<string, unknown>> = [{ role: 'system', content: systemPrompt }];
 
   // ── Restore previous conversation history from per-agent storage ────────
@@ -1396,6 +1380,9 @@ export default async function cmdChat(
         : 'none'
       : 'unavailable',
   });
+
+  // ── Stream renderer (terminal output for tool calls, progress, replies) ──
+  const streamRenderer = new ChatStreamRenderer({ verbose });
 
   // ── Voice pipeline server (optional, --voice flag) ───────────────────────
   //
@@ -1587,77 +1574,30 @@ export default async function cmdChat(
     }
   }
 
-  // ── Channel message queue (bridges async channel events into the REPL) ──
-  type IncomingChannelMessage = {
-    platform: string;
-    conversationId: string;
-    senderName: string;
-    text: string;
-    adapter: ChannelAdapterInstance;
-  };
-  const channelQueue: IncomingChannelMessage[] = [];
-  let channelQueueResolve: (() => void) | null = null;
+  // ── ChatREPL — interactive session loop and slash commands ──
+  const repl = new ChatREPL({
+    toolMap,
+    channelAdapters,
+    autoApproveToolCalls,
+    verbose,
+    enableQueryRouter,
+    renderer: streamRenderer,
+    messages,
+    conversationId,
+    contextWindowManager: contextWindowManager as any,
+    discoveryManager: discoveryManager as any,
+    memoryAdapter,
+    getCliQueryRouter: () => getCliQueryRouter() as any,
+    applyResearchPrefix,
+    runChatTurn,
+  });
 
-  function enqueueChannelMessage(msg: IncomingChannelMessage) {
-    channelQueue.push(msg);
-    if (channelQueueResolve) {
-      channelQueueResolve();
-      channelQueueResolve = null;
-    }
-  }
-  function waitForChannelMessage(): Promise<void> {
-    if (channelQueue.length > 0) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      channelQueueResolve = resolve;
-    });
-  }
-
-  // Wire up channel adapter listeners
-  const channelCleanups: Array<() => void> = [];
-  for (const adapter of channelAdapters) {
-    const cleanup = adapter.on(
-      (event: any) => {
-        if (event?.type !== 'message') return;
-        const data = event.data;
-        enqueueChannelMessage({
-          platform: data?.platform ?? (adapter as any).platform ?? 'unknown',
-          conversationId: data?.conversationId ?? '',
-          senderName:
-            data?.sender?.displayName || data?.sender?.username || data?.sender?.id || 'unknown',
-          text: data?.text ?? '',
-          adapter,
-        });
-      },
-      ['message']
-    );
-    channelCleanups.push(cleanup);
-  }
-
-  // Session-scoped cache to avoid re-prompting for identical tool+args combinations.
-  const permissionCache = new Map<string, boolean>();
-  // When the user presses 'a' (accept all), all subsequent prompts auto-approve for this session.
-  let sessionAcceptAll = false;
-
-  const askPermission = async (
-    tool: ToolInstance,
-    args: Record<string, unknown>
-  ): Promise<boolean> => {
-    if (autoApproveToolCalls || sessionAcceptAll) return true;
-    const cacheKey = `${tool.name}:${safeJsonStringify(args, 400)}`;
-    const cached = permissionCache.get(cacheKey);
-    if (cached !== undefined) return cached;
-    const preview = safeJsonStringify(args, 800);
-    const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
-    const q = `  ${wColor(glyphs().warn)} Allow ${tColor(tool.name)} (${effectLabel})?\n${dim(preview)}\n  ${muted('[y/a(ccept all)/N]')} `;
-    const answer = (await rl.question(q)).trim().toLowerCase();
-    if (answer === 'a' || answer === 'all' || answer === 'accept all') {
-      sessionAcceptAll = true;
-      return true;
-    }
-    const result = answer === 'y' || answer === 'yes';
-    permissionCache.set(cacheKey, result);
-    return result;
-  };
+  // Expose the REPL's permission prompts to the rest of the setup code.
+  const askPermission = repl.askPermission.bind(repl);
+  const askCheckpoint =
+    turnApprovalMode === 'off'
+      ? undefined
+      : repl.askCheckpoint.bind(repl);
 
   // ── Runtime folder access request tool ──
   if (!dangerouslySkipPermissions) {
@@ -1677,47 +1617,11 @@ export default async function cmdChat(
         }
       },
       requestPermission: async (req) => {
-        if (sessionAcceptAll) return true;
-        const cacheKey = `folder_access:${req.path}:${req.operation}`;
-        const cached = permissionCache.get(cacheKey);
-        if (cached !== undefined) return cached;
-        const q = `  ${wColor(glyphs().warn)} Grant ${req.operation.toUpperCase()} access to ${tColor(req.path)}${req.recursive ? '/**' : ''}?\n  ${dim(`Reason: ${req.reason}`)}\n  ${muted('[y/a(ccept all)/N]')} `;
-        const answer = (await rl.question(q)).trim().toLowerCase();
-        if (answer === 'a' || answer === 'all' || answer === 'accept all') {
-          sessionAcceptAll = true;
-          return true;
-        }
-        const result = answer === 'y' || answer === 'yes';
-        permissionCache.set(cacheKey, result);
-        return result;
+        return repl.askFolderPermission(req);
       },
     });
     toolMap.set('request_folder_access', folderAccessTool as any);
   }
-
-  const askCheckpoint =
-    turnApprovalMode === 'off'
-      ? undefined
-      : async (info: {
-          round: number;
-          toolCalls: Array<{
-            toolName: string;
-            hasSideEffects: boolean;
-            args: Record<string, unknown>;
-          }>;
-        }): Promise<boolean> => {
-          if (autoApproveToolCalls) return true;
-          const summary = info.toolCalls
-            .map((c) => {
-              const effect = c.hasSideEffects ? 'side effects' : 'read-only';
-              const preview = safeJsonStringify(c.args, 600);
-              return `- ${c.toolName} (${effect}): ${preview}`;
-            })
-            .join('\n');
-          const q = `  ${wColor(glyphs().warn)} Checkpoint after round ${info.round}.\n${dim(summary || '(no tool calls)')}\n  ${muted('Continue? [y/N]')} `;
-          const answer = (await rl.question(q)).trim().toLowerCase();
-          return answer === 'y' || answer === 'yes';
-        };
 
   // ── Chat turn helper (shared by stdin and channel inputs) ──
   async function runChatTurn(
@@ -1750,11 +1654,9 @@ export default async function cmdChat(
               messages.splice(1, 0, { role: 'system', content: cm.content });
             }
           }
-          if (verbose) {
+          {
             const stats = contextWindowManager.getStats();
-            console.log(
-              `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[context compacted: ${stats.currentTokens} tokens, ${stats.totalCompactions} compactions, ${stats.strategy} strategy]`)}`
-            );
+            streamRenderer.renderCompactionStats(stats);
           }
         }
       } catch {
@@ -1785,14 +1687,7 @@ export default async function cmdChat(
         const routerResult: QueryResult = await qr.route(input, convHistory);
         const routeDuration = Date.now() - routeStart;
 
-        if (verbose) {
-          const c = routerResult.classification;
-          const srcCount = routerResult.sources?.length ?? 0;
-          const fallbacks = routerResult.fallbacksUsed?.length ? ` fallbacks=[${routerResult.fallbacksUsed.join(',')}]` : '';
-          console.log(
-            `  ${frameBorder(chatFrameGlyphs().v)} ${dim(`[QueryRouter] tier=${c.tier} confidence=${c.confidence.toFixed(2)} strategy=${c.strategy} sources=${srcCount}${fallbacks} reasoning="${c.reasoning}" | ${routeDuration}ms`)}`
-          );
-        }
+        streamRenderer.renderQueryRouterDiag(routerResult as any, routeDuration);
 
         // Inject retrieved context when the router found relevant sources
         if (
@@ -1916,15 +1811,11 @@ export default async function cmdChat(
         getApiKey: oauthGetApiKey,
         onFallback: (_err, provider) => {
           fallbackTriggered = true;
-          console.log(
-            `  ${frameBorder(chatFrameGlyphs().v)} ${wColor('!')} Primary provider failed, falling back to ${chalk.hex(C.cyan)(provider)}`
-          );
+          streamRenderer.renderFallbackNotice(provider);
         },
         onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
           toolCallCount += 1;
-          console.log(
-            `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)('>')} ${chalk.hex(C.magenta)(tool.name)} ${chalk.hex(C.dim)(truncateString(JSON.stringify(args), 120))}`
-          );
+          streamRenderer.renderToolCall(tool, args);
         },
         onToolResult: (info) => {
           if (!info.success && info.error) {
@@ -1937,10 +1828,7 @@ export default async function cmdChat(
           }
         },
         onToolProgress: (info) => {
-          const icon = chalk.hex(C.cyan)('\u{1F50D}');
-          const label = chalk.hex(C.cyan)(`[${info.toolName}]`);
-          const msg = chalk.hex(C.dim)(info.message);
-          console.log(`  ${frameBorder(chatFrameGlyphs().v)} ${icon} ${label} ${msg}`);
+          streamRenderer.renderToolProgress(info);
         },
       });
     } catch (error) {
@@ -1989,44 +1877,10 @@ export default async function cmdChat(
     }
 
     if (reply) {
-      // ── Widget block detection ───────────────────────────────────────────
-      // When the agent emits :::widget fenced blocks containing self-contained
-      // HTML, extract each block, persist it to the agent workspace, open it
-      // in the user's default browser, and replace the raw markup in the
-      // terminal output with a short path indicator.
-      const widgetMatches = [...reply.matchAll(/:::widget\n([\s\S]*?)\n:::/g)];
-      for (let i = 0; i < widgetMatches.length; i++) {
-        const widgetHtml = widgetMatches[i][1];
-        const titleMatch = widgetHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
-        const title = titleMatch ? titleMatch[1].trim() : `widget-${i + 1}`;
-        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      // Render the assistant reply (handles widget extraction, file saving,
+      // browser launch, and terminal display via ChatStreamRenderer).
+      await streamRenderer.renderAssistantReply(reply);
 
-        const widgetsDir = path.join(process.cwd(), 'widgets');
-        await mkdir(widgetsDir, { recursive: true });
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const filename = `${timestamp}-${slug}.html`;
-        const filePath = path.join(widgetsDir, filename);
-        await writeFile(filePath, widgetHtml, 'utf-8');
-
-        // Print widget info below the chat frame
-        console.log();
-        console.log(`  ${accent('\u25C6')} Widget: ${bright(title)}`);
-        console.log(`    ${dim('File:')} ${filePath}`);
-
-        // Open in the user's default browser (fire-and-forget)
-        const openCmd = process.platform === 'darwin' ? 'open'
-          : process.platform === 'win32' ? 'start'
-          : 'xdg-open';
-        exec(`${openCmd} "${filePath}"`);
-      }
-
-      // Strip widget blocks from the terminal display so the user sees a
-      // clean placeholder instead of raw HTML.
-      const displayReply = widgetMatches.length > 0
-        ? reply.replace(/:::widget\n[\s\S]*?\n:::/g, '\n  [Interactive Widget \u2014 opened in browser]\n')
-        : reply;
-
-      printAssistantReply(displayReply);
       // If this turn originated from a messaging channel, send the reply back
       if (replyTarget) {
         try {
@@ -2071,7 +1925,6 @@ export default async function cmdChat(
     }
   }
 
-  // ── Slash command handler (returns true if the input was a slash command) ──
   // ── Research classifier config ──
   const researchClassifierEnabled = cfg?.research?.autoClassify !== false;
   const researchMinDepth: ResearchDepth = (cfg?.research?.minDepthToInject as ResearchDepth) || 'quick';
@@ -2094,9 +1947,7 @@ export default async function cmdChat(
     if (researchMatch) {
       const depth = researchMatch[1].toLowerCase() === 'deep' ? 'deep' : 'moderate';
       const query = researchMatch[2].trim();
-      console.log(
-        `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)(`[research:${depth}]`)} ${query}`
-      );
+      streamRenderer.renderExplicitResearch(depth, query);
       const prefix = buildResearchPrefix(depth as ResearchDepth);
       return prefix ? `${prefix}\n\n${query}` : query;
     }
@@ -2110,11 +1961,11 @@ export default async function cmdChat(
     });
 
     if (shouldInjectResearch(classification.depth, researchMinDepth)) {
-      if (verbose) {
-        console.log(
-          `  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.magenta)(`[auto-research:${classification.depth}]`)} ${chalk.hex(C.dim)(classification.reasoning)} ${chalk.hex(C.dim)(`(${classification.latencyMs}ms)`)}`
-        );
-      }
+      streamRenderer.renderResearchClassification(
+        classification.depth,
+        classification.reasoning,
+        classification.latencyMs,
+      );
       const prefix = buildResearchPrefix(classification.depth);
       return prefix ? `${prefix}\n\n${input}` : input;
     }
@@ -2122,291 +1973,11 @@ export default async function cmdChat(
     return input;
   }
 
-  function handleSlashCommand(input: string): boolean {
-    if (input === '/help') {
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const helpLines: string[] = [];
-      helpLines.push('');
-      helpLines.push(
-        frameLine(
-          `   ${chalk.hex(C.cyan)('/help')}      ${chalk.hex(C.text)('Show this help')}`,
-          iw
-        )
-      );
-      helpLines.push(
-        frameLine(
-          `   ${chalk.hex(C.cyan)('/tools')}     ${chalk.hex(C.text)('List available tools')}`,
-          iw
-        )
-      );
-      helpLines.push(
-        frameLine(
-          `   ${chalk.hex(C.cyan)('/channels')}  ${chalk.hex(C.text)('Show connected channels')}`,
-          iw
-        )
-      );
-      helpLines.push(
-        frameLine(
-          `   ${chalk.hex(C.cyan)('/discover')}  ${chalk.hex(C.text)('Show discovery stats')}`,
-          iw
-        )
-      );
-      helpLines.push(
-        frameLine(
-          `   ${chalk.hex(C.cyan)('/memory')}    ${chalk.hex(C.text)('Show context window & compaction stats')}`,
-          iw
-        )
-      );
-      helpLines.push(
-        frameLine(
-          `   ${chalk.hex(C.cyan)('/clear')}     ${chalk.hex(C.text)('Clear conversation history')}`,
-          iw
-        )
-      );
-      helpLines.push(
-        frameLine(
-          `   ${chalk.hex(C.cyan)('/research')}  ${chalk.hex(C.text)('Deep research mode (prefix: /research <query>)')}`,
-          iw
-        )
-      );
-      helpLines.push(
-        frameLine(
-          `   ${chalk.hex(C.cyan)('/router')}    ${chalk.hex(C.text)('Show QueryRouter status & corpus stats')}`,
-          iw
-        )
-      );
-      helpLines.push(
-        frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw)
-      );
-      helpLines.push('');
-      console.log(helpLines.join('\n'));
-      return true;
-    }
-
-    if (input === '/tools') {
-      const names = [...toolMap.keys()].sort();
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const toolLines: string[] = [''];
-      for (const n of names) {
-        toolLines.push(frameLine(`   ${chalk.hex(C.magenta)(n)}`, iw));
-      }
-      toolLines.push('');
-      console.log(toolLines.join('\n'));
-      return true;
-    }
-
-    if (input === '/channels') {
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const chLines: string[] = [''];
-      if (channelAdapters.length === 0) {
-        chLines.push(frameLine(`   ${muted('No channels connected')}`, iw));
-      } else {
-        for (const adapter of channelAdapters) {
-          const info = adapter.getConnectionInfo?.();
-          const status =
-            info?.status === 'connected' ? sColor('connected') : wColor(info?.status ?? 'unknown');
-          chLines.push(
-            frameLine(
-              `   ${chalk.hex(C.brightCyan)((adapter as any).displayName || (adapter as any).platform)} ${status}`,
-              iw
-            )
-          );
-        }
-      }
-      chLines.push('');
-      console.log(chLines.join('\n'));
-      return true;
-    }
-
-    if (input === '/discover') {
-      const dStats = discoveryManager?.getStats() ?? { enabled: false, initialized: false, capabilityCount: 0, graphNodes: 0, graphEdges: 0, presetCoOccurrences: 0, manifestDirs: [], recallProfile: 'balanced' };
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const dLines: string[] = [''];
-      dLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Discovery Stats')}`, iw));
-      dLines.push(
-        frameLine(`   Enabled:       ${dStats.enabled ? sColor('yes') : wColor('no')}`, iw)
-      );
-      dLines.push(
-        frameLine(`   Initialized:   ${dStats.initialized ? sColor('yes') : wColor('no')}`, iw)
-      );
-      dLines.push(frameLine(`   Capabilities:  ${dStats.capabilityCount}`, iw));
-      dLines.push(frameLine(`   Graph nodes:   ${dStats.graphNodes}`, iw));
-      dLines.push(frameLine(`   Graph edges:   ${dStats.graphEdges}`, iw));
-      dLines.push(frameLine(`   Preset co-occ: ${dStats.presetCoOccurrences}`, iw));
-      if (dStats.manifestDirs.length > 0) {
-        dLines.push(frameLine(`   Manifest dirs: ${dStats.manifestDirs.join(', ')}`, iw));
-      }
-      dLines.push('');
-      console.log(dLines.join('\n'));
-      return true;
-    }
-
-    if (input === '/memory') {
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const memLines: string[] = [''];
-      memLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Context Window Status')}`, iw));
-      if (contextWindowManager?.enabled) {
-        const stats = contextWindowManager.getStats();
-        memLines.push(frameLine(`   Enabled:       ${sColor('yes')} (${stats.strategy})`, iw));
-        memLines.push(frameLine(`   Tokens:        ${stats.currentTokens} / ${stats.maxTokens} (${(stats.utilization * 100).toFixed(1)}%)`, iw));
-        memLines.push(frameLine(`   Turn:          ${stats.currentTurn}`, iw));
-        memLines.push(frameLine(`   Messages:      ${stats.messageCount} (${stats.compactedMessageCount} compacted)`, iw));
-        memLines.push(frameLine(`   Compactions:   ${stats.totalCompactions}`, iw));
-        if (stats.totalCompactions > 0) {
-          memLines.push(frameLine(`   Avg compress:  ${stats.avgCompressionRatio}x`, iw));
-          memLines.push(frameLine(`   Traces created:${stats.totalTracesCreated}`, iw));
-          memLines.push(frameLine(`   Chain nodes:   ${stats.summaryChainNodes} (${stats.summaryChainTokens} tokens)`, iw));
-        }
-        // Show recent compaction entries
-        const history = contextWindowManager.getCompactionHistory();
-        if (history.length > 0) {
-          memLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Recent Compactions')}`, iw));
-          for (const entry of history.slice(-3)) {
-            memLines.push(frameLine(
-              `   [${new Date(entry.timestamp).toLocaleTimeString()}] turns ${entry.turnRange[0]}–${entry.turnRange[1]}: ${entry.inputTokens}→${entry.outputTokens} tokens (${entry.compressionRatio.toFixed(1)}x, ${entry.durationMs}ms)`,
-              iw
-            ));
-            if (entry.preservedEntities.length > 0) {
-              memLines.push(frameLine(`     entities: ${entry.preservedEntities.slice(0, 10).join(', ')}`, iw));
-            }
-          }
-        }
-      } else {
-        memLines.push(frameLine(`   Enabled:       ${wColor('no')}`, iw));
-        memLines.push(frameLine(`   ${muted('Set memory.infiniteContext.enabled: true in agent config')}`, iw));
-      }
-      memLines.push('');
-      console.log(memLines.join('\n'));
-      return true;
-    }
-
-    if (input === '/clear') {
-      // Clear in-memory messages (keep only the system prompt)
-      messages.splice(1);
-      // Clear context window manager state
-      contextWindowManager?.clear();
-      // Clear persisted history
-      if (memoryAdapter?.deleteConversation) {
-        memoryAdapter.deleteConversation(conversationId).catch(() => {});
-      }
-      console.log(`  ${chalk.hex(C.dim)('Conversation history cleared.')}`);
-      return true;
-    }
-
-    if (input === '/router') {
-      const cw = getChatWidth();
-      const iw = cw - 2;
-      const rLines: string[] = [''];
-      rLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('QueryRouter Status')}`, iw));
-      if (!enableQueryRouter) {
-        rLines.push(frameLine(`   Enabled:       ${wColor('no')} (--no-query-router)`, iw));
-      } else {
-        const qr = getCliQueryRouter();
-        if (qr) {
-          const stats = qr.getCorpusStats();
-          rLines.push(frameLine(`   Enabled:       ${sColor('yes')}`, iw));
-          rLines.push(frameLine(`   Initialised:   ${stats.initialized ? sColor('yes') : wColor('no')}`, iw));
-          rLines.push(frameLine(`   Corpus paths:  ${stats.configuredPathCount}`, iw));
-          rLines.push(frameLine(`   Chunks:        ${stats.chunkCount}`, iw));
-          rLines.push(frameLine(`   Sources:       ${stats.sourceCount}`, iw));
-          rLines.push(frameLine(`   Topics:        ${stats.topicCount}`, iw));
-          rLines.push(frameLine(`   Retrieval:     ${stats.retrievalMode}`, iw));
-          rLines.push(frameLine(`   Embedding dim: ${stats.embeddingDimension}`, iw));
-          rLines.push(frameLine(`   Rerank:        ${stats.rerankRuntimeMode}`, iw));
-          rLines.push(frameLine(`   Deep research: ${stats.deepResearchEnabled ? sColor('yes') : wColor('no')} (${stats.deepResearchRuntimeMode})`, iw));
-        } else {
-          rLines.push(frameLine(`   Enabled:       ${wColor('pending')} (init in progress or failed)`, iw));
-          rLines.push(frameLine(`   ${muted('The router initialises in the background. Try again shortly.')}`, iw));
-        }
-      }
-      rLines.push('');
-      console.log(rLines.join('\n'));
-      return true;
-    }
-
-    return false;
-  }
-
-  // ── Main REPL loop ──
-
-  /** Wraps runChatTurn with error handling so network/LLM failures don't crash the REPL */
-  async function safeChatTurn(
-    input: string,
-    replyTarget?: { adapter: ChannelAdapterInstance; conversationId: string }
-  ): Promise<void> {
-    try {
-      await runChatTurn(input, replyTarget);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      // Detect network errors and show a concise, user-friendly message
-      const isNetwork =
-        /fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|network.*error|Network error|unable to reach/i.test(
-          errMsg
-        );
-      if (isNetwork) {
-        fmt.errorBlock(
-          'Network error',
-          'Could not reach the LLM provider. Check your internet connection and try again.'
-        );
-      } else {
-        fmt.errorBlock('Error', errMsg.length > 300 ? errMsg.slice(0, 300) + '…' : errMsg);
-      }
-    }
-  }
-
-  const hasChannels = channelAdapters.length > 0;
-  for (;;) {
-    if (!hasChannels) {
-      // No channels — simple blocking readline (original behavior, zero overhead)
-      const line = await rl.question(chatPrompt());
-      const input = (line || '').trim();
-      if (!input) continue;
-      if (input === '/exit' || input === 'exit' || input === 'quit') break;
-      if (handleSlashCommand(input)) continue;
-      await safeChatTurn(await applyResearchPrefix(input));
-    } else {
-      // Concurrent: race stdin vs channel message queue
-      let stdinLine: string | undefined;
-      let channelMsg: IncomingChannelMessage | undefined;
-
-      const stdinPromise = rl.question(chatPrompt()).then((line) => {
-        stdinLine = line;
-      });
-      const channelPromise = waitForChannelMessage().then(() => {
-        channelMsg = channelQueue.shift();
-      });
-
-      await Promise.race([stdinPromise, channelPromise]);
-
-      if (channelMsg) {
-        const cm = channelMsg;
-        const prefix = `[${cm.platform}/${cm.senderName}]`;
-        console.log(
-          `\n  ${frameBorder(chatFrameGlyphs().v)} ${chalk.hex(C.brightCyan)(prefix)} ${cm.text}`
-        );
-        await safeChatTurn(`${prefix} ${cm.text}`, {
-          adapter: cm.adapter,
-          conversationId: cm.conversationId,
-        });
-        // The pending stdinPromise stays live — it will resolve on the next iteration
-      } else if (stdinLine !== undefined) {
-        const input = (stdinLine || '').trim();
-        if (!input) continue;
-        if (input === '/exit' || input === 'exit' || input === 'quit') break;
-        if (handleSlashCommand(input)) continue;
-        await safeChatTurn(await applyResearchPrefix(input));
-      }
-    }
-  }
+  // ── Enter the interactive REPL loop ──
+  await repl.start();
 
   // ── Graceful shutdown ──
-  for (const cleanup of channelCleanups) cleanup();
-  rl.close();
+  repl.stop();
   await discoveryManager?.close();
   await adaptiveRuntime.close();
   if (agentStorageManager) await agentStorageManager.shutdown().catch(() => {});
