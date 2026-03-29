@@ -1,25 +1,25 @@
 import path from 'node:path';
+import * as agentos from '@framers/agentos';
 
 // These usage-tracking functions are exported by @framers/agentos >=0.1.89
 // but may not exist in older published versions. Graceful stubs for CI compat.
-let clearRecordedAgentOSUsage: (ledgerPath: string) => void;
-let getDefaultAgentOSUsageLedgerPath: () => string;
-let readRecordedAgentOSUsageEvents: (ledgerPath: string) => any[];
-let recordAgentOSUsage: (event: any, ledgerPath?: string) => void;
+const clearRecordedAgentOSUsageRaw =
+  typeof agentos.clearRecordedAgentOSUsage === 'function'
+    ? agentos.clearRecordedAgentOSUsage
+    : undefined;
+const getDefaultAgentOSUsageLedgerPath =
+  typeof agentos.getDefaultAgentOSUsageLedgerPath === 'function'
+    ? agentos.getDefaultAgentOSUsageLedgerPath
+    : () => '';
+const readRecordedAgentOSUsageEventsRaw =
+  typeof agentos.readRecordedAgentOSUsageEvents === 'function'
+    ? agentos.readRecordedAgentOSUsageEvents
+    : undefined;
+const recordAgentOSUsage =
+  typeof agentos.recordAgentOSUsage === 'function'
+    ? agentos.recordAgentOSUsage
+    : async () => {};
 type AgentOSUsageEvent = { model?: string; provider?: string; promptTokens?: number; completionTokens?: number; timestamp?: number; [k: string]: unknown };
-
-try {
-  const mod = require('@framers/agentos');
-  clearRecordedAgentOSUsage = mod.clearRecordedAgentOSUsage ?? (() => {});
-  getDefaultAgentOSUsageLedgerPath = mod.getDefaultAgentOSUsageLedgerPath ?? (() => '');
-  readRecordedAgentOSUsageEvents = mod.readRecordedAgentOSUsageEvents ?? (() => []);
-  recordAgentOSUsage = mod.recordAgentOSUsage ?? (() => {});
-} catch {
-  clearRecordedAgentOSUsage = () => {};
-  getDefaultAgentOSUsageLedgerPath = () => '';
-  readRecordedAgentOSUsageEvents = () => [];
-  recordAgentOSUsage = () => {};
-}
 
 import { getConfigDir } from '../cli/config/config-manager.js';
 import { USAGE_LEDGER_FILE_NAME } from '../cli/constants.js';
@@ -114,8 +114,45 @@ function bucketKey(event: WunderlandUsageEvent): string {
   ].join('|');
 }
 
+async function readRecordedAgentOSUsageEventsCompat(
+  ledgerPath: string,
+): Promise<AgentOSUsageEvent[]> {
+  if (!readRecordedAgentOSUsageEventsRaw) return [];
+
+  try {
+    const result = await readRecordedAgentOSUsageEventsRaw({ path: ledgerPath });
+    if (Array.isArray(result)) return result as AgentOSUsageEvent[];
+  } catch {
+    // Fall through to legacy string-path signature.
+  }
+
+  try {
+    const result = await readRecordedAgentOSUsageEventsRaw(ledgerPath);
+    return Array.isArray(result) ? result as AgentOSUsageEvent[] : [];
+  } catch {
+    return [];
+  }
+}
+
+async function clearRecordedAgentOSUsageCompat(ledgerPath: string): Promise<void> {
+  if (!clearRecordedAgentOSUsageRaw) return;
+
+  try {
+    await clearRecordedAgentOSUsageRaw({ path: ledgerPath });
+    return;
+  } catch {
+    // Fall through to legacy string-path signature.
+  }
+
+  try {
+    await clearRecordedAgentOSUsageRaw(ledgerPath);
+  } catch {
+    // Best effort cleanup only.
+  }
+}
+
 export async function readWunderlandUsageEvents(configDirOverride?: string): Promise<WunderlandUsageEvent[]> {
-  return readRecordedAgentOSUsageEvents(resolveUsageLedgerPath(configDirOverride));
+  return readRecordedAgentOSUsageEventsCompat(resolveUsageLedgerPath(configDirOverride));
 }
 
 export async function listWunderlandUsageSummaries(opts?: {
@@ -304,5 +341,5 @@ export async function recordWunderlandUsage(input: RecordWunderlandUsageInput): 
 }
 
 export async function clearWunderlandUsageLedger(configDirOverride?: string): Promise<void> {
-  await clearRecordedAgentOSUsage(resolveUsageLedgerPath(configDirOverride));
+  await clearRecordedAgentOSUsageCompat(resolveUsageLedgerPath(configDirOverride));
 }

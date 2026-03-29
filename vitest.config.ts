@@ -8,6 +8,7 @@ const agentosRagPath = resolve(__dirname, '../agentos/src/rag/index.ts');
 const agentosQueryRouterPath = resolve(__dirname, '../agentos/src/query-router/index.ts');
 const agentosMemoryPath = resolve(__dirname, '../agentos/src/memory/index.ts');
 const agentosOrchestrationPath = resolve(__dirname, '../agentos/src/orchestration/index.ts');
+const agentosOrchestrationRuntimeKernelPath = resolve(__dirname, '../agentos/src/orchestration/runtime-kernel.ts');
 const agentosRootPath = resolve(__dirname, '../agentos/src/index.ts');
 const agentosOrchestrationIrTypesPath = resolve(__dirname, '../agentos/src/orchestration/ir/types.ts');
 const agentosOrchestrationGraphEventPath = resolve(__dirname, '../agentos/src/orchestration/events/GraphEvent.ts');
@@ -25,6 +26,7 @@ if (hasAgentosRoot) {
   agentosAliases['@framers/agentos/query-router'] = agentosQueryRouterPath;
   agentosAliases['@framers/agentos/memory'] = agentosMemoryPath;
   agentosAliases['@framers/agentos/orchestration'] = agentosOrchestrationPath;
+  agentosAliases['@framers/agentos/orchestration/runtime-kernel'] = agentosOrchestrationRuntimeKernelPath;
   agentosAliases['@framers/agentos/orchestration/ir/types'] = agentosOrchestrationIrTypesPath;
   agentosAliases['@framers/agentos/orchestration/events/GraphEvent'] = agentosOrchestrationGraphEventPath;
   agentosAliases['@framers/agentos/orchestration/checkpoint/ICheckpointStore'] = agentosOrchestrationCheckpointInterfacePath;
@@ -36,17 +38,20 @@ if (hasAgentosRoot) {
 
 const agentosSourceDir = resolve(__dirname, '../agentos/src');
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export default defineConfig({
   resolve: {
     alias: [
-      ...Object.entries(agentosAliases).map(([find, replacement]) => ({ find, replacement })),
+      ...Object.entries(agentosAliases).map(([find, replacement]) => ({
+        find: new RegExp(`^${escapeRegExp(find)}$`),
+        replacement,
+      })),
       {
-        find: '@framers/agentos/',
-        replacement: `${agentosSourceDir}/`,
-      },
-      {
-        find: /^@framers\/agentos\/(.+)$/,
-        replacement: `${agentosSourceDir}/$1`,
+        find: '@framers/agentos',
+        replacement: agentosSourceDir,
       },
     ],
   },
@@ -67,6 +72,7 @@ export default defineConfig({
     server: {
       deps: {
         inline: [
+          /^@framers\/agentos(?:\/.*)?$/,
           '@framers/agentos-ext-web-search',
           '@framers/agentos-ext-web-browser',
           '@framers/agentos-ext-giphy',

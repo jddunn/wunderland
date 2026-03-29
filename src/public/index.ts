@@ -484,6 +484,15 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     ]);
   }
 
+  const discoveryOpts: WunderlandDiscoveryConfig = {
+    ...buildDiscoveryOptionsFromAgentConfig(resolvedConfig),
+    ...opts.discovery,
+    config: {
+      ...(buildDiscoveryOptionsFromAgentConfig(resolvedConfig).config ?? {}),
+      ...(opts.discovery?.config ?? {}),
+    },
+  };
+
   // ── Core bootstrap (shared with CLI + chat-runtime) ──────────────────
   // Uses lazyTools + disableSkills so the library can layer its own
   // curated-tool, extension, and skill resolution on top.
@@ -497,6 +506,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
     workspaceId: opts.workspace?.agentId ?? String(resolvedConfig.seedId || 'seed_local_agent'),
     workspaceBaseDir: opts.workspace?.baseDir,
     workingDirectory,
+    discoveryOverrides: discoveryOpts,
     logger,
   });
 
@@ -564,14 +574,6 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   });
 
   // Capability discovery — semantic search + graph re-ranking for tool/skill context
-  const discoveryOpts: WunderlandDiscoveryConfig = {
-    ...buildDiscoveryOptionsFromAgentConfig(agentConfig),
-    ...opts.discovery,
-    config: {
-      ...(buildDiscoveryOptionsFromAgentConfig(agentConfig).config ?? {}),
-      ...(opts.discovery?.config ?? {}),
-    },
-  };
   const discoveryManager = new WunderlandDiscoveryManager(discoveryOpts);
   try {
     await discoveryManager.initialize({
