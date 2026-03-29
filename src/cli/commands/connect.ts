@@ -3,10 +3,13 @@
  * Supports Gmail, WhatsApp (Twilio / Meta), Slack (OAuth via rabbithole.inc),
  * and Signal (signal-cli setup wizard).
  *
- * Gmail supports three credential ingestion paths:
+ * Gmail supports two credential ingestion paths:
  *   1. `--credentials <path>` flag pointing to a Google OAuth client secret JSON
- *   2. Auto-discovery of `client_secret*.json` in ~/Downloads
- *   3. Manual env vars `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+ *   2. Manual env vars `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+ *
+ * Credential discovery (scanning ~/Downloads, guiding users through setup) is
+ * handled by the agent itself via platform knowledge and agentic tools
+ * (shell_execute, file_read), not by this CLI command.
  *
  * @module wunderland/cli/commands/connect
  */
@@ -16,9 +19,8 @@ import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { URL } from 'node:url';
 import { createInterface } from 'node:readline';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import { accent, muted } from '../ui/theme.js';
 
 // Default Google OAuth client ID — "Desktop app" type, safe to embed.
@@ -75,39 +77,6 @@ function parseGoogleCredentialsFile(filePath: string): { clientId: string; clien
   return { clientId: creds.client_id, clientSecret: creds.client_secret };
 }
 
-/**
- * Auto-discover a Google OAuth client secret JSON in the user's ~/Downloads
- * folder. Looks for files matching `client_secret*.json` and returns the
- * newest one (by modification time).
- *
- * @returns Parsed credentials plus the file path, or `null` if nothing found.
- */
-async function discoverGoogleCredentials(): Promise<{
-  clientId: string;
-  clientSecret: string;
-  path: string;
-} | null> {
-  const downloadsDir = path.join(os.homedir(), 'Downloads');
-  try {
-    const files = readdirSync(downloadsDir)
-      .filter(f => f.startsWith('client_secret') && f.endsWith('.json'))
-      .map(f => ({
-        name: f,
-        path: path.join(downloadsDir, f),
-        mtime: statSync(path.join(downloadsDir, f)).mtimeMs,
-      }))
-      .sort((a, b) => b.mtime - a.mtime); // newest first
-
-    if (files.length === 0) return null;
-
-    const newest = files[0];
-    const creds = parseGoogleCredentialsFile(newest.path);
-    return { ...creds, path: newest.path };
-  } catch {
-    return null;
-  }
-}
-
 // ── Gmail flow ───────────────────────────────────────────────────────────────
 
 async function connectGmail(credentialsFile?: string): Promise<void> {
@@ -141,25 +110,10 @@ async function connectGmail(credentialsFile?: string): Promise<void> {
   }
 
   // Guide users to create their own Google Cloud project if no credentials are set.
+  // Credential file discovery is handled by the agent via platform knowledge and
+  // agentic tools (shell_execute, file_read) — not by this CLI command.
   const usingDefaultClientId = clientId === DEFAULT_GOOGLE_CLIENT_ID;
   if (usingDefaultClientId || !clientSecret) {
-    // ── Path 2: Auto-discover from ~/Downloads ───────────────────────────
-    const discovered = await discoverGoogleCredentials();
-    if (discovered) {
-      console.log(`\n  ${chalk.green('\u2713')}  Found Google credentials: ${chalk.cyan(path.basename(discovered.path))}`);
-      console.log(`     Client ID: ${discovered.clientId.slice(0, 20)}...`);
-
-      const useIt = await prompt(`\n  ${accent('Use these credentials? (Y/n):')} `);
-      if (!useIt || useIt.toLowerCase() === 'y' || useIt.toLowerCase() === 'yes') {
-        clientId = discovered.clientId;
-        clientSecret = discovered.clientSecret;
-      }
-    }
-  }
-
-  // Re-check after auto-discovery — if still on defaults, show the manual guide.
-  const stillDefault = clientId === DEFAULT_GOOGLE_CLIENT_ID;
-  if (stillDefault || !clientSecret) {
     console.log(`\n  ${chalk.yellow('\u26A0')}  ${chalk.yellow('Gmail requires your own Google Cloud credentials.')}`);
     console.log(`     Our app is not yet verified by Google, so you need your own project.\n`);
     console.log(`     ${accent('Quick setup (5 minutes):')}`);
@@ -171,13 +125,13 @@ async function connectGmail(credentialsFile?: string): Promise<void> {
     console.log(`     6. Download the JSON file (${accent('client_secret_*.json')})\n`);
     console.log(`     Then either:`);
     console.log(`     ${accent('a)')} Run: ${muted('wunderland connect gmail --credentials ~/Downloads/client_secret_*.json')}`);
-    console.log(`     ${accent('b)')} Drop the file in ~/Downloads and re-run ${muted('wunderland connect gmail')} (auto-detected)`);
-    console.log(`     ${accent('c)')} Set environment variables:`);
+    console.log(`     ${accent('b)')} Set environment variables:`);
     console.log(`        ${muted('export GOOGLE_CLIENT_ID=your-client-id')}`);
     console.log(`        ${muted('export GOOGLE_CLIENT_SECRET=your-secret')}`);
     console.log(`        ${muted('wunderland connect gmail')}\n`);
+    console.log(`     ${accent('c)')} Ask the agent: ${muted('"help me set up Gmail"')} in ${muted('wunderland chat')}\n`);
 
-    if (stillDefault) {
+    if (usingDefaultClientId) {
       console.log(`     ${chalk.red('Cannot proceed without your own credentials.')}\n`);
       return;
     }
