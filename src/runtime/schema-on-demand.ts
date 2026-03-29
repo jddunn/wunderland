@@ -8,7 +8,7 @@
 import { getAvailableExtensions, type ExtensionInfo } from '@framers/agentos-extensions-registry';
 
 import type { ToolInstance } from './tool-calling.js';
-import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from '../cli/security/runtime-policy.js';
+import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from './policy.js';
 import { normalizeExtensionName } from '../cli/extensions/aliases.js';
 import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
 
