@@ -741,63 +741,7 @@ const FULL_BANNER_COMMANDS = new Set(['setup', 'init']);
 
 // ── Natural language intent router ──────────────────────────────────────────
 
-/** Intent categories recognized by the NL router. */
-type NLIntent = 'create' | 'agency' | 'mission' | 'chat' | 'help';
-
-/**
- * Classify free-form user input into a routing intent using keyword heuristics.
- * No LLM call — deterministic and instant.
- *
- * Priority order matters: agency > create > mission > help > chat (default).
- */
-function classifyIntent(input: string): NLIntent {
-  const lower = input.toLowerCase();
-
-  // Team / agency creation — check BEFORE single-agent creation so
-  // "Create a team: researcher, analyst" doesn't route to `create`.
-  if (
-    /\b(team|crew|group|squad|agency|collective|collaborate|coordinate)\b/i.test(lower) &&
-    /\b(build|create|make|set\s*up|scaffold|assemble|form)\b/i.test(lower)
-  ) {
-    return 'agency';
-  }
-
-  // Single-agent creation intents
-  if (
-    /\b(build|create|make|set\s*up|scaffold|generate|deploy)\b/i.test(lower) &&
-    /\b(agent|bot|assistant|wunderbot|wunder\s*bot)\b/i.test(lower)
-  ) {
-    return 'create';
-  }
-
-  // Mission intents — complex multi-step goals (longer input implies mission scope)
-  if (
-    /\b(research|investigate|analyze|compare|write\s+a\s+report|generate\s+a\s+report|find\s+and\s+summarize|monitor\s+and|scrape\s+and|collect\s+and)\b/i.test(lower) &&
-    lower.length > 50
-  ) {
-    return 'mission';
-  }
-
-  // Help / question intents — anything that reads like a question
-  if (
-    /\b(what|how|why|where|which|can\s+you|do\s+you|does\s+it|is\s+there|tell\s+me|explain|show\s+me)\b/i.test(lower) &&
-    /\?$/.test(input.trim())
-  ) {
-    return 'help';
-  }
-
-  // Default: treat as a conversational chat message
-  return 'chat';
-}
-
-/** Human-readable labels for each intent, shown in the routing message. */
-const INTENT_LABELS: Record<NLIntent, { label: string; command: string }> = {
-  create:  { label: 'create agent',      command: 'wunderland create' },
-  agency:  { label: 'create agency',     command: 'wunderland agency create' },
-  mission: { label: 'run mission',       command: 'wunderland mission' },
-  chat:    { label: 'chat',              command: 'wunderland chat' },
-  help:    { label: 'answer question',   command: 'wunderland chat' },
-};
+import { classifyIntent, INTENT_LABELS, type NLIntent } from './nl-intent-classifier.js';
 
 /**
  * Route unrecognized CLI input through intent classification and dispatch
