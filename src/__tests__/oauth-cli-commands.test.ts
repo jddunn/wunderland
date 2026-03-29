@@ -52,7 +52,7 @@ describe('wunderland login', () => {
   });
 
   it('rejects unsupported providers', async () => {
-    const { default: cmdLogin } = await import('../cli/commands/login.js');
+    const { default: cmdLogin } = await import('../cli/commands/auth/login.js');
     const cap = captureConsole();
     try {
       await cmdLogin([], { provider: 'nonexistent-provider' }, globals);
@@ -74,7 +74,7 @@ describe('wunderland login', () => {
     }));
 
     // Re-import so the mock takes effect
-    const { default: cmdLogin } = await import('../cli/commands/login.js');
+    const { default: cmdLogin } = await import('../cli/commands/auth/login.js');
     const cap = captureConsole();
     try {
       await cmdLogin([], {}, globals);
@@ -97,7 +97,7 @@ describe('wunderland login', () => {
       select: vi.fn(async () => 'openai-oauth'),
     }));
 
-    const { default: cmdLogin } = await import('../cli/commands/login.js');
+    const { default: cmdLogin } = await import('../cli/commands/auth/login.js');
     const cap = captureConsole();
     try {
       await cmdLogin([], {}, globals);
@@ -123,7 +123,7 @@ describe('wunderland login', () => {
       FileTokenStore: class {},
     }));
 
-    const { default: cmdLogin } = await import('../cli/commands/login.js');
+    const { default: cmdLogin } = await import('../cli/commands/auth/login.js');
     const cap = captureConsole();
     try {
       await cmdLogin([], { provider: 'linkedin', 'client-id': 'cid', 'client-secret': 'secret' }, globals);
@@ -143,7 +143,7 @@ describe('wunderland login', () => {
       },
     }));
 
-    const { default: cmdLogin } = await import('../cli/commands/login.js');
+    const { default: cmdLogin } = await import('../cli/commands/auth/login.js');
     const cap = captureConsole();
     try {
       await cmdLogin(
@@ -191,7 +191,7 @@ describe('wunderland logout', () => {
       },
     }));
 
-    const { default: cmdLogout } = await import('../cli/commands/logout.js');
+    const { default: cmdLogout } = await import('../cli/commands/auth/logout.js');
     const cap = captureConsole();
     try {
       await cmdLogout([], {}, globals);
@@ -214,7 +214,7 @@ describe('wunderland logout', () => {
       },
     }));
 
-    const { default: cmdLogout } = await import('../cli/commands/logout.js');
+    const { default: cmdLogout } = await import('../cli/commands/auth/logout.js');
     const cap = captureConsole();
     try {
       await cmdLogout([], {}, globals);
@@ -235,7 +235,7 @@ describe('wunderland logout', () => {
       },
     }));
 
-    const { default: cmdLogout } = await import('../cli/commands/logout.js');
+    const { default: cmdLogout } = await import('../cli/commands/auth/logout.js');
     const cap = captureConsole();
     try {
       await cmdLogout([], { provider: 'custom-provider' }, globals);
@@ -270,7 +270,7 @@ describe('wunderland auth-status', () => {
       isTokenValid: vi.fn(() => false),
     }));
 
-    const { default: cmdAuthStatus } = await import('../cli/commands/auth-status.js');
+    const { default: cmdAuthStatus } = await import('../cli/commands/auth/auth-status.js');
     const cap = captureConsole();
     try {
       await cmdAuthStatus([], {}, globals);
@@ -295,7 +295,7 @@ describe('wunderland auth-status', () => {
       isTokenValid: vi.fn(() => true),
     }));
 
-    const { default: cmdAuthStatus } = await import('../cli/commands/auth-status.js');
+    const { default: cmdAuthStatus } = await import('../cli/commands/auth/auth-status.js');
     const cap = captureConsole();
     try {
       await cmdAuthStatus([], {}, globals);
@@ -320,7 +320,7 @@ describe('wunderland auth-status', () => {
       isTokenValid: vi.fn(() => false),
     }));
 
-    const { default: cmdAuthStatus } = await import('../cli/commands/auth-status.js');
+    const { default: cmdAuthStatus } = await import('../cli/commands/auth/auth-status.js');
     const cap = captureConsole();
     try {
       await cmdAuthStatus([], {}, globals);
@@ -343,7 +343,7 @@ describe('wunderland auth-status', () => {
       isTokenValid: vi.fn(() => false),
     }));
 
-    const { default: cmdAuthStatus } = await import('../cli/commands/auth-status.js');
+    const { default: cmdAuthStatus } = await import('../cli/commands/auth/auth-status.js');
     const cap = captureConsole();
     try {
       await cmdAuthStatus([], {}, globals);
