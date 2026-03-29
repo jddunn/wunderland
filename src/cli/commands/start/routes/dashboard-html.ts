@@ -167,6 +167,14 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
       }
       .auth-card input { width: 280px; max-width: 100%; }
       .auth-hint { font-size: 11px; color: var(--muted); }
+      .secret-wrap { position: relative; display: inline-flex; align-items: center; }
+      .secret-wrap input { padding-right: 32px; }
+      .eye-toggle {
+        position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+        background: none; border: none; color: var(--muted); cursor: pointer;
+        font-size: 14px; padding: 2px 4px; line-height: 1;
+      }
+      .eye-toggle:hover { color: var(--accent); }
 
       /* ── Card ────────────────────────────────────────────────────────── */
       .card {
@@ -475,9 +483,12 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
       <!-- Auth (shared across all tabs) -->
       <div class="auth-card" id="authCard">
         <label>Admin Secret</label>
-        <input id="secretInput" type="password" placeholder="Paste admin secret from server logs" />
+        <span class="secret-wrap">
+          <input id="secretInput" type="password" placeholder="Paste from terminal output" />
+          <button class="eye-toggle" id="eyeToggle" type="button" title="Show/hide secret" onclick="toggleSecretVisibility()">&#128065;</button>
+        </span>
         <button class="ok" id="connectBtn">Connect</button>
-        <span class="auth-hint" id="authHint"></span>
+        <span class="auth-hint" id="authHint">Find this in the terminal where you ran <code>wunderland start</code></span>
       </div>
 
       <!-- ── Overview tab ──────────────────────────────────────────────── -->
@@ -615,6 +626,21 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
       const events = [];
       const MAX_EVENTS = 200;
 
+      /* ── Secret visibility toggle ────────────────────────────────────── */
+      function toggleSecretVisibility() {
+        const inp = $('#secretInput');
+        const eye = $('#eyeToggle');
+        if (inp.type === 'password') {
+          inp.type = 'text';
+          eye.textContent = '\\u{1F441}\\u{FE0F}';
+          eye.title = 'Hide secret';
+        } else {
+          inp.type = 'password';
+          eye.textContent = '\\u{1F441}';
+          eye.title = 'Show secret';
+        }
+      }
+
       /* ── Auth ────────────────────────────────────────────────────────── */
       const secretInput = $('#secretInput');
       const authHint = $('#authHint');
@@ -658,7 +684,11 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
         };
         if (body) opts.body = JSON.stringify(body);
         const res = await fetch(url.toString(), opts);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) {
+          let msg = 'HTTP ' + res.status;
+          try { const j = await res.json(); msg = j.error || j.message || msg; } catch {}
+          throw new Error(msg);
+        }
         return res.json();
       }
 
