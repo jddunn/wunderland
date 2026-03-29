@@ -46,6 +46,8 @@ const SAFE_NAVIGATION_TOOLS = new Set([
   'discover_capabilities',
   'web_search',
   'news_search',
+  'extensions_list',
+  'extensions_status',
 ]);
 
 /**
