@@ -18,6 +18,7 @@ import {
   resolveWunderlandTextModel,
 } from '../../../config/provider-defaults.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime/workspace.js';
+import { buildFallbackChain } from '@framers/agentos';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
   const { flags, globals, cfg, policy, seedId } = ctx;
@@ -88,26 +89,34 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   const portRaw = typeof flags['port'] === 'string' ? flags['port'] : (process.env['PORT'] || '');
   const port = Number(portRaw) || 3777;
 
-  // Build fallback chain from ALL available API keys (skip the primary provider)
+  // Build fallback chain from ALL available API keys (skip the primary provider).
+  // Uses the agentos-level buildFallbackChain() for consistent provider discovery.
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
-  const fallbackCandidates: Array<{ id: string; config: LLMProviderConfig }> = [];
-  if (process.env['OPENAI_API_KEY'] && providerId !== 'openai') {
-    fallbackCandidates.push({ id: 'openai', config: { apiKey: process.env['OPENAI_API_KEY'], model: 'gpt-4o-mini' } });
-  }
-  if (process.env['ANTHROPIC_API_KEY'] && providerId !== 'anthropic') {
-    fallbackCandidates.push({ id: 'anthropic', config: { apiKey: process.env['ANTHROPIC_API_KEY'], model: 'claude-haiku-4-5-20251001', baseUrl: 'https://api.anthropic.com/v1' } });
-  }
-  if (openrouterApiKey && providerId !== 'openrouter') {
-    fallbackCandidates.push({ id: 'openrouter', config: {
-      apiKey: openrouterApiKey,
-      model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
-    } });
-  }
-  if (process.env['GEMINI_API_KEY'] && providerId !== 'gemini') {
-    fallbackCandidates.push({ id: 'gemini', config: { apiKey: process.env['GEMINI_API_KEY'], model: 'gemini-2.5-flash' } });
-  }
+  const fallbackChain = buildFallbackChain(providerId);
+
+  // Map the agentos FallbackProviderEntry chain into the legacy LLMProviderConfig
+  // format expected by the wunderland tool-calling runtime.
+  const fallbackCandidates: Array<{ id: string; config: LLMProviderConfig }> = fallbackChain.map((fb) => {
+    if (fb.provider === 'openai') {
+      return { id: 'openai', config: { apiKey: process.env['OPENAI_API_KEY']!, model: fb.model ?? 'gpt-4o-mini' } };
+    }
+    if (fb.provider === 'anthropic') {
+      return { id: 'anthropic', config: { apiKey: process.env['ANTHROPIC_API_KEY']!, model: fb.model ?? 'claude-haiku-4-5-20251001', baseUrl: 'https://api.anthropic.com/v1' } };
+    }
+    if (fb.provider === 'openrouter') {
+      return { id: 'openrouter', config: {
+        apiKey: openrouterApiKey,
+        model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
+      } };
+    }
+    if (fb.provider === 'gemini') {
+      return { id: 'gemini', config: { apiKey: process.env['GEMINI_API_KEY']!, model: fb.model ?? 'gemini-2.5-flash' } };
+    }
+    // Generic fallback entry for any other provider discovered by buildFallbackChain
+    return { id: fb.provider, config: { apiKey: '', model: fb.model ?? '' } };
+  });
   // Use first available candidate as the fallback (cheap models preferred)
   const openrouterFallback: LLMProviderConfig | undefined = fallbackCandidates[0]?.config;
 
@@ -177,6 +186,7 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   ctx.model = model;
   ctx.port = port;
   ctx.openrouterFallback = openrouterFallback;
+  ctx.fallbackChain = fallbackChain;
   ctx.dangerouslySkipPermissions = dangerouslySkipPermissions;
   ctx.dangerouslySkipCommandSafety = dangerouslySkipCommandSafety;
   ctx.autoApproveToolCalls = autoApproveToolCalls;
