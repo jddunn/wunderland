@@ -1,12 +1,12 @@
 /**
  * @fileoverview Natural language intent classifier for CLI routing.
  *
- * Classifies free-form user input into one of five routing intents using
+ * Classifies free-form user input into one of six routing intents using
  * keyword heuristics. No LLM call — deterministic and instant (~0ms).
  *
  * The classifier is used by the CLI entry point to route unrecognized
  * commands through the appropriate handler (create, agency, mission,
- * chat, or help).
+ * connect, chat, or help).
  *
  * @module wunderland/cli/nl-intent-classifier
  */
@@ -14,7 +14,7 @@
 // ── Types ──────────────────────────────────────────────────────────────────
 
 /** Intent categories recognized by the NL router. */
-export type NLIntent = 'create' | 'agency' | 'mission' | 'chat' | 'help';
+export type NLIntent = 'create' | 'agency' | 'mission' | 'connect' | 'chat' | 'help';
 
 /** Human-readable label and equivalent CLI command for each intent. */
 export interface IntentLabel {
@@ -28,12 +28,14 @@ export interface IntentLabel {
  * Classify free-form user input into a routing intent using keyword heuristics.
  * No LLM call — deterministic and instant.
  *
- * **Priority order matters**: agency > create > mission > help > chat (default).
+ * **Priority order matters**: agency > create > connect > mission > help > chat (default).
  *
  * - **agency**: input mentions both a collective noun (team, crew, squad, etc.)
  *   AND a creation verb (build, create, make, etc.).
  * - **create**: input mentions both a creation verb AND an agent noun
  *   (agent, bot, assistant, etc.).
+ * - **connect**: input mentions a connection verb AND a service keyword (gmail,
+ *   email, google, oauth), or references credential files / client secrets.
  * - **mission**: input contains a research/investigation verb AND is longer
  *   than 50 characters (short inputs are more likely casual questions).
  * - **help**: input contains a question word AND ends with a question mark.
@@ -60,6 +62,21 @@ export function classifyIntent(input: string): NLIntent {
     /\b(agent|bot|assistant|wunderbot|wunder\s*bot)\b/i.test(lower)
   ) {
     return 'create';
+  }
+
+  // OAuth / service connection intents — Gmail, email, Google credentials
+  if (
+    /\b(connect|set\s*up|configure|link|add|enable)\b/i.test(lower) &&
+    /\b(gmail|email|google|oauth|calendar)\b/i.test(lower)
+  ) {
+    return 'connect';
+  }
+  // Also match credential file references (e.g. "use the client secret I downloaded")
+  if (
+    /\b(client.secret|credential|oauth)\b/i.test(lower) &&
+    /\b(download|file|json|use|import|load)\b/i.test(lower)
+  ) {
+    return 'connect';
   }
 
   // Mission intents — complex multi-step goals (longer input implies mission scope)
@@ -89,6 +106,7 @@ export const INTENT_LABELS: Record<NLIntent, IntentLabel> = {
   create:  { label: 'create agent',    command: 'wunderland create' },
   agency:  { label: 'create agency',   command: 'wunderland agency create' },
   mission: { label: 'run mission',     command: 'wunderland mission' },
+  connect: { label: 'connect service', command: 'wunderland connect gmail' },
   chat:    { label: 'chat',            command: 'wunderland chat' },
   help:    { label: 'answer question', command: 'wunderland chat' },
 };
