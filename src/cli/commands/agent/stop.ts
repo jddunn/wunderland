@@ -3,9 +3,9 @@
  * @module wunderland/cli/commands/stop
  */
 
-import type { GlobalFlags } from '../types.js';
-import { accent } from '../ui/theme.js';
-import * as fmt from '../ui/format.js';
+import type { GlobalFlags } from '../../types.js';
+import { accent } from '../../ui/theme.js';
+import * as fmt from '../../ui/format.js';
 import {
   cleanStaleDaemons,
   readAllDaemons,
@@ -13,7 +13,7 @@ import {
   isDaemonAlive,
   resolveDaemon,
   type DaemonInfo,
-} from '../daemon/daemon-state.js';
+} from '../../daemon/daemon-state.js';
 
 const GRACEFUL_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 500;
