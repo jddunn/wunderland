@@ -4,7 +4,7 @@ import {
   normalizeExtensionList,
   normalizeExtensionName,
 } from '../cli/extensions/aliases.js';
-import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
+import { createEnvSecretResolver } from '../security/env-secrets.js';
 
 describe('extension aliases', () => {
   it('normalizes google-calendar to calendar-google', () => {
