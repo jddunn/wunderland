@@ -15,8 +15,8 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Wunderland Dashboard</title>
     <style>
-      /* ── CSS Variables (shared with /pairing and /hitl) ──────────────── */
-      :root {
+      /* ── CSS Variables — dark mode (default) ────────────────────────── */
+      :root, [data-theme="dark"] {
         --bg: #0b1020;
         --panel: #111833;
         --text: #e8ecff;
@@ -27,6 +27,35 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
         --warn: #ffd43b;
         --font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
         --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        --bg-gradient: radial-gradient(1200px 800px at 20% 20%, #18244a, var(--bg));
+        --header-bg: rgba(11,16,32,0.85);
+        --tabs-bg: rgba(11,16,32,0.6);
+        --card-bg: rgba(17,24,51,0.78);
+        --input-bg: rgba(0,0,0,0.22);
+        --border: rgba(255,255,255,0.10);
+        --border-subtle: rgba(255,255,255,0.06);
+        --border-hover: rgba(255,255,255,0.14);
+        --shadow: rgba(0,0,0,0.22);
+      }
+      /* ── Light mode ────────────────────────────────────────────────── */
+      [data-theme="light"] {
+        --bg: #f5f6fa;
+        --panel: #ffffff;
+        --text: #1a1e2e;
+        --muted: #5c6380;
+        --accent: #0e9384;
+        --danger: #dc3545;
+        --ok: #198754;
+        --warn: #cc8a00;
+        --bg-gradient: linear-gradient(135deg, #eef1f8, #f5f6fa);
+        --header-bg: rgba(255,255,255,0.88);
+        --tabs-bg: rgba(245,246,250,0.9);
+        --card-bg: rgba(255,255,255,0.92);
+        --input-bg: rgba(0,0,0,0.04);
+        --border: rgba(0,0,0,0.10);
+        --border-subtle: rgba(0,0,0,0.06);
+        --border-hover: rgba(0,0,0,0.18);
+        --shadow: rgba(0,0,0,0.06);
       }
 
       /* ── Reset & base ───────────────────────────────────────────────── */
@@ -34,9 +63,10 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
       body {
         margin: 0;
         font-family: var(--font-sans);
-        background: radial-gradient(1200px 800px at 20% 20%, #18244a, var(--bg));
+        background: var(--bg-gradient);
         color: var(--text);
         min-height: 100vh;
+        transition: background 0.3s, color 0.3s;
       }
 
       /* ── Header ─────────────────────────────────────────────────────── */
@@ -46,7 +76,7 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
         backdrop-filter: blur(6px);
         position: sticky;
         top: 0;
-        background: rgba(11,16,32,0.85);
+        background: var(--header-bg);
         z-index: 10;
         display: flex;
         align-items: center;
@@ -61,7 +91,7 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
         gap: 6px;
         padding: 4px 10px;
         border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.14);
+        border: 1px solid var(--border-hover);
         font-size: 11px;
         color: var(--muted);
       }
@@ -79,8 +109,8 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
         display: flex;
         gap: 2px;
         padding: 0 20px;
-        background: rgba(11,16,32,0.6);
-        border-bottom: 1px solid rgba(255,255,255,0.06);
+        background: var(--tabs-bg);
+        border-bottom: 1px solid var(--border-subtle);
         overflow-x: auto;
       }
       .tab {
@@ -111,8 +141,8 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
 
       /* ── Auth card ──────────────────────────────────────────────────── */
       .auth-card {
-        background: rgba(17,24,51,0.78);
-        border: 1px solid rgba(255,255,255,0.10);
+        background: var(--card-bg);
+        border: 1px solid var(--border);
         border-radius: 12px;
         padding: 14px;
         margin-bottom: 16px;
@@ -124,8 +154,8 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
       .auth-card label { font-size: 12px; color: var(--muted); font-weight: 600; }
       input, textarea {
         border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(0,0,0,0.22);
+        border: 1px solid var(--border-hover);
+        background: var(--input-bg);
         color: var(--text);
         padding: 8px 10px;
         font-family: var(--font-sans);
@@ -140,11 +170,11 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
 
       /* ── Card ────────────────────────────────────────────────────────── */
       .card {
-        background: rgba(17,24,51,0.78);
-        border: 1px solid rgba(255,255,255,0.10);
+        background: var(--card-bg);
+        border: 1px solid var(--border);
         border-radius: 12px;
         padding: 14px;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.22);
+        box-shadow: 0 20px 40px var(--shadow);
         margin-bottom: 16px;
       }
       .card h2 {
@@ -401,6 +431,20 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+      /* ── Theme toggle ──────────────────────────────────────────────── */
+      .theme-toggle {
+        background: none;
+        border: 1px solid var(--border-hover);
+        border-radius: 8px;
+        padding: 6px 8px;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1;
+        transition: color 0.2s, border-color 0.2s;
+      }
+      .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
     </style>
   </head>
   <body>
@@ -413,6 +457,7 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
           <span id="connStatus">disconnected</span>
         </span>
       </div>
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#9790;</button>
     </header>
 
     <!-- ── Tab bar ─────────────────────────────────────────────────────── -->
@@ -542,6 +587,25 @@ export const DASHBOARD_PAGE_HTML = `<!doctype html>
       const $ = (sel) => document.querySelector(sel);
       const $$ = (sel) => document.querySelectorAll(sel);
       const server = location.origin;
+
+      /* ── Theme (light/dark) ────────────────────────────────────────── */
+      function getPreferredTheme() {
+        const saved = localStorage.getItem('wunderland_dashboard_theme');
+        if (saved) return saved;
+        return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      function applyTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        const btn = $('#themeToggle');
+        if (btn) btn.textContent = t === 'light' ? '\\u2600' : '\\u263E';
+      }
+      function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('wunderland_dashboard_theme', next);
+        applyTheme(next);
+      }
+      applyTheme(getPreferredTheme());
 
       /* ── State ───────────────────────────────────────────────────────── */
       let secret = localStorage.getItem('wunderland_hitl_secret') || '';
