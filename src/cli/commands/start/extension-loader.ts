@@ -9,7 +9,7 @@ import * as fmt from '../../ui/format.js';
 import { type ToolInstance, getGuardrailsInstance } from '../../../runtime/tool-calling.js';
 import { createSchemaOnDemandTools } from '../../../runtime/schema-on-demand.js';
 import { filterToolMapByPolicy } from '../../../runtime/policy.js';
-import { createEnvSecretResolver } from '../../security/env-secrets.js';
+import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { normalizeExtensionList } from '../../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../../extensions/settings.js';
 import { createConfiguredRagTools } from '../../../rag/runtime-tools.js';
