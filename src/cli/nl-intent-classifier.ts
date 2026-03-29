@@ -35,7 +35,9 @@ export interface IntentLabel {
  * - **create**: input mentions both a creation verb AND an agent noun
  *   (agent, bot, assistant, etc.).
  * - **connect**: input mentions a connection verb AND a service keyword (gmail,
- *   email, google, oauth), or references credential files / client secrets.
+ *   email, google, oauth, whatsapp, slack, signal), or references credential
+ *   files / client secrets. General credential questions ("how do I add my
+ *   API keys?") route to help/chat so the agent can guide interactively.
  * - **mission**: input contains a research/investigation verb AND is longer
  *   than 50 characters (short inputs are more likely casual questions).
  * - **help**: input contains a question word AND ends with a question mark.
@@ -64,10 +66,10 @@ export function classifyIntent(input: string): NLIntent {
     return 'create';
   }
 
-  // OAuth / service connection intents — Gmail, email, Google credentials
+  // OAuth / service connection intents — Gmail, WhatsApp, Slack, Signal, email
   if (
     /\b(connect|set\s*up|configure|link|add|enable)\b/i.test(lower) &&
-    /\b(gmail|email|google|oauth|calendar)\b/i.test(lower)
+    /\b(gmail|email|google|oauth|calendar|whatsapp|slack|signal)\b/i.test(lower)
   ) {
     return 'connect';
   }
@@ -76,6 +78,14 @@ export function classifyIntent(input: string): NLIntent {
     /\b(client.secret|credential|oauth)\b/i.test(lower) &&
     /\b(download|file|json|use|import|load)\b/i.test(lower)
   ) {
+    return 'connect';
+  }
+  // "I have a client secret file" — direct credential file mention
+  if (/\bclient.secret\s*(file)?\b/i.test(lower) && /\b(have|got|downloaded)\b/i.test(lower)) {
+    return 'connect';
+  }
+  // "connect my email" — informal email setup intent
+  if (/\bconnect\s+(my\s+)?email\b/i.test(lower)) {
     return 'connect';
   }
 
