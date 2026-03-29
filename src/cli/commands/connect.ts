@@ -58,14 +58,28 @@ async function connectGmail(): Promise<void> {
   const port = 19832;
   const redirectUri = `http://localhost:${port}/callback`;
 
-  // Warn if client_secret is missing — required for Web Application OAuth clients.
-  if (!clientSecret) {
-    console.log(`\n  ${chalk.yellow('⚠')}  ${chalk.yellow('GOOGLE_CLIENT_SECRET is not set.')}`);
-    console.log(`     If your Google Cloud Console OAuth client is type "Web application",`);
-    console.log(`     you must set ${accent('GOOGLE_CLIENT_SECRET')} in your .env file.`);
-    console.log(`     Desktop app clients work without it (PKCE only).\n`);
-    console.log(`     Set it with: ${muted('export GOOGLE_CLIENT_SECRET=your-secret-here')}`);
-    console.log(`     Or add to .env: ${muted('GOOGLE_CLIENT_SECRET=your-secret-here')}\n`);
+  // Guide users to create their own Google Cloud project if no credentials are set.
+  const usingDefaultClientId = clientId === DEFAULT_GOOGLE_CLIENT_ID;
+  if (usingDefaultClientId || !clientSecret) {
+    console.log(`\n  ${chalk.yellow('⚠')}  ${chalk.yellow('Gmail requires your own Google Cloud credentials.')}`);
+    console.log(`     Our app is not yet verified by Google, so you need your own project.\n`);
+    console.log(`     ${accent('Quick setup (5 minutes):')}`);
+    console.log(`     1. Go to ${muted('https://console.cloud.google.com/apis/credentials')}`);
+    console.log(`     2. Create a project (or select existing)`);
+    console.log(`     3. Enable the ${accent('Gmail API')}: ${muted('https://console.cloud.google.com/apis/library/gmail.googleapis.com')}`);
+    console.log(`     4. Go to ${accent('Credentials')} → ${accent('Create Credentials')} → ${accent('OAuth client ID')}`);
+    console.log(`     5. Application type: ${accent('Web application')}`);
+    console.log(`     6. Add authorized redirect URI: ${accent(`http://localhost:${port}/callback`)}`);
+    console.log(`     7. Copy the ${accent('Client ID')} and ${accent('Client Secret')}\n`);
+    console.log(`     Then set them in your .env or shell:`);
+    console.log(`     ${muted('export GOOGLE_CLIENT_ID=your-client-id')}`);
+    console.log(`     ${muted('export GOOGLE_CLIENT_SECRET=your-client-secret')}\n`);
+
+    if (usingDefaultClientId) {
+      console.log(`     ${chalk.red('Cannot proceed without your own credentials.')}`);
+      console.log(`     ${muted('Re-run after setting GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.')}\n`);
+      return;
+    }
   }
 
   console.log(`\n  ${accent('Connecting Gmail...')}`);
