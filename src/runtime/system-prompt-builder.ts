@@ -175,17 +175,29 @@ export function buildAgenticSystemPrompt(opts: SystemPromptOptions): string {
 
   // 9. Approval mode.
   if (autoApproveToolCalls) {
-    parts.push('All tool calls are auto-approved (fully autonomous mode).');
+    parts.push(
+      'All tool calls are auto-approved (fully autonomous mode). ' +
+        'Write files directly with file_write — no need to request folder access first.'
+    );
   } else {
+    // At balanced/strict/paranoid tiers, the agent should use request_folder_access
+    // when denied. At permissive/dangerous, guardrails auto-grant so the agent
+    // should just call file_write directly.
+    const isOpenTier = policy.securityTier === 'permissive' || policy.securityTier === 'dangerous';
+    const folderPermBlock = isOpenTier
+      ? 'FOLDER PERMISSIONS: Your security tier allows broad filesystem access. ' +
+        'Write files directly with file_write — the guardrails will auto-grant access.'
+      : 'FOLDER PERMISSIONS: If a filesystem tool is denied due to folder permissions, ' +
+        'use the request_folder_access tool to ask the user for permission. Explain WHY you need access. ' +
+        'If approved, retry the original operation. If denied, acknowledge that the user chose not to grant access. ' +
+        "NEVER say \"I don't have permission\" and give up — always request access first.";
+
     parts.push(
       'Tool authorization is handled automatically by the runtime. Call tools freely — the system will handle any required approvals. ' +
         'NEVER say "I cannot create files", "I cannot run commands", or "I don\'t have the capability". ' +
         'You DO have shell_execute, file_write, file_read, browser_navigate, and other tools available. Always attempt the tool call. ' +
         'If a tool call fails or is denied, explain that the action requires approval and suggest the user enable auto-approve mode with --auto-approve-tools.\n\n' +
-        'FOLDER PERMISSIONS: If a filesystem tool is denied due to folder permissions, ' +
-        'use the request_folder_access tool to ask the user for permission. Explain WHY you need access. ' +
-        'If approved, retry the original operation. If denied, acknowledge that the user chose not to grant access. ' +
-        'NEVER say "I don\'t have permission" and give up — always request access first.'
+        folderPermBlock
     );
   }
   if (turnApprovalMode && turnApprovalMode !== 'off') {
