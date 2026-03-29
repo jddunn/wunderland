@@ -58,6 +58,16 @@ async function connectGmail(): Promise<void> {
   const port = 19832;
   const redirectUri = `http://localhost:${port}/callback`;
 
+  // Warn if client_secret is missing — required for Web Application OAuth clients.
+  if (!clientSecret) {
+    console.log(`\n  ${chalk.yellow('⚠')}  ${chalk.yellow('GOOGLE_CLIENT_SECRET is not set.')}`);
+    console.log(`     If your Google Cloud Console OAuth client is type "Web application",`);
+    console.log(`     you must set ${accent('GOOGLE_CLIENT_SECRET')} in your .env file.`);
+    console.log(`     Desktop app clients work without it (PKCE only).\n`);
+    console.log(`     Set it with: ${muted('export GOOGLE_CLIENT_SECRET=your-secret-here')}`);
+    console.log(`     Or add to .env: ${muted('GOOGLE_CLIENT_SECRET=your-secret-here')}\n`);
+  }
+
   console.log(`\n  ${accent('Connecting Gmail...')}`);
   console.log(`  ${muted('Opening browser for Google authorization...')}\n`);
 
@@ -113,11 +123,11 @@ async function connectGmail(): Promise<void> {
       openBrowser(authUrl);
     });
 
-    // Timeout after 5 minutes.
+    // Timeout after 10 minutes.
     setTimeout(() => {
       callbackServer.close();
-      reject(new Error('OAuth timeout — no response within 5 minutes'));
-    }, 300_000);
+      reject(new Error('OAuth timeout — no response within 10 minutes'));
+    }, 600_000);
   });
 
   console.log(`  ${muted('Received authorization, exchanging for tokens...')}`);
@@ -144,6 +154,15 @@ async function connectGmail(): Promise<void> {
 
   if (!tokenRes.ok) {
     const err = await tokenRes.text();
+    if (err.includes('client_secret')) {
+      throw new Error(
+        `Token exchange failed: ${err}\n\n` +
+        `  Your Google OAuth client requires a client_secret.\n` +
+        `  Set GOOGLE_CLIENT_SECRET in your .env file:\n` +
+        `    GOOGLE_CLIENT_SECRET=your-secret-here\n` +
+        `  Find it at: https://console.cloud.google.com/apis/credentials`,
+      );
+    }
     throw new Error(`Token exchange failed: ${err}`);
   }
 
