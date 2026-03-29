@@ -741,7 +741,7 @@ const FULL_BANNER_COMMANDS = new Set(['setup', 'init']);
 
 // ── Natural language intent router ──────────────────────────────────────────
 
-import { classifyIntent, INTENT_LABELS, type NLIntent } from './nl-intent-classifier.js';
+import { classifyIntent, INTENT_LABELS } from './nl-intent-classifier.js';
 
 /**
  * Route unrecognized CLI input through intent classification and dispatch
