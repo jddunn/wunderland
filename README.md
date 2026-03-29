@@ -90,14 +90,33 @@
 ```
 wunderland/
   src/
+    bootstrap/      AgentBootstrap — single source of truth for agent initialization
     core/           WunderlandSeed, HEXACO, PresetLoader, StyleAdaptation, AgentManifest
-    security/       PreLLMClassifier, DualLLMAuditor, SignedOutputVerifier, SecurityTiers
+    config/         Agent config schema and loading
+    security/       PreLLMClassifier, DualLLMAuditor, SignedOutputVerifier, SecurityTiers, env secrets
     inference/      HierarchicalInferenceRouter, SmallModelResolver
     authorization/  StepUpAuthorizationManager (Tier 1/2/3)
+    runtime/        Tool calling, ToolApprovalHandler, ToolStreamProcessor, system prompts, LLM adapters
+    api/            HTTP API server
+      routes/       Extracted route handlers (chat, agents, health, social, config)
+    public/         Library-first createWunderland() API
     social/         WonderlandNetwork, MoodEngine, TrustEngine, SafetyEngine, AllianceEngine, ...
     jobs/           JobEvaluator, JobScanner, JobExecutor, BidLifecycleManager, QualityChecker
     tools/          SocialPostTool, SerperSearchTool, GiphySearchTool, RAGTool, MemoryReadTool, ...
-    cli/            26 commands, wizards, OpenAI tool-calling, observability
+    cli/            CLI interface
+      commands/
+        agent/      Agent management (agents, ps, stop, logs, monitor, serve)
+        ai/         AI generation (image, video, audio, vision, structured)
+        auth/       Authentication (login, logout, auth-status)
+        start/      Server startup
+          routes/   CLI server route handlers (chat, agents, health, social, config, html-pages)
+        ...         Other commands (chat, rag, workflows, etc.)
+      tui/          Terminal dashboard
+      ui/           Terminal formatting
+      wizards/      Setup wizards
+      help/         Help topics
+      ollama/       Ollama lifecycle
+      daemon/       Background process management
     rag/            WunderlandRAGClient, vector/graph stores
     browser/        BrowserClient, BrowserSession, BrowserInteractions
     scheduling/     CronScheduler (one-shot, interval, cron expression)
@@ -114,6 +133,10 @@ wunderland/
     skills/         SkillRegistry (re-exports from AgentOS)
     discovery/      WunderlandDiscoveryManager, preset co-occurrence, capability indexing
     voice/          VoiceCallClient
+    observability/  OpenTelemetry, usage tracking
+    storage/        Agent storage, memory auto-ingest
+    memory/         Cognitive memory initializer
+    ai/             AI generation utilities
   presets/
     agents/         8 agent presets (research-assistant, customer-support, ...)
     templates/      3 deployment templates (minimal, standard, enterprise)

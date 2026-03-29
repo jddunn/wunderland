@@ -26,7 +26,7 @@ Markers:
 
 Reference:
 
-- `packages/wunderland/src/cli/openai/tool-calling.ts`
+- `packages/wunderland/src/runtime/tool-calling.ts`
 
 ## Human In The Loop (HITL) + Approvals
 
@@ -58,8 +58,8 @@ Notes:
 
 Reference:
 
-- `packages/wunderland/src/cli/security/runtime-policy.ts`
-- `packages/wunderland/src/cli/commands/chat.ts`
+- `packages/wunderland/src/runtime/policy.ts`
+- `packages/wunderland/src/cli/commands/chat.ts` (orchestration via `ChatREPL.ts`)
 - `packages/wunderland/src/cli/commands/start.ts`
 
 ## Filesystem + Command Guardrails
@@ -88,7 +88,7 @@ Reference:
 
 - `packages/wunderland/src/cli/commands/extensions.ts`
 - `packages/wunderland/src/cli/commands/start.ts`
-- `packages/wunderland/src/cli/commands/chat.ts`
+- `packages/wunderland/src/cli/commands/chat.ts` (delegates to `ChatREPL.ts` for the interactive loop)
 
 ### Secret resolution (Wunderland CLI convenience)
 
@@ -98,7 +98,7 @@ Reference:
 
 Reference:
 
-- `packages/wunderland/src/cli/security/env-secrets.ts`
+- `packages/wunderland/src/security/env-secrets.ts`
 
 ### Skill registry (parity)
 
