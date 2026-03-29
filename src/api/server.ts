@@ -55,12 +55,6 @@ import {
 } from '../runtime/policy.js';
 import { createEnvSecretResolver } from '../cli/security/env-secrets.js';
 import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
-import {
-  buildPersonaSessionKey,
-  createRequestScopedToolMap,
-  extractRequestedPersonaId,
-  resolveRequestScopedPersonaRuntime,
-} from '../runtime/request-persona.js';
 import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
 import { buildOllamaRuntimeOptions } from '../runtime/ollama-options.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
@@ -83,6 +77,9 @@ import type {
   WunderlandToolFailureMode,
   WunderlandWorkspace,
 } from './types.js';
+
+import { dispatchRoute } from './routes/index.js';
+import type { ServerDeps } from './routes/types.js';
 
 type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;
@@ -108,12 +105,9 @@ export {
 import {
   consoleLogger,
   toToolInstance,
-  readBody,
   sendJson,
-  isHitlAuthorized,
   inferTurnApprovalMode,
   finiteNumber,
-  HITL_PAGE_HTML, PAIRING_PAGE_HTML,
 } from "./server-helpers.js";
 
 export type WunderlandServerHandle = {
@@ -1137,8 +1131,56 @@ export async function createWunderlandServer(opts?: {
     }
   }
 
+  /* ── Assemble shared deps for extracted route handlers ─────────────────── */
+  const routeDeps: ServerDeps = {
+    seedId,
+    displayName,
+    activePersonaId,
+    selectedPersona,
+    availablePersonas: availablePersonas ?? [],
+    providerId,
+    model,
+    llmApiKey,
+    llmBaseUrl,
+    canUseLLM,
+    openrouterFallback,
+    seed,
+    cfg,
+    rawAgentConfig,
+    policy,
+    toolMap,
+    sessions,
+    systemPrompt,
+    adaptiveRuntime,
+    discoveryManager: discoveryManager!,
+    strictToolNames,
+    autoApproveToolCalls,
+    turnApprovalMode,
+    defaultTenantId,
+    workspaceAgentId,
+    workspaceBaseDir,
+    lazyTools,
+    skillsPrompt,
+    workingDirectory,
+    hitlSecret,
+    hitlManager,
+    sseClients,
+    broadcastHitlUpdate,
+    pairingEnabled,
+    pairing,
+    adapterByPlatform,
+    loadedChannelAdapters,
+    loadedHttpHandlers,
+    sessionTextLogger,
+    logger,
+    configDirOverride: opts?.configDirOverride,
+    toolApiSecret,
+    dangerouslySkipPermissions,
+  };
+
   const server = createServer(async (req, res) => {
     try {
+      /* ── CORS ───────────────────────────────────────────────────────────── */
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
       res.setHeader(
@@ -1154,533 +1196,17 @@ export async function createWunderlandServer(opts?: {
 
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
+      /* ── RAG proxy pass-through ─────────────────────────────────────────── */
       if (await maybeProxyAgentosRagRequest({ req, res, url, agentConfig: cfg, logger })) {
         return;
       }
 
-      if (req.method === 'GET' && url.pathname === '/api/agentos/personas') {
-        sendJson(res, 200, {
-          selectedPersonaId: activePersonaId !== seedId ? activePersonaId : undefined,
-          selectedPersona: selectedPersona ?? undefined,
-          personas: availablePersonas ?? [],
-        });
+      /* ── Dispatch to extracted route handlers ───────────────────────────── */
+      if (await dispatchRoute(req, res, url, routeDeps)) {
         return;
       }
 
-      if (req.method === 'GET' && url.pathname.startsWith('/api/agentos/personas/')) {
-        const personaId = decodeURIComponent(url.pathname.slice('/api/agentos/personas/'.length));
-        const persona = Array.isArray(availablePersonas)
-          ? availablePersonas.find((entry) => entry.id === personaId)
-          : undefined;
-        if (!persona) {
-          sendJson(res, 404, { error: `Persona '${personaId}' not found.` });
-          return;
-        }
-        sendJson(res, 200, { persona });
-        return;
-      }
-
-      if (url.pathname.startsWith('/pairing')) {
-        if (req.method === 'GET' && url.pathname === '/pairing') {
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(PAIRING_PAGE_HTML);
-          return;
-        }
-
-        if (!isHitlAuthorized(req, url, hitlSecret)) {
-          sendJson(res, 401, { error: 'Unauthorized' });
-          return;
-        }
-
-        const channels = Array.from(adapterByPlatform.keys());
-
-        if (req.method === 'GET' && url.pathname === '/pairing/requests') {
-          const requestsByChannel: Record<string, unknown> = {};
-          for (const channel of channels) {
-            try {
-              (requestsByChannel as any)[channel] = await pairing.listRequests(channel as any);
-            } catch {
-              (requestsByChannel as any)[channel] = [];
-            }
-          }
-          sendJson(res, 200, { pairingEnabled, channels, requestsByChannel });
-          return;
-        }
-
-        if (req.method === 'GET' && url.pathname === '/pairing/allowlist') {
-          const allowlistByChannel: Record<string, unknown> = {};
-          for (const channel of channels) {
-            try {
-              (allowlistByChannel as any)[channel] = await pairing.readAllowlist(channel as any);
-            } catch {
-              (allowlistByChannel as any)[channel] = [];
-            }
-          }
-          sendJson(res, 200, { channels, allowlistByChannel });
-          return;
-        }
-
-        if (req.method === 'POST' && url.pathname === '/pairing/approve') {
-          const body = await readBody(req);
-          const parsed = body ? JSON.parse(body) : {};
-          const channel = typeof parsed?.channel === 'string' ? parsed.channel.trim() : '';
-          const code = typeof parsed?.code === 'string' ? parsed.code.trim() : '';
-          if (!channel || !code) {
-            sendJson(res, 400, { error: 'Missing channel/code' });
-            return;
-          }
-          const result = await pairing.approveCode(channel as any, code);
-          void broadcastHitlUpdate({ type: 'pairing_approved', channel, code });
-          sendJson(res, 200, { ok: true, result });
-          return;
-        }
-
-        if (req.method === 'POST' && url.pathname === '/pairing/reject') {
-          const body = await readBody(req);
-          const parsed = body ? JSON.parse(body) : {};
-          const channel = typeof parsed?.channel === 'string' ? parsed.channel.trim() : '';
-          const code = typeof parsed?.code === 'string' ? parsed.code.trim() : '';
-          if (!channel || !code) {
-            sendJson(res, 400, { error: 'Missing channel/code' });
-            return;
-          }
-          const ok = await pairing.rejectCode(channel as any, code);
-          void broadcastHitlUpdate({ type: 'pairing_rejected', channel, code });
-          sendJson(res, 200, { ok });
-          return;
-        }
-
-        sendJson(res, 404, { error: 'Not Found' });
-        return;
-      }
-
-      if (url.pathname.startsWith('/hitl')) {
-        if (req.method === 'GET' && url.pathname === '/hitl') {
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(HITL_PAGE_HTML);
-          return;
-        }
-
-        if (!isHitlAuthorized(req, url, hitlSecret)) {
-          sendJson(res, 401, { error: 'Unauthorized' });
-          return;
-        }
-
-        if (req.method === 'GET' && url.pathname === '/hitl/pending') {
-          const pending = await hitlManager.getPendingRequests();
-          sendJson(res, 200, pending);
-          return;
-        }
-
-        if (req.method === 'GET' && url.pathname === '/hitl/stats') {
-          sendJson(res, 200, hitlManager.getStatistics());
-          return;
-        }
-
-        if (req.method === 'GET' && url.pathname === '/hitl/stream') {
-          res.writeHead(200, {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-          });
-          res.write('event: ready\\ndata: {}\\n\\n');
-          sseClients.add(res);
-
-          try {
-            const pending = await hitlManager.getPendingRequests();
-            res.write(`event: hitl\\ndata: ${JSON.stringify({ type: 'snapshot', pending })}\\n\\n`);
-          } catch {
-            // ignore
-          }
-
-          const ping = setInterval(() => {
-            try {
-              res.write(`event: ping\\ndata: ${Date.now()}\\n\\n`);
-            } catch {
-              // ignore
-            }
-          }, 15_000);
-
-          req.on('close', () => {
-            clearInterval(ping);
-            sseClients.delete(res);
-          });
-          return;
-        }
-
-        if (req.method === 'POST' && url.pathname.startsWith('/hitl/approvals/')) {
-          const parts = url.pathname.split('/').filter(Boolean);
-          const actionId = parts[2] || '';
-          const action = parts[3] || '';
-          if (!actionId || (action !== 'approve' && action !== 'reject')) {
-            sendJson(res, 404, { error: 'Not Found' });
-            return;
-          }
-          const body = await readBody(req);
-          const parsed = body ? JSON.parse(body) : {};
-          const decidedBy =
-            typeof parsed?.decidedBy === 'string' && parsed.decidedBy.trim() ? parsed.decidedBy.trim() : 'operator';
-          const rejectionReason = typeof parsed?.reason === 'string' ? parsed.reason : undefined;
-
-          await hitlManager.submitApprovalDecision({
-            actionId,
-            approved: action === 'approve',
-            decidedBy,
-            decidedAt: new Date(),
-            ...(action === 'reject' && rejectionReason ? { rejectionReason } : null),
-          });
-
-          void broadcastHitlUpdate({ type: 'approval_decision', actionId, approved: action === 'approve', decidedBy });
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        if (req.method === 'POST' && url.pathname.startsWith('/hitl/checkpoints/')) {
-          const parts = url.pathname.split('/').filter(Boolean);
-          const checkpointId = parts[2] || '';
-          const action = parts[3] || '';
-          if (!checkpointId || (action !== 'continue' && action !== 'pause' && action !== 'abort')) {
-            sendJson(res, 404, { error: 'Not Found' });
-            return;
-          }
-          const body = await readBody(req);
-          const parsed = body ? JSON.parse(body) : {};
-          const decidedBy =
-            typeof parsed?.decidedBy === 'string' && parsed.decidedBy.trim() ? parsed.decidedBy.trim() : 'operator';
-          const instructions = typeof parsed?.instructions === 'string' ? parsed.instructions : undefined;
-
-          await hitlManager.submitCheckpointDecision({
-            checkpointId,
-            decision: action as any,
-            decidedBy,
-            decidedAt: new Date(),
-            ...(instructions ? { instructions } : null),
-          } as any);
-
-          void broadcastHitlUpdate({ type: 'checkpoint_decision', checkpointId, decision: action, decidedBy });
-          sendJson(res, 200, { ok: true });
-          return;
-        }
-
-        sendJson(res, 404, { error: 'Not Found' });
-        return;
-      }
-
-      if (req.method === 'GET' && url.pathname === '/health') {
-        sendJson(res, 200, {
-          ok: true,
-          seedId,
-          name: displayName,
-          persona: selectedPersona ?? (activePersonaId !== seedId ? { id: activePersonaId } : undefined),
-          personasAvailable: Array.isArray(availablePersonas) ? availablePersonas.length : 0,
-        });
-        return;
-      }
-
-      if (req.method === 'POST' && url.pathname === '/chat') {
-        const body = await readBody(req);
-        const parsed = JSON.parse(body || '{}');
-        const message = typeof parsed.message === 'string' ? parsed.message.trim() : '';
-        if (!message) {
-          sendJson(res, 400, { error: 'Missing "message" in JSON body.' });
-          return;
-        }
-
-        let reply = '';
-        let turnFailed = false;
-        let fallbackTriggered = false;
-        let toolCallCount = 0;
-        let turnError: unknown;
-        const sessionId =
-          typeof parsed.sessionId === 'string' && parsed.sessionId.trim() ? parsed.sessionId.trim().slice(0, 128) : 'default';
-        const requestedPersonaId = extractRequestedPersonaId(parsed);
-        let requestActivePersonaId = activePersonaId;
-        let requestSystemPrompt = systemPrompt;
-        let requestToolMap = toolMap;
-
-        if (requestedPersonaId && requestedPersonaId !== activePersonaId) {
-          const personaRuntime = await resolveRequestScopedPersonaRuntime({
-            rawAgentConfig,
-            requestedPersonaId,
-            workingDirectory,
-            logger,
-            policy,
-            mode: 'server',
-            lazyTools,
-            autoApproveToolCalls,
-            turnApprovalMode,
-            skillsPrompt: skillsPrompt || undefined,
-            channelNames:
-              loadedChannelAdapters.length > 0
-                ? loadedChannelAdapters
-                  .map((adapter: any) => adapter.displayName || adapter.platform)
-                  .filter((name: unknown): name is string => typeof name === 'string' && name.trim().length > 0)
-                : undefined,
-          });
-
-          if (!personaRuntime) {
-            sendJson(res, 400, {
-              error: `Persona '${requestedPersonaId}' not found.`,
-              availablePersonaIds: Array.isArray(availablePersonas) ? availablePersonas.map((persona) => persona.id) : [],
-            });
-            return;
-          }
-
-          requestActivePersonaId = personaRuntime.activePersonaId;
-          requestSystemPrompt = personaRuntime.systemPrompt;
-          requestToolMap = createRequestScopedToolMap(toolMap, personaRuntime.agentConfig);
-        }
-
-        const internalSessionId = buildPersonaSessionKey(sessionId, requestActivePersonaId);
-        const requestedToolFailureMode =
-          typeof parsed.toolFailureMode === 'string' ? parsed.toolFailureMode : undefined;
-        const tenantId =
-          (typeof parsed.tenantId === 'string' && parsed.tenantId.trim())
-          || defaultTenantId;
-        const adaptiveDecision = adaptiveRuntime.resolveTurnDecision({
-          scope: {
-            sessionId,
-            userId: sessionId,
-            personaId: requestActivePersonaId,
-            tenantId: tenantId || undefined,
-          },
-          requestedToolFailureMode,
-        });
-
-        if (parsed.reset === true) {
-          sessions.delete(internalSessionId);
-        }
-
-        let messages = sessions.get(internalSessionId);
-        if (!messages) {
-          messages = [{ role: 'system', content: requestSystemPrompt }];
-          sessions.set(internalSessionId, messages);
-        }
-
-        if (messages.length > 200) {
-          messages = [messages[0], ...messages.slice(-120)];
-          sessions.set(internalSessionId, messages);
-        }
-
-        messages.push({ role: 'user', content: message });
-
-        try {
-          if (canUseLLM) {
-            const toolContext: Record<string, unknown> = {
-              gmiId: `wunderland-server-${internalSessionId}`,
-              sessionId,
-              personaId: requestActivePersonaId,
-              userContext: {
-                userId: sessionId,
-                ...(tenantId ? { organizationId: tenantId } : null),
-              },
-              ...(opts?.configDirOverride ? { wunderlandConfigDir: opts.configDirOverride } : null),
-              agentWorkspace: { agentId: workspaceAgentId, baseDir: workspaceBaseDir },
-              permissionSet: policy.permissionSet,
-              securityTier: policy.securityTier,
-              executionMode: policy.executionMode,
-              toolAccessProfile: policy.toolAccessProfile,
-              interactiveSession: false,
-              turnApprovalMode,
-              toolFailureMode: adaptiveDecision.toolFailureMode,
-              adaptiveExecution: {
-                degraded: adaptiveDecision.degraded,
-                reason: adaptiveDecision.reason,
-                actions: adaptiveDecision.actions,
-                kpi: adaptiveDecision.kpi ?? undefined,
-              },
-              ...(policy.folderPermissions ? { folderPermissions: policy.folderPermissions } : null),
-              wrapToolOutputs: policy.wrapToolOutputs,
-              strictToolNames,
-            };
-
-            reply = await runToolCallingTurn({
-              providerId,
-              apiKey: llmApiKey,
-              model,
-              messages,
-              toolMap: requestToolMap,
-              toolContext,
-              maxRounds: 8,
-              dangerouslySkipPermissions: autoApproveToolCalls,
-              strictToolNames,
-              toolFailureMode: adaptiveDecision.toolFailureMode,
-              ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
-              onToolCall: () => {
-                toolCallCount += 1;
-              },
-              askPermission: async (tool, args) => {
-                if (autoApproveToolCalls) return true;
-                const preview = safeJsonStringify(args, 1800);
-                const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
-                const actionId = `tool-${seedId}-${randomUUID()}`;
-                const decision = await hitlManager.requestApproval({
-                  actionId,
-                  description: `Allow ${tool.name} (${effectLabel})?\\n\\n${preview}`,
-                  severity: tool.hasSideEffects === true ? 'high' : 'low',
-                  category: toAgentosApprovalCategory(tool),
-                  agentId: seed.seedId,
-                  context: { toolName: tool.name, args, sessionId, personaId: requestActivePersonaId },
-                  reversible: tool.hasSideEffects !== true,
-                  requestedAt: new Date(),
-                  timeoutMs: 5 * 60_000,
-                });
-                return decision.approved === true;
-              },
-              askCheckpoint:
-                turnApprovalMode === 'off'
-                  ? undefined
-                  : async ({ round, toolCalls }) => {
-                      if (autoApproveToolCalls) return true;
-                      const checkpointId = `checkpoint-${seedId}-${internalSessionId}-${round}-${randomUUID()}`;
-                      const completedWork = toolCalls.map((c) => {
-                        const effect = c.hasSideEffects ? 'side effects' : 'read-only';
-                        const preview = safeJsonStringify(c.args, 800);
-                        return `${c.toolName} (${effect})\\n${preview}`;
-                      });
-                      const timeoutMs = 5 * 60_000;
-                      const checkpointPromise = hitlManager
-                        .checkpoint({
-                          checkpointId,
-                          workflowId: `chat-${internalSessionId}`,
-                          currentPhase: `tool-round-${round}`,
-                          progress: Math.min(1, (round + 1) / 8),
-                          completedWork,
-                          upcomingWork: ['Continue to next LLM round'],
-                          issues: [],
-                          notes: 'Continue?',
-                          checkpointAt: new Date(),
-                        })
-                        .catch(() => ({ decision: 'abort' as const }));
-                      const timeoutPromise = new Promise<{ decision: 'abort' }>((resolve) =>
-                        setTimeout(() => resolve({ decision: 'abort' }), timeoutMs),
-                      );
-                      const decision = (await Promise.race([checkpointPromise, timeoutPromise])) as any;
-                      if (decision?.decision !== 'continue') {
-                        try {
-                          await hitlManager.cancelRequest(checkpointId, 'checkpoint_timeout_or_abort');
-                        } catch {
-                          // ignore
-                        }
-                      }
-                      return decision?.decision === 'continue';
-                    },
-              baseUrl: llmBaseUrl,
-              fallback: providerId === 'openai' ? openrouterFallback : undefined,
-              onFallback: (err, provider) => {
-                fallbackTriggered = true;
-                logger.warn?.('[wunderland/api] fallback activated', { error: err.message, provider });
-              },
-            });
-          } else {
-            reply =
-              'No LLM credentials configured. I can run, but I cannot generate real replies yet.\\n\\n' +
-              'Set an API key in .env (OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY) or use Ollama, then retry.\\n\\n' +
-              `You said: ${message}`;
-          }
-        } catch (error) {
-          turnFailed = true;
-          turnError = error;
-          throw error;
-        } finally {
-          try {
-            await adaptiveRuntime.recordTurnOutcome({
-              scope: {
-                sessionId,
-                userId: sessionId,
-                personaId: requestActivePersonaId,
-                tenantId: tenantId || undefined,
-              },
-              degraded: adaptiveDecision.degraded || fallbackTriggered,
-              replyText: reply,
-              didFail: turnFailed,
-              toolCallCount,
-            });
-          } catch (error) {
-            logger.warn?.('[wunderland/api][chat] failed to record adaptive outcome', {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          await sessionTextLogger.logTurn({
-            meta: {
-              agentId: workspaceAgentId,
-              seedId,
-              displayName,
-              providerId: String(providerId),
-              model,
-              personaId: requestActivePersonaId,
-            },
-            sessionId,
-            userText: message,
-            reply,
-            error: turnError,
-            toolCallCount,
-            durationMs: 0,
-            fallbackTriggered,
-          });
-        }
-
-        sendJson(res, 200, { reply, personaId: requestActivePersonaId });
-        return;
-      }
-
-      // ── Tool Execution API ──────────────────────────────────────
-      if (url.pathname === '/api/tools' && req.method === 'GET') {
-        if (toolApiSecret && req.headers['x-api-key'] !== toolApiSecret) {
-          sendJson(res, 401, { error: 'Unauthorized' });
-          return;
-        }
-        const tools = Array.from(toolMap.values()).map((t) => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: t.inputSchema,
-          category: t.category,
-          hasSideEffects: t.hasSideEffects,
-        }));
-        sendJson(res, 200, { tools });
-        return;
-      }
-
-      if (url.pathname.startsWith('/api/tools/') && req.method === 'POST') {
-        if (toolApiSecret && req.headers['x-api-key'] !== toolApiSecret) {
-          sendJson(res, 401, { error: 'Unauthorized' });
-          return;
-        }
-        const toolName = decodeURIComponent(url.pathname.slice('/api/tools/'.length));
-        const tool = toolMap.get(toolName);
-        if (!tool) {
-          sendJson(res, 404, { error: `Tool '${toolName}' not found` });
-          return;
-        }
-        let args: Record<string, unknown> = {};
-        try {
-          const body = await readBody(req);
-          if (body) args = JSON.parse(body);
-        } catch {
-          sendJson(res, 400, { error: 'Invalid JSON body' });
-          return;
-        }
-        try {
-          const ctx: Record<string, unknown> = {
-            gmiId: 'tool-api',
-            personaId: activePersonaId,
-            permissionSet: policy.permissionSet,
-            securityTier: policy.securityTier,
-            executionMode: 'autonomous',
-            toolAccessProfile: policy.toolAccessProfile,
-            interactiveSession: false,
-          };
-          const result = await tool.execute(args, ctx);
-          sendJson(res, result.success ? 200 : 500, result);
-        } catch (err) {
-          sendJson(res, 500, {
-            success: false,
-            error: err instanceof Error ? err.message : 'Tool execution failed',
-          });
-        }
-        return;
-      }
-
+      /* ── Extension HTTP handlers (webhooks, etc.) ───────────────────────── */
       for (const handler of loadedHttpHandlers) {
         try {
           const handled = await handler(req, res);
