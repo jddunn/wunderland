@@ -173,6 +173,14 @@ export interface ChatREPLConfig {
       chunkCount: number;
       sourceCount: number;
       topicCount: number;
+      platformKnowledge: {
+        total: number;
+        tools: number;
+        skills: number;
+        faq: number;
+        api: number;
+        troubleshooting: number;
+      };
       retrievalMode: string;
       embeddingDimension: number;
       rerankRuntimeMode: string;
@@ -486,12 +494,25 @@ export class ChatREPL {
       );
       helpLines.push(
         frameLine(
-          `   ${chalk.hex(C.cyan)('/router')}    ${chalk.hex(C.text)('Show QueryRouter status & corpus stats')}`,
+          `   ${chalk.hex(C.cyan)('/router')}    ${chalk.hex(C.text)('QueryRouter status, platform knowledge, recommendations')}`,
           iw
         )
       );
       helpLines.push(
         frameLine(`   ${chalk.hex(C.cyan)('/exit')}      ${chalk.hex(C.text)('Quit')}`, iw)
+      );
+      helpLines.push('');
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.dim)('The agent has built-in platform knowledge (tools, skills, FAQ, API docs).')}`,
+          iw
+        )
+      );
+      helpLines.push(
+        frameLine(
+          `   ${chalk.hex(C.dim)('Use /discover and /router to inspect what is loaded.')}`,
+          iw
+        )
       );
       helpLines.push('');
       console.log(helpLines.join('\n'));
@@ -642,7 +663,29 @@ export class ChatREPL {
           rLines.push(frameLine(`   Embedding dim: ${stats.embeddingDimension}`, iw));
           rLines.push(frameLine(`   Rerank:        ${stats.rerankRuntimeMode}`, iw));
           rLines.push(frameLine(`   Deep research: ${stats.deepResearchEnabled ? sColor('yes') : wColor('no')} (${stats.deepResearchRuntimeMode})`, iw));
-          rLines.push(frameLine(`   ${chalk.hex(C.brightCyan)('Platform knowledge')}: 243 entries (105 tools, 79 skills, 30 FAQ, 14 API, 15 troubleshooting)`, iw));
+          rLines.push(frameLine(
+            `   ${chalk.hex(C.brightCyan)('Platform knowledge')}: ` +
+              `${stats.platformKnowledge.total} entries (` +
+              `${stats.platformKnowledge.tools} tools, ${stats.platformKnowledge.skills} skills, ` +
+              `${stats.platformKnowledge.faq} FAQ, ${stats.platformKnowledge.api} API, ` +
+              `${stats.platformKnowledge.troubleshooting} troubleshooting)`,
+            iw,
+          ));
+          // Capability catalog summary
+          const dStats = this.config.discoveryManager?.getStats();
+          if (dStats) {
+            rLines.push(frameLine(
+              `   ${chalk.hex(C.brightCyan)('Capability catalog')}: ` +
+                `${dStats.capabilityCount} capabilities indexed` +
+                (dStats.graphNodes > 0 ? `, ${dStats.graphNodes} graph nodes, ${dStats.graphEdges} edges` : ''),
+              iw,
+            ));
+          }
+          // Last recommendation hint
+          rLines.push(frameLine(
+            `   ${chalk.hex(C.brightCyan)('Recommendations')}: ${dim('auto-injected per turn (see /discover for details)')}`,
+            iw,
+          ));
         } else {
           rLines.push(frameLine(`   Enabled:       ${wColor('pending')} (init in progress or failed)`, iw));
           rLines.push(frameLine(`   ${muted('The router initialises in the background. Try again shortly.')}`, iw));
