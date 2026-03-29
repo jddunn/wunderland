@@ -428,7 +428,7 @@ export async function handleChatRoutes(
           return (decision as any)?.decision === 'continue';
         },
         baseUrl: llmBaseUrl,
-        fallback: providerId === 'openai' ? openrouterFallback : undefined,
+        fallback: openrouterFallback,
         onFallback: (err: any, provider: any) => {
           fallbackTriggered = true;
           console.warn(`[fallback] Primary provider failed (${err.message}), routing to ${provider}`);
