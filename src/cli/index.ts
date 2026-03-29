@@ -167,6 +167,7 @@ ${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command ou
     ${w('wunderland')} ${d('"Build me a research agent that monitors AI news"')}
     ${w('wunderland')} ${d('"Create a support team with triage and escalation"')}
     ${w('wunderland')} ${d('"Research the latest AI news and generate a PDF report"')}
+    ${w('wunderland')} ${d('"help me set up Gmail"')}          ${d('# Agent guides credential setup')}
 
   ${c('Links:')}
     ${muted(URLS.website)}${fmt.dot()}${muted(URLS.saas)}${fmt.dot()}${muted(URLS.docs)}
