@@ -34,6 +34,7 @@ import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';
 import { SafeGuardrails } from '../security/SafeGuardrails.js';
 import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
+import { createDefaultFolderConfig } from '../security/FolderPermissions.js';
 import {
   PERMISSION_SETS,
   SECURITY_TIERS,
@@ -468,9 +469,28 @@ export function maybeConfigureGuardrailsForAgent(toolContext: Record<string, unk
     return;
   }
 
-  // Default: sandbox to per-agent workspace (deny outside).
+  // Default: use tier-aware folder config instead of a deny-all sandbox.
+  // Permissive/dangerous tiers get defaultPolicy 'allow'; balanced gets common dirs;
+  // strict/paranoid get workspace-only. Then append the per-agent workspace as an
+  // explicit allow rule so it's always writable regardless of tier.
+  const rawTier =
+    getStringProp(toolContext, 'securityTier') ||
+    (toolContext['policy'] && typeof toolContext['policy'] === 'object'
+      ? getStringProp(toolContext['policy'] as Record<string, unknown>, 'securityTier')
+      : undefined) ||
+    'balanced';
+  const resolvedTier = (rawTier in SECURITY_TIERS ? rawTier : 'balanced') as
+    'dangerous' | 'permissive' | 'balanced' | 'strict' | 'paranoid';
+  const folderConfig = createDefaultFolderConfig(resolvedTier);
   const workspaceDir = getAgentWorkspaceDirFromContext(toolContext, agentId);
-  guardrails.setFolderPermissions(agentId, buildDefaultFolderPermissions(workspaceDir));
+  folderConfig.rules = folderConfig.rules || [];
+  folderConfig.rules.push({
+    pattern: path.join(workspaceDir, '**'),
+    read: true,
+    write: true,
+    description: 'Agent workspace',
+  });
+  guardrails.setFolderPermissions(agentId, folderConfig);
 }
 
 export function emitOtelLog(opts: {
