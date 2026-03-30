@@ -82,6 +82,15 @@ export interface ChatREPLConfig {
   channelAdapters: ChannelAdapterInstance[];
   /** Whether tool calls auto-approve without HITL prompts. */
   autoApproveToolCalls: boolean;
+  /**
+   * Optional LLM judge handler for HITL approval decisions.
+   *
+   * When set, tool approval requests are first routed through this handler.
+   * The handler evaluates the tool call for safety/relevance and returns a
+   * boolean decision. If the handler is absent, the standard CLI interactive
+   * prompt (or auto-approve) behaviour applies.
+   */
+  llmJudgeHandler?: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
   /** Whether verbose diagnostic output is enabled. */
   verbose: boolean;
   /** Whether the QueryRouter is enabled. */
@@ -243,6 +252,22 @@ export class ChatREPL {
     args: Record<string, unknown>,
   ): Promise<boolean> {
     if (this.config.autoApproveToolCalls || this.sessionAcceptAll) return true;
+
+    // LLM judge mode: delegate the decision to the judge handler.
+    // The judge returns a boolean directly; no interactive prompt needed.
+    if (this.config.llmJudgeHandler) {
+      const judgeCacheKey = `${tool.name}:${safeJsonStringify(args, 400)}`;
+      const judgeCached = this.permissionCache.get(judgeCacheKey);
+      if (judgeCached !== undefined) return judgeCached;
+      try {
+        const judgeResult = await this.config.llmJudgeHandler(tool, args);
+        this.permissionCache.set(judgeCacheKey, judgeResult);
+        return judgeResult;
+      } catch {
+        // LLM judge failed — fall through to interactive CLI prompt
+      }
+    }
+
     const cacheKey = `${tool.name}:${safeJsonStringify(args, 400)}`;
     const cached = this.permissionCache.get(cacheKey);
     if (cached !== undefined) return cached;

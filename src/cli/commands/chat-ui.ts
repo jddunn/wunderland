@@ -114,7 +114,11 @@ export function printChatHeader(info: {
   lines.push(
     kvLine(
       'Authorization',
-      info.autoApprove ? wColor('fully autonomous') : sColor('tiered (Tier 1/2/3)')
+      info.autoApprove
+        ? wColor('fully autonomous')
+        : info.llmJudge
+          ? sColor('LLM judge')
+          : sColor('tiered (Tier 1/2/3)')
     )
   );
   lines.push(kvLine('Security Tier', accent(info.securityTier)));
