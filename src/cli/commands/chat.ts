@@ -258,6 +258,18 @@ export default async function cmdChat(
       .filter(Boolean);
   }
 
+  // ── Guardrail override CLI flag ─────────────────────────────────────────
+  // --no-guardrail-override → disable post-approval guardrail safety net
+  //
+  // When set, guardrails will NOT veto HITL-approved tool calls. Also
+  // supported in agent.config.json under hitl.guardrailOverride: false.
+  const noGuardrailOverride = flags['no-guardrail-override'] === true
+    || (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl)
+      && (cfg.hitl as Record<string, unknown>).guardrailOverride === false);
+  if (noGuardrailOverride) {
+    cliDefaults.guardrailOverride = false;
+  }
+
   // ── Voice pipeline CLI flags ──────────────────────────────────────────────
   //
   // These flags configure the optional local WebSocket voice pipeline server.
