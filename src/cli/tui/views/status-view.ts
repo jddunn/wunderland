@@ -245,6 +245,29 @@ export class StatusView {
     // Show local providers as always available
     lines.push(`    ${sColor(ui.ascii ? g.bullet : '●')} ${'Piper / Whisper.cpp'.padEnd(18)} ${dim('local (no key)')}`);
 
+    // HITL & Approval section
+    lines.push('');
+    lines.push(`  ${iColor(g.bulletHollow)} ${bright('HITL & Approvals')}`);
+    const hitlCfg = resolvedAgentConfig?.hitl as Record<string, unknown> | undefined;
+    const hitlMode = (() => {
+      if (hitlCfg?.mode === 'llm-judge') return 'llm-judge';
+      if (hitlCfg?.mode === 'auto-approve') return 'auto-approve';
+      return 'human';
+    })();
+    const hitlModeColor = hitlMode === 'human' ? sColor(hitlMode)
+      : hitlMode === 'llm-judge' ? iColor(hitlMode)
+      : wColor(hitlMode);
+    lines.push(`    ${muted('HITL Mode'.padEnd(20))} ${hitlModeColor}`);
+    const guardrailOverride = hitlCfg?.guardrailOverride !== false;
+    lines.push(
+      `    ${muted('Guardrail Override'.padEnd(20))} ${guardrailOverride ? sColor('enabled') : wColor('disabled')}`,
+    );
+    const postApprovalGuardrails = (hitlCfg?.postApprovalGuardrails as string[] | undefined)
+      ?? ['code-safety', 'pii-redaction'];
+    lines.push(
+      `    ${muted('Post-approval'.padEnd(20))} ${dim(postApprovalGuardrails.join(', '))}`,
+    );
+
     lines.push('');
     lines.push(`  ${dim('r')} refresh  ${dim('?')} help  ${dim('esc')} back  ${dim('q')} quit`);
 
