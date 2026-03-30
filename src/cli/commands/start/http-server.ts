@@ -116,6 +116,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
     discoveryManager,
     strictToolNames,
     autoApproveToolCalls,
+    llmJudgeHandler: ctx.llmJudgeHandler,
     dangerouslySkipPermissions,
     turnApprovalMode,
     defaultTenantId,

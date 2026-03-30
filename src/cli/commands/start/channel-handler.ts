@@ -53,6 +53,8 @@ export interface ChannelRuntimeCtx {
   llmBaseUrl?: string;
   policy: any;
   autoApproveToolCalls: boolean;
+  /** Pre-built LLM judge handler for tool approval decisions (--llm-judge). */
+  llmJudgeHandler?: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
   dangerouslySkipPermissions: boolean;
   strictToolNames: boolean;
   openrouterFallback: any;
@@ -227,6 +229,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
     llmBaseUrl,
     policy,
     autoApproveToolCalls,
+    llmJudgeHandler,
     dangerouslySkipPermissions,
     strictToolNames,
     openrouterFallback,
@@ -478,6 +481,15 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
         },
         askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
           if (autoApproveToolCalls) return true;
+
+          // LLM judge mode: delegate the decision to the LLM judge handler
+          if (llmJudgeHandler) {
+            try {
+              return await llmJudgeHandler(tool, args);
+            } catch {
+              // Judge failed — fall through to HITL manager prompt
+            }
+          }
 
           const preview = safeJsonStringify(args, 1800);
           const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';

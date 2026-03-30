@@ -69,3 +69,16 @@ export {
   type ToolLoopDetectorConfig,
   type LoopDetectionResult,
 } from './ToolLoopDetector.js';
+
+// Citizen Mode Guardrail (merged from guardrails/)
+export {
+  CitizenModeGuardrail,
+  type CitizenGuardrailAction,
+  type CitizenGuardrailResult,
+} from './CitizenModeGuardrail.js';
+
+// Authorization types (merged from authorization/)
+export * from './authorization-types.js';
+
+// Step-Up Authorization Manager (merged from authorization/)
+export { StepUpAuthorizationManager } from './StepUpAuthorizationManager.js';

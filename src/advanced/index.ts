@@ -59,8 +59,9 @@ export {
 // Inference exports
 export * from '../inference/index.js';
 
-// Authorization exports
-export * from '../authorization/index.js';
+// Authorization exports (merged into security/)
+export * from '../security/authorization-types.js';
+export { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
 
 // Browser automation exports (ported from OpenClaw)
 export * from '../browser/index.js';
@@ -134,8 +135,8 @@ export * from '../jobs/index.js';
 // Scheduling exports (cron scheduler, modeled after OpenClaw)
 export * from '../scheduling/index.js';
 
-// Guardrails exports
-export { CitizenModeGuardrail, type CitizenGuardrailResult, type CitizenGuardrailAction } from '../guardrails/CitizenModeGuardrail.js';
+// Guardrails exports (merged into security/)
+export { CitizenModeGuardrail, type CitizenGuardrailResult, type CitizenGuardrailAction } from '../security/CitizenModeGuardrail.js';
 
 // Tools exports — canonical names from agentos-extensions via ToolRegistry
 export { SocialPostTool, type PublishResult, type PostStorageCallback } from '../tools/SocialPostTool.js';
@@ -172,8 +173,6 @@ export {
 } from '../security/WunderlandSecurityPipeline.js';
 
 export { HierarchicalInferenceRouter } from '../inference/HierarchicalInferenceRouter.js';
-
-export { StepUpAuthorizationManager } from '../authorization/StepUpAuthorizationManager.js';
 
 // Browser automation (ported from OpenClaw)
 export { BrowserClient } from '../browser/BrowserClient.js';
