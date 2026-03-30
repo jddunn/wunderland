@@ -262,7 +262,7 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     notes: ['--verbose, -v: show extension activation, discovery debug, and context compaction logs.'],
   },
   start: {
-    summary: 'Start the local agent server (launches TUI dashboard by default).',
+    summary: 'Start the local agent server with channels, tools, and TUI dashboard.',
     usage: ['wunderland start [--port <number>] [--oauth] [--lazy-tools] [--cli]'],
     examples: ['wunderland start', 'wunderland start --cli --port 3777'],
   },
