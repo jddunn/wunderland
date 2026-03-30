@@ -26,6 +26,9 @@ export {
 } from './effective-agent-config.js';
 export type { EffectiveAgentConfigResult } from './effective-agent-config.js';
 
+// ── Wallet config types (merged from wallet/) ─────────────────────────────
+export * from './wallet-types.js';
+
 // ── Persona registry ───────────────────────────────────────────────────────
 export {
   resolveConfiguredPersonas,
