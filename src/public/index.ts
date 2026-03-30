@@ -1384,3 +1384,7 @@ export { generateImage } from '@framers/agentos';
 export type { GenerateTextOptions, GenerateTextResult } from '@framers/agentos';
 export type { StreamTextResult, StreamPart } from '@framers/agentos';
 export type { GenerateImageOptions, GenerateImageResult } from '@framers/agentos';
+
+// ── Chat task responder (messaging channel → tool execution bridge) ───────
+export { ChatTaskResponder, ChatConversationStore, checkSecurity, resolveToolAllowlist } from '../chat/index.js';
+export type { SecurityTier, ChannelContext, ChannelConfig, ChatTaskResponderConfig, ConversationMessage } from '../chat/index.js';
