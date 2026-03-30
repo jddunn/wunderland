@@ -198,6 +198,26 @@ export class DiscoveryView {
     }
     lines.push('');
 
+    // ── Safety & HITL ─────────────────────────────────────────────────
+    lines.push(`  ${iColor(g.bulletHollow)} ${bright('Safety & HITL')}`);
+    const hitlCfg = await this.resolveHitlConfig(config);
+    const hitlModeColor = hitlCfg.mode === 'human' ? sColor(hitlCfg.mode)
+      : hitlCfg.mode === 'llm-judge' ? iColor(hitlCfg.mode)
+      : wColor(hitlCfg.mode);
+    lines.push(
+      `    ${muted('HITL Mode'.padEnd(20))} ${hitlModeColor}`,
+    );
+    lines.push(
+      `    ${muted('Available Handlers'.padEnd(20))} ${dim('autoApprove, autoReject, cli, webhook, slack, llmJudge')}`,
+    );
+    lines.push(
+      `    ${muted('Guardrail Override'.padEnd(20))} ${hitlCfg.guardrailOverride ? sColor('enabled') : wColor('disabled')}`,
+    );
+    lines.push(
+      `    ${muted('Post-approval'.padEnd(20))} ${dim(hitlCfg.postApprovalGuardrails.join(', '))}`,
+    );
+    lines.push('');
+
     // ── Recent Recommendations ───────────────────────────────────────
     lines.push(`  ${iColor(g.bulletHollow)} ${bright('Recent Recommendations')}`);
     lines.push(
@@ -307,6 +327,37 @@ export class DiscoveryView {
       extensions: 105,
       skills: 69,
     };
+  }
+
+  /**
+   * Resolve HITL/approval config from the local agent.config.json.
+   * Falls back to safe defaults when no local config or hitl block exists.
+   */
+  private async resolveHitlConfig(
+    _config?: unknown,
+  ): Promise<{ mode: string; guardrailOverride: boolean; postApprovalGuardrails: string[] }> {
+    const defaults = { mode: 'human', guardrailOverride: true, postApprovalGuardrails: ['code-safety', 'pii-redaction'] };
+
+    const localConfig = path.resolve(process.cwd(), 'agent.config.json');
+    if (!existsSync(localConfig)) return defaults;
+
+    try {
+      const rawCfg = JSON.parse(await readFile(localConfig, 'utf8'));
+      const effective = await resolveEffectiveAgentConfig({
+        agentConfig: rawCfg,
+        workingDirectory: process.cwd(),
+      });
+      const hitl = (effective.agentConfig as Record<string, unknown>).hitl as Record<string, unknown> | undefined;
+      if (!hitl) return defaults;
+
+      return {
+        mode: (hitl.mode as string) || 'human',
+        guardrailOverride: hitl.guardrailOverride !== false,
+        postApprovalGuardrails: (hitl.postApprovalGuardrails as string[]) ?? defaults.postApprovalGuardrails,
+      };
+    } catch {
+      return defaults;
+    }
   }
 
   private getHelpLines(): string[] {
