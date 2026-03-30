@@ -491,6 +491,7 @@ export default async function cmdChat(
     flags['dangerously-skip-command-safety'] === true || dangerouslySkipPermissions;
   const autoApproveToolCalls =
     globals.autoApproveTools || dangerouslySkipPermissions || overdriveMode || policy.executionMode === 'autonomous' || policy.securityTier === 'permissive' || policy.securityTier === 'dangerous';
+
   const enableSkills = flags['no-skills'] !== true;
   const enableQueryRouter = flags['no-query-router'] !== true;
   const lazyTools = flags['lazy-tools'] === true;
@@ -1378,6 +1379,62 @@ export default async function cmdChat(
     }
   }
 
+  // ── LLM Judge HITL mode ──────────────────────────────────────────────────
+  //
+  // When --llm-judge is passed (or hitl.mode is set to "llm-judge" in
+  // agent.config.json), tool approval decisions are routed to an LLM judge
+  // instead of blindly auto-approving or requiring interactive CLI prompts.
+  //
+  // The judge evaluates each tool call for safety and relevance, approving
+  // or rejecting with a confidence score. Below the confidence threshold,
+  // the decision falls through to the CLI interactive prompt.
+  const llmJudgeMode = (() => {
+    if (flags['llm-judge'] === true) return true;
+    if (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl)) {
+      const modeVal = (cfg.hitl as Record<string, unknown>).mode;
+      if (typeof modeVal === 'string' && modeVal.trim().toLowerCase() === 'llm-judge') return true;
+    }
+    return false;
+  })();
+
+  let llmJudgeHandler: ((tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>) | undefined;
+  if (llmJudgeMode) {
+    try {
+      const { hitl } = await import('@framers/agentos');
+      const cfgSecretsObj =
+        cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets)
+          ? (cfg.secrets as Record<string, string>)
+          : undefined;
+      const getSecretForJudge = createEnvSecretResolver({ configSecrets: cfgSecretsObj });
+      const judgeApiKey = getSecretForJudge('openai.apiKey') || process.env['OPENAI_API_KEY'] || llmApiKey;
+      const judgeHandler = hitl.llmJudge({
+        model: (cfg?.hitl as any)?.judgeModel || policy.llmModel || 'gpt-4o-mini',
+        provider: (cfg?.hitl as any)?.judgeProvider || 'openai',
+        criteria:
+          (cfg?.hitl as any)?.judgeCriteria ||
+          'Evaluate whether this tool call is safe, relevant to the user request, and appropriate given the security context.',
+        confidenceThreshold: (cfg?.hitl as any)?.judgeConfidenceThreshold ?? 0.7,
+        apiKey: judgeApiKey,
+      });
+      llmJudgeHandler = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
+        const decision = await judgeHandler({
+          id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'tool',
+          agent: displayName,
+          action: tool.name,
+          description: `Tool call: ${tool.name} (${tool.hasSideEffects ? 'side effects' : 'read-only'})`,
+          details: { toolName: tool.name, args, hasSideEffects: tool.hasSideEffects },
+        });
+        return decision.approved === true;
+      };
+      fmt.ok('LLM judge HITL handler active');
+    } catch (err) {
+      fmt.warning(
+        `LLM judge init failed, falling back to interactive prompts: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   printChatHeader({
     agentName: displayName,
     provider: providerId,
@@ -1387,6 +1444,7 @@ export default async function cmdChat(
     fallback: providerId === 'openai' && !!openrouterFallback,
     lazyTools,
     autoApprove: autoApproveToolCalls,
+    llmJudge: llmJudgeMode && !!llmJudgeHandler,
     turnApproval: turnApprovalMode,
     securityTier: policy.securityTier || 'permissive',
     toolProfile: policy.toolAccessProfile || 'developer',
@@ -1596,6 +1654,7 @@ export default async function cmdChat(
     toolMap,
     channelAdapters,
     autoApproveToolCalls,
+    llmJudgeHandler,
     verbose,
     enableQueryRouter,
     renderer: streamRenderer,
@@ -1638,6 +1697,17 @@ export default async function cmdChat(
         // folder access without prompting — avoids duplicate HITL approval.
         if (autoApproveToolCalls) {
           return true;
+        }
+        // LLM judge mode: delegate folder access decisions to the judge
+        if (llmJudgeHandler) {
+          try {
+            return await llmJudgeHandler(
+              { name: 'request_folder_access', description: req.reason, hasSideEffects: req.operation === 'write' } as ToolInstance,
+              { path: req.path, operation: req.operation, recursive: req.recursive },
+            );
+          } catch {
+            // Judge failed — fall through to interactive prompt
+          }
         }
         return repl.askFolderPermission(req);
       },

@@ -155,6 +155,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
     ${d('--no-skills')}            Disable skill loading
 ${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}
     ${d('--overdrive')}                Auto-approve all tool calls for this session
+    ${d('--llm-judge')}                Route HITL approvals through an LLM judge instead of auto-approving
     ${d('--dangerously-skip-permissions')}  Skip permission/approval checks (dangerous)
     ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
 

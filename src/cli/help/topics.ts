@@ -565,6 +565,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log();
     console.log(`  ${dim('CLI shortcuts:')}`);
     console.log(`     ${accent('--overdrive')} ${dim('auto-approve all tool calls (keeps security pipeline active)')}`);
+    console.log(`     ${accent('--llm-judge')} ${dim('route HITL approvals through an LLM judge (safety/relevance evaluation)')}`);
     console.log(`     ${accent('--auto-approve-tools')} ${dim('fully autonomous tool calls (CI / demos)')}`);
     console.log(`     ${accent('--yes')} ${dim('auto-confirm prompts (setup/init); does NOT auto-approve tools')}`);
     console.log(`     ${accent('--dangerously-skip-permissions')} ${dim('skip permission checks')}`);
