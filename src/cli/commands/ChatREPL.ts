@@ -706,6 +706,24 @@ export class ChatREPL {
               iw,
             ));
           }
+          // HITL mode info
+          const hitlMode = this.config.llmJudgeHandler ? 'llm-judge'
+            : this.config.autoApproveToolCalls ? 'auto-approve'
+            : 'human';
+          rLines.push(frameLine(
+            `   ${chalk.hex(C.brightCyan)('HITL mode')}: ${hitlMode}` +
+              (this.config.llmJudgeHandler ? dim(' (--llm-judge)') : '') +
+              (this.config.autoApproveToolCalls ? dim(' (--auto-approve-tools)') : ''),
+            iw,
+          ));
+          rLines.push(frameLine(
+            `   ${chalk.hex(C.brightCyan)('Guardrail override')}: ${sColor('enabled')}`,
+            iw,
+          ));
+          rLines.push(frameLine(
+            `   ${chalk.hex(C.brightCyan)('Post-approval')}: ${dim('code-safety, pii-redaction')}`,
+            iw,
+          ));
           // Last recommendation hint
           rLines.push(frameLine(
             `   ${chalk.hex(C.brightCyan)('Recommendations')}: ${dim('auto-injected per turn (see /discover for details)')}`,
