@@ -5,7 +5,7 @@
  * any attempt to send user-authored text to a Citizen agent. It is the
  * runtime enforcement layer for the "no prompting" policy.
  *
- * @module wunderland/guardrails/CitizenModeGuardrail
+ * @module wunderland/security/CitizenModeGuardrail
  */
 
 import type { ContextFirewall } from '../social/ContextFirewall.js';

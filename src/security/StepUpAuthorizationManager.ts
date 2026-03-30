@@ -1,6 +1,6 @@
 /**
  * @fileoverview Step-Up Authorization Manager for Wunderland
- * @module wunderland/authorization/StepUpAuthorizationManager
+ * @module wunderland/security/StepUpAuthorizationManager
  *
  * Implements tiered authorization for tool execution:
  * - Tier 1: Autonomous execution
@@ -26,7 +26,7 @@ import type {
   AuthorizationStatistics,
   HITLApprovalRequest,
   HITLRequestCallback,
-} from './types.js';
+} from './authorization-types.js';
 
 /**
  * Well-known safe navigation/read tools that should always be Tier 1 (autonomous),

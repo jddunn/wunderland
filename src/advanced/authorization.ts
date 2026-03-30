@@ -1,2 +1,3 @@
-export * from '../authorization/index.js';
+export * from '../security/authorization-types.js';
+export { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
 
