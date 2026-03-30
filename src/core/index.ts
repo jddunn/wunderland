@@ -87,3 +87,36 @@ export {
   type LLMInvoker,
   type ExtractedAgentConfig,
 } from './NaturalLanguageAgentBuilder.js';
+
+// Safe merge (prototype pollution prevention)
+export {
+  safeDeepMerge,
+  safeDeepMergeSilent,
+  stripDangerousKeys,
+  isSafeKey,
+} from './safe-merge.js';
+
+// SSRF guard (private IP/host blocking)
+export {
+  isPrivateIPv4,
+  isPrivateIPv6,
+  isPrivateIP,
+  isBlockedHost,
+  validateURL,
+  validateWebSocketURL,
+} from './ssrf-guard.js';
+
+// Validation utilities (agent config, presets, security tiers, etc.)
+export {
+  validatePreset,
+  validateSecurityTier,
+  validateToolAccessProfile,
+  validatePermissionSet,
+  validateExecutionMode,
+  validateTurnApprovalMode,
+  validateExtensionName,
+  validateSkillName,
+  validateHexacoTraits,
+  validateAgentConfig,
+  VALID_PRESETS,
+} from './validation.js';

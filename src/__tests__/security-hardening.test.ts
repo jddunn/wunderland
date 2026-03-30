@@ -15,7 +15,7 @@ import {
     safeDeepMergeSilent,
     stripDangerousKeys,
     isSafeKey,
-} from '../utils/safe-merge.js';
+} from '../core/safe-merge.js';
 import {
     isPrivateIPv4,
     isPrivateIPv6,
@@ -23,7 +23,7 @@ import {
     isBlockedHost,
     validateURL,
     validateWebSocketURL,
-} from '../utils/ssrf-guard.js';
+} from '../core/ssrf-guard.js';
 import { PreLLMClassifier } from '../security/PreLLMClassifier.js';
 import { ToolLoopDetector } from '../security/ToolLoopDetector.js';
 
