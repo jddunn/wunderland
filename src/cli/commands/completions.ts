@@ -110,6 +110,7 @@ const GLOBAL_FLAGS = [
   '--preset',
   '--security-tier',
   '--no-guardrails',
+  '--no-guardrail-override',
   '--guardrails',
   '--format',
   '--dir',
