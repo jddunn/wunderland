@@ -79,3 +79,11 @@ export { CompactionManager } from './CompactionManager.js';
 
 // PresetExtensionResolver (resolve extensions from presets)
 export { resolvePresetExtensions } from './PresetExtensionResolver.js';
+
+// NaturalLanguageAgentBuilder (merged from ai/)
+export {
+  extractAgentConfig,
+  validateApiKeySetup,
+  type LLMInvoker,
+  type ExtractedAgentConfig,
+} from './NaturalLanguageAgentBuilder.js';
