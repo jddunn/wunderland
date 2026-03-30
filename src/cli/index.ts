@@ -156,6 +156,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
 ${opts?.isExporting ? '' : `    ${d('--export-png <path>')}    Export command output as styled PNG screenshot\n`}
     ${d('--overdrive')}                Auto-approve all tool calls for this session
     ${d('--llm-judge')}                Route HITL approvals through an LLM judge instead of auto-approving
+    ${d('--no-guardrail-override')}    Disable post-approval guardrail veto after HITL approval
     ${d('--dangerously-skip-permissions')}  Skip permission/approval checks (dangerous)
     ${d('--dangerously-skip-command-safety')}  Disable shell command safety checks
 

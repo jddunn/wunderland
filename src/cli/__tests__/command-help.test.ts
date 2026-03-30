@@ -71,4 +71,14 @@ describe('CLI subcommand help', () => {
     expect(output).toContain('wunderland voice test "Hello"');
     expect(output).toContain('OPENAI_API_KEY');
   });
+
+  it('prints global help with both HITL guardrail flags', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await main(['--help', '--quiet']);
+
+    const output = stripAnsi(log.mock.calls.flat().join('\n'));
+    expect(output).toContain('--llm-judge');
+    expect(output).toContain('--no-guardrail-override');
+  });
 });

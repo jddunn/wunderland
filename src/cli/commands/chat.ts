@@ -1418,10 +1418,19 @@ export default async function cmdChat(
           ? (cfg.secrets as Record<string, string>)
           : undefined;
       const getSecretForJudge = createEnvSecretResolver({ configSecrets: cfgSecretsObj });
-      const judgeApiKey = getSecretForJudge('openai.apiKey') || process.env['OPENAI_API_KEY'] || llmApiKey;
+      const judgeProvider = (cfg?.hitl as any)?.judgeProvider || 'openai';
+      const judgeApiKey = judgeProvider === 'openrouter'
+        ? getSecretForJudge('openrouter.apiKey') || process.env['OPENROUTER_API_KEY'] || llmApiKey
+        : judgeProvider === 'anthropic'
+          ? getSecretForJudge('anthropic.apiKey') || process.env['ANTHROPIC_API_KEY'] || llmApiKey
+          : judgeProvider === 'gemini'
+            ? getSecretForJudge('gemini.apiKey') || process.env['GEMINI_API_KEY'] || llmApiKey
+            : judgeProvider === 'ollama'
+              ? undefined
+              : getSecretForJudge('openai.apiKey') || process.env['OPENAI_API_KEY'] || llmApiKey;
       const judgeHandler = hitl.llmJudge({
         model: (cfg?.hitl as any)?.judgeModel || model || 'gpt-4o-mini',
-        provider: (cfg?.hitl as any)?.judgeProvider || 'openai',
+        provider: judgeProvider,
         criteria:
           (cfg?.hitl as any)?.judgeCriteria ||
           'Evaluate whether this tool call is safe, relevant to the user request, and appropriate given the security context.',
@@ -1447,6 +1456,15 @@ export default async function cmdChat(
       );
     }
   }
+
+  const hitlGuardrailOverride =
+    !(cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl))
+      || (cfg.hitl as Record<string, unknown>).guardrailOverride !== false;
+  const hitlPostApprovalGuardrails =
+    cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl)
+      && Array.isArray((cfg.hitl as Record<string, unknown>).postApprovalGuardrails)
+      ? ((cfg.hitl as Record<string, unknown>).postApprovalGuardrails as string[])
+      : ['pii-redaction', 'code-safety'];
 
   printChatHeader({
     agentName: displayName,
@@ -1668,6 +1686,8 @@ export default async function cmdChat(
     channelAdapters,
     autoApproveToolCalls,
     llmJudgeHandler,
+    guardrailOverride: hitlGuardrailOverride,
+    postApprovalGuardrails: hitlPostApprovalGuardrails,
     verbose,
     enableQueryRouter,
     renderer: streamRenderer,
