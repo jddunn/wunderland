@@ -35,7 +35,8 @@ export type HelpTopicId =
   | 'retrieval'
   | 'discovery'
   | 'memory'
-  | 'personality';
+  | 'personality'
+  | 'channels';
 
 export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: string }> = [
   {
@@ -97,6 +98,11 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     id: 'security',
     title: 'Security & Approvals',
     summary: 'Execution modes, tool permissions, and safe defaults.',
+  },
+  {
+    id: 'channels',
+    title: 'Channel Task Execution & File Relay',
+    summary: 'Run tasks via Telegram/WhatsApp/Discord, send files to your phone.',
   },
   {
     id: 'export',
@@ -217,6 +223,7 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'discovery' || topic === 'discover' || topic === 'platform-knowledge' || topic === 'catalog' || topic === 'capabilities') return 'discovery';
     if (topic === 'memory' || topic === 'cognitive-memory' || topic === 'cognitive-mechanisms' || topic === 'mechanisms' || topic === 'infinite-context' || topic === 'consolidation' || topic === 'decay' || topic === 'ebbinghaus') return 'memory';
     if (topic === 'personality' || topic === 'hexaco' || topic === 'traits' || topic === 'persona' || topic === 'personas') return 'personality';
+    if (topic === 'channels' || topic === 'chat-tasks' || topic === 'file-relay' || topic === 'telegram' || topic === 'discord') return 'channels';
     if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
   })();
@@ -588,6 +595,60 @@ export function printHelpTopic(topicRaw: string): void {
     console.log();
     console.log(`  ${hr()}`);
     console.log(`  ${dim('See also:')} ${accent('wunderland help memory')}${dim(',')} ${accent('wunderland help personality')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'channels' || topic === 'chat-tasks' || topic === 'file-relay') {
+    printTitle('Channel Task Execution & File Relay');
+    console.log(`  ${dim('Use Telegram, WhatsApp, Discord, or Slack as a remote control for your agent.')}`);
+    console.log(`  ${dim('Send tasks via chat, get results + files back on your phone.')}`);
+    console.log();
+    console.log(`  ${bright('How It Works:')}`);
+    console.log(`     ${dim('Message your bot → agent executes tools → sends results/files back.')}`);
+    console.log(`     ${dim('Conversation history persists in SQLite across restarts.')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('3 New Tools:')}`);
+    console.log(`     ${accent('local_file_search')}      ${dim('Find files by fuzzy name match (full filesystem, denylist-filtered)')}`);
+    console.log(`     ${accent('zip_files')}              ${dim('Create zip archives from local files')}`);
+    console.log(`     ${accent('send_file_to_channel')}   ${dim('Send a file to the user via current chat (platform-aware size limits)')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Security Tiers (per-channel):')}`);
+    console.log(`     ${accent('strict')}       ${dim('Search tools only (web_search, news_search, fact_check)')}`);
+    console.log(`     ${accent('balanced')}     ${dim('+ file tools (local_file_search, zip_files, send_file_to_channel)')}`);
+    console.log(`     ${accent('permissive')}   ${dim('All tools including cli_executor and social posting')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('User Whitelist:')}`);
+    console.log(`     ${dim('Only specific user IDs can trigger tool execution.')}`);
+    console.log(`     ${dim('Empty list = all users allowed. Set in agent.config.json:')}`);
+    console.log();
+    console.log(`     ${muted('"channels": {')}`);
+    console.log(`     ${muted('  "telegram": {')}`);
+    console.log(`     ${muted('    "securityTier": "permissive",')}`);
+    console.log(`     ${muted('    "allowedUsers": ["123456789"]')}`);
+    console.log(`     ${muted('  }')}`);
+    console.log(`     ${muted('}')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('File Size Limits:')}`);
+    console.log(`     ${accent('Telegram')}      ${dim('50 MB')}`);
+    console.log(`     ${accent('WhatsApp')}      ${dim('100 MB (Cloud API) / 16 MB (Twilio)')}`);
+    console.log(`     ${accent('Discord')}       ${dim('25 MB (50 MB with Nitro)')}`);
+    console.log(`     ${accent('Slack')}         ${dim('1 GB')}`);
+    console.log(`     ${dim('Files over the limit: agent suggests compression.')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Example Conversations:')}`);
+    console.log(`     ${dim('You:')} "Find pic.png in my Downloads and send it to me"`);
+    console.log(`     ${dim('Bot:')} ${iColor('Found ~/Downloads/pic.png (2.1 MB). Sending...')} ${sColor('[file sent]')}`);
+    console.log();
+    console.log(`     ${dim('You:')} "Do my assignment on quantum computing and send me a zip"`);
+    console.log(`     ${dim('Bot:')} ${iColor('Created 3 files → zipped → sending...')} ${sColor('[quantum-assignment.zip sent]')}`);
+    console.log();
+    console.log(`  ${dim('See also:')} ${accent('wunderland help security')}${dim(',')} ${accent('wunderland help whatsapp')}`);
     console.log();
     return;
   }
