@@ -1,10 +1,10 @@
 /**
  * @fileoverview Unit tests for NaturalLanguageAgentBuilder
- * @module wunderland/ai/__tests__/NaturalLanguageAgentBuilder
+ * @module wunderland/__tests__/NaturalLanguageAgentBuilder
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { extractAgentConfig, validateApiKeySetup } from '../NaturalLanguageAgentBuilder.js';
+import { extractAgentConfig, validateApiKeySetup } from '../core/NaturalLanguageAgentBuilder.js';
 
 describe('NaturalLanguageAgentBuilder', () => {
   describe('validateApiKeySetup', () => {

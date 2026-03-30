@@ -1,6 +1,6 @@
 /**
  * @fileoverview LLM-powered extraction from natural language agent descriptions.
- * @module wunderland/ai/NaturalLanguageAgentBuilder
+ * @module wunderland/core/NaturalLanguageAgentBuilder
  *
  * Extracts structured agent configuration from natural language descriptions:
  * - Preset selection
