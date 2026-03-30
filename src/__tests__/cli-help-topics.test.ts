@@ -57,6 +57,12 @@ describe('CLI help topics', () => {
     expect(out).toContain('wunderland extensions info image-generation');
   });
 
+  it('prints the security guide with guardrail override guidance', () => {
+    const out = captureLogs(() => printHelpTopic('security'));
+    expect(out).toContain('--llm-judge');
+    expect(out).toContain('--no-guardrail-override');
+  });
+
   it('prints the workflows guide with orchestration guidance', () => {
     const out = captureLogs(() => printHelpTopic('workflows'));
     expect(out).toContain(`wunderland/workflows`);

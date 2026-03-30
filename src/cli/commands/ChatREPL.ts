@@ -91,6 +91,10 @@ export interface ChatREPLConfig {
    * prompt (or auto-approve) behaviour applies.
    */
   llmJudgeHandler?: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
+  /** Whether post-approval guardrails may veto approved actions. */
+  guardrailOverride?: boolean;
+  /** Ordered post-approval guardrails shown in /router status. */
+  postApprovalGuardrails?: string[];
   /** Whether verbose diagnostic output is enabled. */
   verbose: boolean;
   /** Whether the QueryRouter is enabled. */
@@ -717,11 +721,14 @@ export class ChatREPL {
             iw,
           ));
           rLines.push(frameLine(
-            `   ${chalk.hex(C.brightCyan)('Guardrail override')}: ${sColor('enabled')}`,
+            `   ${chalk.hex(C.brightCyan)('Guardrail override')}: ${
+              this.config.guardrailOverride !== false ? sColor('enabled') : wColor('disabled')
+            }`,
             iw,
           ));
+          const postApprovalGuardrails = this.config.postApprovalGuardrails ?? ['pii-redaction', 'code-safety'];
           rLines.push(frameLine(
-            `   ${chalk.hex(C.brightCyan)('Post-approval')}: ${dim('code-safety, pii-redaction')}`,
+            `   ${chalk.hex(C.brightCyan)('Post-approval')}: ${dim(postApprovalGuardrails.join(', '))}`,
             iw,
           ));
           // Last recommendation hint
