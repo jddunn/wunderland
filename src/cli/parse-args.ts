@@ -67,6 +67,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
         'no-tui',
         'overdrive',
         'llm-judge',
+        'no-guardrail-override',
         'dangerously-skip-permissions',
         'dangerously-skip-command-safety',
       ]);
