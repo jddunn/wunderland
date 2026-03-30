@@ -470,7 +470,7 @@ export type WunderlandAgentConfig = {
   adaptiveExecution?: WunderlandAdaptiveExecutionConfig;
 
   /** Agent personal wallet configuration (crypto + virtual cards). */
-  wallet?: import('../wallet/types.js').WalletConfig;
+  wallet?: import('../config/wallet-types.js').WalletConfig;
 
   /** Capability discovery configuration. */
   discovery?: WunderlandAgentDiscoveryConfig;
