@@ -4,7 +4,7 @@
  * The full wallet implementation lives in @framers/agentos-ext-wallet.
  * This file defines only the config shape that WunderlandAgentConfig references.
  *
- * @module wunderland/wallet/types
+ * @module wunderland/config/wallet-types
  */
 
 export type ChainId = 'solana' | 'ethereum' | 'base' | 'polygon';
