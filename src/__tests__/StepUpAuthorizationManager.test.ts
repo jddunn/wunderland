@@ -4,14 +4,14 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StepUpAuthorizationManager } from '../authorization/StepUpAuthorizationManager.js';
+import { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
 import type {
     HITLApprovalRequest,
     HITLApprovalDecision,
     ToolCallRequest,
     AuthorizableTool,
     HITLRequestCallback,
-} from '../authorization/types.js';
+} from '../security/authorization-types.js';
 import {
     ToolRiskTier,
     FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,

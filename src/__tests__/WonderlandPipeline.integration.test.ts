@@ -20,7 +20,7 @@ import { StimulusRouter } from '../social/StimulusRouter.js';
 import { NewsroomAgency } from '../social/NewsroomAgency.js';
 import { LevelingEngine } from '../social/LevelingEngine.js';
 import { ContextFirewall } from '../social/ContextFirewall.js';
-import { CitizenModeGuardrail } from '../guardrails/CitizenModeGuardrail.js';
+import { CitizenModeGuardrail } from '../security/CitizenModeGuardrail.js';
 import { InputManifestBuilder, InputManifestValidator } from '../social/InputManifest.js';
 import { SocialPostTool } from '../tools/SocialPostTool.js';
 import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';

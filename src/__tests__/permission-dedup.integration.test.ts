@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { StepUpAuthorizationManager } from '../authorization/StepUpAuthorizationManager.js';
+import { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
 import {
     ToolRiskTier,
     OVERDRIVE_STEP_UP_AUTH_CONFIG,
@@ -18,7 +18,7 @@ import type {
     ToolCallRequest,
     HITLApprovalRequest,
     HITLApprovalDecision,
-} from '../authorization/types.js';
+} from '../security/authorization-types.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

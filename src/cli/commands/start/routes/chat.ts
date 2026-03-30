@@ -97,6 +97,7 @@ export async function handleChatRoutes(
     discoveryManager,
     strictToolNames,
     autoApproveToolCalls,
+    llmJudgeHandler,
     dangerouslySkipPermissions,
     turnApprovalMode,
     defaultTenantId,
@@ -360,6 +361,15 @@ export async function handleChatRoutes(
         },
         askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
           if (autoApproveToolCalls) return true;
+
+          // LLM judge mode: delegate the decision to the LLM judge handler
+          if (llmJudgeHandler) {
+            try {
+              return await llmJudgeHandler(tool, args);
+            } catch {
+              // Judge failed — fall through to standard HITL flow
+            }
+          }
 
           /* Auto-approve read-only tools via HTTP API */
           if (tool.hasSideEffects !== true) return true;

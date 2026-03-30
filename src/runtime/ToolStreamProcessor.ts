@@ -14,7 +14,7 @@
  */
 
 import type { StepUpAuthorizationConfig } from '../core/types.js';
-import type { StepUpAuthorizationManager } from '../authorization/StepUpAuthorizationManager.js';
+import type { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
 import type { ToolInstance, LLMProviderConfig } from './tool-helpers.js';
 import {
   getBooleanProp,

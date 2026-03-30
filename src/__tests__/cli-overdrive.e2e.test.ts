@@ -20,13 +20,13 @@ import {
   createStepUpAuthConfigFromTier,
   ToolRiskTier,
 } from '../core/types.js';
-import { StepUpAuthorizationManager } from '../authorization/StepUpAuthorizationManager.js';
+import { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
 import type {
   AuthorizableTool,
   ToolCallRequest,
   HITLApprovalRequest,
   HITLApprovalDecision,
-} from '../authorization/types.js';
+} from '../security/authorization-types.js';
 
 /** Helper: create a minimal AuthorizableTool. */
 const createTool = (overrides: Partial<AuthorizableTool> = {}): AuthorizableTool => ({
