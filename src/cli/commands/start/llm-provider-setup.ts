@@ -237,6 +237,7 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
           action: tool.name,
           description: `Tool call: ${tool.name} (${tool.hasSideEffects ? 'side effects' : 'read-only'})`,
           details: { toolName: tool.name, args, hasSideEffects: tool.hasSideEffects },
+          context: { agentCalls: [], totalTokens: 0, totalCostUSD: 0, elapsedMs: 0 },
         });
         return decision.approved === true;
       };

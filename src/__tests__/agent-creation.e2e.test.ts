@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
-import { extractAgentConfig } from '../ai/NaturalLanguageAgentBuilder.js';
+import { extractAgentConfig } from '../core/NaturalLanguageAgentBuilder.js';
 import { resolvePresetExtensions } from '../core/PresetExtensionResolver.js';
 import { validateAgentConfig } from '../utils/validation.js';
 

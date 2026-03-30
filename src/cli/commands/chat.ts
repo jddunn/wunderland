@@ -1408,7 +1408,7 @@ export default async function cmdChat(
       const getSecretForJudge = createEnvSecretResolver({ configSecrets: cfgSecretsObj });
       const judgeApiKey = getSecretForJudge('openai.apiKey') || process.env['OPENAI_API_KEY'] || llmApiKey;
       const judgeHandler = hitl.llmJudge({
-        model: (cfg?.hitl as any)?.judgeModel || policy.llmModel || 'gpt-4o-mini',
+        model: (cfg?.hitl as any)?.judgeModel || model || 'gpt-4o-mini',
         provider: (cfg?.hitl as any)?.judgeProvider || 'openai',
         criteria:
           (cfg?.hitl as any)?.judgeCriteria ||
@@ -1424,6 +1424,7 @@ export default async function cmdChat(
           action: tool.name,
           description: `Tool call: ${tool.name} (${tool.hasSideEffects ? 'side effects' : 'read-only'})`,
           details: { toolName: tool.name, args, hasSideEffects: tool.hasSideEffects },
+          context: { agentCalls: [], totalTokens: 0, totalCostUSD: 0, elapsedMs: 0 },
         });
         return decision.approved === true;
       };
