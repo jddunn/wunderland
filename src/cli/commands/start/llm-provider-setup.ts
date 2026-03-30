@@ -18,6 +18,7 @@ import {
   resolveWunderlandTextModel,
 } from '../../../config/provider-defaults.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime/workspace.js';
+import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { buildFallbackChain } from '@framers/agentos';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
@@ -209,19 +210,35 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   // The handler wraps the AgentOS hitl.llmJudge() factory to evaluate each
   // tool call via an LLM, converting the ApprovalRequest interface into the
   // simpler (tool, args) => boolean used by askPermission handlers.
-  if (ctx.llmJudgeMode && canUseLLM) {
+  const judgeProvider = (cfg?.hitl as any)?.judgeProvider || 'openai';
+  const judgeApiKey = (() => {
+    const cfgSecrets =
+      cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets)
+        ? (cfg.secrets as Record<string, string>)
+        : undefined;
+    const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
+    if (judgeProvider === 'openrouter') {
+      return getSecret('openrouter.apiKey') || process.env['OPENROUTER_API_KEY'] || llmApiKey;
+    }
+    if (judgeProvider === 'anthropic') {
+      return getSecret('anthropic.apiKey') || process.env['ANTHROPIC_API_KEY'] || llmApiKey;
+    }
+    if (judgeProvider === 'gemini') {
+      return getSecret('gemini.apiKey') || process.env['GEMINI_API_KEY'] || llmApiKey;
+    }
+    if (judgeProvider === 'ollama') {
+      return undefined;
+    }
+    return getSecret('openai.apiKey') || process.env['OPENAI_API_KEY'] || llmApiKey;
+  })();
+  const judgeCanUseLLM = judgeProvider === 'ollama' || !!judgeApiKey;
+
+  if (ctx.llmJudgeMode && judgeCanUseLLM) {
     try {
       const { hitl } = await import('@framers/agentos');
-      const { createEnvSecretResolver } = await import('../../../security/env-secrets.js');
-      const cfgSecrets =
-        cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets)
-          ? (cfg.secrets as Record<string, string>)
-          : undefined;
-      const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
-      const judgeApiKey = getSecret('openai.apiKey') || process.env['OPENAI_API_KEY'] || llmApiKey;
       const judgeHandler = hitl.llmJudge({
         model: (cfg?.hitl as any)?.judgeModel || 'gpt-4o-mini',
-        provider: (cfg?.hitl as any)?.judgeProvider || 'openai',
+        provider: judgeProvider,
         criteria:
           (cfg?.hitl as any)?.judgeCriteria ||
           'Evaluate whether this tool call is safe, relevant to the user request, and appropriate given the security context.',
