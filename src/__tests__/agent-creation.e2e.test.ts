@@ -16,7 +16,7 @@ import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { extractAgentConfig } from '../core/NaturalLanguageAgentBuilder.js';
 import { resolvePresetExtensions } from '../core/PresetExtensionResolver.js';
-import { validateAgentConfig } from '../utils/validation.js';
+import { validateAgentConfig } from '../core/validation.js';
 
 const TEST_DIR = path.join(process.cwd(), '.test-agents');
 const TEST_AGENT_DIR = path.join(TEST_DIR, 'test-research-bot');
