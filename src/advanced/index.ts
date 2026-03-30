@@ -76,22 +76,22 @@ export * from '../skills/index.js';
 export * from '../rag/index.js';
 
 // Agency (multi-agent collectives) exports
-export * from '../agency/index.js';
+export * from './agency.js';
 
 // Workflows engine exports
-export * from '../workflows/index.js';
+export * from './workflows.js';
 
 // Voice calling exports
 export * from '../voice/call-client.js';
 
 // Structured outputs exports
-export * from '../structured/index.js';
+export * from './structured.js';
 
 // Knowledge graph exports
-export * from '../knowledge/index.js';
+export * from './knowledge.js';
 
 // Planning engine exports
-export { PlanningEngine } from '../planning/index.js';
+export { PlanningEngine } from './planning.js';
 export type {
   IPlanningEngine,
   ExecutionPlan,
@@ -112,16 +112,16 @@ export type {
   ExecutionState,
   ExecutionSummary,
   PlanMetadata,
-} from '../planning/index.js';
+} from './planning.js';
 
 // Evaluation exports
-export * from '../evaluation/index.js';
+export * from './evaluation.js';
 
 // Provenance & audit trail exports
-export * from '../provenance/index.js';
+export * from './provenance.js';
 
 // Marketplace exports
-export * from '../marketplace/index.js';
+export * from './marketplace.js';
 
 // Discovery exports (capability discovery engine)
 export * from '../discovery/index.js';
