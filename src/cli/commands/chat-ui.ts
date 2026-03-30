@@ -60,6 +60,8 @@ export function printChatHeader(info: {
   fallback: boolean;
   lazyTools: boolean;
   autoApprove: boolean;
+  /** Whether HITL decisions are routed through an LLM judge. */
+  llmJudge?: boolean;
   turnApproval: string;
   securityTier: string;
   toolProfile: string;

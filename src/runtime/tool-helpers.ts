@@ -22,13 +22,13 @@
 
 import {
   StepUpAuthorizationManager,
-} from '../authorization/StepUpAuthorizationManager.js';
+} from '../security/StepUpAuthorizationManager.js';
 import {
   FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
   DEFAULT_STEP_UP_AUTH_CONFIG,
   type StepUpAuthorizationConfig,
 } from '../core/types.js';
-import type { AuthorizableTool } from '../authorization/types.js';
+import type { AuthorizableTool } from '../security/authorization-types.js';
 import { SpanStatusCode, context, trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';

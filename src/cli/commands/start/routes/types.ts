@@ -50,6 +50,8 @@ export interface CliServerDeps {
   discoveryManager: any;
   strictToolNames: boolean;
   autoApproveToolCalls: boolean;
+  /** Pre-built LLM judge handler for tool approval decisions (--llm-judge). */
+  llmJudgeHandler?: (tool: { name: string; hasSideEffects?: boolean }, args: Record<string, unknown>) => Promise<boolean>;
   dangerouslySkipPermissions: boolean;
   turnApprovalMode: 'off' | 'after-each-turn' | 'after-each-round';
   defaultTenantId: string | undefined;

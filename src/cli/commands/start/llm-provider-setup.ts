@@ -190,6 +190,62 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   ctx.dangerouslySkipPermissions = dangerouslySkipPermissions;
   ctx.dangerouslySkipCommandSafety = dangerouslySkipCommandSafety;
   ctx.autoApproveToolCalls = autoApproveToolCalls;
+
+  // ── LLM Judge HITL mode ──────────────────────────────────────────────────
+  // Resolve from --llm-judge CLI flag or hitl.mode in agent.config.json.
+  // When active, tool approval decisions are routed through an LLM judge
+  // instead of blindly auto-approving or requiring interactive prompts.
+  const llmJudgeFlag = flags['llm-judge'] === true;
+  const configHitlMode = (() => {
+    if (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl)) {
+      const m = (cfg.hitl as Record<string, unknown>).mode;
+      if (typeof m === 'string') return m.trim().toLowerCase();
+    }
+    return '';
+  })();
+  ctx.llmJudgeMode = llmJudgeFlag || configHitlMode === 'llm-judge';
+
+  // Create LLM judge HITL handler when active and an LLM is available.
+  // The handler wraps the AgentOS hitl.llmJudge() factory to evaluate each
+  // tool call via an LLM, converting the ApprovalRequest interface into the
+  // simpler (tool, args) => boolean used by askPermission handlers.
+  if (ctx.llmJudgeMode && canUseLLM) {
+    try {
+      const { hitl } = await import('@framers/agentos');
+      const { createEnvSecretResolver } = await import('../../../security/env-secrets.js');
+      const cfgSecrets =
+        cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets)
+          ? (cfg.secrets as Record<string, string>)
+          : undefined;
+      const getSecret = createEnvSecretResolver({ configSecrets: cfgSecrets });
+      const judgeApiKey = getSecret('openai.apiKey') || process.env['OPENAI_API_KEY'] || llmApiKey;
+      const judgeHandler = hitl.llmJudge({
+        model: (cfg?.hitl as any)?.judgeModel || 'gpt-4o-mini',
+        provider: (cfg?.hitl as any)?.judgeProvider || 'openai',
+        criteria:
+          (cfg?.hitl as any)?.judgeCriteria ||
+          'Evaluate whether this tool call is safe, relevant to the user request, and appropriate given the security context.',
+        confidenceThreshold: (cfg?.hitl as any)?.judgeConfidenceThreshold ?? 0.7,
+        apiKey: judgeApiKey,
+      });
+      const agentDisplayName = cfg?.displayName || cfg?.agentName || seedId || 'Wunderland Agent';
+      ctx.llmJudgeHandler = async (tool: any, args: Record<string, unknown>): Promise<boolean> => {
+        const decision = await judgeHandler({
+          id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'tool' as const,
+          agent: agentDisplayName,
+          action: tool.name,
+          description: `Tool call: ${tool.name} (${tool.hasSideEffects ? 'side effects' : 'read-only'})`,
+          details: { toolName: tool.name, args, hasSideEffects: tool.hasSideEffects },
+        });
+        return decision.approved === true;
+      };
+      fmt.ok('LLM judge HITL handler active');
+    } catch (err: any) {
+      fmt.warning(`LLM judge init failed, falling back to standard HITL: ${err?.message ?? err}`);
+    }
+  }
+
   ctx.enableSkills = enableSkills;
   ctx.lazyTools = lazyTools;
   ctx.workspaceBaseDir = workspaceBaseDir;

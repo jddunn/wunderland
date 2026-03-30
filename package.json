@@ -47,8 +47,8 @@
       "types": "./dist/storage/index.d.ts"
     },
     "./guardrails": {
-      "import": "./dist/guardrails/index.js",
-      "types": "./dist/guardrails/index.d.ts"
+      "import": "./dist/advanced/guardrails.js",
+      "types": "./dist/advanced/guardrails.d.ts"
     },
     "./voice": {
       "import": "./dist/voice/index.js",

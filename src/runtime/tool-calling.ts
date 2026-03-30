@@ -16,7 +16,7 @@
 
 import {
   StepUpAuthorizationManager,
-} from '../authorization/StepUpAuthorizationManager.js';
+} from '../security/StepUpAuthorizationManager.js';
 import {
   FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
   type StepUpAuthorizationConfig,
