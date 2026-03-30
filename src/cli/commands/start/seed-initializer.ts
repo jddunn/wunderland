@@ -32,6 +32,12 @@ export async function initializeSeed(ctx: any): Promise<void> {
   if (guardrailsFlag) {
     cfg.enableOnlyGuardrailPacks = guardrailsFlag.split(',').map((s: string) => s.trim()).filter(Boolean);
   }
+  if (flags?.['no-guardrail-override'] === true) {
+    cfg.hitl = {
+      ...(cfg.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl) ? cfg.hitl : {}),
+      guardrailOverride: false,
+    };
+  }
 
   const seedId = String(cfg.seedId || 'seed_local_agent');
   const displayName = resolveAgentDisplayName({

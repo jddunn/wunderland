@@ -98,6 +98,7 @@ const GLOBAL_FLAGS = [
   '--quiet', '-q',
   '--yes', '-y',
   '--auto-approve-tools',
+  '--llm-judge',
   '--theme',
   '--ascii',
   '--no-color',
