@@ -139,6 +139,20 @@ export interface CliQueryRouterOptions {
    * Typically `~/.wunderland/agents/<agent-id>/`.
    */
   agentDir?: string;
+
+  /**
+   * Optional RerankerService for provider-backed reranking (Cohere, local cross-encoder, LLM judge).
+   * When provided with a `rerankChain` config, replaces the built-in lexical reranker.
+   */
+  rerankerService?: {
+    rerankChain: (query: string, chunks: any[], chain: Array<{ provider: string; topK: number; model?: string }>) => Promise<any[]>;
+  };
+
+  /**
+   * Reranker chain stages. Used with `rerankerService` to define a multi-stage pipeline.
+   * Default: single-stage lexical reranker (built-in).
+   */
+  rerankChain?: Array<{ provider: string; topK: number; model?: string }>;
 }
 
 // ============================================================================
@@ -366,7 +380,10 @@ function buildCliQueryRouterConfig(opts: CliQueryRouterOptions): QueryRouterConf
     embeddingBaseUrl,
     graphEnabled: false,
     deepResearchEnabled,
-    rerank: rerankCliChunks,
+    rerank: opts.rerankerService && opts.rerankChain
+      ? (query: string, chunks: RetrievedChunk[], topN: number) =>
+          opts.rerankerService!.rerankChain(query, chunks as any[], opts.rerankChain!).then((r: any[]) => r.slice(0, topN) as RetrievedChunk[])
+      : rerankCliChunks,
     availableTools: deepResearchEnabled ? ['web_search', 'deep_research'] : [],
     maxTier: opts.maxTier ?? 3,
     onClassification: (result: ClassificationResult) => {
@@ -458,7 +475,10 @@ export async function initCliQueryRouter(
             llmBaseUrl: opts.baseUrl,
             corpusPaths: config.knowledgeCorpus,
             agentDir: opts.agentDir,
-            rerank: rerankCliChunks,
+            rerank: opts.rerankerService && opts.rerankChain
+              ? (query: string, chunks: any[], topN: number) =>
+                  opts.rerankerService!.rerankChain(query, chunks, opts.rerankChain!).then((r: any[]) => r.slice(0, topN))
+              : rerankCliChunks,
             verbose: opts.verbose,
             logger,
           });
