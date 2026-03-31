@@ -179,9 +179,49 @@ export async function loadDotEnvIntoProcessUpward(opts?: {
  * Matches keys against known extension secrets from extension-secrets.json.
  * Returns a summary of what was imported.
  */
+/**
+ * Build an alias map for recognizing common key name variants.
+ * Handles NEXT_PUBLIC_ prefix stripping and common naming differences.
+ */
+function buildAliasMap(secrets: Array<{ envVar: string }>): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const s of secrets) {
+    // Direct: OPENAI_API_KEY → OPENAI_API_KEY
+    map.set(s.envVar, s.envVar);
+    // NEXT_PUBLIC_ prefix: NEXT_PUBLIC_OPENAI_API_KEY → OPENAI_API_KEY
+    map.set(`NEXT_PUBLIC_${s.envVar}`, s.envVar);
+  }
+  return map;
+}
+
+/**
+ * Extract API key patterns from freeform text (not just KEY=value format).
+ * Detects common API key patterns like sk-..., key-..., Bearer tokens.
+ */
+function extractApiKeysFromText(text: string): Record<string, string> {
+  const found: Record<string, string> = {};
+  const patterns: Array<{ env: string; regex: RegExp }> = [
+    { env: 'OPENAI_API_KEY', regex: /\b(sk-[A-Za-z0-9_-]{20,})\b/ },
+    { env: 'ANTHROPIC_API_KEY', regex: /\b(sk-ant-[A-Za-z0-9_-]{20,})\b/ },
+    { env: 'OPENROUTER_API_KEY', regex: /\b(sk-or-[A-Za-z0-9_-]{20,})\b/ },
+  ];
+  for (const { env, regex } of patterns) {
+    const match = text.match(regex);
+    if (match) found[env] = match[1];
+  }
+  return found;
+}
+
 export async function importEnvBlock(text: string): Promise<ImportResult> {
   // 1. Parse the pasted text as .env format
   const parsed = parseEnvFile(text);
+
+  // 1b. Also detect raw API key patterns in freeform text
+  const freeformKeys = extractApiKeysFromText(text);
+  for (const [key, value] of Object.entries(freeformKeys)) {
+    if (!(key in parsed)) parsed[key] = value;
+  }
+
   const parsedKeys = Object.keys(parsed);
 
   // 2. Load existing env from ~/.wunderland/.env
@@ -190,6 +230,9 @@ export async function importEnvBlock(text: string): Promise<ImportResult> {
   // 3. Build envVar -> secretId lookup from known secret definitions
   const secrets = getAllSecrets();
   const knownEnvVars = new Set(secrets.map((s) => s.envVar));
+
+  // 3b. Alias map for NEXT_PUBLIC_ stripping and common variants
+  const aliasMap = buildAliasMap(secrets);
 
   // 4. Classify each parsed key
   const result: ImportResult = {
@@ -206,32 +249,38 @@ export async function importEnvBlock(text: string): Promise<ImportResult> {
   for (const key of parsedKeys) {
     const value = parsed[key];
 
-    if (!knownEnvVars.has(key)) {
-      // Not a recognized secret env var
+    // Direct match or alias match (NEXT_PUBLIC_ stripped, etc.)
+    const canonicalKey = knownEnvVars.has(key) ? key : aliasMap.get(key);
+    if (!canonicalKey) {
       result.unrecognized++;
       result.details.push({ key, action: 'unrecognized' });
       continue;
     }
 
-    if (key in existing && existing[key] === value) {
-      // Already set with the same value — skip
-      result.skipped++;
-      result.details.push({ key, action: 'skipped' });
+    // Skip empty or obviously non-secret values (booleans, URLs without keys)
+    if (!value || value === 'false' || value === 'true' || value === '0' || value === '1') {
+      result.unrecognized++;
+      result.details.push({ key, action: 'unrecognized' });
       continue;
     }
 
-    if (key in existing && existing[key] !== value) {
-      // Exists but with a different value — update
+    if (canonicalKey in existing && existing[canonicalKey] === value) {
+      result.skipped++;
+      result.details.push({ key: canonicalKey, action: 'skipped' });
+      continue;
+    }
+
+    if (canonicalKey in existing && existing[canonicalKey] !== value) {
       result.updated++;
-      result.details.push({ key, action: 'updated' });
-      toMerge[key] = value;
+      result.details.push({ key: canonicalKey, action: 'updated' });
+      toMerge[canonicalKey] = value;
       continue;
     }
 
     // New key — import
     result.imported++;
-    result.details.push({ key, action: 'imported' });
-    toMerge[key] = value;
+    result.details.push({ key: canonicalKey, action: 'imported' });
+    toMerge[canonicalKey] = value;
   }
 
   // 5. Merge recognized keys into existing env and save
