@@ -44,12 +44,25 @@ function generatePKCE(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-async function openBrowser(url: string): Promise<void> {
-  const { exec } = await import('node:child_process');
-  const platform = process.platform;
-  const cmd =
-    platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open';
-  exec(`${cmd} "${url}"`);
+/** Detect if running in a headless environment (no display). */
+function isHeadless(): boolean {
+  if (process.env.SSH_CLIENT || process.env.SSH_TTY) return true;
+  if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return true;
+  return false;
+}
+
+async function openBrowser(url: string): Promise<boolean> {
+  if (isHeadless()) return false;
+  try {
+    const { exec } = await import('node:child_process');
+    const platform = process.platform;
+    const cmd =
+      platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open';
+    exec(`${cmd} "${url}"`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── Google credential ingestion helpers ──────────────────────────────────────
@@ -138,7 +151,6 @@ async function connectGmail(credentialsFile?: string): Promise<void> {
   }
 
   console.log(`\n  ${accent('Connecting Gmail...')}`);
-  console.log(`  ${muted('Opening browser for Google authorization...')}\n`);
 
   // Build consent URL.
   const params = new URLSearchParams({
@@ -153,6 +165,20 @@ async function connectGmail(credentialsFile?: string): Promise<void> {
   });
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  const headless = isHeadless();
+
+  if (headless) {
+    console.log(`  ${chalk.yellow('\u26A0')}  ${chalk.yellow('Headless environment detected (no browser available).')}\n`);
+    console.log(`  ${accent('Option 1:')} Open this URL on any device with a browser:\n`);
+    console.log(`  ${chalk.cyan(authUrl)}\n`);
+    console.log(`  After authorizing, you'll be redirected to a localhost URL.`);
+    console.log(`  Copy the ${accent('full redirect URL')} and paste it below.\n`);
+    console.log(`  ${accent('Option 2:')} Run ${muted('wunderland connect gmail')} on a machine with a browser,`);
+    console.log(`  then copy ${muted('~/.wunderland/config.json')} to this server:\n`);
+    console.log(`  ${muted('scp ~/.wunderland/config.json root@this-server:~/.wunderland/config.json')}\n`);
+  } else {
+    console.log(`  ${muted('Opening browser for Google authorization...')}\n`);
+  }
 
   // Start callback server and wait for the authorization code.
   const code = await new Promise<string>((resolve, reject) => {
@@ -188,9 +214,50 @@ async function connectGmail(credentialsFile?: string): Promise<void> {
       res.end('Not found');
     });
 
-    callbackServer.listen(port, '127.0.0.1', () => {
-      openBrowser(authUrl);
+    callbackServer.listen(port, '127.0.0.1', async () => {
+      if (!headless) {
+        const opened = await openBrowser(authUrl);
+        if (!opened) {
+          // Browser failed to open — fall back to manual mode
+          console.log(`  ${chalk.yellow('\u26A0')}  Could not open browser. Open this URL manually:\n`);
+          console.log(`  ${chalk.cyan(authUrl)}\n`);
+        }
+      }
     });
+
+    // In headless mode, also accept the redirect URL pasted into stdin
+    if (headless) {
+      const waitForPaste = async () => {
+        const pastedUrl = await prompt(`  ${accent('Paste redirect URL:')} `);
+        try {
+          const parsed = new URL(pastedUrl);
+          const authCode = parsed.searchParams.get('code');
+          if (authCode) {
+            callbackServer.close();
+            resolve(authCode);
+            return;
+          }
+          // Maybe they pasted just the code
+          if (pastedUrl.length > 10 && !pastedUrl.includes(' ')) {
+            callbackServer.close();
+            resolve(pastedUrl);
+            return;
+          }
+          console.log(`  ${chalk.red('No authorization code found in URL. Try again.')}`);
+          waitForPaste();
+        } catch {
+          // Not a URL — maybe raw code
+          if (pastedUrl.length > 10) {
+            callbackServer.close();
+            resolve(pastedUrl);
+          } else {
+            console.log(`  ${chalk.red('Invalid input. Paste the full redirect URL or authorization code.')}`);
+            waitForPaste();
+          }
+        }
+      };
+      waitForPaste();
+    }
 
     // Timeout after 10 minutes.
     setTimeout(() => {
