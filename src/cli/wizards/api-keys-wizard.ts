@@ -58,7 +58,7 @@ async function validateApiKey(providerId: string, apiKey: string): Promise<{ val
 export async function runApiKeysWizard(state: WizardState): Promise<void> {
   // ── .env paste import ──────────────────────────────────────────────────────
   const wantsPaste = await p.confirm({
-    message: 'Would you like to paste a .env block with your API keys?\n  (This will auto-detect and import recognized keys)',
+    message: 'Would you like to paste API keys or a .env block?\n  (Auto-detects keys from any format — .env files, NEXT_PUBLIC_ vars, raw keys)',
     initialValue: false,
   });
 
@@ -77,14 +77,17 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
 
       // Display summary
       fmt.section('Import Summary');
-      fmt.note(`${result.total} key${result.total !== 1 ? 's' : ''} parsed from input`);
+
+      const recognized = result.imported + result.updated + result.skipped;
+      if (recognized > 0) {
+        fmt.note(`${recognized} API key${recognized !== 1 ? 's' : ''} recognized from input`);
+      }
 
       for (const detail of result.details) {
         switch (detail.action) {
           case 'imported':
             fmt.ok(`${chalk.bold(detail.key)}: imported`);
-            // Also inject into state.apiKeys so downstream wizard steps see them
-            state.apiKeys[detail.key] = '';  // mark as set (actual value is in .env)
+            state.apiKeys[detail.key] = '';
             break;
           case 'updated':
             fmt.ok(`${chalk.bold(detail.key)}: updated (value changed)`);
@@ -95,7 +98,7 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
             state.apiKeys[detail.key] = '';
             break;
           case 'unrecognized':
-            fmt.warning(`${chalk.bold(detail.key)}: unrecognized key, skipped`);
+            // Only show unrecognized in verbose — don't spam the user
             break;
         }
       }
@@ -104,8 +107,13 @@ export async function runApiKeysWizard(state: WizardState): Promise<void> {
       if (result.imported > 0 || result.updated > 0) {
         fmt.ok(`${result.imported + result.updated} key${(result.imported + result.updated) !== 1 ? 's' : ''} written to ~/.wunderland/.env`);
       }
-      if (result.unrecognized > 0) {
-        fmt.note(`${result.unrecognized} unrecognized key${result.unrecognized !== 1 ? 's' : ''} were ignored`);
+      if (recognized === 0) {
+        fmt.warning('No API keys found in pasted text.');
+        fmt.note('Paste lines like: OPENAI_API_KEY=sk-... or ANTHROPIC_API_KEY=sk-ant-...');
+        fmt.note('NEXT_PUBLIC_ prefixed keys are auto-stripped (e.g., NEXT_PUBLIC_OPENAI_API_KEY works).');
+        fmt.note(`${result.unrecognized} line${result.unrecognized !== 1 ? 's' : ''} contained config values, not API keys.`);
+      } else if (result.unrecognized > 0) {
+        fmt.note(`${result.unrecognized} non-API-key line${result.unrecognized !== 1 ? 's' : ''} skipped (config flags, URLs, etc.)`);
       }
       fmt.blank();
     }
