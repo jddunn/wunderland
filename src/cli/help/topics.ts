@@ -36,7 +36,8 @@ export type HelpTopicId =
   | 'discovery'
   | 'memory'
   | 'personality'
-  | 'channels';
+  | 'channels'
+  | 'citations';
 
 export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: string }> = [
   {
@@ -103,6 +104,11 @@ export const HELP_TOPICS: Array<{ id: HelpTopicId; title: string; summary: strin
     id: 'channels',
     title: 'Channel Task Execution & File Relay',
     summary: 'Run tasks via Telegram/WhatsApp/Discord, send files to your phone.',
+  },
+  {
+    id: 'citations',
+    title: 'Citation Verification',
+    summary: 'Verify claims against sources with cosine similarity + web fallback.',
   },
   {
     id: 'export',
@@ -224,6 +230,7 @@ export function printHelpTopic(topicRaw: string): void {
     if (topic === 'memory' || topic === 'cognitive-memory' || topic === 'cognitive-mechanisms' || topic === 'mechanisms' || topic === 'infinite-context' || topic === 'consolidation' || topic === 'decay' || topic === 'ebbinghaus') return 'memory';
     if (topic === 'personality' || topic === 'hexaco' || topic === 'traits' || topic === 'persona' || topic === 'personas') return 'personality';
     if (topic === 'channels' || topic === 'chat-tasks' || topic === 'file-relay' || topic === 'telegram' || topic === 'discord') return 'channels';
+    if (topic === 'citations' || topic === 'citation' || topic === 'verify-citations' || topic === 'fact-grounding' || topic === 'grounding' || topic === 'claim-verification') return 'citations';
     if (topic === 'faq' || topic === 'faqs' || topic === 'questions') return 'faq';
     return null;
   })();
@@ -649,6 +656,40 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${dim('Bot:')} ${iColor('Created 3 files → zipped → sending...')} ${sColor('[quantum-assignment.zip sent]')}`);
     console.log();
     console.log(`  ${dim('See also:')} ${accent('wunderland help security')}${dim(',')} ${accent('wunderland help whatsapp')}`);
+    console.log();
+    return;
+  }
+
+  if (resolved === 'citations') {
+    printTitle('Citation Verification');
+    console.log(`  ${dim('Verify claims in agent responses against sources using semantic similarity.')}`);
+    console.log();
+    console.log(`  ${bright('How It Works:')}`);
+    console.log(`     ${iColor('1')} Extract atomic claims from text (sentence splitting or LLM decomposition)`);
+    console.log(`     ${iColor('2')} Batch-embed claims + sources (one embedding call)`);
+    console.log(`     ${iColor('3')} Compute cosine similarity matrix: claims x sources`);
+    console.log(`     ${iColor('4')} Assign per-claim verdict: supported / weak / unverifiable / contradicted`);
+    console.log(`     ${iColor('5')} Optional: web search fallback for unverifiable claims`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('When Citations Are Verified:')}`);
+    console.log(`     ${accent('deep research')}     ${dim('Automatic — always verifies')}`);
+    console.log(`     ${accent('moderate')}           ${dim('Only if verifyCitations: true in config')}`);
+    console.log(`     ${accent('quick / none')}       ${dim('Never automatic')}`);
+    console.log(`     ${accent('on-demand')}          ${dim('Agent calls verify_citations tool explicitly')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Configuration:')}`);
+    console.log(`     ${muted('"queryRouter": { "verifyCitations": true }')}`);
+    console.log();
+    console.log(`  ${hr()}`);
+    console.log(`  ${bright('Tools & Skills:')}`);
+    console.log(`     ${accent('verify_citations')}   ${dim('On-demand claim verification tool')}`);
+    console.log(`     ${accent('fact-grounding')}     ${dim('Skill: instructs agent to verify before presenting')}`);
+    console.log(`     ${accent('grounding-guard')}    ${dim('Guardrail: real-time NLI streaming verification')}`);
+    console.log(`     ${accent('fact_check')}         ${dim('Web-based single-claim fact checking')}`);
+    console.log();
+    console.log(`  ${dim('See also:')} ${accent('wunderland help retrieval')}${dim(',')} ${accent('wunderland help security')}`);
     console.log();
     return;
   }
