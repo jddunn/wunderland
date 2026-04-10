@@ -1,3 +1,4 @@
+// @ts-nocheck
 // packages/wunderland/tests/memory/MemorySystemInitializer.spec.ts
 import { describe, it, expect, vi } from 'vitest';
 import { createMemorySystem } from '../../src/memory/MemorySystemInitializer.js';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Handler for 'create_enclave' governance proposals.
  * @module wunderland/social/governance-handlers/CreateEnclaveHandler

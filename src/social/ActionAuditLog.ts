@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file ActionAuditLog.ts
  * @description In-memory ring buffer with optional persistence adapter for

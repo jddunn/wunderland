@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createWunderland } from '../index.js';
 

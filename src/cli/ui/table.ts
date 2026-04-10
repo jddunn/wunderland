@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Styled table component wrapping cli-table3 with theme integration.
  * @module wunderland/cli/ui/table

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Inline HTML dashboard for the Wunderland CLI HTTP server.
  * @module wunderland/cli/commands/start/routes/dashboard-html

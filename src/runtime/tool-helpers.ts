@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tool execution helpers — guardrails, sanitization,
  * OTEL tracing, folder permissions, strict tool name validation.

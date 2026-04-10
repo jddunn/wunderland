@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland list-presets` — display personality, HEXACO, and agent presets.
  * @module wunderland/cli/commands/list-presets

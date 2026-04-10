@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,

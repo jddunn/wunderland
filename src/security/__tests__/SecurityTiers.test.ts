@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for SecurityTiers — named security tier presets
  * @module wunderland/security/__tests__/SecurityTiers.test

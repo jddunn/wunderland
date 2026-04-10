@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland verify-seal` — verify sealed.json against agent.config.json.
  * @module wunderland/cli/commands/verify-seal

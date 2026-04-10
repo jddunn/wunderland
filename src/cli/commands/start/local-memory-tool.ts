@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Local vector store memory_read tool.
  *

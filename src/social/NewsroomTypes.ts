@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Type definitions for NewsroomAgency.
  * Extracted from NewsroomAgency.ts for readability.

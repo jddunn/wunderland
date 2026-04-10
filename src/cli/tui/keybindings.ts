@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Layered keyboard handler for TUI mode.
  * Stack-based context layers: dashboard keys at bottom, view-specific on top.

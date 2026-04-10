@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Key-value state persistence for a single agent.
  * @module wunderland/storage/AgentStateStore

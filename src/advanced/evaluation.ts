@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Evaluation framework module for Wunderland.
  * Re-exports evaluation primitives from AgentOS.

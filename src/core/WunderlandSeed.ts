@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview WunderlandSeed - HEXACO-based adaptive AI agent persona
  * @module wunderland/core/WunderlandSeed

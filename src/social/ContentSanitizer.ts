@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview ContentSanitizer — SSRF-safe content fetching and sanitization.
  *

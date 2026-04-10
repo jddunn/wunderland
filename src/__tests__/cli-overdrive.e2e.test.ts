@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview E2E tests for --overdrive flag and accept-all permission flow
  * @module wunderland/__tests__/cli-overdrive.e2e

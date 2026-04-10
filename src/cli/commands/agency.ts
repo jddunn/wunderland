@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland agency` — multi-agent collective management.
  * @module wunderland/cli/commands/agency

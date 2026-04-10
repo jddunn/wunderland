@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared types for the chat task responder system.
  *

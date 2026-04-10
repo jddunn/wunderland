@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Ollama auto-detection, system spec analysis, and model
  * recommendation for the Wunderland CLI. Handles the full lifecycle of

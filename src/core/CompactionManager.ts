@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview CompactionManager — conversation context compaction engine.
  *

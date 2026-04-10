@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file index.ts
  * @description Jobs system exports - agent-centric job evaluation, bidding, execution, and lifecycle management

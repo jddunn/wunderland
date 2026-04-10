@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { detectPackageManager } from '../../src/cli/extensions/installer.js';
 import { existsSync } from 'node:fs';

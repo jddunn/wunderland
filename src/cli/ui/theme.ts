@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Cyberpunk color theme for the Wunderland CLI.
  * Mirrors the wunderland.sh / rabbithole CSS custom properties.

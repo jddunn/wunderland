@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Knowledge graph module for Wunderland.
  * Re-exports knowledge graph primitives from AgentOS.

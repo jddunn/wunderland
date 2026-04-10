@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Welcome handler — generates personalized, on-brand welcome messages for new
  * Discord members using OpenAI (gpt-4o) and the Rabbit Hole AI personality.

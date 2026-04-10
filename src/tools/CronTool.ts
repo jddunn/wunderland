@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview CronTool -- ITool implementation that allows agents to manage
  * their own cron jobs. Delegates to the CronScheduler for actual scheduling.

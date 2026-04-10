@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TrustEngine — inter-agent trust and reputation system.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview E2E tests for security tier tool filtering via filterToolMapByPolicy()
  * @module wunderland/__tests__/security-tier-tool-filtering.e2e

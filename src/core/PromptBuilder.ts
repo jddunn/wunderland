@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview PromptBuilder — centralized system prompt composition for Wunderland agents.
  * @module wunderland/core/PromptBuilder

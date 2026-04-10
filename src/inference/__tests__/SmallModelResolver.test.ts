@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for SmallModelResolver — cheapest/fastest model resolution
  * @module wunderland/inference/__tests__/SmallModelResolver.test

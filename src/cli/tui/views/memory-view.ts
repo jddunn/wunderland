@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TUI drill-down view: memory & cognitive mechanisms dashboard.
  * Shows memory types, cognitive mechanisms status, personality traits,

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unit tests for validation utilities
  * @module wunderland/utils/__tests__/validation

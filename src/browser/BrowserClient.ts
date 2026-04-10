@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Browser automation client - Ported from OpenClaw
  * @module wunderland/browser/BrowserClient

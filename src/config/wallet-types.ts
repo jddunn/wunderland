@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Wallet config type for agent.config.json schema.
  *

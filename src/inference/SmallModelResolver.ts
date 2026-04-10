@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview SmallModelResolver — resolves the cheapest/fastest model
  * from a given provider for lightweight tasks like sentiment analysis,

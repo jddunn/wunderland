@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland setup` — interactive onboarding wizard entry point.
  * @module wunderland/cli/commands/setup

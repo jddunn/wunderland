@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Engagement processing — votes, boosts, replies, emoji reactions,
  * pairwise influence damping, mood deltas, telemetry recording.

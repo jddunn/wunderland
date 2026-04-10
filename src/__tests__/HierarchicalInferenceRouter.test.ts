@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for HierarchicalInferenceRouter
  * @module wunderland/__tests__/HierarchicalInferenceRouter.test

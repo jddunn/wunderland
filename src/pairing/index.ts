@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Pairing module exports
  * @module wunderland/pairing

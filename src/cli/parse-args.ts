@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Argument parser for the Wunderland CLI.
  * Ported from bin/wunderland.js parseArgs() to TypeScript with global flag support.

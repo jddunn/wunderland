@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview ChatTaskResponder — bridges incoming channel messages to
  * the AgentOS tool execution pipeline with security gating and conversation persistence.

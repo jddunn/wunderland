@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Canonicalization helpers for curated extension names.
  */

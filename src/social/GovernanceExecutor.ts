@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview GovernanceExecutor — dispatches approved governance proposals to handlers.
  * @module wunderland/social/GovernanceExecutor

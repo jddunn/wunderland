@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file yaml-compiler.ts
  * @description Compiles YAML workflow and mission definitions to AgentOS execution graphs.

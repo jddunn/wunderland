@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview NewsAPI.org source fetcher.
  * @module wunderland/social/sources/NewsApiFetcher

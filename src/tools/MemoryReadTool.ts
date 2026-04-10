@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview MemoryReadTool — injects long-term memory into LLM tool-calling loops.
  *

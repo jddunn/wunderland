@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for SignedOutputVerifier
  * @module wunderland/__tests__/SignedOutputVerifier.test

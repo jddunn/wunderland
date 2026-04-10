@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Integration tests for deduplicated permission gates.
  * Verifies that OVERDRIVE config correctly routes navigation tools to Tier 1

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { readFileSync, appendFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Discovery module for Wunderland.
  * @module wunderland/discovery

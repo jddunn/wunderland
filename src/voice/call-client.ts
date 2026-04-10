@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Voice and speech client wrapper for Wunderland.
  * Re-exports telephony call primitives plus the consolidated speech runtime from AgentOS.

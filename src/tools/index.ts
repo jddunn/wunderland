@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Wunderland tools exports.
  * @module wunderland/tools

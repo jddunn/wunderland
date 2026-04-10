@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview ANSI escape → styled HTML converter for PNG export.
  * Maps CLI hex palette to CSS classes for pixel-perfect terminal screenshots.

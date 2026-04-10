@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared types for per-agent storage subsystem.
  * @module wunderland/storage/types

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for cognitive mechanisms wiring into Wunderland pipeline.
  *

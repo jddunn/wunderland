@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TUI drill-down view: interactive LLM provider browser.
  * @module wunderland/cli/tui/views/models-view

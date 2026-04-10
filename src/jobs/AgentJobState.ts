@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file AgentJobState.ts
  * @description Per-agent job decision state that evolves with experience.

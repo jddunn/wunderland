@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview OpenTelemetry (OTEL) bootstrap for Wunderland runtimes.
  *

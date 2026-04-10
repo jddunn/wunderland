@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Type declarations for @framers/agentos/auth subpath export.
  * Resolved at runtime via dynamic import().

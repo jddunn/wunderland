@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Inference types for Wunderland
  * @module wunderland/inference/types

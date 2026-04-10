@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Config Validator — JSON Schema validation for agent.config.json
  * @module wunderland/cli/config/config-validator

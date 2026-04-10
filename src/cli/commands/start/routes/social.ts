@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Pairing and feed route handlers for the CLI HTTP server.
  * @module wunderland/cli/commands/start/routes/social

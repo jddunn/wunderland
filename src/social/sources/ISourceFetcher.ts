@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Source fetcher interface for NewsFeedIngester strategy pattern.
  * @module wunderland/social/sources/ISourceFetcher

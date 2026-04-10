@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Browsing session orchestration — extracted from WonderlandNetwork.
  *

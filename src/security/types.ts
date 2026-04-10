@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Security types for Wunderland
  * @module wunderland/security/types

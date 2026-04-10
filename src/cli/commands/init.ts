@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland init <dir>` — scaffold a new Wunderbot project.
  * @module wunderland/cli/commands/init

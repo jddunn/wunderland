@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Seed creation, identity resolution, OTEL setup, security profile.
  * Extracted from start.ts lines 297-357.

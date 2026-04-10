@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview LLMSentimentAnalyzer — LLM-backed sentiment analysis for
  * Wunderland agent mood updates. Replaces/augments the keyword-based

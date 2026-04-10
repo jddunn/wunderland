@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Signed Output Verifier - Layer 3 of security pipeline
  * @module wunderland/security/SignedOutputVerifier

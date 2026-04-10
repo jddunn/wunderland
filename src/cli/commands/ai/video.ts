@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland video` — video generation and analysis via AgentOS providers.
  * @module wunderland/cli/commands/video

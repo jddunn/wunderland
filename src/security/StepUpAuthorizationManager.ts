@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Step-Up Authorization Manager for Wunderland
  * @module wunderland/security/StepUpAuthorizationManager

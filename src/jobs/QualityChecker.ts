@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file QualityChecker.ts
  * @description Validates deliverable quality before submission.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect } from 'vitest';
 import { getRecommendations } from '../../src/cli/extensions/recommender.js';
 

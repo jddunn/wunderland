@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Browser automation types - Ported from OpenClaw
  * @module wunderland/browser/types

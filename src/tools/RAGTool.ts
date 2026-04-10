@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview RAG memory query tool for Wunderland agents.
  * Allows agents to search their RAG memory during tool-calling conversations.

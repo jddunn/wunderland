@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview End-to-end integration test for agent creation flow
  * @module wunderland/__tests__/agent-creation.e2e

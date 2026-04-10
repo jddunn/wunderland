@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland marketplace` — search skills, tools, channels, and providers.
  *

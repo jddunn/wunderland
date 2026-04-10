@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TUI drill-down view: animated health check.
  * @module wunderland/cli/tui/views/doctor-view

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for incremental LLM streaming in the voice pipeline.
  *

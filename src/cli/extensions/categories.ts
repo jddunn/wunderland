@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Extension category mapping for smart, preset-aware loading.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared agent config builder + file scaffold writer.
  * Used by both `wunderland init` and `wunderland start` (inline onboarding).

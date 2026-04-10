@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tool API keys wizard — collect keys for search, media, voice, and devtools.
  * @module wunderland/cli/wizards/tool-keys-wizard

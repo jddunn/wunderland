@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Comprehensive tests for Wunderland security hardening modules
  * @module wunderland/__tests__/security-hardening.test

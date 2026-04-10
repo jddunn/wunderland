@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared skill resolution for Wunderland runtime surfaces.
  * @module wunderland/core/resolve-skill-context

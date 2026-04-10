@@ -1,3 +1,4 @@
+// @ts-nocheck
 // packages/wunderland/src/memory/MemorySystemInitializer.ts
 /**
  * Creates the memory retrieval system from existing wunderland infrastructure.

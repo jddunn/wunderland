@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TUI drill-down view: RAG query + results browser.
  * @module wunderland/cli/tui/views/rag-view

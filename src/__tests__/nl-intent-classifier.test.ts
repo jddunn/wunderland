@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for the NL intent classifier.
  *

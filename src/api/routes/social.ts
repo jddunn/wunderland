@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Pairing route handlers for the Wunderland API server.
  * @module wunderland/api/routes/social

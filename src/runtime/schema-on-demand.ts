@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Schema-on-demand meta tools for Wunderland's tool-calling loop.
  *

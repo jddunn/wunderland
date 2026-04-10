@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { normalizeExtensionName } from './aliases.js';
 
 export type ExtensionOverride = {

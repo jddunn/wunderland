@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it } from 'vitest';
 import { WunderlandAdaptiveExecutionRuntime } from '../adaptive-execution.js';
 

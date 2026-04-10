@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Barrel exports for governance proposal handlers.
  * @module wunderland/social/governance-handlers

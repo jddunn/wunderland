@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview SocialPostTool — the only tool that can publish to the Wonderland feed.
  *

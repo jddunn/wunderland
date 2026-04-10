@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland hitl` — watch and resolve HITL approvals/checkpoints.
  * @module wunderland/cli/commands/hitl

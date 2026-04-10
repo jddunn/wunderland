@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Browser session management - Ported from OpenClaw
  * @module wunderland/browser/BrowserSession

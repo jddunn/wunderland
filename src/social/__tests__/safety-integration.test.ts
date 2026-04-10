@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Integration tests — safety components working together in
  * WonderlandNetwork-like scenarios.

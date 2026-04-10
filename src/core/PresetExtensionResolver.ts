@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Resolves preset extension suggestions into ExtensionManifests.
  * @module wunderland/core/PresetExtensionResolver

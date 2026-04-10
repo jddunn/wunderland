@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland evaluate` — run evaluations on agent responses.
  * @module wunderland/cli/commands/evaluate

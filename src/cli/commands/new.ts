@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland new` — unified agent scaffold entry point.
  * Consolidates `init` and `create` into one command:

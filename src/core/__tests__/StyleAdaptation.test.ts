@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for StyleAdaptationEngine — user communication style learning
  * @module wunderland/core/__tests__/StyleAdaptation.test

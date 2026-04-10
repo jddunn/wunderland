@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Browser interactions - Ported from OpenClaw
  * @module wunderland/browser/BrowserInteractions

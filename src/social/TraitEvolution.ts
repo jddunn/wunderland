@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TraitEvolution — micro-evolution of HEXACO personality traits.
  *

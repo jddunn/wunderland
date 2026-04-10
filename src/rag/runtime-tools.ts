@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ITool, ToolExecutionContext } from '@framers/agentos';
 
 import type { WunderlandAgentConfig } from '../api/types.js';

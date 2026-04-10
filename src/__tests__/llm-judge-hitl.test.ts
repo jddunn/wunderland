@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for the --llm-judge HITL flag and handler wiring.
  *

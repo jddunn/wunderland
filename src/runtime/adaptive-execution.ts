@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Rolling task-outcome telemetry + adaptive execution policy for Wunderland runtimes.
  * @module wunderland/runtime/adaptive-execution

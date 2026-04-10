@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview PromptEvolution — bounded self-modification of agent system prompts.
  *

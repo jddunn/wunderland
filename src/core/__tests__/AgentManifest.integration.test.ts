@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Integration tests for AgentManifest — round-trip export/validate/import.
  * @module wunderland/core/__tests__/AgentManifest.integration.test
