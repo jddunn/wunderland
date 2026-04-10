@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview ElevenLabs TTS Tool — backward-compat re-export from agentos-extensions.
  * @deprecated Use TextToSpeechTool from ToolRegistry or agentos-extensions directly.

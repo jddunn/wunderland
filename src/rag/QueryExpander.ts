@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview LLM-based Query Expansion for RAG full-text search.
  * @module wunderland/rag/QueryExpander

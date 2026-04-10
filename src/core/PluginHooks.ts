@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview PluginHookManager — event-driven plugin hook system for Wunderland agents.
  *

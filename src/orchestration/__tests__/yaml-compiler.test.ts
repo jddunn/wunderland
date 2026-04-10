@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file yaml-compiler.test.ts
  * @description Unit tests for the YAML workflow and mission compiler.

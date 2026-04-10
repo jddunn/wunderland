@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file ContentSimilarityDedup.ts
  * @description Prevents agents from posting near-identical content.

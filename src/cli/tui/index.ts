@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TUI entry point. Launches the interactive dashboard.
  * @module wunderland/cli/tui

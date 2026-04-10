@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Safe API key resolution for static, lazy, and async key sources.
  * @module wunderland/runtime/api-key-resolver

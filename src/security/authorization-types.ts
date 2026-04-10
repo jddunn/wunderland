@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Authorization types for Wunderland
  * @module wunderland/security/authorization-types

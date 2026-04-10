@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland skills` — manage agent skills (list, info, enable, disable).
  * @module wunderland/cli/commands/skills

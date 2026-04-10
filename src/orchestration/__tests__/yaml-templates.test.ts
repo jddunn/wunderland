@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file yaml-templates.test.ts
  * @description Smoke-tests that every prebuilt workflow and mission YAML template

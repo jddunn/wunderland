@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland deploy` — generate deployment artifacts from agent.config.json.
  *

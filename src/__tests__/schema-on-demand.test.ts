@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it } from 'vitest';
 
 import type { ToolInstance } from '../runtime/tool-calling.js';

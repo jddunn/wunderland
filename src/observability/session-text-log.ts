@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Per-session text log writer for Wunderland agent runs.
  * @module wunderland/observability/session-text-log

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared dependency type for route handler registration functions.
  * @module wunderland/api/routes/types

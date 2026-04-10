@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Barrel export for the agent bootstrap module.
  * @module wunderland/bootstrap

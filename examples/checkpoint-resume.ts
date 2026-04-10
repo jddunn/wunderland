@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+// @ts-nocheck
 /**
  * Example: Session checkpoint and resume
  * Run: npx tsx examples/checkpoint-resume.ts

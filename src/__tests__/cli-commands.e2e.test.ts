@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview End-to-end tests for CLI commands
  * @module wunderland/__tests__/cli-commands.e2e

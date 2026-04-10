@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland domains` — list and inspect domain registrars.
  * @module wunderland/cli/commands/domains

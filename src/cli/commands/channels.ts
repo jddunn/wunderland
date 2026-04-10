@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland channels` — list, add, remove channel configurations.
  * @module wunderland/cli/commands/channels

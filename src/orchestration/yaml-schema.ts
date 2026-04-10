@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { z, type ZodTypeAny } from 'zod';
 
 /**

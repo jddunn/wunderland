@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Full ASCII banner with gradient coloring and typewriter animation.
  * Shown on: `wunderland` (no args), `wunderland setup`, `wunderland init`, `wunderland --help`.

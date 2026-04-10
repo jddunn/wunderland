@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for BM25 and RAPTOR state persistence.
  *

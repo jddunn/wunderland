@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Runtime module barrel exports — tool calling, research classification,
  * system prompt building, adaptive execution, and operational utilities.

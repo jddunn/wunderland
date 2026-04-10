@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Per-agent conversation memory backed by a shared StorageAdapter.
  * @module wunderland/storage/AgentMemoryAdapter

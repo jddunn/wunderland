@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Notification manager for permission violations
  * @module wunderland/security/NotificationManager

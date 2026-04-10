@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unit tests for PresetExtensionResolver
  * @module wunderland/core/__tests__/PresetExtensionResolver

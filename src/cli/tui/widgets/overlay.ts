@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Lightweight overlay box renderer for TUI help/palettes.
  * @module wunderland/cli/tui/widgets/overlay

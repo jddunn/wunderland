@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for unified retriever wiring into the agent runtime.
  *

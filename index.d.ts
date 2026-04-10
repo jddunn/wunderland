@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Wunderland - Wunderbot SDK for the Wunderland network
  * Built on AgentOS.

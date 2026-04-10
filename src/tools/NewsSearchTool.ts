@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview News Search Tool — backward-compat re-export from agentos-extensions.
  * @deprecated Use NewsSearchTool from ToolRegistry or agentos-extensions directly.

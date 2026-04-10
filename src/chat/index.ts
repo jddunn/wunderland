@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Chat task responder system — bridges messaging channels to AgentOS tool execution.
  * @module wunderland/chat

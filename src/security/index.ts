@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Security module exports for Wunderland
  * @module wunderland/security

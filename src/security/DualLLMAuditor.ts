@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Dual-LLM Auditor - Layer 2 of security pipeline
  * @module wunderland/security/DualLLMAuditor

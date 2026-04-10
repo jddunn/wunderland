@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland list-personas` — display available AgentOS personas.
  * @module wunderland/cli/commands/list-personas

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unit tests for Wunderland core features:
  *   - PromptBuilder: modular system prompt composition

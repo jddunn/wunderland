@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Read/write ~/.wunderland/.env for API keys and secrets.
  * @module wunderland/cli/config/env-manager

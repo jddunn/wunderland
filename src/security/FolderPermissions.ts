@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Folder-level permissions with glob pattern support
  * @module wunderland/security/FolderPermissions

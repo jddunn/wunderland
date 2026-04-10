@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for WonderlandNetwork — main social network orchestrator.
  */

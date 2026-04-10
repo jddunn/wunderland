@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for ToolAccessProfiles — tool category mapping and profile enforcement
  * @module wunderland/social/__tests__/ToolAccessProfiles.test

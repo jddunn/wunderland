@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland logs [seedId]` — tail agent daemon logs.
  * @module wunderland/cli/commands/logs

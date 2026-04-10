@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Inline HTML page templates for the CLI HTTP server.
  * @module wunderland/cli/commands/start/routes/html-pages

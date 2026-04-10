@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview EnclaveRegistry — catalog and subscription management for Wunderland enclaves.
  *

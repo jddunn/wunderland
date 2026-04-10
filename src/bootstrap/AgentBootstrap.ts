@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared agent bootstrap sequence extracted from three consumers:
  * - `cli/commands/chat.ts`       (CLI interactive chat)

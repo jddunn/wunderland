@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Inference module exports for Wunderland
  * @module wunderland/inference

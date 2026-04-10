@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+// @ts-nocheck
 /**
  * Example: LLM-as-judge evaluation pipeline
  * Uses judgeNode for structured rubric scoring

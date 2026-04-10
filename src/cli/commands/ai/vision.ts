@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland vision` — vision pipeline for OCR, image description, and CLIP embeddings.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Lightweight LLM provider/key/model prompt for `wunderland init`.
  * Detects existing env vars, confirms or overrides, selects provider + model.

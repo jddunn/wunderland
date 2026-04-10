@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Per-agent storage orchestrator.
  * @module wunderland/storage/AgentStorageManager

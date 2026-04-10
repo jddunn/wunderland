@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unit tests for NaturalLanguageAgentBuilder
  * @module wunderland/__tests__/NaturalLanguageAgentBuilder

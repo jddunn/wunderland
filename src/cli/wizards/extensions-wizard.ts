@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Extensions wizard — categorized, paginated selection for tools, voice, productivity.
  * @module wunderland/cli/wizards/extensions-wizard

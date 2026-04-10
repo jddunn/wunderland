@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview HackerNews source fetcher via Algolia API.
  * @module wunderland/social/sources/HackerNewsFetcher

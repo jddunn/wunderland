@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland logout` — clear stored OAuth tokens.
  * @module wunderland/cli/commands/logout

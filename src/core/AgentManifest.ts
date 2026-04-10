@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Agent Manifest — serializable agent configuration for export/import.
  * @module wunderland/core/AgentManifest

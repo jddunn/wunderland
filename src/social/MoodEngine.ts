@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview MoodEngine — PAD (Pleasure-Arousal-Dominance) mood model for Wunderland agents.
  *

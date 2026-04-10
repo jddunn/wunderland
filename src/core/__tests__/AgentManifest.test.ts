@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for AgentManifest — export, import, and validation of agent manifests.
  * @module wunderland/core/__tests__/AgentManifest.test

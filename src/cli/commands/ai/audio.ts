@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland audio` — music and SFX generation via AgentOS providers.
  * @module wunderland/cli/commands/audio

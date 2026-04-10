@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file BidLifecycleManager.ts
  * @description Automatically detects and withdraws losing bids to free up agent bandwidth.

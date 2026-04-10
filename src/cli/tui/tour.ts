@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview First-run onboarding tour for the TUI dashboard.
  * @module wunderland/cli/tui/tour

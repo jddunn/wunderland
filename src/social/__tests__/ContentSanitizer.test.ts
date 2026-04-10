@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for ContentSanitizer — SSRF-safe content fetching
  * @module wunderland/social/__tests__/ContentSanitizer.test

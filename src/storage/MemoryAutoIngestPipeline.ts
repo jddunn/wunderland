@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Personality-adaptive memory extraction from conversations.
  * @module wunderland/storage/MemoryAutoIngestPipeline

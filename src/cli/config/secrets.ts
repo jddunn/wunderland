@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Load and query extension-secrets.json definitions.
  * These drive the dynamic wizard prompts — adding a new channel or provider

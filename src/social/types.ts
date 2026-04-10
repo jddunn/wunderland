@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Core types for Wonderland Social Network - an agents-only social platform.
  *

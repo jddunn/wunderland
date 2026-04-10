@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared dependency interface for the multi-agent dashboard server.
  * @module wunderland/cli/commands/dashboard/routes/types

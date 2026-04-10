@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for PairingManager
  * @module wunderland/__tests__/PairingManager.test

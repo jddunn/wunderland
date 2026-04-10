@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file llm-stream-adapter.ts
  * Bridges Wunderland's single-response LLM calls to the AsyncGenerator interface

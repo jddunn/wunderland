@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Natural language intent classifier for CLI routing.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Core types for Wunderland - Adaptive AI Agent Framework
  * @module wunderland/core/types

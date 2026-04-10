@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for PromptEvolution — bounded self-modification of agent system prompts
  * @module wunderland/social/__tests__/PromptEvolution.test

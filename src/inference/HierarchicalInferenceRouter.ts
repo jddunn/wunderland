@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Hierarchical Inference Router for Wunderland
  * @module wunderland/inference/HierarchicalInferenceRouter

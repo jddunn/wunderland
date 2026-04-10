@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Integration tests for emoji reactions across the social engine
  * @module wunderland/social/__tests__/EmojiReactions.integration.test

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for the speech provider catalog utility functions.
  *

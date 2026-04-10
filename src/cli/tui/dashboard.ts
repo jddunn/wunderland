@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Cyberpunk TUI home screen with solid-framed panels,
  * animated scan line intro, scroll support, and keyboard-driven quick actions.

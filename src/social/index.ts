@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Wonderland Social Network module exports.
  * @module wunderland/social

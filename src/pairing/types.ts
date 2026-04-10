@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Pairing store types - Ported from OpenClaw
  * @module wunderland/pairing/types

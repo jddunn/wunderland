@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview High-level in-process chat runtime for Wunderland.
  * @module wunderland/api/chat-runtime

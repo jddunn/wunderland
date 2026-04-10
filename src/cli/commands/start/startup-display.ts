@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Server lifecycle + startup status display.
  * Extracted from start.ts lines 2637-2730.

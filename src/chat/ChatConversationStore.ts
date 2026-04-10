@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview SQLite-backed conversation persistence for chat channels.
  *

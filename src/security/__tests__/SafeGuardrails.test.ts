@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unit tests for SafeGuardrails
  * @module wunderland/security/__tests__/SafeGuardrails

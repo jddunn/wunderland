@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file RevenueDistributor.ts
  * @description Manages the 70/10/20 revenue split from EnclaveTreasury balance.

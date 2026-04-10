@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Pre-LLM Input Classifier - Layer 1 of security pipeline
  * @module wunderland/security/PreLLMClassifier

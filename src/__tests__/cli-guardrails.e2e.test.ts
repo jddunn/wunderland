@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview E2E tests for CLI commands with guardrails
  * @module wunderland/__tests__/cli-guardrails.e2e

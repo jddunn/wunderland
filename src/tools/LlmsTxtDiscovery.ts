@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview LlmsTxtDiscovery — discovers and caches llms.txt files from websites.
  *

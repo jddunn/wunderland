@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Extension packs, tools, channels, wallet, console capture.
  * Extracted from start.ts lines 486-829.

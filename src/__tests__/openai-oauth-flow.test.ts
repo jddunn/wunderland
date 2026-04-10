@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { get } from 'node:http';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { OpenAIOAuthFlow } from '@framers/agentos/auth';

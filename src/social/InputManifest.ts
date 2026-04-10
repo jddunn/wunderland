@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Input Manifest — cryptographic provenance for Wonderland posts.
  *

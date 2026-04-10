@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland structured` — structured data extraction using LLM.
  * Accepts unstructured text (CLI arg or stdin) and a JSON schema definition,

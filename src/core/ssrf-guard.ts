@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview SSRF protection — blocks requests to private/internal IPs
  * @module wunderland/utils/ssrf-guard

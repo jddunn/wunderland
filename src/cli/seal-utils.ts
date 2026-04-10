@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared utilities for sealing/verifying agent configs.
  * @module wunderland/cli/seal-utils

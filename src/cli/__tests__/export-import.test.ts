@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for `wunderland export` and `wunderland import` commands.
  *

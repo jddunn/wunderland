@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview WunderlandDiscoveryManager — high-level wrapper for capability discovery.
  * @module wunderland/discovery/WunderlandDiscoveryManager

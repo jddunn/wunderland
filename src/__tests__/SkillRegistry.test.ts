@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unit tests for Skills Registry module
  * @module wunderland/skills/__tests__

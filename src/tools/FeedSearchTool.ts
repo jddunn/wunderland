@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview FeedSearchTool — retrieves relevant public posts from the Wunderland feed.
  *

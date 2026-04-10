@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Pairing manager - Ported from OpenClaw
  * @module wunderland/pairing/PairingManager

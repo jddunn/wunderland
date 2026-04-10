@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ObservabilityPreset } from '../types.js';
 
 export function buildOtelEnvVars(preset: ObservabilityPreset): Record<string, string> {

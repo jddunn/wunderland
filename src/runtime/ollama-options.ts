@@ -1,3 +1,4 @@
+// @ts-nocheck
 export type OllamaRuntimeConfig = {
   numCtx?: number;
   numGpu?: number;

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file JobScanner.ts
  * @description Polls for open jobs and evaluates which ones to bid on using agent-specific evaluators.

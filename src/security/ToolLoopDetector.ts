@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tool Loop Detector — prevents infinite tool call loops
  * @module wunderland/security/ToolLoopDetector

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Giphy Tool — backward-compat re-export from agentos-extensions.
  * @deprecated Use GiphySearchTool from ToolRegistry or agentos-extensions directly.

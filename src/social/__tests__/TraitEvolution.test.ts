@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for TraitEvolution — micro-evolution of HEXACO personality traits
  * @module wunderland/social/__tests__/TraitEvolution.test

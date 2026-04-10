@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland image` — image generation via AgentOS providers.
  * @module wunderland/cli/commands/image

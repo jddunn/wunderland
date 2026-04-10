@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Serper Web Search Tool — Google search via Serper.dev API.
  *

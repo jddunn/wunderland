@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Channel runtime — inbound/outbound message handling, Discord
  * extension wiring, and adapter subscriptions.

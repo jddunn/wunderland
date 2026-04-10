@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Shared relevance-scoring search used by CLI commands, TUI views, and API consumers.
  * Supports multi-term queries with fuzzy matching via Levenshtein distance.

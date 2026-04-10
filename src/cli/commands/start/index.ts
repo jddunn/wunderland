@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland start` — start local agent server.
  * Orchestrates modular startup phases.

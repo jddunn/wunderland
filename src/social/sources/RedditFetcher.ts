@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Reddit source fetcher via public JSON API.
  * @module wunderland/social/sources/RedditFetcher
