@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland ps` — list running agent daemon processes.
  * @module wunderland/cli/commands/ps

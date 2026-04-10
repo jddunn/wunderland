@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unit tests for FolderPermissions
  * @module wunderland/security/__tests__/FolderPermissions

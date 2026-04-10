@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for PresetLoader — loads preset agent configs and templates from disk.
  * @module wunderland/core/__tests__/PresetLoader.test

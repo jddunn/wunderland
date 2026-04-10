@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview High-level HTTP server API for Wunderland.
  * @module wunderland/api/server

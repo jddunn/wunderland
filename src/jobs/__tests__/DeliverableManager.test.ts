@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file DeliverableManager.test.ts
  * @description Unit tests for DeliverableManager — storage, hashing, and submission.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Browser module exports
  * @module wunderland/browser

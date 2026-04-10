@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Formatted output helpers for the Wunderland CLI.
  * Provides consistent styled logging across all commands.

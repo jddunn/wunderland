@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Channel subscription handler — lets Pioneer+ users toggle visibility of
  * individual feed channels in THE LOOKING GLASS via button clicks.

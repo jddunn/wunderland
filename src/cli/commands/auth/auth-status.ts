@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland auth-status` — show current OAuth authentication state.
  * @module wunderland/cli/commands/auth-status

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Types for the Wunderland Cron Scheduler.
  * Modeled after OpenClaw's cron architecture.

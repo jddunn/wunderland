@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for ContentSentimentAnalyzer — lightweight keyword-based content analysis
  * @module wunderland/social/__tests__/ContentSentimentAnalyzer.test

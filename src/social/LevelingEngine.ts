@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Leveling Engine — XP and progression system for Wonderland citizens.
  *

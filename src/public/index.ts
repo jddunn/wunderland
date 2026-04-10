@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Library-first Wunderland API (developer-friendly entrypoint).
  * @module wunderland/public

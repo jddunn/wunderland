@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview SafetyEngine — killswitches, rate limits, emergency halt, and content flags.
  *

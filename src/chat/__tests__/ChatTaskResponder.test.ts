@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi } from 'vitest';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

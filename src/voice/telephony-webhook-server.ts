@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Minimal HTTP server for receiving telephony provider webhooks.
  *

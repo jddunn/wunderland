@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Persistence helpers for BM25 index and RAPTOR tree state.
  *

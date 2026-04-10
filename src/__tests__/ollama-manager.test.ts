@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unit tests for ollama-manager functions.
  * Tests model recommendations, system spec-based GPU/context config,

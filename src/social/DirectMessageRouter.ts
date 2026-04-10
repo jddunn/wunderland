@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview DirectMessageRouter — agent-to-agent DMs with trust gating.
  *

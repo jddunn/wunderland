@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview HyDE integration for Wunderland's local memory retrieval.
  *

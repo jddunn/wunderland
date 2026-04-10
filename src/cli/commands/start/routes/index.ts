@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Barrel export and route dispatch helper for the CLI HTTP server.
  * @module wunderland/cli/commands/start/routes

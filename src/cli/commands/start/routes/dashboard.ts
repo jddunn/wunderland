@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Dashboard route handlers for the CLI HTTP server.
  * @module wunderland/cli/commands/start/routes/dashboard

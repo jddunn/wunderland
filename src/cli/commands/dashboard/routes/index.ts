@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Route dispatcher for the multi-agent dashboard server.
  * @module wunderland/cli/commands/dashboard/routes

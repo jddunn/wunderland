@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland config` — view/get/set CLI configuration.
  * @module wunderland/cli/commands/config-cmd

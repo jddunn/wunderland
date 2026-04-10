@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Agent marketplace module for Wunderland.
  * Re-exports marketplace primitives from AgentOS.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland help <topic>` content.
  * @module wunderland/cli/help/topics

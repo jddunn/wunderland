@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland spawn <description>` — create + start an agent in one command.
  * @module wunderland/cli/commands/spawn

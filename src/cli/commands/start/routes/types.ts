@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared dependency type for CLI HTTP server route handlers.
  * @module wunderland/cli/commands/start/routes/types

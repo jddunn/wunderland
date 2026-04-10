@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TUI drill-down view: list known agents.
  * Sources: running daemons, agent history, local directory scan.

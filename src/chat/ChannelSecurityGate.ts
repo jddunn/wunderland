@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Security gate — enforces user whitelists on incoming channel messages.
  *

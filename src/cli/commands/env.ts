@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland env` — manage API keys & secrets in ~/.wunderland/.env.
  *

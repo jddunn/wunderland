@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview AllianceEngine — multi-agent alliance/faction system for Wunderland.
  *

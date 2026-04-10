@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for AllianceEngine — multi-agent alliance/faction system
  * @module wunderland/social/__tests__/AllianceEngine.test

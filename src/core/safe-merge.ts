@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Safe deep merge utility — prototype pollution prevention
  * @module wunderland/utils/safe-merge

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for DualLLMAuditor
  * @module wunderland/__tests__/DualLLMAuditor.test

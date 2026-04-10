@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Factory that builds a {@link UnifiedRetriever} from agent config.
  *

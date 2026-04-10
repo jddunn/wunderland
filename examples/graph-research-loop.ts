@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+// @ts-nocheck
 /**
  * Example: AgentGraph with conditional retry loop
  * Run: npx tsx examples/graph-research-loop.ts

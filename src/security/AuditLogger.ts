@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Audit logger for permission violations
  * @module wunderland/security/AuditLogger

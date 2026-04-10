@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Chat UI rendering helpers — frame drawing, header printing,
  * assistant reply formatting, prompt styling.

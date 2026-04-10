@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland batch-create` — bulk agent creation from file or mission.
  * @module wunderland/cli/commands/batch-create

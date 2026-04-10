@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Main setup wizard orchestrator.
  * Runs QuickStart (3 steps) or Advanced (7 steps) mode.

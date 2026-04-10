@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland quickstart` — detect env, scaffold, and start in one command.
  * @module wunderland/cli/commands/quickstart

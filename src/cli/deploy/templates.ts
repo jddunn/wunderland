@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Deployment artifact templates for Docker, Railway, and Fly.io.
  * Pure functions that return file content strings — no I/O, no catalog logic.

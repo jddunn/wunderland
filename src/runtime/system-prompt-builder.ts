@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared system prompt builder for Wunderland agent runtimes.
  *

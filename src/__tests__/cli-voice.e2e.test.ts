@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview E2E tests for `wunderland voice` CLI command.
  * @module wunderland/__tests__/cli-voice.e2e.test

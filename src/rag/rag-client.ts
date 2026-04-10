@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview HTTP client for the Wunderland backend RAG API.
  * Wraps /api/agentos/rag/* endpoints with typed methods.

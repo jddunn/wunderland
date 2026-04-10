@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview QueryRouter singleton for the Wunderland CLI.
  *

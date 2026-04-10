@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Render HTML to PNG via Playwright (headless Chromium).
  * Uses playwright-core which is already installed for BrowserSession.

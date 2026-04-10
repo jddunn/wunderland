@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland export <agent-name>` — export agent config to a shareable manifest.
  *

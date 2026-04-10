@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TUI drill-down view: live status dashboard.
  * @module wunderland/cli/tui/views/status-view

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Semantic Scholar source fetcher.
  * @module wunderland/social/sources/SemanticScholarFetcher

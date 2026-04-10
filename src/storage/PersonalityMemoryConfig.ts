@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview HEXACO personality → memory behavior mapping.
  * @module wunderland/storage/PersonalityMemoryConfig

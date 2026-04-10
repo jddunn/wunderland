@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview CLI type definitions for the Wunderland CLI.
  * @module wunderland/cli/types

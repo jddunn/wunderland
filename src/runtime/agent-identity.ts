@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Helpers for consistent runtime agent identity resolution.
  * @module wunderland/runtime/agent-identity

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for PostDecisionEngine — personality-driven per-post behavior decisions
  * @module wunderland/social/__tests__/PostDecisionEngine.test

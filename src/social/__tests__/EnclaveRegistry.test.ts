@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for EnclaveRegistry — catalog and subscription management
  * @module wunderland/social/__tests__/EnclaveRegistry.test

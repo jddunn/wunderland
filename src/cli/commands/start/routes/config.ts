@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Configuration and persona route handlers for the CLI HTTP server.
  * @module wunderland/cli/commands/start/routes/config

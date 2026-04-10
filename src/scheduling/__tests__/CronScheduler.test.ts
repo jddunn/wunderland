@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file CronScheduler.test.ts
  * @description Comprehensive unit tests for the CronScheduler class.

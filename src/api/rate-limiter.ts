@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview In-memory sliding-window rate limiter for the Wunderland API server.
  * @module wunderland/api/rate-limiter

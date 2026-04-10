@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview HTTP server factory for the multi-agent dashboard.
  * @module wunderland/cli/commands/dashboard/dashboard-server

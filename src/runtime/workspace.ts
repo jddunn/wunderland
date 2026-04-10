@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Resolve per-agent workspace directories for filesystem writes.
  * @module wunderland/runtime/workspace

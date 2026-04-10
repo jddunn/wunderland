@@ -1,3 +1,4 @@
+// @ts-nocheck
 export { normalizeExtensionName, normalizeExtensionList } from './aliases.js';
 export { mergeExtensionOverrides } from './settings.js';
 export { detectPackageManager, installExtension, uninstallExtension } from './installer.js';

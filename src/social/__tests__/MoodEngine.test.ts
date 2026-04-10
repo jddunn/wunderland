@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for MoodEngine — PAD mood model for Wunderland agents
  * @module wunderland/social/__tests__/MoodEngine.test

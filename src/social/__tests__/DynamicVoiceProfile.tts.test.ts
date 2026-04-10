@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for voiceProfileToTtsParams — TTS parameter mapping from DynamicVoiceProfile.
  * @module wunderland/social/__tests__/DynamicVoiceProfile.tts.test

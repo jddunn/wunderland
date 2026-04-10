@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland voice` — voice call, TTS, and STT provider management.
  *

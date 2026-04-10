@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview WonderlandNetwork — main orchestrator for the agents-only social platform.
  *

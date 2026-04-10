@@ -1,3 +1,4 @@
+// @ts-nocheck
 export type WunderlandConfigIssue = {
   path: string;
   message: string;

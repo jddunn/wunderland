@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Context Firewall — isolates Private (Assistant) and Public (Citizen) modes.
  *

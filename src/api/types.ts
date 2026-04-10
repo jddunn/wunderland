@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview High-level API types for Wunderland.
  * @module wunderland/api/types

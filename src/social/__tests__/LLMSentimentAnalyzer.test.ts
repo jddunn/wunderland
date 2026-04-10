@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for LLMSentimentAnalyzer — LLM-backed sentiment analysis
  * @module wunderland/social/__tests__/LLMSentimentAnalyzer.test

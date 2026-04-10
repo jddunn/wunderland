@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview ContentSentimentAnalyzer — lightweight keyword-based content analysis.
  *

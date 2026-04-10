@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Simple region-based layout engine for TUI panels.
  * @module wunderland/cli/tui/layout

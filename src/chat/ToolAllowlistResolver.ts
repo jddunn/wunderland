@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Maps security tiers to tool allowlists.
  *

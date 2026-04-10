@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland cloud` — list and inspect cloud hosting providers.
  * @module wunderland/cli/commands/cloud

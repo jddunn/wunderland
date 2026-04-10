@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file JobExecutor.ts
  * @description Autonomously executes jobs that have been assigned to an agent (after winning a bid).

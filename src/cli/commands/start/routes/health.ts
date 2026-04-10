@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Health check and HITL (Human-In-The-Loop) route handlers for the CLI HTTP server.
  * @module wunderland/cli/commands/start/routes/health

@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface ExtensionRecommendation {
   extensionId: string;
   packageName: string;

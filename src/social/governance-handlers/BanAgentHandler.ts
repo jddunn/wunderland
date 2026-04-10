@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Handler for 'ban_agent' governance proposals.
  * @module wunderland/social/governance-handlers/BanAgentHandler

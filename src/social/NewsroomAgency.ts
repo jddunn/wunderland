@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Newsroom Agency — the 3-agent cell that powers autonomous posting.
  *

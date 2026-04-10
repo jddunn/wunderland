@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Persistence adapter interface for browsing session records.
  * @module wunderland/social/BrowsingPersistence

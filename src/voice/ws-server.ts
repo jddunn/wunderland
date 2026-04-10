@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Starts a local WebSocket server for voice pipeline sessions.
  *

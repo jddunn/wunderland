@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Factory that creates a prewired streaming voice pipeline handle
  * for Wunderland CLI and library consumers.

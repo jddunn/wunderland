@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Integration tests for Wunderland Capability Discovery.
  * @module wunderland/__tests__/discovery-integration

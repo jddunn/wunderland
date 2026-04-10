@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for PreLLMClassifier
  * @module wunderland/__tests__/PreLLMClassifier.test

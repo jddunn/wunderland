@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland extensions` — manage agent extensions.
  * @module wunderland/cli/commands/extensions

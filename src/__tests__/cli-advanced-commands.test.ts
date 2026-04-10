@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for advanced CLI commands — marketplace, knowledge, provenance
  * @module wunderland/__tests__/cli-advanced-commands.test

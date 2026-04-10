@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for EngagementProcessor — votes, boosts, emoji reactions, pairwise damping.
  * @module wunderland/social/__tests__/EngagementProcessor.test

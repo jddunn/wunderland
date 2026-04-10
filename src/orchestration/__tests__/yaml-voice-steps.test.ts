@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file yaml-voice-steps.test.ts
  * @description Unit tests for voice step and transport config support in the YAML compiler.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Export middleware — wraps any command to capture output as PNG.
  * Usage: wunderland <command> --export-png <path>

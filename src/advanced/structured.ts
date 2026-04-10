@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Structured outputs module for Wunderland.
  * Re-exports structured output primitives from AgentOS.

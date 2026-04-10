@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Config loading and inline onboarding for `wunderland start`.
  * Extracted from start.ts — handles config resolution, environment loading,

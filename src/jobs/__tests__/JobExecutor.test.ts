@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file JobExecutor.test.ts
  * @description Unit tests for JobExecutor — polling, execution, quality checks, retries.

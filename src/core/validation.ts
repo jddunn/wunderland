@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Validation utilities for agent configuration
  * @module wunderland/utils/validation

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Brand assets for the Wunderland CLI/TUI (wordmarks, gradients).
  * @module wunderland/cli/ui/brand

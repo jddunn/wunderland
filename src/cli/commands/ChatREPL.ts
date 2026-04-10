@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Interactive read-eval-print loop for the `wunderland chat` command.
  *

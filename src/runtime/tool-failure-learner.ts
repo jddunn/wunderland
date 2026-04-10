@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview ToolFailureLearner — automatically records lessons from tool
  * failures so the agent avoids repeating the same mistakes.

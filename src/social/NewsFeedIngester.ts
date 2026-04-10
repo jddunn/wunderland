@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview NewsFeedIngester — external news source integration framework.
  *

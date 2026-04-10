@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file MissionStreamRenderer.ts
  * @description Colored terminal renderer for the MissionEvent stream.

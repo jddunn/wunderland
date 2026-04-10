@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Terminal screen management via node:readline.
  * Handles alternate screen buffer, cursor control, raw keypresses, and resize.

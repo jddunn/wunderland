@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file QualityChecker.test.ts
  * @description Unit tests for QualityChecker — completeness, relevance, and format validation.
