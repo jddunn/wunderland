@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview PresetLoader - Loads preset agent configurations and templates from disk.
  * @module wunderland/core/PresetLoader

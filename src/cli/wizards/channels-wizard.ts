@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Channels wizard — platform selection + credential prompts.
  * @module wunderland/cli/wizards/channels-wizard

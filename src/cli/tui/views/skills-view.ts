@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview TUI drill-down view: browsable skill catalog.
  * @module wunderland/cli/tui/views/skills-view

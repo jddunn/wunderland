@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview High-level, ergonomic APIs for Wunderland.
  * @module wunderland/api

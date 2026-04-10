@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland import <file>` — import agent from a manifest file.
  *

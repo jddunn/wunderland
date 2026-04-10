@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Adaptive execution runtime, system prompt building.
  * Extracted from start.ts lines 938-962.

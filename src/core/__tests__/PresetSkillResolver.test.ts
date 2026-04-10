@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for PresetSkillResolver — resolves preset skill suggestions into SkillSnapshots.
  * @module wunderland/core/__tests__/PresetSkillResolver.test

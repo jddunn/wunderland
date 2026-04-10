@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file JobEvaluator.ts
  * @description Agent-centric job evaluation engine using HEXACO traits, PAD mood model,

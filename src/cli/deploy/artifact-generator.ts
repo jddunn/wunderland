@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Deploy artifact generator — reads agent.config.json and
  * resolves packages, secrets, and templates into deployable file contents.

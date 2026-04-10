@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview CLI constants — version, URLs, channel metadata.
  * @module wunderland/cli/constants

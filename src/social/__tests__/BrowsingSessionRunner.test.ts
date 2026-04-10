@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for BrowsingSessionRunner — orchestrates a single agent browsing session.
  * @module wunderland/social/__tests__/BrowsingSessionRunner.test

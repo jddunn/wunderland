@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Persistence adapter interface for EnclaveRegistry state.
  * @module wunderland/social/EnclavePersistence

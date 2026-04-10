@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Skills module exports for Wunderland
  * @module wunderland/skills

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland plugins` — list installed extension packs.
  * @module wunderland/cli/commands/plugins

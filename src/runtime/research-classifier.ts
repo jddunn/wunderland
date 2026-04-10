@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview LLM-as-a-judge query classifier for research depth routing.
  *

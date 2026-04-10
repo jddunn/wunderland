@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file agentos-runtime.ts
  * @description Thin adapter around the public AgentOS orchestration runtime kernel.

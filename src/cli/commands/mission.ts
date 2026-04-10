@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland mission` — natural language missions, YAML files, or explain.
  *

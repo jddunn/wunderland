@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
 

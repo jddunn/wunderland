@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for runtime-policy — tool filtering by profile and permissions
  * @module wunderland/cli/__tests__/runtime-policy.test

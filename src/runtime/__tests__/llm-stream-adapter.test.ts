@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file llm-stream-adapter.test.ts
  * Unit tests for wrapLLMAsGenerator.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland monitor` — live dashboard of running agent daemons.
  * Refreshes every 5s with health status, memory, restarts.

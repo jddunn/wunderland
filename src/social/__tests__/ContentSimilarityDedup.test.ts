@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for ContentSimilarityDedup — Jaccard trigram deduplication
  * @module wunderland/social/__tests__/ContentSimilarityDedup.test

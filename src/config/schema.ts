@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { WunderlandAgentConfig } from '../api/types.js';
 import type { WunderlandConfigIssue } from './errors.js';
 

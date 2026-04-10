@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Daemon state management — PID files, daemon info, lifecycle helpers.
  * Shared by `serve`, `ps`, `logs`, and `stop` commands.

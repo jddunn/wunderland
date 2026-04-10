@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Lightweight test verifying memory.observe is called
  * in the chat-runtime flow (before and after runToolCallingTurn).

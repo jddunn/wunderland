@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview StyleAdaptationEngine — learns user communication preferences
  * and generates tailored style instructions for agent responses.

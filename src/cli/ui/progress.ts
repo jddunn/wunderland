@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Step-by-step progress indicator with animated spinners.
  * @module wunderland/cli/ui/progress

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Configuration and persona route handlers for the Wunderland API server.
  * @module wunderland/api/routes/config

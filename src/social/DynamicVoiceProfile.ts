@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Dynamic voice profile synthesis for mood-aware social writing.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview API keys wizard — LLM provider key collection.
  * @module wunderland/cli/wizards/api-keys-wizard

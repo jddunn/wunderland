@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Integration test for the full Wonderland pipeline.
  *

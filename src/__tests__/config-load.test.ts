@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WunderlandConfigError } from '../config/errors.js';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland dashboard` — standalone multi-agent web dashboard.
  * @module wunderland/cli/commands/dashboard

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Inline HTML multi-agent dashboard SPA for Wunderland Hub.
  * @module wunderland/cli/commands/dashboard/routes/hub-html

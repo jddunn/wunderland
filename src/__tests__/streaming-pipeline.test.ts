@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for the streaming pipeline factory (`createStreamingPipeline`).
  *

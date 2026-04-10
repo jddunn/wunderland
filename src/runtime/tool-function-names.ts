@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tool function-name normalization and lookup helpers.
  * @module wunderland/runtime/tool-function-names

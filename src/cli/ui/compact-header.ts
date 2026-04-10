@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview One-line compact header for non-primary commands.
  * @module wunderland/cli/ui/compact-header

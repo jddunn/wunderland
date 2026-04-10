@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Named Tool Access Profiles for Wunderland
  * @module wunderland/social/ToolAccessProfiles

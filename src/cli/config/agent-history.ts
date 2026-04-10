@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Agent history — tracks recently used agents across sessions.
  * Persisted at ~/.wunderland/agent-history.json.

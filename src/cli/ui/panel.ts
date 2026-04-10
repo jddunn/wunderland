@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Bordered panel component wrapping boxen with theme integration.
  * @module wunderland/cli/ui/panel

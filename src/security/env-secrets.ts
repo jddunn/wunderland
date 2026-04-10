@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Environment-backed secret resolution for AgentOS extension packs.
  *

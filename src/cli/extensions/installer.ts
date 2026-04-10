@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';

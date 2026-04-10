@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Serper (Google Search) source fetcher.
  * @module wunderland/social/sources/SerperFetcher

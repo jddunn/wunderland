@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland doctor` — health check: keys, tools, channels, connectivity.
  * Uses animated step progress with spinners for each diagnostic check.

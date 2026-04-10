@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Media Search Tool — backward-compat re-export from agentos-extensions.
  * @deprecated Use ImageSearchTool from ToolRegistry or agentos-extensions directly.

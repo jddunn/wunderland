@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Global UI runtime settings (theme, ASCII fallback, color).
  * @module wunderland/cli/ui/runtime

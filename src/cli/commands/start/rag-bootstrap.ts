@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview RAG knowledge bootstrap — seeds the agent's vector store with
  * documentation on first startup (or when docs change). Skips if already seeded

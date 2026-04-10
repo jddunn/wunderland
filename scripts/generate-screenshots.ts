@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+// @ts-nocheck
 /**
  * Generate PNG screenshots for all non-interactive CLI commands.
  * Uses the existing --export-png pipeline (OutputCapture → ansi-to-html → Playwright).

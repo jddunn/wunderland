@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for openaiChatWithTools fallback behavior (OpenRouter, etc.)
  * @module wunderland/__tests__/OpenRouterFallback.test

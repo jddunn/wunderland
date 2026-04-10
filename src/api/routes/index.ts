@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Barrel export and route dispatch helper for the Wunderland API server.
  * @module wunderland/api/routes

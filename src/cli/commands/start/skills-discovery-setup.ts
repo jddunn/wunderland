@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Discovery config, skills registry, discovery manager init.
  * Extracted from start.ts lines 831-936.

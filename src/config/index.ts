@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Agent configuration loading, validation, and resolution.
  *

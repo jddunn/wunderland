@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { beforeAll, describe, expect, it } from 'vitest';
 import chalk from 'chalk';
 

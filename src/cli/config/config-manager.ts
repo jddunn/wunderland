@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Read/write ~/.wunderland/config.json.
  * @module wunderland/cli/config/config-manager

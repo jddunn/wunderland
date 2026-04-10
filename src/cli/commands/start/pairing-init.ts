@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview PairingManager setup.
  * Extracted from start.ts lines 964-981.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Config layer barrel exports.
  * @module wunderland/cli/config

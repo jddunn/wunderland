@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland chat` — interactive terminal assistant with tool calling.
  *

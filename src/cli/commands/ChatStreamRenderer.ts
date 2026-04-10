@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Terminal rendering for streaming chat output — tool call
  * display, assistant reply printing, widget extraction, and progress

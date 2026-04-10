@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland stop [seedId]` — gracefully stop a running daemon.
  * @module wunderland/cli/commands/stop

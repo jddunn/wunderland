@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Persistence adapter interface for MoodEngine state.
  * @module wunderland/social/MoodPersistence

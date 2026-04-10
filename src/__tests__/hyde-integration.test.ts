@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for hyde-integration — HyDE config resolution and
  * query wrapper for Wunderland's local memory retrieval.

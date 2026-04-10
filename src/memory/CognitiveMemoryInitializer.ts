@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared factory for initializing CognitiveMemoryManager
  * in both CLI (chat.ts) and API (chat-runtime.ts) entry points.

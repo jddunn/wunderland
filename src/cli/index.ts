@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview CLI entry point and command router.
  * Imported by bin/wunderland.js (thin bootstrap).

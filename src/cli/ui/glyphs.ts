@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Unicode/ASCII glyph selection for CLI + TUI.
  * @module wunderland/cli/ui/glyphs

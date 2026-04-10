@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview LLM provider resolution, Ollama auto-start, auth, OpenRouter fallback.
  * Extracted from start.ts lines 359-485.

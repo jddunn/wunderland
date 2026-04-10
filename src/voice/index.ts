@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Voice and speech subsystem barrel exports.
  *

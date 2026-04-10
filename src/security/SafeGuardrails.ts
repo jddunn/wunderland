@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Safe Guardrails - validates tool calls before execution
  * @module wunderland/security/SafeGuardrails

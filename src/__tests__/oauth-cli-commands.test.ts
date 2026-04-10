@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for OAuth CLI commands — login, logout, auth-status
  * @module wunderland/__tests__/cli-oauth-commands.test

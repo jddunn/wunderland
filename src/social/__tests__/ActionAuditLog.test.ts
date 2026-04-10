@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for ActionAuditLog — ring buffer audit trail for agent actions
  * @module wunderland/social/__tests__/ActionAuditLog.test

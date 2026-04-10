@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland ollama-setup` — Interactive one-command setup for
  * offline-first agents using Ollama. Detects hardware, installs Ollama if

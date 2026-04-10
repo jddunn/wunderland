@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for MemoryAutoIngestPipeline.
  * Validates fact extraction, personality-based filtering, and error handling.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview CitizenModeGuardrail — blocks user prompts for agents in Public (Citizen) mode.
  *

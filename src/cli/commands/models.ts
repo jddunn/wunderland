@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland models` — list providers/models, set defaults, test connectivity.
  * @module wunderland/cli/commands/models

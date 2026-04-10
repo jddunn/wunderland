@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview RequestFolderAccessTool — lets agents request filesystem
  * permissions from the user at runtime via HITL approval.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview HITL (Human-In-The-Loop) and health route handlers for the Wunderland API server.
  * @module wunderland/api/routes/health

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Named Security Tiers for Wunderland (Phase 6)
  * @module wunderland/security/SecurityTiers

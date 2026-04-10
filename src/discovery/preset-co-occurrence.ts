@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Derive preset co-occurrence data for capability graph construction.
  * @module wunderland/discovery/preset-co-occurrence

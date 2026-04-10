@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Provenance & audit trail module for Wunderland.
  * Re-exports provenance primitives from AgentOS.

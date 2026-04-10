@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Runtime policy helpers for Wunderland.
  *

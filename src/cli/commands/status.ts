@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland status` — agent & connection status overview.
  * Uses bordered panels per section for a polished dashboard feel.

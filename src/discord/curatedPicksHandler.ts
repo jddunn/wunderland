@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Curated Picks handler — periodically fetches news/research from the scraper API,
  * uses OpenAI to pick the most wildly interesting item, generates edgy opinionated

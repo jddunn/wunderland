@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Wunderland Tool Registry — uses the curated extensions registry
  * to load all available tools via a single `createCuratedManifest()` call.

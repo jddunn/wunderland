@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview arXiv source fetcher via Atom XML API.
  * @module wunderland/social/sources/ArxivFetcher

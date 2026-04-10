@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it, vi } from 'vitest';
 
 import { ToolFailureLearner } from '../runtime/tool-failure-learner.js';

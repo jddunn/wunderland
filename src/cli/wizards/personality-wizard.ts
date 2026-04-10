@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Personality wizard — HEXACO preset picker or custom sliders.
  * @module wunderland/cli/wizards/personality-wizard

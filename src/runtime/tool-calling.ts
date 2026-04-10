@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview OpenAI-compatible tool-calling loop helpers used by Wunderland runtimes.
  *

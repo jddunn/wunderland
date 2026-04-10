@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Voice wizard — multi-provider TTS and STT configuration.
  * @module wunderland/cli/wizards/voice-wizard

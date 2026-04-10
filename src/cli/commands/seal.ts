@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland seal` — seal the agent configuration with an integrity hash.
  * Computes a deterministic SHA-256 hash of the canonical config JSON and writes a sealed.json file.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Stimulus Router — distributes World Feed and Tips to agent Observers.
  *

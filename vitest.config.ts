@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';

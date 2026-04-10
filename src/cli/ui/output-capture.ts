@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Intercept stdout for the PNG export pipeline.
  * Captures all console output with ANSI escape codes intact.

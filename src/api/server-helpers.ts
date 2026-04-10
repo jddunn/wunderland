@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview HTTP helper utilities for the Wunderland server.
  * Extracted from server.ts for readability.

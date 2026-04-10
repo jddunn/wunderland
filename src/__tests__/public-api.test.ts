@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';

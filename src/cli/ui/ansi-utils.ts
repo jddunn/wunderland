@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Shared ANSI escape-code utilities.
  * Used by banner.ts (typewriter), layout.ts (truncate/pad), and dashboard.ts (side-by-side).

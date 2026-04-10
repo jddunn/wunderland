@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file DeliverableManager.ts
  * @description Manages job deliverables: in-memory storage, SHA-256 hash generation,

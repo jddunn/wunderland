@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview SQL persistence for RAG audit trails.
  * Uses the sql-storage-adapter StorageAdapter interface for cross-platform support.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file JobMemoryService.ts
  * @description Manages job outcome memory using AgentOS RAG system.

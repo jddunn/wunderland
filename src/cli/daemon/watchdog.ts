@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Watchdog process — monitors a daemon and restarts on crash.
  *

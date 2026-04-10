@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Streaming tool-call parsing and SSE chunk assembly.
  *

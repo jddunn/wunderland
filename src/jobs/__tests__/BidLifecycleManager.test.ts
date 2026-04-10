@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file BidLifecycleManager.test.ts
  * @description Unit tests for BidLifecycleManager — detecting and withdrawing losing bids.

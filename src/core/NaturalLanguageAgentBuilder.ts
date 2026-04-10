@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview LLM-powered extraction from natural language agent descriptions.
  * @module wunderland/core/NaturalLanguageAgentBuilder

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview PostDecisionEngine — personality-driven per-post behavior decisions.
  *

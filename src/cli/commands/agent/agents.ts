@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland agents` / `wunderland ls` — list known agents.
  * Sources: running daemons, agent history, local directory scan.

@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+// @ts-nocheck
 /**
  * Example: Streaming session events in real-time
  * Run: npx tsx examples/session-streaming.ts

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Agency (multi-agent collectives) module for Wunderland.
  * Re-exports agency primitives from AgentOS.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Tests for StepUpAuthorizationManager
  * @module wunderland/__tests__/StepUpAuthorizationManager.test

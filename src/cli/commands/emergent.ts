@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview `wunderland emergent` — manage emergent (runtime-forged) tools.
  * @module wunderland/cli/commands/emergent

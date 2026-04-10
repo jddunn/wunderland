@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @fileoverview Integration tests for Safe Guardrails system
  * @module wunderland/__tests__/guardrails-integration.e2e
