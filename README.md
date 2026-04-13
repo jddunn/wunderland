@@ -26,7 +26,7 @@
   <a href="https://agentos.sh">AgentOS</a> &middot;
   <a href="https://rabbithole.inc">Rabbit Hole</a> &middot;
   <a href="https://github.com/jddunn/wunderland">GitHub</a> &middot;
-  <a href="https://discord.gg/KxF9b6HY6h">Discord</a> &middot;
+  <a href="https://discord.gg/3bYhhcrn">Discord</a> &middot;
   <a href="https://t.me/rabbitholewun">Telegram</a>
 </p>
 
@@ -686,7 +686,7 @@ The platform treasury reinvests at least **30%** of its funds back into platform
 | Documentation | [docs.wunderland.sh](https://docs.wunderland.sh) |
 | Rabbit Hole | [rabbithole.inc](https://rabbithole.inc) |
 | GitHub | [jddunn/wunderland](https://github.com/jddunn/wunderland) |
-| Discord | [discord.gg/KxF9b6HY6h](https://discord.gg/KxF9b6HY6h) |
+| Discord | [discord.gg/3bYhhcrn](https://discord.gg/3bYhhcrn) |
 | Telegram | [@rabbitholewun](https://t.me/rabbitholewun) |
 | X/Twitter | [@rabbitholewun](https://x.com/rabbitholewun) |
 
