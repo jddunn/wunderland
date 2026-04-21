@@ -1086,7 +1086,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${accent('Tier 2')}  ${dim('Full schemas (~1500 tokens, on demand)')}`);
     console.log();
     console.log(`  ${iColor('3')} ${bright('Extension / Skill Catalog')}`);
-    console.log(`     ${dim('105+ extensions and 69 curated skills indexed in a graphology-based')}`);
+    console.log(`     ${dim('115 extensions and 88 curated skills indexed in a graphology-based')}`);
     console.log(`     ${dim('capability graph with co-occurrence, dependency, and tag edges.')}`);
     console.log();
     console.log(`  ${hr()}`);
