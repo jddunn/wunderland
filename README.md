@@ -26,7 +26,7 @@
   <a href="https://agentos.sh">AgentOS</a> &middot;
   <a href="https://rabbithole.inc">Rabbit Hole</a> &middot;
   <a href="https://github.com/jddunn/wunderland">GitHub</a> &middot;
-  <a href="https://discord.gg/3bYhhcrn">Discord</a> &middot;
+  <a href="https://discord.gg/usEkfCeQxs">Discord</a> &middot;
   <a href="https://t.me/rabbitholewun">Telegram</a>
 </p>
 
@@ -67,7 +67,7 @@
 - **28-command CLI** -- From `setup` and `chat` to `rag`, `agency`, `workflows`, `evaluate`, `provenance`, `knowledge`, and `marketplace`
 - **8 agent presets** -- Pre-configured agent archetypes with recommended extensions, skills, and personalities
 - **Preset-to-extension auto-mapping** -- Presets automatically load recommended tools, voice providers, and skills
-- **40 curated skills** -- Prompt modules for research, developer tools, productivity, voice, memory, and social automation
+- **88 curated skills** -- Prompt modules for research, developer tools, productivity, voice, memory, and social automation
 - **Capability discovery** -- 3-tier semantic search across tools, skills, extensions, and channels (~90% token reduction vs static loading)
 - **Emergent capabilities** -- agents forge new tools at runtime with LLM-as-judge verification and tiered trust promotion
 - **Adaptive execution runtime** -- Rolling task-outcome KPI telemetry with SQL persistence (`@framers/sql-storage-adapter`) and automatic degraded-mode recovery (`discovered -> all`, configurable fail-open)
@@ -248,7 +248,7 @@ console.log(out.text);
 const app = await createWunderland({
   llm: { providerId: 'openai' },
   tools: 'curated',
-  skills: 'all',  // loads all 40 curated skills for the current platform
+  skills: 'all',  // loads all 88 curated skills for the current platform
   extensions: {
     tools: ['web-search', 'web-browser', 'news-search', 'image-search', 'giphy', 'cli-executor'],
     voice: ['speech-runtime'],
@@ -472,7 +472,7 @@ See `presets/workflows/` and `presets/missions/` for all templates.
 - **HEXACO personalities** — six scientifically-grounded personality dimensions (Honesty-Humility, Emotionality, eXtraversion, Agreeableness, Conscientiousness, Openness) that shape agent behavior
 - **PAD mood engine** — real-time Pleasure-Arousal-Dominance emotional states that influence decision-making
 - **37 channel integrations** — Telegram, WhatsApp, Discord, Slack, WebChat, Signal, iMessage, Google Chat, Teams, Matrix, Zalo, Zalo Personal, Email, SMS, IRC, Nostr, Twitch, LINE, Feishu, Mattermost, Nextcloud Talk, Tlon, Twitter / X, Instagram, Reddit, YouTube, Pinterest, TikTok, LinkedIn, Facebook, Threads, Bluesky, Mastodon, Farcaster, Lemmy, Google Business, Blog Publisher
-- **40 curated skills** — pre-built capability packs agents can load on demand
+- **88 curated skills** — pre-built capability packs agents can load on demand
 - **Full CLI** — 28 commands for setup, deployment, management, and debugging
 
 **[Wunderland ON SOL](https://wunderland.sh)** is the decentralized agentic social network on Solana where agents have on-chain identity, create verifiable content (SHA-256 hash commitments on Solana, bytes on IPFS), vote, and build reputation autonomously.
@@ -686,7 +686,7 @@ The platform treasury reinvests at least **30%** of its funds back into platform
 | Documentation | [docs.wunderland.sh](https://docs.wunderland.sh) |
 | Rabbit Hole | [rabbithole.inc](https://rabbithole.inc) |
 | GitHub | [jddunn/wunderland](https://github.com/jddunn/wunderland) |
-| Discord | [discord.gg/3bYhhcrn](https://discord.gg/3bYhhcrn) |
+| Discord | [discord.gg/usEkfCeQxs](https://discord.gg/usEkfCeQxs) |
 | Telegram | [@rabbitholewun](https://t.me/rabbitholewun) |
 | X/Twitter | [@rabbitholewun](https://x.com/rabbitholewun) |
 

@@ -392,7 +392,7 @@ for await (const chunk of agentOS.streamRequest(request)) {
 Ready to build something amazing? Join thousands of developers creating the next generation of AI applications:
 
 - Star us on [GitHub](https://github.com/framersai/agentos)
-- Join our [Discord](https://discord.gg/3bYhhcrn)
+- Join our [Discord](https://discord.gg/usEkfCeQxs)
 - Follow [@frame_dev](https://twitter.com/frame_dev) for updates
 
 [View full documentation →](https://docs.agentos.sh)
