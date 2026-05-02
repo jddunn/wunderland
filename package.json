@@ -1,7 +1,7 @@
 {
   "name": "wunderland",
   "version": "0.61.0",
-  "description": "Autonomous AI agent framework with cognitive memory, infinite-context graph-based RAG, and HEXACO personality modeling — built on OpenClaw with 5-tier prompt-injection defense, adaptive HyDE retrieval, observational memory with Ebbinghaus decay, 37 channel integrations, and a zero-config CLI",
+  "description": "Autonomous AI agent framework with cognitive memory, infinite-context graph-based RAG, and HEXACO personality modeling \u2014 built on OpenClaw with 5-tier prompt-injection defense, adaptive HyDE retrieval, observational memory with Ebbinghaus decay, 37 channel integrations, and a zero-config CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -137,7 +137,7 @@
     "@framers/agentos-ext-web-browser": "^1.2.1",
     "@framers/agentos-ext-web-search": "^1.1.1",
     "@framers/agentos-extensions-registry": "^0.18.0",
-    "@framers/sql-storage-adapter": "^0.6.3",
+    "@framers/sql-storage-adapter": "^0.6.4",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.201.1",
     "@opentelemetry/auto-instrumentations-node": "^0.59.0",
