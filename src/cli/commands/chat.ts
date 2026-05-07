@@ -73,8 +73,7 @@ import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js
 import { buildOllamaRuntimeOptions } from '../../runtime/ollama-options.js';
 import { createRequestFolderAccessTool } from '../../tools/RequestFolderAccessTool.js';
 import {
-  resolveWunderlandProviderId,
-  resolveWunderlandTextModel,
+  resolveLlmProviderAndModel,
 } from '../../config/provider-defaults.js';
 import {
   AgentStorageManager,
@@ -368,29 +367,28 @@ export default async function cmdChat(
   })();
   const strictToolNames = resolveStrictToolNames((cfg as any)?.toolCalling?.strictToolNames);
 
-  const providerFlag =
-    typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
-  const providerFromConfig =
-    typeof cfg?.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
   let providerId: WunderlandProviderId;
+  let model: string;
+  let providerSource: 'flag' | 'local-cfg' | 'global-cfg' | 'default';
   try {
-    providerId = resolveWunderlandProviderId(
-      flags['ollama'] === true ? 'ollama' : providerFlag || providerFromConfig || 'openai',
-    );
-  } catch {
+    const resolved = resolveLlmProviderAndModel({
+      providerFlag: typeof flags['provider'] === 'string' ? flags['provider'] : '',
+      ollamaFlag: flags['ollama'] === true,
+      modelFlag: typeof flags['model'] === 'string' ? flags['model'] : '',
+      localCfg: cfg,
+      globalCfg: globalConfig,
+    });
+    providerId = resolved.providerId;
+    model = resolved.model;
+    providerSource = resolved.source.provider;
+  } catch (err) {
     fmt.errorBlock(
       'Unsupported LLM provider',
-      `Provider "${flags['ollama'] === true ? 'ollama' : providerFlag || providerFromConfig || 'openai'}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic, gemini`
+      err instanceof Error ? err.message : String(err),
     );
     process.exitCode = 1;
     return;
   }
-
-  const modelFromConfig = typeof cfg?.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
-  const model = resolveWunderlandTextModel({
-    providerId,
-    model: typeof flags['model'] === 'string' ? String(flags['model']) : modelFromConfig,
-  });
 
   // OpenRouter fallback (OpenAI provider only)
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
@@ -478,12 +476,13 @@ export default async function cmdChat(
     return;
   }
 
-  // Warn if using an API key from environment rather than agent config.
-  // This prevents confusion when CTRL+C'd init still creates a working agent.
+  // Warn if using an API key from environment rather than from any config layer
+  // (./agent.config.json or ~/.wunderland/config.json). This prevents confusion
+  // when CTRL+C'd init still creates a working agent.
   if (
     providerId !== 'ollama' &&
     llmApiKey &&
-    !providerFromConfig
+    providerSource === 'default'
   ) {
     const envVarName =
       providerId === 'openrouter'
@@ -494,7 +493,7 @@ export default async function cmdChat(
             ? 'GEMINI_API_KEY'
             : 'OPENAI_API_KEY';
     console.log(
-      `  ${wColor('!')} No LLM provider in agent.config.json — using ${accent(envVarName)} from environment`
+      `  ${wColor('!')} No LLM provider in agent.config.json or ~/.wunderland/config.json — using ${accent(envVarName)} from environment`
     );
   }
 

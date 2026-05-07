@@ -15,38 +15,37 @@ import {
   detectOllamaInstall,
 } from '../../ollama/ollama-manager.js';
 import {
-  resolveWunderlandProviderId,
-  resolveWunderlandTextModel,
+  resolveLlmProviderAndModel,
 } from '../../../config/provider-defaults.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime/workspace.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { buildFallbackChain } from '@framers/agentos';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
-  const { flags, globals, cfg, policy, seedId } = ctx;
+  const { flags, globals, cfg, policy, seedId, globalConfig } = ctx;
 
-  // Resolve provider/model from config (fallbacks preserve legacy env behavior).
-  const providerFlag = typeof flags['provider'] === 'string' ? String(flags['provider']).trim() : '';
-  const providerFromConfig = typeof cfg.llmProvider === 'string' ? String(cfg.llmProvider).trim() : '';
+  // Resolve provider/model with layered precedence:
+  //   --ollama / --provider flag > ./agent.config.json > ~/.wunderland/config.json > openai
   let providerId;
+  let model: string;
   try {
-    providerId = resolveWunderlandProviderId(
-      flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai'),
-    );
-  } catch {
+    const resolved = resolveLlmProviderAndModel({
+      providerFlag: typeof flags['provider'] === 'string' ? flags['provider'] : '',
+      ollamaFlag: flags['ollama'] === true,
+      modelFlag: typeof flags['model'] === 'string' ? flags['model'] : '',
+      localCfg: cfg,
+      globalCfg: globalConfig,
+    });
+    providerId = resolved.providerId;
+    model = resolved.model;
+  } catch (err) {
     fmt.errorBlock(
       'Unsupported LLM provider',
-      `Provider "${flags['ollama'] === true ? 'ollama' : (providerFlag || providerFromConfig || 'openai')}" is not supported by this CLI runtime.\nSupported: openai, openrouter, ollama, anthropic, gemini`,
+      err instanceof Error ? err.message : String(err),
     );
     process.exitCode = 1;
     return false;
   }
-
-  const modelFromConfig = typeof cfg.llmModel === 'string' ? String(cfg.llmModel).trim() : '';
-  const model = resolveWunderlandTextModel({
-    providerId: providerId as any,
-    model: typeof flags['model'] === 'string' ? String(flags['model']) : modelFromConfig,
-  });
 
   const ollamaBaseUrl = (() => {
     const configBaseUrl = typeof cfg?.ollama?.baseUrl === 'string' ? cfg.ollama.baseUrl.trim() : '';
