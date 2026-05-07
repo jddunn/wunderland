@@ -497,6 +497,16 @@ interface YamlMissionDef {
     maxSteps?: number;
     /** Maximum internal iterations for ReAct-style planners. */
     maxIterations?: number;
+    /**
+     * Plan template selector. Picks the shape of the stub plan emitted by
+     * the compiler:
+     * - `'research'` (default) — gather → process → deliver → refine, suited
+     *   to evidence-backed research goals
+     * - `'qa'` — short two-step quick-answer plan
+     * - `'creative'` — brainstorm → develop → produce → polish, suited to
+     *   goals that produce a written/designed artifact
+     */
+    style?: 'research' | 'qa' | 'creative';
   };
   /** Optional policy overrides (e.g. guardrails). */
   policy?: {
@@ -544,6 +554,7 @@ export function compileMissionYaml(yamlContent: string): any {
       strategy: doc.planner.strategy,
       maxSteps: doc.planner.maxSteps ?? 8,
       maxIterationsPerNode: doc.planner.maxIterations,
+      ...(doc.planner.style ? { style: doc.planner.style } : {}),
     });
 
   if (doc.policy) {
