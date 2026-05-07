@@ -34,6 +34,26 @@ function stringifyForReport(value: unknown): string {
   }
 }
 
+/**
+ * Format the optional GMI telemetry attached to a `node_end` event into a
+ * compact one-line summary for inclusion in mission reports. Returns an
+ * empty string when telemetry is absent or empty.
+ */
+function formatTelemetry(t?: {
+  iterations?: number;
+  toolCalls?: number;
+  toolErrors?: number;
+  iterationsExhausted?: boolean;
+}): string {
+  if (!t || (!t.iterations && !t.toolCalls && !t.toolErrors)) return '';
+  const parts: string[] = [];
+  if (t.iterations !== undefined) parts.push(`${t.iterations} iteration${t.iterations === 1 ? '' : 's'}`);
+  if (t.toolCalls) parts.push(`${t.toolCalls} tool call${t.toolCalls === 1 ? '' : 's'}`);
+  if (t.toolErrors) parts.push(`${t.toolErrors} tool error${t.toolErrors === 1 ? '' : 's'}`);
+  if (t.iterationsExhausted) parts.push('hit max-iter cap');
+  return parts.join(', ');
+}
+
 type MissionProviderCandidate = {
   env: string;
   id: string;
@@ -156,7 +176,20 @@ export default async function missionCommand(
       const startTime = Date.now();
 
       // Collect node outputs + run_end finalOutput so we can write a report file.
-      const nodeOutputs: Array<{ nodeId: string; output: unknown; durationMs: number }> = [];
+      // `telemetry` carries the GMI executor's iteration / tool-call counters
+      // when present (older agentos releases will leave it undefined).
+      type NodeTelemetry = {
+        iterations?: number;
+        toolCalls?: number;
+        toolErrors?: number;
+        iterationsExhausted?: boolean;
+      };
+      const nodeOutputs: Array<{
+        nodeId: string;
+        output: unknown;
+        durationMs: number;
+        telemetry?: NodeTelemetry;
+      }> = [];
       let finalOutput: unknown = undefined;
       const errors: Array<{ nodeId?: string; message: string; code: string }> = [];
 
@@ -164,8 +197,21 @@ export default async function missionCommand(
         for await (const event of app.streamGraph(compiled, input)) {
           if (event.type === 'node_start') process.stdout.write(`  ├── running ${event.nodeId}...`);
           if (event.type === 'node_end') {
-            process.stdout.write(` [${event.durationMs}ms]\n`);
-            nodeOutputs.push({ nodeId: event.nodeId, output: event.output, durationMs: event.durationMs });
+            const tele = (event as any).telemetry as NodeTelemetry | undefined;
+            const teleSuffix = tele?.iterations
+              ? ` (${tele.iterations} iter${tele.iterations === 1 ? '' : 's'}` +
+                (tele.toolCalls ? `, ${tele.toolCalls} tool${tele.toolCalls === 1 ? '' : 's'}` : '') +
+                (tele.toolErrors ? `, ${tele.toolErrors} err${tele.toolErrors === 1 ? '' : 's'}` : '') +
+                (tele.iterationsExhausted ? ', max-iter' : '') +
+                ')'
+              : '';
+            process.stdout.write(` [${event.durationMs}ms${teleSuffix}]\n`);
+            nodeOutputs.push({
+              nodeId: event.nodeId,
+              output: event.output,
+              durationMs: event.durationMs,
+              telemetry: tele,
+            });
           }
           if (event.type === 'run_end') {
             finalOutput = event.finalOutput;
@@ -226,7 +272,11 @@ export default async function missionCommand(
             parts.push('=== Final Output ===', stringifyForReport(finalOutput), '');
           }
           for (const n of nodeOutputs) {
-            parts.push(`--- ${n.nodeId} (${n.durationMs}ms) ---`, stringifyForReport(n.output), '');
+            const tele = formatTelemetry(n.telemetry);
+            const header = tele
+              ? `--- ${n.nodeId} (${n.durationMs}ms — ${tele}) ---`
+              : `--- ${n.nodeId} (${n.durationMs}ms) ---`;
+            parts.push(header, stringifyForReport(n.output), '');
           }
           if (errors.length) {
             parts.push('=== Errors ===');
@@ -249,7 +299,11 @@ export default async function missionCommand(
           if (nodeOutputs.length) {
             parts.push('## Node Outputs', '');
             for (const n of nodeOutputs) {
-              parts.push(`### ${n.nodeId} (${n.durationMs}ms)`, '', '```', stringifyForReport(n.output), '```', '');
+              const tele = formatTelemetry(n.telemetry);
+              const header = tele
+                ? `### ${n.nodeId} (${n.durationMs}ms — ${tele})`
+                : `### ${n.nodeId} (${n.durationMs}ms)`;
+              parts.push(header, '', '```', stringifyForReport(n.output), '```', '');
             }
           }
           if (errors.length) {

@@ -324,6 +324,12 @@ class WunderlandNodeExecutor extends NodeExecutor {
           : Math.max(1, node.executorConfig.maxInternalIterations ?? 4);
       const emittedEvents: GraphEvent[] = [];
       const expansionRequests: NonNullable<NodeExecutionResult['expansionRequests']> = [];
+      // Per-node telemetry counters surfaced on the node_end event for mission
+      // reports. We can't get the exact ReAct iteration count from
+      // runToolCallingTurn (it returns only the final string) so toolCalls is
+      // the practical proxy for "how much work this node did".
+      let toolCallCount = 0;
+      let toolErrorCount = 0;
 
       const reply = await runToolCallingTurn({
         providerId: llm.providerId,
@@ -344,6 +350,7 @@ class WunderlandNodeExecutor extends NodeExecutor {
           emittedEvents.push({ type: 'text_delta', nodeId: node.id, content });
         },
         onToolCall: (tool, args) => {
+          toolCallCount += 1;
           emittedEvents.push({
             type: 'tool_call',
             nodeId: node.id,
@@ -352,6 +359,7 @@ class WunderlandNodeExecutor extends NodeExecutor {
           });
         },
         onToolResult: (info) => {
+          if (!info.success) toolErrorCount += 1;
           emittedEvents.push({
             type: 'tool_result',
             nodeId: node.id,
@@ -379,6 +387,13 @@ class WunderlandNodeExecutor extends NodeExecutor {
         output: reply,
         events: emittedEvents,
         ...(expansionRequests.length > 0 ? { expansionRequests } : {}),
+        metadata: {
+          // toolCallCount is the total number of tool invocations; rounds is
+          // bounded by maxRounds and at least 1 turn happened to get the reply.
+          iterations: Math.max(1, toolCallCount),
+          toolCalls: toolCallCount,
+          toolErrors: toolErrorCount,
+        },
       });
     }
 
