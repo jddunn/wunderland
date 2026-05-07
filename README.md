@@ -421,12 +421,32 @@ wunderland workflows explain research-pipeline.workflow.yaml
 ### YAML Missions (Intent-Driven)
 
 ```bash
-# Execute a mission YAML file
-wunderland mission run deep-research.mission.yaml
+# Execute a mission YAML file (writes a per-node report to ./report.md)
+wunderland mission run examples/mission-deep-research.yaml \
+  --input '{"topic":"quantum computing"}' \
+  --output ./report.md
 
 # Show the planner-derived mission graph
-wunderland mission explain deep-research.mission.yaml
+wunderland mission explain examples/mission-deep-research.yaml
 ```
+
+`planner.style` selects the plan template:
+
+| Style      | Steps                                                  | Best for                          |
+| ---------- | ------------------------------------------------------ | --------------------------------- |
+| `research` | gather → process → deliver → refine                    | evidence-backed research (default)|
+| `qa`       | research-quick → answer                                | short factual questions           |
+| `creative` | brainstorm → develop → produce → polish                | write/design/compose artifacts    |
+
+Omit `style` and the goal text auto-classifies: `what is`/`explain`/`how do I` →
+`qa`, `Write a...`/`Compose...`/`Design a...` → `creative`, everything else →
+`research`. The resolved style is shown in the console banner and report header.
+
+Bundled examples:
+
+- `examples/mission-deep-research.yaml` — full research pipeline
+- `examples/mission-qa.yaml` — short Q&A
+- `examples/mission-creative.yaml` — write-a-haiku
 
 ### Library API
 
