@@ -133,6 +133,24 @@ export async function runToolCallingTurn(opts: {
   }) => void;
   /** Called when the LLM emits streamed text before the turn completes. */
   onTextDelta?: (content: string) => void;
+  /**
+   * Called once per provider response with token usage and cost — same
+   * payload shape as `recordWunderlandTokenUsage`'s observability hook,
+   * surfaced to the caller so per-node accumulators (e.g. mission report
+   * cost telemetry) can be built without going through the global
+   * observability sink.
+   *
+   * Fired on every successful round of the ReAct loop — caller is
+   * responsible for accumulating across rounds.
+   */
+  onUsage?: (usage: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    costUSD?: number;
+    model?: string;
+    providerId?: string;
+  }) => void;
   /** Optional pre-configured authorization manager. Created automatically if not provided. */
   authorizationManager?: StepUpAuthorizationManager;
   /** Override the API base URL for the primary provider. */
@@ -392,6 +410,23 @@ export async function runToolCallingTurn(opts: {
 	                usage: res.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; costUSD?: number } | null,
 	              });
 
+              // Surface per-round usage to the caller so node-level
+              // accumulators (e.g. mission report cost telemetry) don't have
+              // to fish it out of the global observability sink.
+              if (opts.onUsage && res.usage && typeof res.usage === 'object') {
+                try {
+                  const u = res.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; costUSD?: number };
+                  opts.onUsage({
+                    prompt_tokens: typeof u.prompt_tokens === 'number' ? u.prompt_tokens : undefined,
+                    completion_tokens: typeof u.completion_tokens === 'number' ? u.completion_tokens : undefined,
+                    total_tokens: typeof u.total_tokens === 'number' ? u.total_tokens : undefined,
+                    costUSD: typeof u.costUSD === 'number' ? u.costUSD : undefined,
+                    model: typeof res.model === 'string' ? res.model : opts.model,
+                    providerId,
+                  });
+                } catch { /* caller bug shouldn't break the round */ }
+              }
+
 	              return res;
 	            } catch (error) {
               try {
@@ -439,6 +474,22 @@ export async function runToolCallingTurn(opts: {
               : undefined,
 	        usage: (llmResult as any)?.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; costUSD?: number } | null,
 	      });
+
+	      // Same per-round usage callback as the OTel branch — fires here so
+	      // callers don't miss it when OTel is disabled.
+	      if (opts.onUsage && (llmResult as any)?.usage && typeof (llmResult as any).usage === 'object') {
+	        try {
+	          const u = (llmResult as any).usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; costUSD?: number };
+	          opts.onUsage({
+	            prompt_tokens: typeof u.prompt_tokens === 'number' ? u.prompt_tokens : undefined,
+	            completion_tokens: typeof u.completion_tokens === 'number' ? u.completion_tokens : undefined,
+	            total_tokens: typeof u.total_tokens === 'number' ? u.total_tokens : undefined,
+	            costUSD: typeof u.costUSD === 'number' ? u.costUSD : undefined,
+	            model: typeof (llmResult as any)?.model === 'string' ? (llmResult as any).model : opts.model,
+	            providerId,
+	          });
+	        } catch { /* caller bug shouldn't break the round */ }
+	      }
 	    }
 
 	    // Re-wrap into standard { choices: [{ message, finish_reason }] } shape

@@ -235,6 +235,43 @@ planner:
     expect(ids).toContain('answer');
   });
 
+  it('forwards planner.parallelTools=true to gmi node executorConfig so multi-tool turns can fan out', () => {
+    const yaml = `
+name: parallel-test
+goal: "Research current vector DB benchmarks"
+planner:
+  strategy: linear
+  parallelTools: true
+`;
+    const compiled = compileMissionYaml(yaml);
+    const ir = compiled.toIR();
+    const gmiNodes = ir.nodes.filter((n: { executorConfig?: { type?: string } }) =>
+      n.executorConfig?.type === 'gmi'
+    );
+    expect(gmiNodes.length).toBeGreaterThan(0);
+    for (const n of gmiNodes) {
+      expect((n.executorConfig as { parallelTools?: boolean }).parallelTools).toBe(true);
+    }
+  });
+
+  it('does not enable parallelTools when the YAML omits the flag (default false)', () => {
+    const yaml = `
+name: serial-test
+goal: "Research current vector DB benchmarks"
+planner:
+  strategy: linear
+`;
+    const compiled = compileMissionYaml(yaml);
+    const ir = compiled.toIR();
+    const gmiNodes = ir.nodes.filter((n: { executorConfig?: { type?: string } }) =>
+      n.executorConfig?.type === 'gmi'
+    );
+    for (const n of gmiNodes) {
+      // Either undefined or false — never true when not requested.
+      expect((n.executorConfig as { parallelTools?: boolean }).parallelTools).not.toBe(true);
+    }
+  });
+
   it('auto-classifies a "Write a..." goal to the creative template when planner.style is not set', () => {
     const yaml = `
 name: ambient-creative

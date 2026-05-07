@@ -44,13 +44,32 @@ function formatTelemetry(t?: {
   toolCalls?: number;
   toolErrors?: number;
   iterationsExhausted?: boolean;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  costUSD?: number;
 }): string {
-  if (!t || (!t.iterations && !t.toolCalls && !t.toolErrors)) return '';
+  if (!t) return '';
+  const hasActivity = t.iterations || t.toolCalls || t.toolErrors;
+  const hasUsage = t.totalTokens || t.costUSD;
+  if (!hasActivity && !hasUsage) return '';
   const parts: string[] = [];
   if (t.iterations !== undefined) parts.push(`${t.iterations} iteration${t.iterations === 1 ? '' : 's'}`);
   if (t.toolCalls) parts.push(`${t.toolCalls} tool call${t.toolCalls === 1 ? '' : 's'}`);
   if (t.toolErrors) parts.push(`${t.toolErrors} tool error${t.toolErrors === 1 ? '' : 's'}`);
   if (t.iterationsExhausted) parts.push('hit max-iter cap');
+  // Token usage and cost — token count is the primary signal users want
+  // for tuning maxIterations/parallelTools; dollar cost is only shown
+  // when the provider returned it so we don't display "$0" misleadingly
+  // when usage was tracked but pricing wasn't computed.
+  if (typeof t.totalTokens === 'number' && t.totalTokens > 0) {
+    parts.push(`${t.totalTokens.toLocaleString()} tokens`);
+  }
+  if (typeof t.costUSD === 'number' && t.costUSD > 0) {
+    // Three decimals so sub-cent rounds show up; very small calls show
+    // as e.g. $0.001 instead of $0.00.
+    parts.push(`$${t.costUSD.toFixed(3)}`);
+  }
   return parts.join(', ');
 }
 
@@ -235,6 +254,10 @@ export default async function missionCommand(
         toolCalls?: number;
         toolErrors?: number;
         iterationsExhausted?: boolean;
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+        costUSD?: number;
       };
       const nodeOutputs: Array<{
         nodeId: string;
@@ -255,6 +278,8 @@ export default async function missionCommand(
                 (tele.toolCalls ? `, ${tele.toolCalls} tool${tele.toolCalls === 1 ? '' : 's'}` : '') +
                 (tele.toolErrors ? `, ${tele.toolErrors} err${tele.toolErrors === 1 ? '' : 's'}` : '') +
                 (tele.iterationsExhausted ? ', max-iter' : '') +
+                (typeof tele.totalTokens === 'number' && tele.totalTokens > 0 ? `, ${tele.totalTokens.toLocaleString()} tok` : '') +
+                (typeof tele.costUSD === 'number' && tele.costUSD > 0 ? `, $${tele.costUSD.toFixed(3)}` : '') +
                 ')'
               : '';
             process.stdout.write(` [${event.durationMs}ms${teleSuffix}]\n`);

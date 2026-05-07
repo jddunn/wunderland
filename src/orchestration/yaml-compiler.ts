@@ -498,6 +498,14 @@ interface YamlMissionDef {
     /** Maximum internal iterations for ReAct-style planners. */
     maxIterations?: number;
     /**
+     * When `true`, GMI nodes are configured to issue multiple tool calls
+     * per turn instead of one-at-a-time. Forwarded to agentos via
+     * `gmiNode.parallelTools`. Useful for goals where independent tool
+     * calls (e.g. three web searches with different angles) can run in
+     * parallel without ordering dependencies. Default: `false`.
+     */
+    parallelTools?: boolean;
+    /**
      * Plan template selector. Picks the shape of the stub plan emitted by
      * the compiler:
      * - `'research'` (default) — gather → process → deliver → refine, suited
@@ -599,6 +607,7 @@ function buildMissionFromDoc(doc: YamlMissionDef): any {
       strategy: doc.planner.strategy,
       maxSteps: doc.planner.maxSteps ?? 8,
       maxIterationsPerNode: doc.planner.maxIterations,
+      ...(doc.planner.parallelTools !== undefined ? { parallelTools: doc.planner.parallelTools } : {}),
       ...(doc.planner.style ? { style: doc.planner.style } : {}),
     });
 
@@ -647,6 +656,7 @@ async function compileMissionYamlWithLlmPlan(
       strategy: doc.planner.strategy,
       maxSteps: doc.planner.maxSteps ?? 8,
       maxIterationsPerNode: doc.planner.maxIterations,
+      ...(doc.planner.parallelTools !== undefined ? { parallelTools: doc.planner.parallelTools } : {}),
       plan,
     } as any);
 
