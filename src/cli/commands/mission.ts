@@ -125,6 +125,22 @@ export default async function missionCommand(
       const compiled = compileMissionYaml(content);
       const ir = compiled.toIR();
 
+      // Resolve the planner style for display so the user can see WHICH
+      // template the mission ran under and WHY (explicit YAML field vs
+      // auto-classified from the goal). Useful when an unexpected plan
+      // shape shows up in the report. The compiled IR is the runtime
+      // graph and doesn't carry the original goal template, so re-parse
+      // the YAML doc to read both `planner.style` and `goal`.
+      const yaml = await import('yaml');
+      const { MissionCompiler } = await import('@framers/agentos/orchestration');
+      const docForStyle = yaml.parse(content) as { planner?: { style?: string }; goal?: string } | null;
+      const explicitStyle = docForStyle?.planner?.style;
+      const resolvedStyle = explicitStyle
+        ?? MissionCompiler.classifyGoal(String(docForStyle?.goal ?? ''));
+      const styleLabel = explicitStyle
+        ? `${resolvedStyle} (explicit)`
+        : `${resolvedStyle} (auto-classified)`;
+
       // Parse --input flag
       const inputFlag = flags?.['input'] as string | undefined;
       let input: Record<string, unknown> = {};
@@ -172,7 +188,7 @@ export default async function missionCommand(
         approvals: { mode: 'auto-all' },
       });
 
-      console.log(`\n  ● Mission: ${ir.name}`);
+      console.log(`\n  ● Mission: ${ir.name}  ·  style: ${styleLabel}`);
       const startTime = Date.now();
 
       // Collect node outputs + run_end finalOutput so we can write a report file.
@@ -254,6 +270,7 @@ export default async function missionCommand(
         if (format === 'json') {
           body = JSON.stringify({
             mission: ir.name,
+            style: { resolved: resolvedStyle, explicit: !!explicitStyle },
             input,
             finalOutput,
             nodes: nodeOutputs,
@@ -264,6 +281,7 @@ export default async function missionCommand(
         } else if (format === 'txt') {
           const parts: string[] = [
             `Mission: ${ir.name}`,
+            `Style: ${styleLabel}`,
             `Started: ${new Date(startTime).toISOString()}`,
             `Duration: ${totalMs}ms`,
             '',
@@ -288,6 +306,7 @@ export default async function missionCommand(
           const parts: string[] = [
             `# Mission: ${ir.name}`,
             '',
+            `- Style: ${styleLabel}`,
             `- Started: ${new Date(startTime).toISOString()}`,
             `- Duration: ${totalMs}ms`,
             `- Nodes: ${nodeOutputs.length}`,

@@ -1,0 +1,24 @@
+# Example: short factual question with the QA plan template
+#
+# The QA template is a 2-step plan (research-quick → answer) tuned for goals
+# where a full 4-phase research/refine pipeline is overkill — typical use:
+# "what is X?", "how do I Y?", "summarise Z briefly".
+#
+# Run:
+#   wunderland mission run examples/mission-qa.yaml \
+#     --input '{"topic":"Cohere rerank-v3.5"}' \
+#     --output ./report.md
+#
+# `style: qa` is set explicitly here so the template choice is obvious to
+# readers, but for question-shaped goals like the one below the auto-classifier
+# would pick `qa` even without it.
+
+name: ask-question
+goal: "Answer briefly with sources: {{topic}}"
+input:
+  topic: { type: string, required: true }
+returns:
+  answer: { type: string }
+planner:
+  strategy: linear
+  style: qa
