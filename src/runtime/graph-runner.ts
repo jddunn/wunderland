@@ -31,6 +31,7 @@ import {
 } from './agentos-runtime.js';
 
 import { runToolCallingTurn, safeJsonStringify, type LLMProviderConfig, type ToolInstance } from './tool-calling.js';
+import { synthesizeEmptyOutputFallback } from './empty-output-fallback.js';
 
 export type WunderlandGraphLike =
   | CompiledExecutionGraph
@@ -324,12 +325,14 @@ class WunderlandNodeExecutor extends NodeExecutor {
           : Math.max(1, node.executorConfig.maxInternalIterations ?? 4);
       const emittedEvents: GraphEvent[] = [];
       const expansionRequests: NonNullable<NodeExecutionResult['expansionRequests']> = [];
-      // Per-node telemetry counters surfaced on the node_end event for mission
-      // reports. We can't get the exact ReAct iteration count from
-      // runToolCallingTurn (it returns only the final string) so toolCalls is
-      // the practical proxy for "how much work this node did".
+      // Per-node telemetry counters + captured tool activity. The arrays
+      // double as data for the empty-output fallback if runToolCallingTurn
+      // returns an empty string after multiple tool calls (matching the
+      // defense-in-depth fallback in agentos's NodeExecutor.executeGmi).
       let toolCallCount = 0;
       let toolErrorCount = 0;
+      const fallbackResults: Array<{ name: string; content: string }> = [];
+      const fallbackErrors: Array<{ name: string; error: string }> = [];
 
       const reply = await runToolCallingTurn({
         providerId: llm.providerId,
@@ -359,7 +362,24 @@ class WunderlandNodeExecutor extends NodeExecutor {
           });
         },
         onToolResult: (info) => {
-          if (!info.success) toolErrorCount += 1;
+          if (info.success) {
+            // Capture the output for the empty-output fallback. JSON.stringify
+            // returns undefined for top-level undefined/functions and throws
+            // on BigInt — the helper handles those by falling through to
+            // String() at synthesis time, but we serialise here so the
+            // captured snapshot doesn't share state with later mutations.
+            const out = info.output;
+            const content: string = typeof out === 'string'
+              ? out
+              : (() => {
+                  try { return JSON.stringify(out) ?? String(out ?? ''); }
+                  catch { return String(out ?? ''); }
+                })();
+            fallbackResults.push({ name: info.toolName, content });
+          } else {
+            toolErrorCount += 1;
+            fallbackErrors.push({ name: info.toolName, error: String(info.error ?? 'unknown error') });
+          }
           emittedEvents.push({
             type: 'tool_result',
             nodeId: node.id,
@@ -382,9 +402,24 @@ class WunderlandNodeExecutor extends NodeExecutor {
         debug: this.config.debug,
       });
 
+      // If the LLM returned no text but tools ran, synthesise a fallback so
+      // downstream graph nodes have data to work with instead of an empty
+      // string. We can't observe whether maxIterations was specifically the
+      // termination reason from runToolCallingTurn (it returns only the
+      // string), so iterationsExhausted is left false — the header will read
+      // "no text response from model" which is accurate either way.
+      const replyTrimmed = (reply ?? '').trim();
+      const finalOutput = replyTrimmed.length === 0 && (fallbackResults.length > 0 || fallbackErrors.length > 0)
+        ? synthesizeEmptyOutputFallback({
+            results: fallbackResults,
+            errors: fallbackErrors,
+            iterationsExhausted: false,
+          })
+        : reply;
+
       return normalizeNodeResult(node, {
         success: true,
-        output: reply,
+        output: finalOutput,
         events: emittedEvents,
         ...(expansionRequests.length > 0 ? { expansionRequests } : {}),
         metadata: {
