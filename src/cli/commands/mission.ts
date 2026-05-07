@@ -122,19 +122,55 @@ export default async function missionCommand(
 
       const yamlPath = resolve(process.cwd(), target);
       const content = await readFile(yamlPath, 'utf-8');
-      const compiled = compileMissionYaml(content);
+
+      // Parse the YAML once up front so we can decide whether the LLM-
+      // driven planner needs an llmCaller before compileMissionYaml runs.
+      const yaml = await import('yaml');
+      const { MissionCompiler } = await import('@framers/agentos/orchestration');
+      const docForStyle = yaml.parse(content) as { planner?: { style?: string }; goal?: string } | null;
+      const explicitStyle = docForStyle?.planner?.style;
+
+      // Build an llmCaller for the 'llm' planner style. Reuses the runtime
+      // LLM config (provider, apiKey, model, baseUrl) so the planner uses
+      // the same provider the agent will use to execute. The result is a
+      // simple prompt-string → response-string function — generateLlmPlan
+      // wraps the JSON parsing and validation.
+      //
+      // 1024 max_tokens is plenty for a 2-8 step JSON plan and stays well
+      // under most pay-as-you-go credit ceilings; using 2000 hit OpenRouter
+      // 402 errors on accounts with small balances.
+      let compileOpts: { llmCaller?: (prompt: string) => Promise<string> } | undefined = undefined;
+      if (explicitStyle === 'llm') {
+        const baseRuntime = resolveRuntimeConfig();
+        const { chatCompletionsRequest } = await import('../../runtime/tool-helpers.js');
+        compileOpts = {
+          llmCaller: async (prompt: string) => {
+            const result = await chatCompletionsRequest(
+              {
+                providerId: String(baseRuntime.llm.providerId ?? 'openai'),
+                apiKey: baseRuntime.llm.apiKey as any,
+                model: String(baseRuntime.llm.model),
+                baseUrl: baseRuntime.llm.baseUrl,
+              } as any,
+              [{ role: 'user', content: prompt }],
+              [], // no tools — pure text completion
+              0.2,
+              1024,
+            );
+            return String(result.message.content ?? '');
+          },
+        };
+      }
+
+      const compiled = compileOpts
+        ? await compileMissionYaml(content, compileOpts)
+        : compileMissionYaml(content);
       const ir = compiled.toIR();
 
       // Resolve the planner style for display so the user can see WHICH
       // template the mission ran under and WHY (explicit YAML field vs
       // auto-classified from the goal). Useful when an unexpected plan
-      // shape shows up in the report. The compiled IR is the runtime
-      // graph and doesn't carry the original goal template, so re-parse
-      // the YAML doc to read both `planner.style` and `goal`.
-      const yaml = await import('yaml');
-      const { MissionCompiler } = await import('@framers/agentos/orchestration');
-      const docForStyle = yaml.parse(content) as { planner?: { style?: string }; goal?: string } | null;
-      const explicitStyle = docForStyle?.planner?.style;
+      // shape shows up in the report.
       const resolvedStyle = explicitStyle
         ?? MissionCompiler.classifyGoal(String(docForStyle?.goal ?? ''));
       const styleLabel = explicitStyle
