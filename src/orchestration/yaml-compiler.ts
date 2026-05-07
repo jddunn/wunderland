@@ -505,8 +505,12 @@ interface YamlMissionDef {
      * - `'qa'` — short two-step quick-answer plan
      * - `'creative'` — brainstorm → develop → produce → polish, suited to
      *   goals that produce a written/designed artifact
+     * - `'llm'` — opt-in real LLM-driven plan generation. Requires the
+     *   caller to pass `{ llmCaller }` in compileMissionYaml's opts so the
+     *   compiler can issue a single LLM call to decompose the goal at
+     *   compile time. Costs one extra LLM call per unique goal (cached).
      */
-    style?: 'research' | 'qa' | 'creative';
+    style?: 'research' | 'qa' | 'creative' | 'llm';
   };
   /** Optional policy overrides (e.g. guardrails). */
   policy?: {
@@ -538,7 +542,20 @@ interface YamlMissionDef {
  *   maxSteps: 6
  * ```
  */
-export function compileMissionYaml(yamlContent: string): any {
+/**
+ * Optional dependencies for the LLM-driven planner mode (`planner.style:
+ * 'llm'`). When the YAML opts into LLM planning, callers MUST supply
+ * `llmCaller` here — the compiler issues exactly one completion call,
+ * caches the result by goal, and validates the returned step list before
+ * passing it through agentos's `plannerConfig.plan` field.
+ */
+export interface CompileMissionYamlOptions {
+  llmCaller?: (prompt: string) => Promise<string>;
+}
+
+export function compileMissionYaml(yamlContent: string): any;
+export function compileMissionYaml(yamlContent: string, opts: CompileMissionYamlOptions): Promise<any>;
+export function compileMissionYaml(yamlContent: string, opts?: CompileMissionYamlOptions): any {
   const doc = parse(yamlContent) as YamlMissionDef;
 
   if (!doc.name) throw new Error('YAML mission must have a `name` field');
@@ -546,6 +563,34 @@ export function compileMissionYaml(yamlContent: string): any {
   if (!doc.planner) throw new Error('YAML mission must have a `planner` field');
   if (!doc.planner.strategy) throw new Error('YAML mission `planner` must have a `strategy`');
 
+  // The 'llm' planner style fans out to an async LLM call before passing
+  // the resulting plan into agentos via plannerConfig.plan. All other
+  // styles stay synchronous, but when opts is supplied at all the overload
+  // contract requires us to return a Promise — wrap the sync result so a
+  // caller that always awaits gets consistent behaviour regardless of
+  // style choice.
+  if (doc.planner.style === 'llm') {
+    if (!opts?.llmCaller) {
+      throw new Error(
+        "YAML mission planner.style: 'llm' requires the caller to pass an llmCaller via " +
+        "compileMissionYaml(yaml, { llmCaller }). The mission CLI provides one automatically; " +
+        "programmatic callers must supply their own.",
+      );
+    }
+    return compileMissionYamlWithLlmPlan(doc, opts.llmCaller);
+  }
+
+  const compileResult = buildMissionFromDoc(doc);
+  return opts === undefined ? compileResult : Promise.resolve(compileResult);
+}
+
+/**
+ * Synchronous shared compile path used by both the sync entrypoint and
+ * the async LLM path (after the LLM has produced a plan). Pulled out so
+ * the wiring of mission(), planner(), policy(), compile(), and the eager
+ * toIR() stays in one place.
+ */
+function buildMissionFromDoc(doc: YamlMissionDef): any {
   let builder = mission(doc.name)
     .input(resolveYamlSchema(doc.input))
     .returns(resolveYamlSchema(doc.returns))
@@ -567,6 +612,49 @@ export function compileMissionYaml(yamlContent: string): any {
   // of waiting for the first execution. The IR is cheap to generate; the
   // CompiledMission re-compiles lazily on every run anyway, so re-doing
   // it here costs nothing meaningful.
+  compiled.toIR();
+  return compiled;
+}
+
+/**
+ * Async branch of compileMissionYaml — invoked when the YAML sets
+ * `planner.style: 'llm'`. Issues a single LLM call to decompose the goal
+ * into a SimplePlan, then passes it through agentos's plannerConfig.plan
+ * so the same validation and graph-building runs as for any other plan
+ * source. The plan is cached by goal in the LLM plan generator so re-
+ * compiling the same YAML doesn't re-call the model.
+ *
+ * Errors propagate. Callers can catch and fall back to a stub style if
+ * they want graceful degradation; the mission CLI surfaces the error
+ * message directly so users know the LLM planner failed.
+ */
+async function compileMissionYamlWithLlmPlan(
+  doc: YamlMissionDef,
+  llmCaller: (prompt: string) => Promise<string>,
+): Promise<any> {
+  const { generateLlmPlan } = await import('./llm-plan-generator.js');
+  const plan = await generateLlmPlan({
+    goal: doc.goal,
+    llmCaller,
+    maxSteps: doc.planner.maxSteps ?? 8,
+  });
+
+  let builder = mission(doc.name)
+    .input(resolveYamlSchema(doc.input))
+    .returns(resolveYamlSchema(doc.returns))
+    .goal(doc.goal)
+    .planner({
+      strategy: doc.planner.strategy,
+      maxSteps: doc.planner.maxSteps ?? 8,
+      maxIterationsPerNode: doc.planner.maxIterations,
+      plan,
+    } as any);
+
+  if (doc.policy) {
+    builder = builder.policy(doc.policy as any);
+  }
+
+  const compiled = builder.compile();
   compiled.toIR();
   return compiled;
 }
