@@ -178,4 +178,74 @@ goal: Do something
 `;
     expect(() => compileMissionYaml(yaml)).toThrow();
   });
+
+  it('forwards planner.style="qa" through to the agentos compiler so a QA template is produced', () => {
+    const yaml = `
+name: ask-something
+goal: "What is the capital of France?"
+planner:
+  strategy: linear
+  style: qa
+`;
+    const compiled = compileMissionYaml(yaml);
+    const ir = compiled.toIR();
+    const ids = ir.nodes.map((n: { id: string }) => n.id);
+    expect(ids).toContain('research-quick');
+    expect(ids).toContain('answer');
+    expect(ids).not.toContain('gather-info');
+  });
+
+  it('forwards planner.style="creative" through to the agentos compiler so a creative template is produced', () => {
+    const yaml = `
+name: write-tagline
+goal: "Write a tagline for a coffee shop"
+planner:
+  strategy: linear
+  style: creative
+`;
+    const compiled = compileMissionYaml(yaml);
+    const ir = compiled.toIR();
+    const ids = ir.nodes.map((n: { id: string }) => n.id);
+    expect(ids).toContain('brainstorm');
+    expect(ids).toContain('produce-artifact');
+  });
+
+  it('rejects an unknown planner.style with an error mentioning the style field', () => {
+    const yaml = `
+name: bad-style
+goal: "Anything"
+planner:
+  strategy: linear
+  style: not-a-real-style
+`;
+    expect(() => compileMissionYaml(yaml)).toThrow(/style/i);
+  });
+
+  it('auto-classifies a question goal to the QA template when planner.style is not set', () => {
+    const yaml = `
+name: ambient-question
+goal: "What is the difference between TCP and UDP?"
+planner:
+  strategy: linear
+`;
+    const compiled = compileMissionYaml(yaml);
+    const ir = compiled.toIR();
+    const ids = ir.nodes.map((n: { id: string }) => n.id);
+    expect(ids).toContain('research-quick');
+    expect(ids).toContain('answer');
+  });
+
+  it('auto-classifies a "Write a..." goal to the creative template when planner.style is not set', () => {
+    const yaml = `
+name: ambient-creative
+goal: "Write a haiku about morning fog"
+planner:
+  strategy: linear
+`;
+    const compiled = compileMissionYaml(yaml);
+    const ir = compiled.toIR();
+    const ids = ir.nodes.map((n: { id: string }) => n.id);
+    expect(ids).toContain('brainstorm');
+    expect(ids).toContain('polish');
+  });
 });

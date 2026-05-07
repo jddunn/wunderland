@@ -561,5 +561,12 @@ export function compileMissionYaml(yamlContent: string): any {
     builder = builder.policy(doc.policy as any);
   }
 
-  return builder.compile();
+  const compiled = builder.compile();
+  // Eagerly invoke the agentos compiler so YAML-level errors (unknown
+  // planner.style, malformed anchors, etc.) surface at parse time instead
+  // of waiting for the first execution. The IR is cheap to generate; the
+  // CompiledMission re-compiles lazily on every run anyway, so re-doing
+  // it here costs nothing meaningful.
+  compiled.toIR();
+  return compiled;
 }
