@@ -1,0 +1,26 @@
+# Example: artifact-producing mission with the creative plan template
+#
+# The creative template is a 4-step plan (brainstorm → develop-concept →
+# produce-artifact → polish) tuned for goals that produce a written or
+# designed artifact rather than a research summary. It skips the tool-heavy
+# gather phase since creative goals usually don't depend on fresh external
+# evidence.
+#
+# Run:
+#   wunderland mission run examples/mission-creative.yaml \
+#     --input '{"topic":"the first morning of spring"}' \
+#     --output ./haiku.md
+#
+# `style: creative` is set explicitly here, but goals starting with
+# "Write a...", "Compose...", "Design a...", or "Imagine..." auto-classify
+# to creative even without it.
+
+name: write-haiku
+goal: "Write a haiku about {{topic}}"
+input:
+  topic: { type: string, required: true }
+returns:
+  haiku: { type: string }
+planner:
+  strategy: linear
+  style: creative
