@@ -62,6 +62,18 @@ export default async function missionCommand(
   flags?: Record<string, string | boolean>,
   globals?: GlobalFlags,
 ): Promise<void> {
+  // Load .env files into process.env so curated tool secrets (PEXELS_API_KEY,
+  // UNSPLASH_ACCESS_KEY, GIPHY_API_KEY, etc.) and provider keys flow through
+  // to ToolRegistry.buildSecretsMap and resolveRuntimeConfig the same way they
+  // do for `wunderland chat` and `wunderland start`.
+  // Without this, missions invoked from a directory without an `.env` would
+  // see only the parent shell's environment and silently skip optional tools.
+  const { loadDotEnvIntoProcessUpward } = await import('../config/env-manager.js');
+  await loadDotEnvIntoProcessUpward({
+    startDir: process.cwd(),
+    configDirOverride: globals?.config,
+  });
+
   const first = args[0] ?? 'help';
 
   // -----------------------------------------------------------------------
