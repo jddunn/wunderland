@@ -20,6 +20,20 @@ import type { ProviderStrategyConfig, ProviderStrategyName } from '@framers/agen
 
 const SUBCOMMANDS = new Set(['run', 'explain', 'help']);
 
+/**
+ * Render a node/run output as a human-friendly string for report files.
+ * Strings pass through unchanged; objects/arrays are pretty-printed JSON.
+ */
+function stringifyForReport(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 type MissionProviderCandidate = {
   env: string;
   id: string;
@@ -92,6 +106,24 @@ export default async function missionCommand(
         }
       }
 
+      // Parse --output / --format flags
+      const outputFlag = flags?.['output'] ?? flags?.['o'];
+      const outputPath = typeof outputFlag === 'string' && outputFlag.trim() ? outputFlag.trim() : '';
+      const formatRaw = typeof flags?.['format'] === 'string' ? String(flags['format']).toLowerCase().trim() : '';
+      const explicitFormat = (['md', 'markdown', 'json', 'txt', 'text'].includes(formatRaw))
+        ? (formatRaw === 'markdown' ? 'md' : formatRaw === 'text' ? 'txt' : (formatRaw as 'md' | 'json' | 'txt'))
+        : '';
+      // Format inferred from output path extension if not given explicitly.
+      const inferredFormat = (() => {
+        if (!outputPath) return '';
+        const ext = outputPath.toLowerCase().split('.').pop();
+        if (ext === 'json') return 'json';
+        if (ext === 'md' || ext === 'markdown') return 'md';
+        if (ext === 'txt' || ext === 'text') return 'txt';
+        return '';
+      })();
+      const format: 'md' | 'json' | 'txt' = (explicitFormat || inferredFormat || 'md') as 'md' | 'json' | 'txt';
+
 	      const baseRuntime = resolveRuntimeConfig();
         const runtimeProviderId = String(baseRuntime.llm.providerId ?? 'openai');
         const runtimeModel = String(baseRuntime.llm.model);
@@ -111,18 +143,113 @@ export default async function missionCommand(
       console.log(`\n  ● Mission: ${ir.name}`);
       const startTime = Date.now();
 
+      // Collect node outputs + run_end finalOutput so we can write a report file.
+      const nodeOutputs: Array<{ nodeId: string; output: unknown; durationMs: number }> = [];
+      let finalOutput: unknown = undefined;
+      const errors: Array<{ nodeId?: string; message: string; code: string }> = [];
+
       try {
         for await (const event of app.streamGraph(compiled, input)) {
           if (event.type === 'node_start') process.stdout.write(`  ├── running ${event.nodeId}...`);
-          if (event.type === 'node_end') process.stdout.write(` [${event.durationMs}ms]\n`);
-          if (event.type === 'error') console.error(`  ├── error: ${event.error.message}`);
+          if (event.type === 'node_end') {
+            process.stdout.write(` [${event.durationMs}ms]\n`);
+            nodeOutputs.push({ nodeId: event.nodeId, output: event.output, durationMs: event.durationMs });
+          }
+          if (event.type === 'run_end') {
+            finalOutput = event.finalOutput;
+          }
+          if (event.type === 'error') {
+            console.error(`  ├── error: ${event.error.message}`);
+            errors.push({ nodeId: event.nodeId, message: event.error.message, code: event.error.code });
+          }
         }
 	      } finally {
 	        await app.close();
 	        await shutdownWunderlandOtel();
 	      }
 
-      console.log(`  └── ✓ complete [${Date.now() - startTime}ms]\n`);
+      const totalMs = Date.now() - startTime;
+      console.log(`  └── ✓ complete [${totalMs}ms]\n`);
+
+      // Write report if --output given OR if -o given. (Silent default: don't write
+      // anywhere; preserves prior behavior for users who don't pass the flag.)
+      if (outputPath) {
+        const { writeFile, mkdir } = await import('node:fs/promises');
+        const path = await import('node:path');
+        const absPath = path.isAbsolute(outputPath)
+          ? outputPath
+          : path.resolve(process.cwd(), outputPath);
+        // Treat as a directory only when path ends with a separator. A bare name
+        // like "report" or "out/today" is a file — we just append the format
+        // extension if one wasn't given.
+        const endsWithSep = absPath.endsWith(path.sep) || absPath.endsWith('/');
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        const safeName = (ir.name.replace(/[^A-Za-z0-9_-]/g, '_').replace(/_+/g, '_').slice(0, 60) || 'mission');
+        const finalPath = (() => {
+          if (endsWithSep) return path.join(absPath, `mission-${safeName}-${ts}.${format}`);
+          if (!path.extname(absPath)) return `${absPath}.${format}`;
+          return absPath;
+        })();
+        await mkdir(path.dirname(finalPath), { recursive: true });
+
+        let body: string;
+        if (format === 'json') {
+          body = JSON.stringify({
+            mission: ir.name,
+            input,
+            finalOutput,
+            nodes: nodeOutputs,
+            errors,
+            totalDurationMs: totalMs,
+            timestamp: new Date().toISOString(),
+          }, null, 2);
+        } else if (format === 'txt') {
+          const parts: string[] = [
+            `Mission: ${ir.name}`,
+            `Started: ${new Date(startTime).toISOString()}`,
+            `Duration: ${totalMs}ms`,
+            '',
+          ];
+          if (finalOutput !== undefined) {
+            parts.push('=== Final Output ===', stringifyForReport(finalOutput), '');
+          }
+          for (const n of nodeOutputs) {
+            parts.push(`--- ${n.nodeId} (${n.durationMs}ms) ---`, stringifyForReport(n.output), '');
+          }
+          if (errors.length) {
+            parts.push('=== Errors ===');
+            for (const e of errors) parts.push(`[${e.code}] ${e.nodeId ?? '<graph>'}: ${e.message}`);
+          }
+          body = parts.join('\n');
+        } else {
+          // markdown
+          const parts: string[] = [
+            `# Mission: ${ir.name}`,
+            '',
+            `- Started: ${new Date(startTime).toISOString()}`,
+            `- Duration: ${totalMs}ms`,
+            `- Nodes: ${nodeOutputs.length}`,
+            '',
+          ];
+          if (finalOutput !== undefined) {
+            parts.push('## Final Output', '', '```', stringifyForReport(finalOutput), '```', '');
+          }
+          if (nodeOutputs.length) {
+            parts.push('## Node Outputs', '');
+            for (const n of nodeOutputs) {
+              parts.push(`### ${n.nodeId} (${n.durationMs}ms)`, '', '```', stringifyForReport(n.output), '```', '');
+            }
+          }
+          if (errors.length) {
+            parts.push('## Errors', '');
+            for (const e of errors) parts.push(`- **[${e.code}] ${e.nodeId ?? '<graph>'}**: ${e.message}`);
+          }
+          body = parts.join('\n');
+        }
+
+        await writeFile(finalPath, body, 'utf8');
+        console.log(`  ◆ Report written: ${finalPath}\n`);
+      }
       break;
     }
     case 'explain': {
@@ -148,6 +275,13 @@ Usage:
   wunderland mission "<goal>"                       Natural language mission
   wunderland mission run <file.yaml> [--input '{}'  YAML mission file
   wunderland mission explain <file.yaml>            Preview plan
+
+YAML Mission Flags:
+  --input '<json>'            Mission input as JSON object
+  --output <path>             Write report to file or directory.
+                              Format inferred from extension; if path is a
+                              directory, a default filename is generated.
+  --format <md|json|txt>      Override format detection (default: md)
 
 NL Mission Flags:
   --autonomy <mode>           autonomous | guided | guardrailed (default: guardrailed)
