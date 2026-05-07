@@ -72,15 +72,95 @@ export function getWunderlandDefaultTextModel(providerId: WunderlandProviderId):
   return model;
 }
 
+/**
+ * Resolve the LLM provider + model from layered sources, in this precedence
+ * order (highest first):
+ *   1. `--ollama` flag → forces `ollama`
+ *   2. `--provider <id>` flag
+ *   3. `./agent.config.json` (local, per-project)
+ *   4. `~/.wunderland/config.json` (global, per-user)
+ *   5. Built-in default (`openai` / its default model)
+ *
+ * Same precedence applies to model selection, with the resolved provider's
+ * default model as the final fallback.
+ *
+ * Without this helper, `wunderland chat` from a directory lacking
+ * `agent.config.json` skips the global config and silently defaults to OpenAI,
+ * even when the user has saved a different default in `~/.wunderland/config.json`.
+ */
+export interface ResolveLlmProviderInput {
+  providerFlag?: string;
+  ollamaFlag?: boolean;
+  modelFlag?: string;
+  localCfg?: { llmProvider?: string; llmModel?: string } | null;
+  globalCfg?: { llmProvider?: string; llmModel?: string } | null;
+}
+
+export interface ResolvedLlmProvider {
+  providerId: WunderlandProviderId;
+  model: string;
+  source: {
+    provider: 'flag' | 'local-cfg' | 'global-cfg' | 'default';
+    model: 'flag' | 'local-cfg' | 'global-cfg' | 'provider-default';
+  };
+}
+
+export function resolveLlmProviderAndModel(
+  input: ResolveLlmProviderInput = {},
+): ResolvedLlmProvider {
+  const trim = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+
+  let providerRaw = '';
+  let providerSource: ResolvedLlmProvider['source']['provider'] = 'default';
+  if (input.ollamaFlag === true) {
+    providerRaw = 'ollama';
+    providerSource = 'flag';
+  } else if (trim(input.providerFlag)) {
+    providerRaw = trim(input.providerFlag);
+    providerSource = 'flag';
+  } else if (trim(input.localCfg?.llmProvider)) {
+    providerRaw = trim(input.localCfg?.llmProvider);
+    providerSource = 'local-cfg';
+  } else if (trim(input.globalCfg?.llmProvider)) {
+    providerRaw = trim(input.globalCfg?.llmProvider);
+    providerSource = 'global-cfg';
+  } else {
+    providerRaw = 'openai';
+  }
+
+  const providerId = resolveWunderlandProviderId(providerRaw);
+
+  let modelRaw = '';
+  let modelSource: ResolvedLlmProvider['source']['model'] = 'provider-default';
+  if (trim(input.modelFlag)) {
+    modelRaw = trim(input.modelFlag);
+    modelSource = 'flag';
+  } else if (trim(input.localCfg?.llmModel)) {
+    modelRaw = trim(input.localCfg?.llmModel);
+    modelSource = 'local-cfg';
+  } else if (trim(input.globalCfg?.llmModel)) {
+    modelRaw = trim(input.globalCfg?.llmModel);
+    modelSource = 'global-cfg';
+  }
+  const model = resolveWunderlandTextModel({ providerId, model: modelRaw });
+
+  return { providerId, model, source: { provider: providerSource, model: modelSource } };
+}
+
 export function resolveWunderlandTextModel(opts: {
   providerId: WunderlandProviderId;
   model?: string;
 }): string {
   const explicitModel = typeof opts.model === 'string' ? opts.model.trim() : '';
   if (explicitModel) {
+    // Only strip a `provider:model` namespace when the prefix is a real provider
+    // id. Ollama tags like `qwen2.5:7b` and `gemma3:4b` are legitimate model
+    // names where the colon is part of the identifier, not a namespace marker.
     if (explicitModel.includes(':')) {
-      const [, ...rest] = explicitModel.split(':');
-      return rest.join(':').trim();
+      const [prefix, ...rest] = explicitModel.split(':');
+      if (isWunderlandProviderId(prefix)) {
+        return rest.join(':').trim();
+      }
     }
     return explicitModel;
   }
