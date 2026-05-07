@@ -333,6 +333,15 @@ class WunderlandNodeExecutor extends NodeExecutor {
       let toolErrorCount = 0;
       const fallbackResults: Array<{ name: string; content: string }> = [];
       const fallbackErrors: Array<{ name: string; error: string }> = [];
+      // Per-node token usage and cost accumulators. Populated by the
+      // onUsage callback fired once per LLM round in runToolCallingTurn —
+      // omitted from the returned metadata when no usage data was seen
+      // (e.g. an Ollama provider that doesn't report usage).
+      let promptTokens = 0;
+      let completionTokens = 0;
+      let totalTokens = 0;
+      let costUSD = 0;
+      let sawUsage = false;
 
       const reply = await runToolCallingTurn({
         providerId: llm.providerId,
@@ -399,6 +408,13 @@ class WunderlandNodeExecutor extends NodeExecutor {
             }
           }
         },
+        onUsage: (u) => {
+          sawUsage = true;
+          if (typeof u.prompt_tokens === 'number') promptTokens += u.prompt_tokens;
+          if (typeof u.completion_tokens === 'number') completionTokens += u.completion_tokens;
+          if (typeof u.total_tokens === 'number') totalTokens += u.total_tokens;
+          if (typeof u.costUSD === 'number') costUSD += u.costUSD;
+        },
         debug: this.config.debug,
       });
 
@@ -428,6 +444,15 @@ class WunderlandNodeExecutor extends NodeExecutor {
           iterations: Math.max(1, toolCallCount),
           toolCalls: toolCallCount,
           toolErrors: toolErrorCount,
+          // Token usage and cost are omitted when the provider didn't
+          // surface any usage data (e.g. some self-hosted endpoints) so
+          // downstream renderers can distinguish "missing" from "zero".
+          ...(sawUsage ? {
+            promptTokens,
+            completionTokens,
+            totalTokens,
+            costUSD: costUSD > 0 ? costUSD : undefined,
+          } : {}),
         },
       });
     }
