@@ -213,19 +213,21 @@ export default async function missionCommand(
       const outputFlag = flags?.['output'] ?? flags?.['o'];
       const outputPath = typeof outputFlag === 'string' && outputFlag.trim() ? outputFlag.trim() : '';
       const formatRaw = typeof flags?.['format'] === 'string' ? String(flags['format']).toLowerCase().trim() : '';
-      const explicitFormat = (['md', 'markdown', 'json', 'txt', 'text'].includes(formatRaw))
-        ? (formatRaw === 'markdown' ? 'md' : formatRaw === 'text' ? 'txt' : (formatRaw as 'md' | 'json' | 'txt'))
+      type ReportFormat = 'md' | 'json' | 'txt' | 'csv';
+      const explicitFormat: ReportFormat | '' = (['md', 'markdown', 'json', 'txt', 'text', 'csv'].includes(formatRaw))
+        ? (formatRaw === 'markdown' ? 'md' : formatRaw === 'text' ? 'txt' : (formatRaw as ReportFormat))
         : '';
       // Format inferred from output path extension if not given explicitly.
-      const inferredFormat = (() => {
+      const inferredFormat: ReportFormat | '' = (() => {
         if (!outputPath) return '';
         const ext = outputPath.toLowerCase().split('.').pop();
         if (ext === 'json') return 'json';
         if (ext === 'md' || ext === 'markdown') return 'md';
         if (ext === 'txt' || ext === 'text') return 'txt';
+        if (ext === 'csv') return 'csv';
         return '';
       })();
-      const format: 'md' | 'json' | 'txt' = (explicitFormat || inferredFormat || 'md') as 'md' | 'json' | 'txt';
+      const format: ReportFormat = (explicitFormat || inferredFormat || 'md');
 
 	      const baseRuntime = resolveRuntimeConfig();
         const runtimeProviderId = String(baseRuntime.llm.providerId ?? 'openai');
@@ -362,6 +364,65 @@ export default async function missionCommand(
             for (const e of errors) parts.push(`[${e.code}] ${e.nodeId ?? '<graph>'}: ${e.message}`);
           }
           body = parts.join('\n');
+        } else if (format === 'csv') {
+          // CSV — one row per node so the file opens cleanly in Excel /
+          // Numbers / Sheets and per-node fields can be sorted/filtered.
+          // The Final Output is included as a separate row with
+          // node_id="__final__" so spreadsheets can show the synthesised
+          // mission output alongside the per-node breakdown.
+          const escape = (v: unknown): string => {
+            const s = v === undefined || v === null ? '' : String(v);
+            // Quote all values; double internal quotes per RFC 4180.
+            return `"${s.replace(/"/g, '""')}"`;
+          };
+          const rows: string[] = [
+            ['node_id', 'phase_duration_ms', 'iterations', 'tool_calls', 'tool_errors', 'iterations_exhausted', 'total_tokens', 'cost_usd', 'output'].map(escape).join(','),
+          ];
+          for (const n of nodeOutputs) {
+            const t = n.telemetry ?? {};
+            rows.push([
+              escape(n.nodeId),
+              escape(n.durationMs),
+              escape(t.iterations ?? ''),
+              escape(t.toolCalls ?? ''),
+              escape(t.toolErrors ?? ''),
+              escape(t.iterationsExhausted ?? ''),
+              escape(t.totalTokens ?? ''),
+              escape(typeof t.costUSD === 'number' ? t.costUSD.toFixed(4) : ''),
+              escape(stringifyForReport(n.output)),
+            ].join(','));
+          }
+          if (finalOutput !== undefined) {
+            rows.push([
+              escape('__final__'),
+              escape(totalMs),
+              escape(''),
+              escape(''),
+              escape(''),
+              escape(''),
+              escape(''),
+              escape(''),
+              escape(stringifyForReport(finalOutput)),
+            ].join(','));
+          }
+          if (errors.length) {
+            // Errors as additional rows with a sentinel node id so they're
+            // sortable but visually distinct from real outputs.
+            for (const e of errors) {
+              rows.push([
+                escape(`__error__:${e.nodeId ?? 'graph'}`),
+                escape(''),
+                escape(''),
+                escape(''),
+                escape(''),
+                escape(''),
+                escape(''),
+                escape(''),
+                escape(`[${e.code}] ${e.message}`),
+              ].join(','));
+            }
+          }
+          body = rows.join('\n');
         } else {
           // markdown
           const parts: string[] = [
@@ -427,7 +488,9 @@ YAML Mission Flags:
   --output <path>             Write report to file or directory.
                               Format inferred from extension; if path is a
                               directory, a default filename is generated.
-  --format <md|json|txt>      Override format detection (default: md)
+  --format <md|json|txt|csv>  Override format detection (default: md).
+                              csv = one row per node + a __final__ row,
+                              opens cleanly in Excel / Numbers / Sheets.
 
 NL Mission Flags:
   --autonomy <mode>           autonomous | guided | guardrailed (default: guardrailed)
