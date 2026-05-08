@@ -657,6 +657,11 @@ async function compileMissionYamlWithLlmPlan(
       maxSteps: doc.planner.maxSteps ?? 8,
       maxIterationsPerNode: doc.planner.maxIterations,
       ...(doc.planner.parallelTools !== undefined ? { parallelTools: doc.planner.parallelTools } : {}),
+      // Carry through `style: 'llm'` so any downstream code that inspects
+      // `plannerConfig.style` for logging/telemetry sees the actual choice;
+      // the agentos compiler ignores `style` when `plan` is set, so this
+      // is observability-only.
+      style: 'llm' as const,
       plan,
     } as any);
 
