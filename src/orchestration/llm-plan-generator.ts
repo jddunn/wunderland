@@ -118,7 +118,7 @@ function parseAndValidate(rawResponse: string, maxSteps: number): SimplePlan {
   }
   const steps = (parsed as { steps: unknown[] }).steps;
   if (steps.length === 0) {
-    throw new Error('generateLlmPlan: response contained at least one step (got empty steps array).');
+    throw new Error('generateLlmPlan: response must contain at least one step; got an empty steps array.');
   }
   if (steps.length > maxSteps) {
     throw new Error(`generateLlmPlan: too many steps — got ${steps.length}, max ${maxSteps}. Lower maxSteps or tighten the meta-prompt.`);
