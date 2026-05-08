@@ -71,11 +71,14 @@ export function synthesizeEmptyOutputFallback(input: EmptyOutputFallbackInput): 
     const content = r.content.length > PER_RESULT_CAP ? r.content.slice(0, PER_RESULT_CAP) : r.content;
     if (!pushChunk([`Tool: ${safeToolName(r.name)}`, 'Result:', content, ''])) break;
   }
-  if (!truncated) {
-    for (const e of errors) {
-      const errMsg = e.error.length > PER_ERROR_CAP ? e.error.slice(0, PER_ERROR_CAP) : e.error;
-      if (!pushChunk([`Tool: ${safeToolName(e.name)}`, `Error: ${errMsg}`, ''])) break;
-    }
+  // Always attempt errors — even if results already filled the buffer.
+  // pushChunk returns false on overflow, so any errors that fit get
+  // appended (errors are short — PER_ERROR_CAP=1KB vs results 4KB — so a
+  // few usually fit even after a large result block). The truncation
+  // marker still fires once the cap is hit.
+  for (const e of errors) {
+    const errMsg = e.error.length > PER_ERROR_CAP ? e.error.slice(0, PER_ERROR_CAP) : e.error;
+    if (!pushChunk([`Tool: ${safeToolName(e.name)}`, `Error: ${errMsg}`, ''])) break;
   }
   if (truncated) lines.push('[fallback truncated]');
 

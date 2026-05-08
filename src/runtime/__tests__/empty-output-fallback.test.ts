@@ -70,6 +70,20 @@ describe('synthesizeEmptyOutputFallback', () => {
     expect(out.match(/^# fake-heading/m)).toBeNull();
   });
 
+  it('still attempts to emit errors even when results filled most of the buffer', () => {
+    // Results take ~12KB of the 16KB cap; a small error should still fit.
+    const results = Array.from({ length: 3 }, (_, i) => ({
+      name: `tool_${i}`, content: 'x'.repeat(4000),
+    }));
+    const out = synthesizeEmptyOutputFallback({
+      results,
+      errors: [{ name: 'web_search', error: 'rate limit' }],
+      iterationsExhausted: false,
+    });
+    expect(out).toContain('Tool: web_search');
+    expect(out).toContain('rate limit');
+  });
+
   it('caps total output size with a [fallback truncated] marker', () => {
     const big = 'x'.repeat(4000);
     const results = Array.from({ length: 10 }, (_, i) => ({ name: `tool_${i}`, content: big }));
