@@ -228,6 +228,12 @@ export default async function missionCommand(
         return '';
       })();
       const format: ReportFormat = (explicitFormat || inferredFormat || 'md');
+      // --bare emits ONLY the last node's output as raw markdown text — no
+      // metadata header, no JSON wrapper, no per-node breakdown. Useful when
+      // the user wants the polished final answer to render directly (e.g.
+      // images embedded with ![](url) need to be at top level, not inside a
+      // code fence). Implies --format md.
+      const bareOutput = flags?.['bare'] === true;
 
 	      const baseRuntime = resolveRuntimeConfig();
         const runtimeProviderId = String(baseRuntime.llm.providerId ?? 'openai');
@@ -330,7 +336,19 @@ export default async function missionCommand(
         await mkdir(path.dirname(finalPath), { recursive: true });
 
         let body: string;
-        if (format === 'json') {
+        if (bareOutput) {
+          // Pull just the last node's output (the polished final answer) and
+          // write it as raw markdown. Falls back to the full finalOutput when
+          // there are no node outputs to choose from. Strips any wrapping
+          // backticks the model may have added.
+          const lastNode = nodeOutputs[nodeOutputs.length - 1];
+          const raw = lastNode ? stringifyForReport(lastNode.output) : stringifyForReport(finalOutput);
+          // Drop a leading triple-backtick block if the model wrapped its
+          // own answer in one, since the goal of --bare is to surface the
+          // markdown directly.
+          const unwrapped = raw.replace(/^```(?:[a-zA-Z]*)?\n([\s\S]*?)\n?```\s*$/, '$1').trim();
+          body = unwrapped;
+        } else if (format === 'json') {
           body = JSON.stringify({
             mission: ir.name,
             style: { resolved: resolvedStyle, explicit: !!explicitStyle },
@@ -491,6 +509,11 @@ YAML Mission Flags:
   --format <md|json|txt|csv>  Override format detection (default: md).
                               csv = one row per node + a __final__ row,
                               opens cleanly in Excel / Numbers / Sheets.
+  --bare                      Write ONLY the last node's polished output
+                              as raw markdown (no metadata header, no
+                              JSON wrapper). Use when the final answer
+                              has images / links that need to render
+                              directly instead of inside a code fence.
 
 NL Mission Flags:
   --autonomy <mode>           autonomous | guided | guardrailed (default: guardrailed)
