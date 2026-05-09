@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { WunderlandConfigError } from '../platform/config-new/errors.js';
-import { resolveLlmConfig } from '../platform/config-new/load.js';
+import { WunderlandConfigError } from '../platform/config/errors.js';
+import { resolveLlmConfig } from '../platform/config/load.js';
 
 const ORIGINAL_ENV = { ...process.env };
 

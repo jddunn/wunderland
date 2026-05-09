@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import type { WunderlandProviderId, WunderlandAgentRagConfig } from '../../channels/api-new/types.js';
+import type { WunderlandProviderId, WunderlandAgentRagConfig } from '../../channels/api/types.js';
 import chalk from 'chalk';
 import {
   accent,
@@ -22,7 +22,7 @@ import {
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime-new/tools/workspace.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
 // resolveDefaultSkillsDirs is now handled by AgentBootstrap
 import {
   runToolCallingTurn,
@@ -30,62 +30,62 @@ import {
   getGuardrailsInstance,
   type ToolInstance,
   type LLMProviderConfig,
-} from '../../runtime-new/tools/tool-calling.js';
-import { createSchemaOnDemandTools } from '../../runtime-new/execution/schema-on-demand.js';
-import { ToolFailureLearner } from '../../runtime-new/tools/tool-failure-learner.js';
+} from '../../runtime/tools/tool-calling.js';
+import { createSchemaOnDemandTools } from '../../runtime/execution/schema-on-demand.js';
+import { ToolFailureLearner } from '../../runtime/tools/tool-failure-learner.js';
 import {
   classifyResearchDepth,
   buildResearchPrefix,
   createResearchClassifierLlmCall,
   shouldInjectResearch,
   type ResearchDepth,
-} from '../../runtime-new/agentos-bridge/research-classifier.js';
+} from '../../runtime/agentos-bridge/research-classifier.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../../platform/observability/otel.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../platform/observability/session-text-log.js';
 // WunderlandAdaptiveExecutionRuntime is now created by AgentBootstrap
-import { resolveStrictToolNames } from '../../runtime-new/tools/tool-function-names.js';
+import { resolveStrictToolNames } from '../../runtime/tools/tool-function-names.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
   normalizeRuntimePolicy,
-} from '../../runtime-new/tools/policy.js';
+} from '../../runtime/tools/policy.js';
 import { isValidSecurityTier, SECURITY_TIERS } from '../../security/SecurityTiers.js';
 import { isValidToolAccessProfile } from '../../autonomy/social/ToolAccessProfiles.js';
 import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
-import { resolveAgentDisplayName } from '../../runtime-new/identity/agent-identity.js';
+import { resolveAgentDisplayName } from '../../runtime/identity/agent-identity.js';
 import {
   createStepUpAuthConfigFromTier,
 } from '../../core/index.js';
 import {
   WunderlandDiscoveryManager,
-} from '../../platform/discovery-new/discovery-index.js';
+} from '../../platform/discovery/discovery-index.js';
 import {
   resolveEffectiveAgentConfig,
-} from '../../platform/config-new/effective-agent-config.js';
+} from '../../platform/config/effective-agent-config.js';
 import { AgentBootstrap } from '../../bootstrap/index.js';
 import { loadConfig } from '../config/config-manager.js';
 import { normalizeExtensionList } from '../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../extensions/settings.js';
-import { createConfiguredRagTools } from '../../memory-new/rag/runtime-tools.js';
-import { resolveHydeFromAgentConfig } from '../../memory-new/rag/hyde-integration.js';
-import { buildAgenticSystemPrompt } from '../../runtime-new/execution/system-prompt-builder.js';
-import { buildOllamaRuntimeOptions } from '../../runtime-new/tools/ollama-options.js';
-import { createRequestFolderAccessTool } from '../../runtime-new/tools/RequestFolderAccessTool.js';
+import { createConfiguredRagTools } from '../../memory/rag/runtime-tools.js';
+import { resolveHydeFromAgentConfig } from '../../memory/rag/hyde-integration.js';
+import { buildAgenticSystemPrompt } from '../../runtime/execution/system-prompt-builder.js';
+import { buildOllamaRuntimeOptions } from '../../runtime/tools/ollama-options.js';
+import { createRequestFolderAccessTool } from '../../runtime/tools/RequestFolderAccessTool.js';
 import {
   resolveLlmProviderAndModel,
-} from '../../platform/config-new/provider-defaults.js';
+} from '../../platform/config/provider-defaults.js';
 import {
   AgentStorageManager,
   resolveAgentStorageConfig,
   MemoryAutoIngestPipeline,
   derivePersonalityMemoryConfig,
-} from '../../memory-new/storage/storage-index.js';
-import type { IMemoryAutoIngestPipeline } from '../../memory-new/storage/types.js';
+} from '../../memory/storage/storage-index.js';
+import type { IMemoryAutoIngestPipeline } from '../../memory/storage/types.js';
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
-} from '../../channels/voice-new/speech-catalog.js';
+} from '../../channels/voice/speech-catalog.js';
 import { createLocalMemoryReadTool } from './start/local-memory-tool.js';
 import { createMemorySystem, type MemorySystem } from '../../memory/index.js';
 import { injectMemoryContext } from '../../memory/index.js';
@@ -95,7 +95,7 @@ import {
   initCliQueryRouter,
   getCliQueryRouter,
   type CliQueryRouterOptions,
-} from '../../runtime-new/agentos-bridge/query-router-init.js';
+} from '../../runtime/agentos-bridge/query-router-init.js';
 import type { QueryRouter, QueryResult, ConversationMessage } from '@framers/agentos/query-router';
 
 

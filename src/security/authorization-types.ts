@@ -4,7 +4,7 @@
  * @module wunderland/security/authorization-types
  */
 
-import type { ToolRiskTier } from '../core/types.js';
+import type { ToolRiskTier } from '../types/core-types.js';
 // StepUpAuthorizationConfig and AuthorizationResult are re-exported from core/types.js via core/index.ts
 
 /**

@@ -13,7 +13,7 @@ import {
   wrapLLMAsGenerator,
   type LoopChunk,
   type LoopOutput,
-} from '../../runtime-new/execution/llm-stream-adapter.js';
+} from '../execution/llm-stream-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

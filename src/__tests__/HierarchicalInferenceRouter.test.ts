@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { HierarchicalInferenceRouter } from '../runtime-new/inference/HierarchicalInferenceRouter.js';
-import type { ModelTarget } from '../core/types.js';
+import { HierarchicalInferenceRouter } from '../runtime/inference/HierarchicalInferenceRouter.js';
+import type { ModelTarget } from '../types/core-types.js';
 
 describe('HierarchicalInferenceRouter', () => {
     let router: HierarchicalInferenceRouter;

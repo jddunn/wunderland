@@ -28,7 +28,7 @@ import * as fmt from '../ui/format.js';
 import { glyphs as getGlyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward, mergeEnv } from '../config/env-manager.js';
 import { runInitLlmStep } from '../wizards/init-llm-step.js';
-import { openaiChatWithTools, type LLMProviderConfig } from '../../runtime-new/tools/tool-calling.js';
+import { openaiChatWithTools, type LLMProviderConfig } from '../../runtime/tools/tool-calling.js';
 
 // ---------------------------------------------------------------------------
 // Demo data (when no backend/seed is available)

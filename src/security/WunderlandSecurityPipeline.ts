@@ -21,7 +21,7 @@ import {
   type SecurityPipelineConfig,
   type GuardrailPackConfig,
 } from './types.js';
-import type { SignedAgentOutput, IntentChainEntry } from '../core/types.js';
+import type { SignedAgentOutput, IntentChainEntry } from '../types/core-types.js';
 
 /**
  * Wunderland Security Pipeline - Unified security guardrail.

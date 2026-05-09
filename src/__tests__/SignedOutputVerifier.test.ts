@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
-import type { IntentChainEntry } from '../core/types.js';
+import type { IntentChainEntry } from '../types/core-types.js';
 
 describe('SignedOutputVerifier', () => {
     let verifier: SignedOutputVerifier;

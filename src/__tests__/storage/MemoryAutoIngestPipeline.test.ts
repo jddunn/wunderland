@@ -9,9 +9,9 @@ import {
   MemoryAutoIngestPipeline,
   type LlmCaller,
   type MemoryAutoIngestPipelineConfig,
-} from '../../memory-new/auto-ingest/MemoryAutoIngestPipeline.js';
-import type { PersonalityMemoryConfig } from '../../memory-new/storage/PersonalityMemoryConfig.js';
-import type { ResolvedAgentStorageConfig } from '../../memory-new/storage/types.js';
+} from '../../memory/auto-ingest/MemoryAutoIngestPipeline.js';
+import type { PersonalityMemoryConfig } from '../../memory/storage/PersonalityMemoryConfig.js';
+import type { ResolvedAgentStorageConfig } from '../../memory/storage/types.js';
 
 /** Minimal in-memory vector store mock. */
 function createMockVectorStore() {

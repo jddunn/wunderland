@@ -21,7 +21,7 @@
 
 import { WunderlandSecurityPipeline } from './WunderlandSecurityPipeline.js';
 import type { SecurityPipelineConfig } from './types.js';
-import { ToolRiskTier } from '../core/types.js';
+import { ToolRiskTier } from '../types/core-types.js';
 import type { FolderPermissionConfig } from './FolderPermissions.js';
 import { createDefaultFolderConfig } from './FolderPermissions.js';
 

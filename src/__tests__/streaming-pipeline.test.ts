@@ -74,7 +74,7 @@ vi.mock('@framers/agentos/voice-pipeline', () => ({
   SoftFadeBargeinHandler: MockSoftFadeBargeinHandler,
 }));
 
-import { createStreamingPipeline } from '../channels/voice-new/streaming-pipeline.js';
+import { createStreamingPipeline } from '../channels/voice/streaming-pipeline.js';
 
 describe('createStreamingPipeline', () => {
   beforeEach(() => {

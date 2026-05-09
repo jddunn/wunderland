@@ -16,7 +16,7 @@ import {
 import { visibleLength } from '../ui/ansi-utils.js';
 import { glyphs } from '../ui/glyphs.js';
 import { getUiRuntime } from '../ui/runtime.js';
-import type { ToolInstance } from '../../runtime-new/tools/tool-calling.js';
+import type { ToolInstance } from '../../runtime/tools/tool-calling.js';
 
 // ── Chat Frame Palette (mirrors dashboard.ts) ──────────────────────────────
 

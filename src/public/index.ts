@@ -29,22 +29,22 @@ import {
 } from '@framers/agentos/orchestration';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 
-import { createWunderlandTools, getToolAvailability } from '../runtime-new/tools/ToolRegistry.js';
+import { createWunderlandTools, getToolAvailability } from '../runtime/tools/ToolRegistry.js';
 import {
   runToolCallingTurn,
   safeJsonStringify,
   type ToolInstance,
-} from '../runtime-new/tools/tool-calling.js';
-import { WunderlandAdaptiveExecutionRuntime } from '../runtime-new/execution/adaptive-execution.js';
-import { resolveStrictToolNames } from '../runtime-new/tools/tool-function-names.js';
-import { buildOllamaRuntimeOptions } from '../runtime-new/tools/ollama-options.js';
-import { planTurnToolDefinitions } from '../runtime-new/tools/turn-tool-selection.js';
+} from '../runtime/tools/tool-calling.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../runtime/execution/adaptive-execution.js';
+import { resolveStrictToolNames } from '../runtime/tools/tool-function-names.js';
+import { buildOllamaRuntimeOptions } from '../runtime/tools/ollama-options.js';
+import { planTurnToolDefinitions } from '../runtime/tools/turn-tool-selection.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
   type NormalizedRuntimePolicy,
-} from '../runtime-new/tools/policy.js';
-import { resolveAgentDisplayName } from '../runtime-new/identity/agent-identity.js';
+} from '../runtime/tools/policy.js';
+import { resolveAgentDisplayName } from '../runtime/identity/agent-identity.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
 import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 
@@ -53,18 +53,18 @@ import type {
   WunderlandAgentConfig,
   WunderlandTaskOutcomeTelemetryConfig,
   WunderlandToolFailureMode,
-} from '../channels/api-new/types.js';
-import { WunderlandConfigError } from '../platform/config-new/errors.js';
-import { loadAgentConfig, resolveLlmConfig } from '../platform/config-new/load.js';
+} from '../channels/api/types.js';
+import { WunderlandConfigError } from '../platform/config/errors.js';
+import { loadAgentConfig, resolveLlmConfig } from '../platform/config/load.js';
 import {
   buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
-} from '../platform/config-new/effective-agent-config.js';
-import { WunderlandDiscoveryManager } from '../platform/discovery-new/discovery-index.js';
-import type { WunderlandDiscoveryConfig, DiscoverySkillEntry } from '../platform/discovery-new/discovery-index.js';
-import { resolveSkillContext } from '../core/resolve-skill-context.js';
-import { createConfiguredRagTools } from '../memory-new/rag/runtime-tools.js';
-import { createSpeechExtensionEnvOverrides } from '../channels/voice-new/speech-catalog.js';
+} from '../platform/config/effective-agent-config.js';
+import { WunderlandDiscoveryManager } from '../platform/discovery/discovery-index.js';
+import type { WunderlandDiscoveryConfig, DiscoverySkillEntry } from '../platform/discovery/discovery-index.js';
+import { resolveSkillContext } from '../agents/presets/resolve-skill-context.js';
+import { createConfiguredRagTools } from '../memory/rag/runtime-tools.js';
+import { createSpeechExtensionEnvOverrides } from '../channels/voice/speech-catalog.js';
 import { AgentBootstrap } from '../bootstrap/index.js';
 import {
   invokeWunderlandGraph,
@@ -72,7 +72,7 @@ import {
   streamResumeWunderlandGraph,
   streamWunderlandGraph,
   type WunderlandGraphLike,
-} from '../runtime-new/execution/graph-runner.js';
+} from '../runtime/execution/graph-runner.js';
 import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../platform/observability/token-usage.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../platform/observability/session-text-log.js';
 
@@ -1375,9 +1375,9 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 }
 
 // Convenience re-exports for library consumers (types only).
-export type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from '../channels/api-new/types.js';
-export { WunderlandConfigError } from '../platform/config-new/errors.js';
-export type { WunderlandConfigIssue } from '../platform/config-new/errors.js';
+export type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from '../channels/api/types.js';
+export { WunderlandConfigError } from '../platform/config/errors.js';
+export type { WunderlandConfigIssue } from '../platform/config/errors.js';
 
 // Re-export AgentOS high-level API for direct access without createWunderland().
 export { generateText, streamText } from '@framers/agentos';

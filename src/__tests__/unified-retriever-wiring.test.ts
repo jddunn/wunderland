@@ -92,7 +92,7 @@ vi.mock('../memory/index.js', () => ({}));
 import {
   buildUnifiedRetrieverFromConfig,
   formatUnifiedRetrievalLog,
-} from '../runtime-new/agentos-bridge/unified-retriever-builder.js';
+} from '../runtime/agentos-bridge/unified-retriever-builder.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

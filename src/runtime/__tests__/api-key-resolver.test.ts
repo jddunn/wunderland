@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { describe, expect, it } from 'vitest';
 
-import { resolveApiKeyInput } from '../../runtime-new/identity/api-key-resolver.js';
+import { resolveApiKeyInput } from '../identity/api-key-resolver.js';
 
 describe('resolveApiKeyInput', () => {
   it('resolves plain string keys', async () => {

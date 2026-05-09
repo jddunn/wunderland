@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, expect, it } from 'vitest';
-import { WunderlandAdaptiveExecutionRuntime } from '../../runtime-new/execution/adaptive-execution.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../execution/adaptive-execution.js';
 
 describe('WunderlandAdaptiveExecutionRuntime', () => {
   it('forces fail-open and full-tool exposure when KPI is degraded', async () => {

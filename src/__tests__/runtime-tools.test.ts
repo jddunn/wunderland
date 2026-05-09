@@ -29,7 +29,7 @@ vi.mock('../rag/rag-client.js', () => ({
   WunderlandRAGClient: MockRagClient,
 }));
 
-import { createConfiguredRagTools } from '../memory-new/rag/runtime-tools.js';
+import { createConfiguredRagTools } from '../memory/rag/runtime-tools.js';
 
 describe('createConfiguredRagTools', () => {
   beforeEach(() => {

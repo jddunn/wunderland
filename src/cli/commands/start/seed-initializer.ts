@@ -4,12 +4,12 @@
  * Extracted from start.ts lines 297-357.
  */
 
-import { resolveAgentDisplayName } from '../../../runtime-new/identity/agent-identity.js';
-import { resolveStrictToolNames } from '../../../runtime-new/tools/tool-function-names.js';
+import { resolveAgentDisplayName } from '../../../runtime/identity/agent-identity.js';
+import { resolveStrictToolNames } from '../../../runtime/tools/tool-function-names.js';
 import {
   normalizeRuntimePolicy,
   getPermissionsForSet,
-} from '../../../runtime-new/tools/policy.js';
+} from '../../../runtime/tools/policy.js';
 import { startWunderlandOtel } from '../../../platform/observability/otel.js';
 import {
   createWunderlandSeed,

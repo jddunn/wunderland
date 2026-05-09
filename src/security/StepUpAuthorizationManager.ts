@@ -17,7 +17,7 @@ import {
   type EscalationTrigger,
   type ContextualOverride,
   DEFAULT_STEP_UP_AUTH_CONFIG,
-} from '../core/types.js';
+} from '../types/core-types.js';
 import type {
   ToolExecutionContext,
   AuthorizableTool,

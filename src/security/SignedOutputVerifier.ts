@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   type IntentChainEntry,
   type SignedAgentOutput,
-} from '../core/types.js';
+} from '../types/core-types.js';
 import {
   type OutputSigningConfig,
   type SigningContext,
