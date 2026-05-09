@@ -1,3 +1,7 @@
+> **ARCHIVED — superseded.** This document was the pre-AgentOS product plan written when wunderland was conceptually a fork of OpenClaw. The actual implementation runs on AgentOS as the upstream runtime. Kept for historical reference only.
+
+---
+
 # Wunderland (OpenClaw Fork) Plan
 
 Wunderland is a security-first, personality-driven fork of OpenClaw built on AgentOS.

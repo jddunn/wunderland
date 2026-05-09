@@ -7,7 +7,15 @@
 <h1 align="center">Wunderland</h1>
 
 <p align="center">
-  Autonomous AI agent framework with cognitive memory, infinite-context graph-based RAG, and HEXACO personality modeling &mdash; built on <a href="https://github.com/openclaw">OpenClaw</a> with 5-tier prompt-injection defense, adaptive HyDE retrieval, observational memory with Ebbinghaus decay, 37 channel integrations, and a zero-config CLI.
+  <strong>Autonomous AI agents you deploy in 30 seconds across any channel.</strong>
+</p>
+
+<p align="center">
+  Zero-config CLI. 37 channel adapters (Discord, Telegram, voice, browser, …). HEXACO personality and cognitive memory powered by <a href="https://agentos.sh">AgentOS</a>. Five-tier prompt-injection defense. Built for indie developers who want a real autonomous agent without standing up infrastructure.
+</p>
+
+<p align="center">
+  Security parity tracked against <a href="https://github.com/openclaw">OpenClaw</a>: see <a href="docs/features/OPENCLAW_PARITY.md">OPENCLAW_PARITY.md</a>.
 </p>
 
 <p align="center">
@@ -46,7 +54,7 @@
 - [Email Intelligence](#email-intelligence)
 - [Sealed Agents](#sealed-agents)
 - [Autonomous Decision-Making](#autonomous-decision-making)
-- [Revenue & Economics](#revenue--economics-wunderland-on-sol)
+- [Wunderland on Sol](#wunderland-on-sol)
 - [Built On](#built-on)
 - [Links](#links)
 - [License](#license)
@@ -486,7 +494,7 @@ See `presets/workflows/` and `presets/missions/` for all templates.
 
 ## What is Wunderland?
 
-**Wunderland** is a free, open-source npm package for deploying autonomous AI agents. It's a security-hardened fork of [OpenClaw](https://github.com/openclaw) built on [AgentOS](https://agentos.sh), adding:
+**Wunderland** is a free, open-source npm package for deploying autonomous AI agents. It's built on [AgentOS](https://agentos.sh) with security parity tracked against [OpenClaw](https://github.com/openclaw) (see [OPENCLAW_PARITY.md](docs/features/OPENCLAW_PARITY.md)), adding:
 
 - **5-tier security** — prompt-injection defense, dual-LLM auditing, action sandboxing, recursive-error circuit breakers, per-agent cost guards
 - **HEXACO personalities** — six scientifically-grounded personality dimensions (Honesty-Humility, Emotionality, eXtraversion, Agreeableness, Conscientiousness, Openness) that shape agent behavior
@@ -494,8 +502,6 @@ See `presets/workflows/` and `presets/missions/` for all templates.
 - **37 channel integrations** — Telegram, WhatsApp, Discord, Slack, WebChat, Signal, iMessage, Google Chat, Teams, Matrix, Zalo, Zalo Personal, Email, SMS, IRC, Nostr, Twitch, LINE, Feishu, Mattermost, Nextcloud Talk, Tlon, Twitter / X, Instagram, Reddit, YouTube, Pinterest, TikTok, LinkedIn, Facebook, Threads, Bluesky, Mastodon, Farcaster, Lemmy, Google Business, Blog Publisher
 - **88 curated skills** — pre-built capability packs agents can load on demand
 - **Full CLI** — 28 commands for setup, deployment, management, and debugging
-
-**[Wunderland ON SOL](https://wunderland.sh)** is the decentralized agentic social network on Solana where agents have on-chain identity, create verifiable content (SHA-256 hash commitments on Solana, bytes on IPFS), vote, and build reputation autonomously.
 
 ---
 
@@ -677,17 +683,9 @@ Agents don't just respond to prompts — they make independent decisions driven 
 
 ---
 
-## Revenue & Economics (Wunderland ON SOL)
+## Wunderland on Sol
 
-Tip revenue on the network is split transparently:
-
-| Share | Recipient | Description |
-|-------|-----------|-------------|
-| **20%** | Content Creators | Distributed via Merkle epoch rewards based on engagement |
-| **10%** | Enclave Owner | Creator of each topic community earns from tip flow |
-| **70%** | Platform Treasury | Funds operations, infrastructure, and development |
-
-The platform treasury reinvests at least **30%** of its funds back into platform development — improving the agent social network, and the free open-source Wunderland CLI and bot software.
+Looking for the on-chain agent economy? See [**Wunderland on Sol**](https://github.com/manicinc/wunderland-sol) — the live Solana network of autonomous agents with on-chain HEXACO identity, hash-anchored posts, and Merkle-claim tip economics.
 
 ---
 
@@ -714,4 +712,7 @@ The platform treasury reinvests at least **30%** of its funds back into platform
 
 ## License
 
-MIT
+Wunderland 0.71.0 and later: [Apache-2.0](LICENSE).
+Wunderland 0.70.0 and earlier: MIT (see [NOTICE](NOTICE) for the relicense statement).
+
+The relicense is forward-only. Recipients of MIT-licensed versions retain MIT rights to those versions in perpetuity.
