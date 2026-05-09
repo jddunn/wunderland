@@ -16,7 +16,7 @@ import type { PromptBuilderInput, BuiltPrompt } from '../agents/prompts/PromptBu
 import { ConfigValidator, migrateConfig } from '../cli/config/config-validator.js';
 import type { ValidationResult } from '../cli/config/config-validator.js';
 import { QueryExpander } from '../memory-new/rag/QueryExpander.js';
-import { RateLimiter } from '../api/rate-limiter.js';
+import { RateLimiter } from '../channels/api-new/rate-limiter.js';
 import type { HEXACOTraits, SecurityProfile, ChannelBinding } from '../core/types.js';
 import type { CommunicationStyleProfile } from '../agents/prompts/StyleAdaptation.js';
 import type { CapabilityDiscoveryResult } from '@framers/agentos/discovery/types.js';

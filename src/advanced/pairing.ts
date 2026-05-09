@@ -1,3 +1,3 @@
 // @ts-nocheck
-export * from '../pairing/index.js';
+export * from '../channels/pairing/index.js';
 

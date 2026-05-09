@@ -1,5 +1,5 @@
 // @ts-nocheck
-import type { WunderlandAgentConfig } from '../api/types.js';
+import type { WunderlandAgentConfig } from '../channels/api-new/types.js';
 import type { WunderlandConfigIssue } from './errors.js';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
