@@ -165,7 +165,7 @@ export {
   createDefaultWunderlandSeed,
   HEXACO_PRESETS,
   type IWunderlandSeed,
-} from '../core/WunderlandSeed.js';
+} from '../agents/builder/WunderlandSeed.js';
 
 export {
   WunderlandSecurityPipeline,

@@ -15,9 +15,9 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
-import { extractAgentConfig } from '../core/NaturalLanguageAgentBuilder.js';
-import { resolvePresetExtensions } from '../core/PresetExtensionResolver.js';
-import { validateAgentConfig } from '../core/validation.js';
+import { extractAgentConfig } from '../agents/builder/NaturalLanguageAgentBuilder.js';
+import { resolvePresetExtensions } from '../agents/presets/PresetExtensionResolver.js';
+import { validateAgentConfig } from '../agents/builder/validation.js';
 
 const TEST_DIR = path.join(process.cwd(), '.test-agents');
 const TEST_AGENT_DIR = path.join(TEST_DIR, 'test-research-bot');

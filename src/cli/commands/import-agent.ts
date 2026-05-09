@@ -24,7 +24,7 @@ import YAML from 'yaml';
 import type { GlobalFlags } from '../types.js';
 import { accent, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
-import { importAgent, validateManifest } from '../../core/AgentManifest.js';
+import { importAgent, validateManifest } from '../../agents/builder/AgentManifest.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -14,7 +14,7 @@ import { updateConfig } from '../config/config-manager.js';
 import { mergeEnv } from '../config/env-manager.js';
 import { URLS, PERSONALITY_PRESETS } from '../constants.js';
 import { buildOtelEnvVars, describeObservabilityPreset } from '../observability/otel-config.js';
-import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
+import { HEXACO_PRESETS } from '../../agents/builder/WunderlandSeed.js';
 import { DEFAULT_HEXACO_TRAITS, type HEXACOTraits } from '../../core/types.js';
 import { getUiRuntime } from '../ui/runtime.js';
 import { runApiKeysWizard } from './api-keys-wizard.js';

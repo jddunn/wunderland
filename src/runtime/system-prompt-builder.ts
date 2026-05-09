@@ -9,7 +9,7 @@
  */
 
 import * as os from 'node:os';
-import type { IWunderlandSeed } from '../core/WunderlandSeed.js';
+import type { IWunderlandSeed } from '../agents/builder/WunderlandSeed.js';
 import type { NormalizedRuntimePolicy } from './policy.js';
 
 export interface SystemPromptOptions {

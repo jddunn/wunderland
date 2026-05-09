@@ -11,7 +11,7 @@ import type {
   WunderlandExtensionConfig,
 } from '../api/types.js';
 import type { WunderlandDiscoveryConfig } from '../discovery/index.js';
-import { PresetLoader, type AgentPreset } from '../core/PresetLoader.js';
+import { PresetLoader, type AgentPreset } from '../agents/presets/PresetLoader.js';
 import {
   buildRagConfigFromPersona,
   extractHexacoTraitsFromPersona,

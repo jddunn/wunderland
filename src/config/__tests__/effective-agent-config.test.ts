@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveEffectiveAgentConfig } from '../effective-agent-config.js';
-import { PresetLoader } from '../../core/PresetLoader.js';
+import { PresetLoader } from '../../agents/presets/PresetLoader.js';
 
 const tempDirs: string[] = [];
 
