@@ -11,7 +11,7 @@ import {
   updateSeedTraits,
   HEXACO_PRESETS,
   type IWunderlandSeed,
-} from '../WunderlandSeed.js';
+} from '../../agents/builder/WunderlandSeed.js';
 import {
   type HEXACOTraits,
   DEFAULT_SECURITY_PROFILE,

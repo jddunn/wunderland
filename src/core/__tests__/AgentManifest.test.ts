@@ -12,7 +12,7 @@ import {
   importAgent,
   validateManifest,
   type AgentManifest,
-} from '../AgentManifest.js';
+} from '../../agents/builder/AgentManifest.js';
 
 // ── Mock node:fs ────────────────────────────────────────────────────────────
 

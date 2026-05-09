@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { resolvePresetExtensions, resolveExtensionsByNames } from '../PresetExtensionResolver.js';
+import { resolvePresetExtensions, resolveExtensionsByNames } from '../../agents/presets/PresetExtensionResolver.js';
 
 // Mock the extensions registry module
 vi.mock('@framers/agentos-extensions-registry', () => ({
