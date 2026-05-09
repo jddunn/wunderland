@@ -19,7 +19,7 @@ import {
   OVERDRIVE_STEP_UP_AUTH_CONFIG,
   DEFAULT_STEP_UP_AUTH_CONFIG,
   FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
-} from '../../core/types.js';
+} from '../../types/core-types.js';
 
 // ── Tier name validation ────────────────────────────────────────────────────
 

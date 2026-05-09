@@ -5,7 +5,7 @@
  */
 
 import * as path from 'node:path';
-import type { LLMProviderConfig } from '../../../runtime-new/tools/tool-calling.js';
+import type { LLMProviderConfig } from '../../../runtime/tools/tool-calling.js';
 import * as fmt from '../../ui/format.js';
 import {
   isLocalOllamaBaseUrl,
@@ -16,8 +16,8 @@ import {
 } from '../../ollama/ollama-manager.js';
 import {
   resolveLlmProviderAndModel,
-} from '../../../platform/config-new/provider-defaults.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime-new/tools/workspace.js';
+} from '../../../platform/config/provider-defaults.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime/tools/workspace.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { buildFallbackChain } from '@framers/agentos';
 

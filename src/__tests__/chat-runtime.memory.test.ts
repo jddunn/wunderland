@@ -4,7 +4,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AgentMemory } from '@framers/agentos';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 
-import { createWunderlandChatRuntime } from '../channels/api-new/chat-runtime.js';
+import { createWunderlandChatRuntime } from '../channels/api/chat-runtime.js';
 
 function createManagerStub(): ICognitiveMemoryManager {
   return {

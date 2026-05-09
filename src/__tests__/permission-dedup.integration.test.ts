@@ -13,7 +13,7 @@ import { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManag
 import {
     ToolRiskTier,
     OVERDRIVE_STEP_UP_AUTH_CONFIG,
-} from '../core/types.js';
+} from '../types/core-types.js';
 import type {
     AuthorizableTool,
     ToolCallRequest,

@@ -95,8 +95,8 @@ vi.mock('@framers/agentos/voice-pipeline', () => ({
 
 // ── Imports under test (after mocks) ─────────────────────────────────────────
 
-import { startTelephonyWebhookServer } from '../channels/voice-new/telephony-webhook-server.js';
-import { startVoiceServer } from '../channels/voice-new/ws-server.js';
+import { startTelephonyWebhookServer } from '../channels/voice/telephony-webhook-server.js';
+import { startVoiceServer } from '../channels/voice/ws-server.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

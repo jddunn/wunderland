@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, it, expect } from 'vitest';
-import { synthesizeEmptyOutputFallback } from '../../runtime-new/execution/empty-output-fallback.js';
+import { synthesizeEmptyOutputFallback } from '../execution/empty-output-fallback.js';
 
 describe('synthesizeEmptyOutputFallback', () => {
   it('returns an empty string when no tool activity happened', () => {

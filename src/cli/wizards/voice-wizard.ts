@@ -7,7 +7,7 @@
 import * as p from '@clack/prompts';
 import type { WizardState } from '../types.js';
 import * as fmt from '../ui/format.js';
-import { getSpeechProviderEntry } from '../../channels/voice-new/speech-catalog.js';
+import { getSpeechProviderEntry } from '../../channels/voice/speech-catalog.js';
 
 const OPENAI_TTS = getSpeechProviderEntry('openai-tts');
 const ELEVENLABS_TTS = getSpeechProviderEntry('elevenlabs');

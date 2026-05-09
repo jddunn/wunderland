@@ -14,7 +14,7 @@ import * as fmt from '../../ui/format.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward, mergeEnv } from '../../config/env-manager.js';
 import { loadConfig, updateConfig } from '../../config/config-manager.js';
-import { resolveEffectiveAgentConfig } from '../../../platform/config-new/effective-agent-config.js';
+import { resolveEffectiveAgentConfig } from '../../../platform/config/effective-agent-config.js';
 import { buildAgentConfig, writeAgentScaffold, toDisplayName } from '../../helpers/build-agent-scaffold.js';
 import { runInitLlmStep } from '../../wizards/init-llm-step.js';
 import { verifySealedConfig } from '../../seal-utils.js';

@@ -20,7 +20,7 @@ import {
   DEFAULT_STEP_UP_AUTH_CONFIG,
   createStepUpAuthConfigFromTier,
   ToolRiskTier,
-} from '../core/types.js';
+} from '../types/core-types.js';
 import { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
 import type {
   AuthorizableTool,

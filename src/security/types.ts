@@ -6,8 +6,8 @@
 
 import { GuardrailAction } from '@framers/agentos/safety/guardrails';
 export { GuardrailAction };
-import type { SignedAgentOutput } from '../core/types.js';
-export type { IntentChainEntry } from '../core/types.js';
+import type { SignedAgentOutput } from '../types/core-types.js';
+export type { IntentChainEntry } from '../types/core-types.js';
 
 // ============================================================================
 // Pre-LLM Classification

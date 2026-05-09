@@ -18,7 +18,7 @@ vi.mock('@framers/agentos-extensions-registry', () => ({
 }));
 
 import { createCuratedManifest } from '@framers/agentos-extensions-registry';
-import { createWunderlandTools, getToolAvailability, WUNDERLAND_TOOL_IDS } from '../runtime-new/tools/ToolRegistry.js';
+import { createWunderlandTools, getToolAvailability, WUNDERLAND_TOOL_IDS } from '../runtime/tools/ToolRegistry.js';
 
 describe('ToolRegistry voice integration', () => {
   afterEach(() => {

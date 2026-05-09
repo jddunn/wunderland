@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import type { GlobalFlags } from '../../types.js';
 import { accent, success as sColor, info as iColor } from '../../ui/theme.js';
 import * as fmt from '../../ui/format.js';
-import { resolveAgentDisplayName } from '../../../runtime-new/identity/agent-identity.js';
+import { resolveAgentDisplayName } from '../../../runtime/identity/agent-identity.js';
 import {
   getDaemonDir,
   readDaemonInfo,

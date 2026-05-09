@@ -28,7 +28,7 @@ import { loadConfig } from '../../config/config-manager.js';
 import { loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
-import { resolveEffectiveAgentConfig } from '../../../platform/config-new/effective-agent-config.js';
+import { resolveEffectiveAgentConfig } from '../../../platform/config/effective-agent-config.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

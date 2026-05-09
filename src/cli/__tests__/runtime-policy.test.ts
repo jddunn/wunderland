@@ -13,7 +13,7 @@ import {
   normalizeRuntimePolicy,
   filterToolMapByPolicy,
   getPermissionsForSet,
-} from '../../runtime-new/tools/policy.js';
+} from '../../runtime/tools/policy.js';
 
 // ── Normalizers ─────────────────────────────────────────────────────────────
 

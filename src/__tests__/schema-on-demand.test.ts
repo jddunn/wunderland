@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { describe, expect, it } from 'vitest';
 
-import type { ToolInstance } from '../runtime-new/tools/tool-calling.js';
-import { createSchemaOnDemandTools } from '../runtime-new/execution/schema-on-demand.js';
+import type { ToolInstance } from '../runtime/tools/tool-calling.js';
+import { createSchemaOnDemandTools } from '../runtime/execution/schema-on-demand.js';
 
 describe('createSchemaOnDemandTools', () => {
   it('loads a local curated pack by curated extension name', async () => {

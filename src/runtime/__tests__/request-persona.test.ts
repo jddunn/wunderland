@@ -10,7 +10,7 @@ import {
   createRequestScopedToolMap,
   extractRequestedPersonaId,
   resolveRequestScopedPersonaRuntime,
-} from '../../runtime-new/execution/request-persona.js';
+} from '../execution/request-persona.js';
 
 const tempDirs: string[] = [];
 

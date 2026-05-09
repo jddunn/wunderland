@@ -12,8 +12,8 @@ import { accent, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { shutdownWunderlandOtel, startWunderlandOtel } from '../../platform/observability/otel.js';
-import type { WunderlandGraphRunConfig } from '../../runtime-new/execution/graph-runner.js';
-import { resolveWunderlandRuntimeConfigFromEnv } from '../../platform/config-new/provider-defaults.js';
+import type { WunderlandGraphRunConfig } from '../../runtime/execution/graph-runner.js';
+import { resolveWunderlandRuntimeConfigFromEnv } from '../../platform/config/provider-defaults.js';
 
 /**
  * Resolves LLM runtime config from environment variables.

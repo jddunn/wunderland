@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.72.0] - 2026-05-09
+
+### License
+
+This is the first release distributed under **Apache-2.0**. Versions 0.70.0 and earlier remain available under the MIT License. See [NOTICE](NOTICE) for details. The relicense is forward-only; recipients of MIT-licensed versions retain MIT rights to those versions in perpetuity.
+
+### BREAKING CHANGES — public surface migration
+
+The `package.json` `exports` field collapsed from 14 declared subpaths to 3. The `wunderland/advanced/*` re-export shelf was removed. Consumers should import named exports from the root `wunderland` package instead.
+
+#### Migration table
+
+| Old import | New import |
+|---|---|
+| `from 'wunderland/advanced'` | `from 'wunderland'` |
+| `from 'wunderland/advanced/core'` | `from 'wunderland'` |
+| `from 'wunderland/advanced/security'` | `from 'wunderland'` |
+| `from 'wunderland/advanced/social'` | `from 'wunderland'` |
+| `from 'wunderland/advanced/<anything>'` | `from 'wunderland'` |
+| `from 'wunderland/workflows'` | `from 'wunderland'` |
+| `from 'wunderland/api'` | `from 'wunderland/api'` (path preserved, dist target updated) |
+| `from 'wunderland/discovery'` | `from 'wunderland/discovery'` (path preserved, dist target updated) |
+| `from 'wunderland/tools'` | `from 'wunderland'` (subpath removed; named exports moved to root) |
+| `from 'wunderland/config'` | `from 'wunderland'` (subpath removed) |
+| `from 'wunderland/security'` | `from 'wunderland'` (subpath removed) |
+| `from 'wunderland/runtime'` | `from 'wunderland'` (subpath removed) |
+| `from 'wunderland/storage'` | `from 'wunderland'` (subpath removed) |
+| `from 'wunderland/voice'` | `from 'wunderland'` (subpath removed) |
+| `from 'wunderland/browser'` | `from 'wunderland'` (subpath removed) |
+| `from 'wunderland/guardrails'` | `from 'wunderland'` (subpath removed) |
+| `from 'wunderland/presets'` | `from 'wunderland'` (subpath removed) |
+
+#### Internal layout
+
+`packages/wunderland/src/` regrouped from 26 top-level directories into 9 themed groups: `agents/`, `runtime/`, `memory/`, `channels/`, `autonomy/`, `security/`, `platform/`, `cli/`, `types/`. Internal API is unaffected for consumers using the root `wunderland` package import.
+
+### Other changes
+
+- README hero rewritten around the autonomous-agents-anywhere identity
+- "Built on OpenClaw" framing corrected to "Built on AgentOS"; OpenClaw stays as competitive parity tracking
+- `Wunderland on Sol` content moved to [`apps/wunderland-sol/`](https://github.com/manicinc/wunderland-sol)
+- Three empty stub packages (`wilds-family-{arcade,platformer,survival}`) removed from monorepo
+
 ## [0.41.0] - 2026-03-28
 
 ### Changed

@@ -18,10 +18,10 @@ import { loadConfig } from '../config/config-manager.js';
 import { loadEnv, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
-import type { TokenUsageSummary } from '../../core/TokenUsageTracker.js';
+import type { TokenUsageSummary } from '../../platform/observability/TokenUsageTracker.js';
 import { getRecordedWunderlandTokenUsage } from '../../platform/observability/token-usage.js';
-import { resolveAgentDisplayName } from '../../runtime-new/identity/agent-identity.js';
-import { resolveEffectiveAgentConfig } from '../../platform/config-new/effective-agent-config.js';
+import { resolveAgentDisplayName } from '../../runtime/identity/agent-identity.js';
+import { resolveEffectiveAgentConfig } from '../../platform/config/effective-agent-config.js';
 
 const CHANNEL_ALIASES: Record<string, string> = {
   'blog-publisher': 'devto',

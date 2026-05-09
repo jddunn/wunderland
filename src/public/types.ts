@@ -25,13 +25,13 @@ import type {
   WunderlandWorkspace,
   WunderlandTaskOutcomeTelemetryConfig,
   WunderlandAdaptiveExecutionConfig,
-} from '../channels/api-new/types.js';
-import type { TurnToolSelectionMode } from '../runtime-new/tools/turn-tool-selection.js';
-import type { NormalizedRuntimePolicy } from '../runtime-new/tools/policy.js';
-import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../platform/discovery-new/discovery-index.js';
-import type { ToolInstance, LLMProviderConfig } from '../runtime-new/tools/tool-calling.js';
-import type { ToolRegistryConfig } from '../runtime-new/tools/ToolRegistry.js';
-import type { TokenUsageSummary } from '../core/TokenUsageTracker.js';
+} from '../channels/api/types.js';
+import type { TurnToolSelectionMode } from '../runtime/tools/turn-tool-selection.js';
+import type { NormalizedRuntimePolicy } from '../runtime/tools/policy.js';
+import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../platform/discovery/discovery-index.js';
+import type { ToolInstance, LLMProviderConfig } from '../runtime/tools/tool-calling.js';
+import type { ToolRegistryConfig } from '../runtime/tools/ToolRegistry.js';
+import type { TokenUsageSummary } from '../platform/observability/TokenUsageTracker.js';
 
 // =============================================================================
 // Public Types

@@ -24,7 +24,7 @@ import * as fmt from '../ui/format.js';
 import {
   truncateString,
   type ToolInstance,
-} from '../../runtime-new/tools/tool-calling.js';
+} from '../../runtime/tools/tool-calling.js';
 import {
   chatFrameGlyphs,
   frameBorder,

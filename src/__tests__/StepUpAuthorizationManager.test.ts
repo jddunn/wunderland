@@ -19,7 +19,7 @@ import {
     OVERDRIVE_STEP_UP_AUTH_CONFIG,
     DEFAULT_STEP_UP_AUTH_CONFIG,
     createStepUpAuthConfigFromTier,
-} from '../core/types.js';
+} from '../types/core-types.js';
 
 describe('StepUpAuthorizationManager', () => {
     let manager: StepUpAuthorizationManager;

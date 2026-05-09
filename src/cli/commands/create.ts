@@ -14,7 +14,7 @@ import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward, mergeEnv } from '../config/env-manager.js';
 import { runInitLlmStep } from '../wizards/init-llm-step.js';
-import { openaiChatWithTools, type LLMProviderConfig } from '../../runtime-new/tools/tool-calling.js';
+import { openaiChatWithTools, type LLMProviderConfig } from '../../runtime/tools/tool-calling.js';
 import { SECURITY_TIERS, getSecurityTier, isValidSecurityTier, type SecurityTierName } from '../../security/SecurityTiers.js';
 import { extractAgentConfig } from '../../agents/builder/NaturalLanguageAgentBuilder.js';
 import type { ExtractedAgentConfig } from '../../agents/builder/NaturalLanguageAgentBuilder.js';

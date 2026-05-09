@@ -4,8 +4,8 @@
  * Extracted from start.ts lines 938-962.
  */
 
-import { WunderlandAdaptiveExecutionRuntime } from '../../../runtime-new/execution/adaptive-execution.js';
-import { buildAgenticSystemPrompt } from '../../../runtime-new/execution/system-prompt-builder.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../../../runtime/execution/adaptive-execution.js';
+import { buildAgenticSystemPrompt } from '../../../runtime/execution/system-prompt-builder.js';
 
 export async function initAdaptiveRuntime(ctx: any): Promise<void> {
   const { cfg, seed, policy, lazyTools, autoApproveToolCalls, skillsPrompt, turnApprovalMode } = ctx;

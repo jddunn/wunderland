@@ -11,62 +11,12 @@
       "types": "./dist/index.d.ts"
     },
     "./api": {
-      "import": "./dist/api/index.js",
-      "types": "./dist/api/index.d.ts"
-    },
-    "./tools": {
-      "import": "./dist/tools/index.js",
-      "types": "./dist/tools/index.d.ts"
-    },
-    "./advanced": {
-      "import": "./dist/advanced/index.js",
-      "types": "./dist/advanced/index.d.ts"
-    },
-    "./advanced/*": {
-      "import": "./dist/advanced/*.js",
-      "types": "./dist/advanced/*.d.ts"
-    },
-    "./config": {
-      "import": "./dist/config/index.js",
-      "types": "./dist/config/index.d.ts"
-    },
-    "./security": {
-      "import": "./dist/security/index.js",
-      "types": "./dist/security/index.d.ts"
-    },
-    "./runtime": {
-      "import": "./dist/runtime/index.js",
-      "types": "./dist/runtime/index.d.ts"
-    },
-    "./workflows": {
-      "import": "./dist/advanced/workflows.js",
-      "types": "./dist/advanced/workflows.d.ts"
-    },
-    "./storage": {
-      "import": "./dist/storage/index.js",
-      "types": "./dist/storage/index.d.ts"
-    },
-    "./guardrails": {
-      "import": "./dist/advanced/guardrails.js",
-      "types": "./dist/advanced/guardrails.d.ts"
-    },
-    "./voice": {
-      "import": "./dist/voice/index.js",
-      "types": "./dist/voice/index.d.ts"
+      "import": "./dist/channels/api/api-index.js",
+      "types": "./dist/channels/api/api-index.d.ts"
     },
     "./discovery": {
-      "import": "./dist/discovery/index.js",
-      "types": "./dist/discovery/index.d.ts"
-    },
-    "./presets": {
-      "import": "./dist/core/PresetLoader.js",
-      "types": "./dist/core/PresetLoader.d.ts"
-    },
-    "./presets/agents/*/agent.config.json": {
-      "import": "./presets/agents/*/agent.config.json"
-    },
-    "./presets/*.json": {
-      "import": "./presets/*.json"
+      "import": "./dist/platform/discovery/discovery-index.js",
+      "types": "./dist/platform/discovery/discovery-index.d.ts"
     }
   },
   "files": [

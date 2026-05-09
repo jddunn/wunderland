@@ -7,22 +7,22 @@
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fmt from '../../ui/format.js';
-import { type ToolInstance, getGuardrailsInstance } from '../../../runtime-new/tools/tool-calling.js';
-import { createSchemaOnDemandTools } from '../../../runtime-new/execution/schema-on-demand.js';
-import { filterToolMapByPolicy } from '../../../runtime-new/tools/policy.js';
+import { type ToolInstance, getGuardrailsInstance } from '../../../runtime/tools/tool-calling.js';
+import { createSchemaOnDemandTools } from '../../../runtime/execution/schema-on-demand.js';
+import { filterToolMapByPolicy } from '../../../runtime/tools/policy.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { normalizeExtensionList } from '../../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../../extensions/settings.js';
-import { createConfiguredRagTools } from '../../../memory-new/rag/runtime-tools.js';
+import { createConfiguredRagTools } from '../../../memory/rag/runtime-tools.js';
 import { createLocalMemoryReadTool } from './local-memory-tool.js';
-import { resolveHydeFromAgentConfig } from '../../../memory-new/rag/hyde-integration.js';
-import { createRequestFolderAccessTool } from '../../../runtime-new/tools/RequestFolderAccessTool.js';
+import { resolveHydeFromAgentConfig } from '../../../memory/rag/hyde-integration.js';
+import { createRequestFolderAccessTool } from '../../../runtime/tools/RequestFolderAccessTool.js';
 import { HumanInteractionManager, type IChannelAdapter } from '@framers/agentos';
 import { MarkdownWorkingMemory, UpdateWorkingMemoryTool, ReadWorkingMemoryTool } from '@framers/agentos/memory';
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
-} from '../../../channels/voice-new/speech-catalog.js';
+} from '../../../channels/voice/speech-catalog.js';
 import { getRecommendations, formatRecommendations } from '../../extensions/recommender.js';
 
 type ExtensionHttpHandler = (
