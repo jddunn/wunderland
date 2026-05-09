@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   StyleAdaptationEngine,
   type CommunicationStyleProfile,
-} from '../StyleAdaptation.js';
+} from '../../agents/prompts/StyleAdaptation.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

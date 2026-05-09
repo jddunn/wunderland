@@ -14,7 +14,7 @@ export {
   createDefaultWunderlandSeed,
   updateSeedTraits,
   HEXACO_PRESETS,
-} from './WunderlandSeed.js';
+} from '../agents/builder/WunderlandSeed.js';
 
 // SeedNetworkManager (multi-agent coordination)
 export {
@@ -23,27 +23,27 @@ export {
   type SeedCapability,
   type SeedNetworkConfig,
   type RoutingStrategy,
-} from './SeedNetworkManager.js';
+} from '../agents/lifecycle/SeedNetworkManager.js';
 
 // StyleAdaptationEngine (communication style learning)
 export {
   StyleAdaptationEngine,
   type CommunicationStyleProfile,
   type StyleAdaptationConfig,
-} from './StyleAdaptation.js';
+} from '../agents/prompts/StyleAdaptation.js';
 
 // PresetLoader (agent presets & deployment templates)
 export {
   PresetLoader,
   type AgentPreset,
   type TemplateConfig,
-} from './PresetLoader.js';
+} from '../agents/presets/PresetLoader.js';
 
 // PresetSkillResolver (auto-resolve skills from preset/config)
 export {
   resolvePresetSkills,
   resolveSkillsByNames,
-} from './PresetSkillResolver.js';
+} from '../agents/presets/PresetSkillResolver.js';
 
 // AgentManifest (serialization / export / import)
 export {
@@ -51,7 +51,7 @@ export {
   exportAgent,
   importAgent,
   validateManifest,
-} from './AgentManifest.js';
+} from '../agents/builder/AgentManifest.js';
 
 // PluginHookManager (event-driven plugin hook system)
 export {
@@ -62,7 +62,7 @@ export {
   type HookResult,
   type HookHandler,
   type HookHandlerFn,
-} from './PluginHooks.js';
+} from '../agents/lifecycle/PluginHooks.js';
 
 // PromptBuilder (centralized system prompt composition)
 export {
@@ -70,7 +70,7 @@ export {
   type PromptSection,
   type PromptBuilderInput,
   type BuiltPrompt,
-} from './PromptBuilder.js';
+} from '../agents/prompts/PromptBuilder.js';
 
 // TokenUsageTracker (cumulative token tracking with cost estimation)
 export { TokenUsageTracker } from './TokenUsageTracker.js';
@@ -79,7 +79,7 @@ export { TokenUsageTracker } from './TokenUsageTracker.js';
 export { CompactionManager } from './CompactionManager.js';
 
 // PresetExtensionResolver (resolve extensions from presets)
-export { resolvePresetExtensions } from './PresetExtensionResolver.js';
+export { resolvePresetExtensions } from '../agents/presets/PresetExtensionResolver.js';
 
 // NaturalLanguageAgentBuilder (merged from ai/)
 export {
@@ -87,7 +87,7 @@ export {
   validateApiKeySetup,
   type LLMInvoker,
   type ExtractedAgentConfig,
-} from './NaturalLanguageAgentBuilder.js';
+} from '../agents/builder/NaturalLanguageAgentBuilder.js';
 
 // Safe merge (prototype pollution prevention)
 export {
@@ -120,4 +120,4 @@ export {
   validateHexacoTraits,
   validateAgentConfig,
   VALID_PRESETS,
-} from './validation.js';
+} from '../agents/builder/validation.js';

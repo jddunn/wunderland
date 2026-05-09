@@ -18,8 +18,8 @@ vi.mock('node:fs', async () => {
 });
 
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { PresetLoader } from '../PresetLoader.js';
-import type { AgentPreset, TemplateConfig } from '../PresetLoader.js';
+import { PresetLoader } from '../../agents/presets/PresetLoader.js';
+import type { AgentPreset, TemplateConfig } from '../../agents/presets/PresetLoader.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

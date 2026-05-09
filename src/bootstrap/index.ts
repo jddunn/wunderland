@@ -4,9 +4,9 @@
  * @module wunderland/bootstrap
  */
 
-export { AgentBootstrap } from './AgentBootstrap.js';
+export { AgentBootstrap } from '../agents/lifecycle/AgentBootstrap.js';
 export type {
   AgentBootstrapConfig,
   BootstrappedAgent,
   BootstrapLogger,
-} from './AgentBootstrap.js';
+} from '../agents/lifecycle/AgentBootstrap.js';

@@ -16,7 +16,7 @@ import {
   validateSkillName,
   validateHexacoTraits,
   validateAgentConfig,
-} from '../validation.js';
+} from '../../agents/builder/validation.js';
 
 describe('Validation Utilities', () => {
   describe('validatePreset', () => {

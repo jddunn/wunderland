@@ -9,7 +9,7 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'no
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { exportAgent, importAgent, validateManifest } from '../AgentManifest.js';
+import { exportAgent, importAgent, validateManifest } from '../../agents/builder/AgentManifest.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

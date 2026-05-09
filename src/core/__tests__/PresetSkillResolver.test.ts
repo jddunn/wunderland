@@ -49,8 +49,8 @@ vi.mock('@framers/agentos-skills-registry', () => ({
 
 // ── Imports (after mocks) ───────────────────────────────────────────────────
 
-import { resolveSkillsByNames, resolvePresetSkills } from '../PresetSkillResolver.js';
-import { PresetLoader } from '../PresetLoader.js';
+import { resolveSkillsByNames, resolvePresetSkills } from '../../agents/presets/PresetSkillResolver.js';
+import { PresetLoader } from '../../agents/presets/PresetLoader.js';
 import { getSkillByName } from '@framers/agentos-skills-registry/catalog';
 import { createCuratedSkillSnapshot } from '@framers/agentos-skills-registry';
 
