@@ -7,9 +7,9 @@ import {
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
 } from '../../core/index.js';
-import { resolveAgentDisplayName } from '../agent-identity.js';
-import { buildAgenticSystemPrompt } from '../system-prompt-builder.js';
-import type { NormalizedRuntimePolicy } from '../policy.js';
+import { resolveAgentDisplayName } from '../../runtime-new/identity/agent-identity.js';
+import { buildAgenticSystemPrompt } from '../../runtime-new/execution/system-prompt-builder.js';
+import type { NormalizedRuntimePolicy } from '../../runtime-new/tools/policy.js';
 
 const POLICY: NormalizedRuntimePolicy = {
   securityTier: 'balanced',

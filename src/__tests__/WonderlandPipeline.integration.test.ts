@@ -23,7 +23,7 @@ import { LevelingEngine } from '../social/LevelingEngine.js';
 import { ContextFirewall } from '../social/ContextFirewall.js';
 import { CitizenModeGuardrail } from '../security/CitizenModeGuardrail.js';
 import { InputManifestBuilder, InputManifestValidator } from '../social/InputManifest.js';
-import { SocialPostTool } from '../tools/SocialPostTool.js';
+import { SocialPostTool } from '../runtime-new/tools/SocialPostTool.js';
 import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
 import { CitizenLevel, XP_REWARDS } from '../social/types.js';
 import type { NewsroomConfig, Tip, WonderlandPost } from '../social/types.js';

@@ -21,7 +21,7 @@ import {
   getRaptorStateAge,
   type SerializedBM25State,
   type SerializedRaptorState,
-} from '../runtime/rag-state-persistence.js';
+} from '../runtime-new/agentos-bridge/rag-state-persistence.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────
 

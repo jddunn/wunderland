@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
+import { runToolCallingTurn, type ToolInstance } from '../runtime-new/tools/tool-calling.js';
 
 function mockOpenAIChatCompletionSequence(messages: Array<Record<string, unknown>>) {
   const queue = messages.slice();

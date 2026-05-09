@@ -19,21 +19,21 @@ import {
   runToolCallingTurn,
   safeJsonStringify,
   type ToolInstance,
-} from '../../../../runtime/tool-calling.js';
+} from '../../../../runtime-new/tools/tool-calling.js';
 import {
   classifyResearchDepth,
   buildResearchPrefix,
   createResearchClassifierLlmCall,
   shouldInjectResearch,
   type ResearchDepth,
-} from '../../../../runtime/research-classifier.js';
+} from '../../../../runtime-new/agentos-bridge/research-classifier.js';
 import {
   buildPersonaSessionKey,
   createRequestScopedToolMap,
   extractRequestedPersonaId,
   resolveRequestScopedPersonaRuntime,
-} from '../../../../runtime/request-persona.js';
-import { buildOllamaRuntimeOptions } from '../../../../runtime/ollama-options.js';
+} from '../../../../runtime-new/execution/request-persona.js';
+import { buildOllamaRuntimeOptions } from '../../../../runtime-new/tools/ollama-options.js';
 
 import {
   readBody,

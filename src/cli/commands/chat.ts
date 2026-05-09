@@ -22,7 +22,7 @@ import {
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime/workspace.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime-new/tools/workspace.js';
 // resolveDefaultSkillsDirs is now handled by AgentBootstrap
 import {
   runToolCallingTurn,
@@ -30,30 +30,30 @@ import {
   getGuardrailsInstance,
   type ToolInstance,
   type LLMProviderConfig,
-} from '../../runtime/tool-calling.js';
-import { createSchemaOnDemandTools } from '../../runtime/schema-on-demand.js';
-import { ToolFailureLearner } from '../../runtime/tool-failure-learner.js';
+} from '../../runtime-new/tools/tool-calling.js';
+import { createSchemaOnDemandTools } from '../../runtime-new/execution/schema-on-demand.js';
+import { ToolFailureLearner } from '../../runtime-new/tools/tool-failure-learner.js';
 import {
   classifyResearchDepth,
   buildResearchPrefix,
   createResearchClassifierLlmCall,
   shouldInjectResearch,
   type ResearchDepth,
-} from '../../runtime/research-classifier.js';
+} from '../../runtime-new/agentos-bridge/research-classifier.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../../observability/otel.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../observability/session-text-log.js';
 // WunderlandAdaptiveExecutionRuntime is now created by AgentBootstrap
-import { resolveStrictToolNames } from '../../runtime/tool-function-names.js';
+import { resolveStrictToolNames } from '../../runtime-new/tools/tool-function-names.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
   normalizeRuntimePolicy,
-} from '../../runtime/policy.js';
+} from '../../runtime-new/tools/policy.js';
 import { isValidSecurityTier, SECURITY_TIERS } from '../../security/SecurityTiers.js';
 import { isValidToolAccessProfile } from '../../social/ToolAccessProfiles.js';
 import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
-import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
+import { resolveAgentDisplayName } from '../../runtime-new/identity/agent-identity.js';
 import {
   createStepUpAuthConfigFromTier,
 } from '../../core/index.js';
@@ -69,9 +69,9 @@ import { normalizeExtensionList } from '../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../extensions/settings.js';
 import { createConfiguredRagTools } from '../../rag/runtime-tools.js';
 import { resolveHydeFromAgentConfig } from '../../rag/hyde-integration.js';
-import { buildAgenticSystemPrompt } from '../../runtime/system-prompt-builder.js';
-import { buildOllamaRuntimeOptions } from '../../runtime/ollama-options.js';
-import { createRequestFolderAccessTool } from '../../tools/RequestFolderAccessTool.js';
+import { buildAgenticSystemPrompt } from '../../runtime-new/execution/system-prompt-builder.js';
+import { buildOllamaRuntimeOptions } from '../../runtime-new/tools/ollama-options.js';
+import { createRequestFolderAccessTool } from '../../runtime-new/tools/RequestFolderAccessTool.js';
 import {
   resolveLlmProviderAndModel,
 } from '../../config/provider-defaults.js';
@@ -95,7 +95,7 @@ import {
   initCliQueryRouter,
   getCliQueryRouter,
   type CliQueryRouterOptions,
-} from '../../runtime/query-router-init.js';
+} from '../../runtime-new/agentos-bridge/query-router-init.js';
 import type { QueryRouter, QueryResult, ConversationMessage } from '@framers/agentos/query-router';
 
 

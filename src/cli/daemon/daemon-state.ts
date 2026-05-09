@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
 import { CONFIG_DIR_NAME } from '../constants.js';
-import { sanitizeAgentWorkspaceId } from '../../runtime/workspace.js';
+import { sanitizeAgentWorkspaceId } from '../../runtime-new/tools/workspace.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ import { accent, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
-import type { WunderlandGraphRunConfig } from '../../runtime/graph-runner.js';
+import type { WunderlandGraphRunConfig } from '../../runtime-new/execution/graph-runner.js';
 import { resolveWunderlandRuntimeConfigFromEnv } from '../../config/provider-defaults.js';
 
 /**

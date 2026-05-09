@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { SmallModelResolver } from '../SmallModelResolver.js';
+import { SmallModelResolver } from '../../runtime-new/inference/SmallModelResolver.js';
 
 // ── resolveSmall: known providers ───────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { describe, expect, it, vi } from 'vitest';
 
-import { ToolFailureLearner } from '../runtime/tool-failure-learner.js';
+import { ToolFailureLearner } from '../runtime-new/tools/tool-failure-learner.js';
 
 describe('ToolFailureLearner', () => {
   it('keeps distinct failure patterns for the same tool', async () => {

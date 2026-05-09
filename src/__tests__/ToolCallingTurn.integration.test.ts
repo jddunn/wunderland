@@ -3,8 +3,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { runToolCallingTurn, type ToolInstance } from '../runtime/tool-calling.js';
-import { createSchemaOnDemandTools } from '../runtime/schema-on-demand.js';
+import { runToolCallingTurn, type ToolInstance } from '../runtime-new/tools/tool-calling.js';
+import { createSchemaOnDemandTools } from '../runtime-new/execution/schema-on-demand.js';
 
 function mockOpenAIChatCompletionSequence(messages: Array<Record<string, unknown>>) {
   const queue = messages.slice();

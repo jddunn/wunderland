@@ -15,7 +15,7 @@ vi.mock('../rag/http-proxy.js', () => ({
 }));
 
 import { createAgentHttpServer } from '../cli/commands/start/http-server.js';
-import { runToolCallingTurn } from '../runtime/tool-calling.js';
+import { runToolCallingTurn } from '../runtime-new/tools/tool-calling.js';
 
 describe('createAgentHttpServer SSE chat streaming', () => {
   afterEach(() => {

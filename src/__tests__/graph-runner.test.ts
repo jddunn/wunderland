@@ -41,7 +41,7 @@ import {
   invokeWunderlandGraph,
   streamResumeWunderlandGraph,
   streamWunderlandGraph,
-} from '../runtime/graph-runner.js';
+} from '../runtime-new/execution/graph-runner.js';
 
 describe('Wunderland graph runner', () => {
   afterEach(() => {

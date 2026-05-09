@@ -9,7 +9,7 @@
 
 import type { IVectorStore } from '@framers/agentos';
 import { HydeRetriever, type HydeConfig } from '@framers/agentos/rag';
-import { createMemoryReadTool } from '../../../tools/MemoryReadTool.js';
+import { createMemoryReadTool } from '../../../runtime-new/tools/MemoryReadTool.js';
 import type { ToolExecutionContext } from '@framers/agentos';
 
 const COLLECTIONS = ['knowledge_base', 'auto_memories'] as const;

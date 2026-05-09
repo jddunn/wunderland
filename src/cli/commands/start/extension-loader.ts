@@ -7,16 +7,16 @@
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fmt from '../../ui/format.js';
-import { type ToolInstance, getGuardrailsInstance } from '../../../runtime/tool-calling.js';
-import { createSchemaOnDemandTools } from '../../../runtime/schema-on-demand.js';
-import { filterToolMapByPolicy } from '../../../runtime/policy.js';
+import { type ToolInstance, getGuardrailsInstance } from '../../../runtime-new/tools/tool-calling.js';
+import { createSchemaOnDemandTools } from '../../../runtime-new/execution/schema-on-demand.js';
+import { filterToolMapByPolicy } from '../../../runtime-new/tools/policy.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { normalizeExtensionList } from '../../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../../extensions/settings.js';
 import { createConfiguredRagTools } from '../../../rag/runtime-tools.js';
 import { createLocalMemoryReadTool } from './local-memory-tool.js';
 import { resolveHydeFromAgentConfig } from '../../../rag/hyde-integration.js';
-import { createRequestFolderAccessTool } from '../../../tools/RequestFolderAccessTool.js';
+import { createRequestFolderAccessTool } from '../../../runtime-new/tools/RequestFolderAccessTool.js';
 import { HumanInteractionManager, type IChannelAdapter } from '@framers/agentos';
 import { MarkdownWorkingMemory, UpdateWorkingMemoryTool, ReadWorkingMemoryTool } from '@framers/agentos/memory';
 import {

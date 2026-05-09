@@ -13,8 +13,8 @@ import {
   runToolCallingTurn,
   safeJsonStringify,
   type ToolInstance,
-} from '../../../runtime/tool-calling.js';
-import { buildOllamaRuntimeOptions } from '../../../runtime/ollama-options.js';
+} from '../../../runtime-new/tools/tool-calling.js';
+import { buildOllamaRuntimeOptions } from '../../../runtime-new/tools/ollama-options.js';
 import * as fmt from '../../ui/format.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
