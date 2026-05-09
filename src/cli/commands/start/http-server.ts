@@ -9,7 +9,7 @@
  */
 
 import { createServer, type ServerResponse } from 'node:http';
-import { maybeProxyAgentosRagRequest } from '../../../rag/http-proxy.js';
+import { maybeProxyAgentosRagRequest } from '../../../memory-new/rag/http-proxy.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../../observability/session-text-log.js';
 import { dispatchRoute } from './routes/index.js';
 import type { CliServerDeps } from './routes/types.js';

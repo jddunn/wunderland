@@ -43,7 +43,7 @@ vi.mock('../api/types.js', () => ({}));
 import {
   resolveHydeFromAgentConfig,
   createHydeQueryWrapper,
-} from '../rag/hyde-integration.js';
+} from '../memory-new/rag/hyde-integration.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 

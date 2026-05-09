@@ -1,4 +1,4 @@
 // @ts-nocheck
-export { createMemorySystem } from './MemorySystemInitializer.js';
-export type { MemorySystemConfig, MemorySystem, MemoryTurnResult } from './MemorySystemInitializer.js';
-export { injectMemoryContext, removeMemoryContext } from './TurnMemoryRetriever.js';
+export { createMemorySystem } from '../memory-new/initialization/MemorySystemInitializer.js';
+export type { MemorySystemConfig, MemorySystem, MemoryTurnResult } from '../memory-new/initialization/MemorySystemInitializer.js';
+export { injectMemoryContext, removeMemoryContext } from '../memory-new/retrieval/TurnMemoryRetriever.js';

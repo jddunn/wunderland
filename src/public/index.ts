@@ -63,7 +63,7 @@ import {
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import type { WunderlandDiscoveryConfig, DiscoverySkillEntry } from '../discovery/index.js';
 import { resolveSkillContext } from '../core/resolve-skill-context.js';
-import { createConfiguredRagTools } from '../rag/runtime-tools.js';
+import { createConfiguredRagTools } from '../memory-new/rag/runtime-tools.js';
 import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
 import { AgentBootstrap } from '../bootstrap/index.js';
 import {

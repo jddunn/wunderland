@@ -17,7 +17,7 @@ import { accent, dim, bright, success as sColor, error as eColor } from '../ui/t
 import * as fmt from '../ui/format.js';
 import { getUiRuntime } from '../ui/runtime.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { normalizeRagApiBaseUrl } from '../../rag/rag-client.js';
+import { normalizeRagApiBaseUrl } from '../../memory-new/rag/rag-client.js';
 import {
   heuristicClassify,
 } from '@framers/agentos/query-router';

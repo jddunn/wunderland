@@ -1,3 +1,3 @@
 // @ts-nocheck
-export * from '../rag/index.js';
+export * from '../memory-new/rag/rag-index.js';
 

@@ -59,8 +59,8 @@ import { resolveAgentDisplayName } from '../runtime-new/identity/agent-identity.
 import { buildAgenticSystemPrompt } from '../runtime-new/execution/system-prompt-builder.js';
 import { buildOllamaRuntimeOptions } from '../runtime-new/tools/ollama-options.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
-import { createConfiguredRagTools } from '../rag/runtime-tools.js';
-import { maybeProxyAgentosRagRequest } from '../rag/http-proxy.js';
+import { createConfiguredRagTools } from '../memory-new/rag/runtime-tools.js';
+import { maybeProxyAgentosRagRequest } from '../memory-new/rag/http-proxy.js';
 import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 import {
   createSpeechExtensionEnvOverrides,
