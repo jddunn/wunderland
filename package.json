@@ -1,7 +1,7 @@
 {
   "name": "wunderland",
   "version": "0.71.0",
-  "description": "Autonomous AI agent framework with cognitive memory, infinite-context graph-based RAG, and HEXACO personality modeling — built on OpenClaw with 5-tier prompt-injection defense, adaptive HyDE retrieval, observational memory with Ebbinghaus decay, 37 channel integrations, and a zero-config CLI",
+  "description": "Autonomous AI agents you deploy in 30 seconds across any channel. Zero-config CLI, 37 channel adapters, HEXACO personality and cognitive memory powered by AgentOS, five-tier prompt-injection defense.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -114,7 +114,7 @@
     "email": "hi@rabbithole.inc",
     "url": "https://rabbithole.inc"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "homepage": "https://wunderland.sh",
   "repository": {
     "type": "git",
