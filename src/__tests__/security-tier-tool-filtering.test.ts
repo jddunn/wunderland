@@ -41,8 +41,8 @@ import {
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
-} from '../runtime/policy.js';
-import type { ToolInstance } from '../runtime/tool-helpers.js';
+} from '../runtime-new/tools/policy.js';
+import type { ToolInstance } from '../runtime-new/tools/tool-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

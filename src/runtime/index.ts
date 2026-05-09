@@ -5,16 +5,16 @@
  * @module wunderland/runtime
  */
 
-export { WunderlandAdaptiveExecutionRuntime } from './adaptive-execution.js';
-export { resolveAgentDisplayName, firstNonEmptyString } from './agent-identity.js';
-export { resolveApiKeyInput } from './api-key-resolver.js';
-export { buildOllamaRuntimeOptions } from './ollama-options.js';
+export { WunderlandAdaptiveExecutionRuntime } from '../runtime-new/execution/adaptive-execution.js';
+export { resolveAgentDisplayName, firstNonEmptyString } from '../runtime-new/identity/agent-identity.js';
+export { resolveApiKeyInput } from '../runtime-new/identity/api-key-resolver.js';
+export { buildOllamaRuntimeOptions } from '../runtime-new/tools/ollama-options.js';
 export {
   filterToolMapByPolicy,
   normalizeRuntimePolicy,
   getPermissionsForSet,
   type NormalizedRuntimePolicy,
-} from './policy.js';
+} from '../runtime-new/tools/policy.js';
 export {
   classifyResearchDepth,
   buildResearchPrefix,
@@ -24,12 +24,12 @@ export {
   type ResearchDepth,
   type ResearchClassification,
   type ResearchClassifierConfig,
-} from './research-classifier.js';
+} from '../runtime-new/agentos-bridge/research-classifier.js';
 export {
   buildAgenticSystemPrompt,
   buildAgenticSystemPrompt as buildSystemPrompt,
-} from './system-prompt-builder.js';
-export { runToolCallingTurn, safeJsonStringify, type ToolInstance } from './tool-calling.js';
+} from '../runtime-new/execution/system-prompt-builder.js';
+export { runToolCallingTurn, safeJsonStringify, type ToolInstance } from '../runtime-new/tools/tool-calling.js';
 export {
   createWunderlandGraphRuntime,
   invokeWunderlandGraph,
@@ -37,18 +37,18 @@ export {
   resolveCompiledGraph,
   type WunderlandGraphLike,
   type WunderlandGraphRunConfig,
-} from './graph-runner.js';
-export { ToolFailureLearner } from './tool-failure-learner.js';
-export { TOOL_FALLBACK_MAP } from './tool-helpers.js';
+} from '../runtime-new/execution/graph-runner.js';
+export { ToolFailureLearner } from '../runtime-new/tools/tool-failure-learner.js';
+export { TOOL_FALLBACK_MAP } from '../runtime-new/tools/tool-helpers.js';
 export {
   buildToolFunctionNameMapping,
   buildToolDefsFromMapping,
   resolveStrictToolNames,
-} from './tool-function-names.js';
+} from '../runtime-new/tools/tool-function-names.js';
 export {
   resolveAgentWorkspaceBaseDir,
   sanitizeAgentWorkspaceId,
-} from './workspace.js';
+} from '../runtime-new/tools/workspace.js';
 export {
   initCliQueryRouter,
   getCliQueryRouter,
@@ -57,13 +57,13 @@ export {
   formatCliQueryRouterReadyLog,
   type CliQueryRouterOptions,
   type UnifiedRetrieverBuildResult,
-} from './query-router-init.js';
+} from '../runtime-new/agentos-bridge/query-router-init.js';
 export {
   buildUnifiedRetrieverFromConfig,
   formatUnifiedRetrievalLog,
   persistBM25Index,
   type UnifiedRetrieverBuildContext,
-} from './unified-retriever-builder.js';
+} from '../runtime-new/agentos-bridge/unified-retriever-builder.js';
 export {
   saveBM25State,
   loadBM25State,
@@ -75,4 +75,4 @@ export {
   type SerializedBM25State,
   type SerializedRaptorState,
   type RagStatePersistenceOptions,
-} from './rag-state-persistence.js';
+} from '../runtime-new/agentos-bridge/rag-state-persistence.js';

@@ -8,7 +8,7 @@ import {
   resolveResearchClassifierModel,
   shouldInjectResearch,
   type ResearchDepth,
-} from '../runtime/research-classifier.js';
+} from '../runtime-new/agentos-bridge/research-classifier.js';
 
 describe('research-classifier', () => {
   it('returns none when disabled', async () => {

@@ -31,10 +31,10 @@ import {
   wrapStreamingLLMAsGenerator,
   type LoopChunk,
   type LoopOutput,
-} from '../runtime/llm-stream-adapter.js';
+} from '../runtime-new/execution/llm-stream-adapter.js';
 import {
   streamToolCallingTurn,
-} from '../runtime/tool-calling.js';
+} from '../runtime-new/tools/tool-calling.js';
 
 // ---------------------------------------------------------------------------
 // SSE adapter tests

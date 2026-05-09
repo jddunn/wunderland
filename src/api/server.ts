@@ -37,27 +37,27 @@ import {
 } from '../config/effective-agent-config.js';
 import { resolveWunderlandProviderId, resolveWunderlandTextModel } from '../config/provider-defaults.js';
 import { loadDotEnvIntoProcessUpward } from '../cli/config/env-manager.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime-new/tools/workspace.js';
 import {
   runToolCallingTurn,
   safeJsonStringify,
   type LLMProviderConfig,
   type ToolInstance,
-} from '../runtime/tool-calling.js';
-import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
-import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
-import { createSchemaOnDemandTools } from '../runtime/schema-on-demand.js';
+} from '../runtime-new/tools/tool-calling.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../runtime-new/execution/adaptive-execution.js';
+import { resolveStrictToolNames } from '../runtime-new/tools/tool-function-names.js';
+import { createSchemaOnDemandTools } from '../runtime-new/execution/schema-on-demand.js';
 import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
   normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
-} from '../runtime/policy.js';
+} from '../runtime-new/tools/policy.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
-import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
-import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
-import { buildOllamaRuntimeOptions } from '../runtime/ollama-options.js';
+import { resolveAgentDisplayName } from '../runtime-new/identity/agent-identity.js';
+import { buildAgenticSystemPrompt } from '../runtime-new/execution/system-prompt-builder.js';
+import { buildOllamaRuntimeOptions } from '../runtime-new/tools/ollama-options.js';
 import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import { createConfiguredRagTools } from '../rag/runtime-tools.js';
 import { maybeProxyAgentosRagRequest } from '../rag/http-proxy.js';

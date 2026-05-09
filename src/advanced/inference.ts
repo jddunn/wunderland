@@ -1,3 +1,3 @@
 // @ts-nocheck
-export * from '../inference/index.js';
+export * from '../runtime-new/inference/inference-index.js';
 

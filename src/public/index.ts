@@ -29,22 +29,22 @@ import {
 } from '@framers/agentos/orchestration';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 
-import { createWunderlandTools, getToolAvailability } from '../tools/ToolRegistry.js';
+import { createWunderlandTools, getToolAvailability } from '../runtime-new/tools/ToolRegistry.js';
 import {
   runToolCallingTurn,
   safeJsonStringify,
   type ToolInstance,
-} from '../runtime/tool-calling.js';
-import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
-import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
-import { buildOllamaRuntimeOptions } from '../runtime/ollama-options.js';
-import { planTurnToolDefinitions } from './turn-tool-selection.js';
+} from '../runtime-new/tools/tool-calling.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../runtime-new/execution/adaptive-execution.js';
+import { resolveStrictToolNames } from '../runtime-new/tools/tool-function-names.js';
+import { buildOllamaRuntimeOptions } from '../runtime-new/tools/ollama-options.js';
+import { planTurnToolDefinitions } from '../runtime-new/tools/turn-tool-selection.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
   type NormalizedRuntimePolicy,
-} from '../runtime/policy.js';
-import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
+} from '../runtime-new/tools/policy.js';
+import { resolveAgentDisplayName } from '../runtime-new/identity/agent-identity.js';
 import { createEnvSecretResolver } from '../security/env-secrets.js';
 import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
 
@@ -72,7 +72,7 @@ import {
   streamResumeWunderlandGraph,
   streamWunderlandGraph,
   type WunderlandGraphLike,
-} from '../runtime/graph-runner.js';
+} from '../runtime-new/execution/graph-runner.js';
 import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../observability/token-usage.js';
 import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../observability/session-text-log.js';
 

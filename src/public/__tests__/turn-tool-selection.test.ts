@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { CapabilityDiscoveryResult } from '@framers/agentos/discovery';
 
-import type { ToolInstance } from '../../runtime/tool-calling.js';
-import { planTurnToolDefinitions } from '../turn-tool-selection.js';
+import type { ToolInstance } from '../../runtime-new/tools/tool-calling.js';
+import { planTurnToolDefinitions } from '../../runtime-new/tools/turn-tool-selection.js';
 
 function makeTool(name: string): ToolInstance {
   return {

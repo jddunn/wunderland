@@ -18,7 +18,7 @@ import { checkEnvSecrets, getSecretsForPlatform } from '../../config/secrets.js'
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../../constants.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
-import { resolveAgentDisplayName } from '../../../runtime/agent-identity.js';
+import { resolveAgentDisplayName } from '../../../runtime-new/identity/agent-identity.js';
 import { HEXACO_PRESETS } from '../../../agents/builder/WunderlandSeed.js';
 import { DEFAULT_HEXACO_TRAITS, type HEXACOTraits } from '../../../core/types.js';
 import { resolveEffectiveAgentConfig } from '../../../config/effective-agent-config.js';

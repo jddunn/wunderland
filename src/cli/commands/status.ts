@@ -20,7 +20,7 @@ import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
 import type { TokenUsageSummary } from '../../core/TokenUsageTracker.js';
 import { getRecordedWunderlandTokenUsage } from '../../observability/token-usage.js';
-import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
+import { resolveAgentDisplayName } from '../../runtime-new/identity/agent-identity.js';
 import { resolveEffectiveAgentConfig } from '../../config/effective-agent-config.js';
 
 const CHANNEL_ALIASES: Record<string, string> = {

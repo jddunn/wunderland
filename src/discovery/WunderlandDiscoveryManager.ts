@@ -32,7 +32,7 @@ import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 
 import { derivePresetCoOccurrences } from './preset-co-occurrence.js';
 import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';
-import { resolveApiKeyInput, type ApiKeyInput } from '../runtime/api-key-resolver.js';
+import { resolveApiKeyInput, type ApiKeyInput } from '../runtime-new/identity/api-key-resolver.js';
 
 // ============================================================================
 // TYPES

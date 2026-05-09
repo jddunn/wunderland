@@ -5,7 +5,7 @@
  */
 
 import type { WunderlandAgentConfig } from './types.js';
-import type { ToolInstance } from '../runtime/tool-calling.js';
+import type { ToolInstance } from '../runtime-new/tools/tool-calling.js';
 
 export type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;

@@ -76,7 +76,7 @@ export {
 export { TokenUsageTracker } from './TokenUsageTracker.js';
 
 // CompactionManager (conversation compaction with critical rule re-injection)
-export { CompactionManager } from './CompactionManager.js';
+export { CompactionManager } from '../runtime-new/compaction/CompactionManager.js';
 
 // PresetExtensionResolver (resolve extensions from presets)
 export { resolvePresetExtensions } from '../agents/presets/PresetExtensionResolver.js';

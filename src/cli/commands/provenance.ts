@@ -16,7 +16,7 @@ import { accent, dim, muted, success as sColor, error as eColor } from '../ui/th
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
-import { resolveAgentDisplayName } from '../../runtime/agent-identity.js';
+import { resolveAgentDisplayName } from '../../runtime-new/identity/agent-identity.js';
 
 interface ProvenanceModules {
   AgentKeyManager: any;

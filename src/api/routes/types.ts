@@ -12,9 +12,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HumanInteractionManager } from '@framers/agentos';
 
-import type { ToolInstance } from '../../runtime/tool-calling.js';
-import type { NormalizedRuntimePolicy } from '../../runtime/policy.js';
-import type { WunderlandAdaptiveExecutionRuntime } from '../../runtime/adaptive-execution.js';
+import type { ToolInstance } from '../../runtime-new/tools/tool-calling.js';
+import type { NormalizedRuntimePolicy } from '../../runtime-new/tools/policy.js';
+import type { WunderlandAdaptiveExecutionRuntime } from '../../runtime-new/execution/adaptive-execution.js';
 import type { WunderlandDiscoveryManager } from '../../discovery/index.js';
 import type { PairingManager } from '../../pairing/PairingManager.js';
 import type { WunderlandSessionTextLogger } from '../../observability/session-text-log.js';

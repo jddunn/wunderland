@@ -58,7 +58,7 @@ export {
 } from '../security/ToolLoopDetector.js';
 
 // Inference exports
-export * from '../inference/index.js';
+export * from '../runtime-new/inference/inference-index.js';
 
 // Authorization exports (merged into security/)
 export * from '../security/authorization-types.js';
@@ -140,7 +140,7 @@ export * from '../scheduling/index.js';
 export { CitizenModeGuardrail, type CitizenGuardrailResult, type CitizenGuardrailAction } from '../security/CitizenModeGuardrail.js';
 
 // Tools exports — canonical names from agentos-extensions via ToolRegistry
-export { SocialPostTool, type PublishResult, type PostStorageCallback } from '../tools/SocialPostTool.js';
+export { SocialPostTool, type PublishResult, type PostStorageCallback } from '../runtime-new/tools/SocialPostTool.js';
 export {
   createWunderlandTools, getToolAvailability, WUNDERLAND_TOOL_IDS, type ToolRegistryConfig,
   SerperSearchTool,
@@ -148,16 +148,16 @@ export {
   ImageSearchTool,
   TextToSpeechTool,
   NewsSearchTool,
-} from '../tools/ToolRegistry.js';
-export { createMemoryReadTool, type MemoryReadFn, type MemoryReadItem, type MemoryReadResult } from '../tools/MemoryReadTool.js';
-export { createFeedSearchTool, type FeedSearchFn, type FeedSearchItem, type FeedSearchResult } from '../tools/FeedSearchTool.js';
-export { RAGTool, RAG_TOOL_ID, type RAGToolConfig } from '../tools/RAGTool.js';
+} from '../runtime-new/tools/ToolRegistry.js';
+export { createMemoryReadTool, type MemoryReadFn, type MemoryReadItem, type MemoryReadResult } from '../runtime-new/tools/MemoryReadTool.js';
+export { createFeedSearchTool, type FeedSearchFn, type FeedSearchItem, type FeedSearchResult } from '../runtime-new/tools/FeedSearchTool.js';
+export { RAGTool, RAG_TOOL_ID, type RAGToolConfig } from '../runtime-new/tools/RAGTool.js';
 // Backward-compat aliases (deprecated — use canonical names above)
-export { GiphyTool, type GiphySearchInput, type GiphySearchResult } from '../tools/GiphyTool.js';
-export { ElevenLabsTool, type ElevenLabsTTSInput, type ElevenLabsTTSResult } from '../tools/ElevenLabsTool.js';
-export { MediaSearchTool, type MediaSearchInput, type MediaSearchResult } from '../tools/MediaSearchTool.js';
-export { type NewsSearchInput, type NewsSearchResult } from '../tools/NewsSearchTool.js';
-export { type SerperSearchInput, type SerperSearchResult } from '../tools/SerperSearchTool.js';
+export { GiphyTool, type GiphySearchInput, type GiphySearchResult } from '../runtime-new/tools/GiphyTool.js';
+export { ElevenLabsTool, type ElevenLabsTTSInput, type ElevenLabsTTSResult } from '../runtime-new/tools/ElevenLabsTool.js';
+export { MediaSearchTool, type MediaSearchInput, type MediaSearchResult } from '../runtime-new/tools/MediaSearchTool.js';
+export { type NewsSearchInput, type NewsSearchResult } from '../runtime-new/tools/NewsSearchTool.js';
+export { type SerperSearchInput, type SerperSearchResult } from '../runtime-new/tools/SerperSearchTool.js';
 
 // Re-export commonly used items at top level for convenience
 export {
@@ -173,7 +173,7 @@ export {
   createDevelopmentSecurityPipeline,
 } from '../security/WunderlandSecurityPipeline.js';
 
-export { HierarchicalInferenceRouter } from '../inference/HierarchicalInferenceRouter.js';
+export { HierarchicalInferenceRouter } from '../runtime-new/inference/HierarchicalInferenceRouter.js';
 
 // Browser automation (ported from OpenClaw)
 export { BrowserClient } from '../browser/BrowserClient.js';

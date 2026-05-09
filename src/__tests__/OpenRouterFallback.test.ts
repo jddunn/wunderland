@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { openaiChatWithTools } from '../runtime/tool-calling.js';
-import type { LLMProviderConfig } from '../runtime/tool-calling.js';
+import { openaiChatWithTools } from '../runtime-new/tools/tool-calling.js';
+import type { LLMProviderConfig } from '../runtime-new/tools/tool-calling.js';
 
 // ---------------------------------------------------------------------------
 // Mocks

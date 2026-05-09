@@ -1,14 +1,14 @@
 // @ts-nocheck
 import { describe, expect, it } from 'vitest';
 
-import { buildToolDefs, type ToolInstance } from '../tool-calling.js';
+import { buildToolDefs, type ToolInstance } from '../../runtime-new/tools/tool-calling.js';
 import {
   buildToolFunctionNameMapping,
   resolveToolMapKeyFromFunctionName,
   sanitizeToolDefsForProvider,
   sanitizeToolFunctionName,
   trySanitizeToolFunctionName,
-} from '../tool-function-names.js';
+} from '../../runtime-new/tools/tool-function-names.js';
 
 function makeTool(name: string): ToolInstance {
   return {
