@@ -2,6 +2,24 @@
 
 This directory contains all Wunderland package documentation, organized into the following sections.
 
+## Source layout (since 0.72.0)
+
+`packages/wunderland/src/` is organized into 9 themed top-level directories:
+
+| Directory | Purpose |
+|---|---|
+| `agents/` | How agents are defined and built (presets, builder, prompts, lifecycle) |
+| `runtime/` | Turn loop, tool dispatch, agentos bridge (execution, identity, tools, compaction, inference, agentos-bridge) |
+| `memory/` | Persistent memory layer over agentos cognitive memory (initialization, retrieval, auto-ingest, rag, storage) |
+| `channels/` | How agents reach the world (chat, discord, voice, browser, api, pairing) |
+| `autonomy/` | The autonomous behavior loop (jobs, social, scheduling, orchestration) |
+| `security/` | 5-tier prompt-injection defense stack |
+| `platform/` | Production infrastructure (observability, discovery, extensions, config) |
+| `cli/` | Zero-config CLI (front door for `wunderland create "..."`) |
+| `types/` | Cross-cutting type definitions |
+
+The `index.ts` and `public/` directories define the public API. The `package.json` `exports` field exposes 3 subpaths: `.`, `./api`, `./discovery`. Everything else is internal. See [CHANGELOG.md](../CHANGELOG.md) `## 0.72.0` for the migration table from the previous layout.
+
 ## Sections
 
 ### [architecture/](architecture/)
