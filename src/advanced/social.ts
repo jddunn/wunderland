@@ -1,3 +1,3 @@
 // @ts-nocheck
-export * from '../social/index.js';
+export * from '../autonomy/social/index.js';
 

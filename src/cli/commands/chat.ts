@@ -50,7 +50,7 @@ import {
   normalizeRuntimePolicy,
 } from '../../runtime-new/tools/policy.js';
 import { isValidSecurityTier, SECURITY_TIERS } from '../../security/SecurityTiers.js';
-import { isValidToolAccessProfile } from '../../social/ToolAccessProfiles.js';
+import { isValidToolAccessProfile } from '../../autonomy/social/ToolAccessProfiles.js';
 import { verifySealedConfig } from '../seal-utils.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
 import { resolveAgentDisplayName } from '../../runtime-new/identity/agent-identity.js';
