@@ -21,7 +21,7 @@ import {
   createSpeechExtensionEnvOverrides,
   getPreferredRuntimeTtsProviderId,
   normalizePreferredSpeechProviderId,
-} from '../voice/speech-catalog.js';
+} from '../channels/voice-new/speech-catalog.js';
 
 describe('speech-catalog', () => {
   it('normalizes provider aliases to runtime provider ids', () => {

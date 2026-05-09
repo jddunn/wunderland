@@ -14,7 +14,7 @@ import { wrapInFrame } from '../layout.js';
 import { loadEnv, loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
-import { getSpeechProviders, isSpeechProviderConfigured } from '../../../voice/speech-catalog.js';
+import { getSpeechProviders, isSpeechProviderConfigured } from '../../../channels/voice-new/speech-catalog.js';
 
 // ── View ─────────────────────────────────────────────────────────────────
 

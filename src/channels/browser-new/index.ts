@@ -1,1 +1,1 @@
-export {};
+export * from './browser-index.js';

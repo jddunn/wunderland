@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { WunderlandAgentConfig, WunderlandProviderId } from '../api/types.js';
+import type { WunderlandAgentConfig, WunderlandProviderId } from '../channels/api-new/types.js';
 import type { LLMProviderConfig } from '../runtime-new/tools/tool-calling.js';
 import { WunderlandConfigError } from './errors.js';
 import { resolveEffectiveAgentConfig } from './effective-agent-config.js';

@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { PairingManager } from '../pairing/PairingManager.js';
+import { PairingManager } from '../channels/pairing/PairingManager.js';
 
 describe('PairingManager', () => {
     let manager: PairingManager;

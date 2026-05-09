@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
-import type { WunderlandProviderId, WunderlandAgentRagConfig } from '../../api/types.js';
+import type { WunderlandProviderId, WunderlandAgentRagConfig } from '../../channels/api-new/types.js';
 import chalk from 'chalk';
 import {
   accent,
@@ -85,7 +85,7 @@ import type { IMemoryAutoIngestPipeline } from '../../memory-new/storage/types.j
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
-} from '../../voice/speech-catalog.js';
+} from '../../channels/voice-new/speech-catalog.js';
 import { createLocalMemoryReadTool } from './start/local-memory-tool.js';
 import { createMemorySystem, type MemorySystem } from '../../memory/index.js';
 import { injectMemoryContext } from '../../memory/index.js';

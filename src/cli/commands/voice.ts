@@ -25,7 +25,7 @@ import {
   getSpeechProviderEntry,
   getSpeechProviders,
   isSpeechProviderConfigured,
-} from '../../voice/speech-catalog.js';
+} from '../../channels/voice-new/speech-catalog.js';
 
 // ── Subcommand: status (telephony) ──
 

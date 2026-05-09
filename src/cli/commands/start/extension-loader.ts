@@ -22,7 +22,7 @@ import { MarkdownWorkingMemory, UpdateWorkingMemoryTool, ReadWorkingMemoryTool }
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
-} from '../../../voice/speech-catalog.js';
+} from '../../../channels/voice-new/speech-catalog.js';
 import { getRecommendations, formatRecommendations } from '../../extensions/recommender.js';
 
 type ExtensionHttpHandler = (

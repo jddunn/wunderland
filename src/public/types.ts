@@ -25,7 +25,7 @@ import type {
   WunderlandWorkspace,
   WunderlandTaskOutcomeTelemetryConfig,
   WunderlandAdaptiveExecutionConfig,
-} from '../api/types.js';
+} from '../channels/api-new/types.js';
 import type { TurnToolSelectionMode } from '../runtime-new/tools/turn-tool-selection.js';
 import type { NormalizedRuntimePolicy } from '../runtime-new/tools/policy.js';
 import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../discovery/index.js';

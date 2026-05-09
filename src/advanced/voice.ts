@@ -1,3 +1,3 @@
 // @ts-nocheck
-export * from '../voice/call-client.js';
+export * from '../channels/voice-new/call-client.js';
 

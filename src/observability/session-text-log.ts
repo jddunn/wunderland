@@ -8,7 +8,7 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 
-import type { WunderlandAgentConfig, WunderlandWorkspace } from '../api/types.js';
+import type { WunderlandAgentConfig, WunderlandWorkspace } from '../channels/api-new/types.js';
 import { sanitizeAgentWorkspaceId } from '../runtime-new/tools/workspace.js';
 
 type LoggerLike = {

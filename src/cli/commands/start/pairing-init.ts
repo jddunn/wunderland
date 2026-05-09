@@ -5,7 +5,7 @@
  */
 
 import * as path from 'node:path';
-import { PairingManager } from '../../../pairing/PairingManager.js';
+import { PairingManager } from '../../../channels/pairing/PairingManager.js';
 
 export function initPairing(ctx: any): void {
   const { cfg, workspaceBaseDir, workspaceAgentId } = ctx;

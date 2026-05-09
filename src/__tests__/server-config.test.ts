@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
-import { createWunderlandServer } from '../api/server.js';
+import { createWunderlandServer } from '../channels/api-new/server.js';
 
 type JsonResponse = {
   statusCode: number;

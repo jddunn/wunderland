@@ -53,7 +53,7 @@ import type {
   WunderlandAgentConfig,
   WunderlandTaskOutcomeTelemetryConfig,
   WunderlandToolFailureMode,
-} from '../api/types.js';
+} from '../channels/api-new/types.js';
 import { WunderlandConfigError } from '../config/errors.js';
 import { loadAgentConfig, resolveLlmConfig } from '../config/load.js';
 import {
@@ -64,7 +64,7 @@ import { WunderlandDiscoveryManager } from '../discovery/index.js';
 import type { WunderlandDiscoveryConfig, DiscoverySkillEntry } from '../discovery/index.js';
 import { resolveSkillContext } from '../core/resolve-skill-context.js';
 import { createConfiguredRagTools } from '../memory-new/rag/runtime-tools.js';
-import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
+import { createSpeechExtensionEnvOverrides } from '../channels/voice-new/speech-catalog.js';
 import { AgentBootstrap } from '../bootstrap/index.js';
 import {
   invokeWunderlandGraph,
@@ -1375,7 +1375,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 }
 
 // Convenience re-exports for library consumers (types only).
-export type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from '../api/types.js';
+export type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from '../channels/api-new/types.js';
 export { WunderlandConfigError } from '../config/errors.js';
 export type { WunderlandConfigIssue } from '../config/errors.js';
 
@@ -1387,5 +1387,5 @@ export type { StreamTextResult, StreamPart } from '@framers/agentos';
 export type { GenerateImageOptions, GenerateImageResult } from '@framers/agentos';
 
 // ── Chat task responder (messaging channel → tool execution bridge) ───────
-export { ChatTaskResponder, ChatConversationStore, checkSecurity, resolveToolAllowlist } from '../chat/index.js';
-export type { SecurityTier, ChannelContext, ChannelConfig, ChatTaskResponderConfig, ConversationMessage } from '../chat/index.js';
+export { ChatTaskResponder, ChatConversationStore, checkSecurity, resolveToolAllowlist } from '../channels/chat/index.js';
+export type { SecurityTier, ChannelContext, ChannelConfig, ChatTaskResponderConfig, ConversationMessage } from '../channels/chat/index.js';

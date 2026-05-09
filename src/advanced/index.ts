@@ -65,10 +65,10 @@ export * from '../security/authorization-types.js';
 export { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
 
 // Browser automation exports (ported from OpenClaw)
-export * from '../browser/index.js';
+export * from '../channels/browser-new/browser-index.js';
 
 // Pairing/allowlist exports (ported from OpenClaw)
-export * from '../pairing/index.js';
+export * from '../channels/pairing/index.js';
 
 // Skills exports (ported from OpenClaw)
 export * from '../skills/index.js';
@@ -83,7 +83,7 @@ export * from './agency.js';
 export * from './workflows.js';
 
 // Voice calling exports
-export * from '../voice/call-client.js';
+export * from '../channels/voice-new/call-client.js';
 
 // Structured outputs exports
 export * from './structured.js';
@@ -176,12 +176,12 @@ export {
 export { HierarchicalInferenceRouter } from '../runtime-new/inference/HierarchicalInferenceRouter.js';
 
 // Browser automation (ported from OpenClaw)
-export { BrowserClient } from '../browser/BrowserClient.js';
-export { BrowserSession } from '../browser/BrowserSession.js';
-export { BrowserInteractions } from '../browser/BrowserInteractions.js';
+export { BrowserClient } from '../channels/browser-new/BrowserClient.js';
+export { BrowserSession } from '../channels/browser-new/BrowserSession.js';
+export { BrowserInteractions } from '../channels/browser-new/BrowserInteractions.js';
 
 // Pairing (ported from OpenClaw)
-export { PairingManager } from '../pairing/PairingManager.js';
+export { PairingManager } from '../channels/pairing/PairingManager.js';
 
 // Scheduling (modeled after OpenClaw)
 export { CronScheduler } from '../scheduling/CronScheduler.js';
