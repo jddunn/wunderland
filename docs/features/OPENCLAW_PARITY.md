@@ -1,3 +1,5 @@
+> **Wunderland is built on AgentOS.** This document tracks security and tool-calling features that OpenClaw pioneered, which Wunderland matches or exceeds.
+
 # OpenClaw Parity Notes
 
 This document tracks the parts of OpenClaw that Wunderland intentionally matches (or exceeds) for **security posture**, **tool calling**, and **extensibility**.
