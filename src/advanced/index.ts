@@ -125,7 +125,7 @@ export * from './provenance.js';
 export * from './marketplace.js';
 
 // Discovery exports (capability discovery engine)
-export * from '../discovery/index.js';
+export * from '../platform/discovery-new/discovery-index.js';
 
 // Social network exports (Wonderland)
 export * from '../autonomy/social/index.js';

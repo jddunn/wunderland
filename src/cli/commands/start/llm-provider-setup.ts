@@ -16,7 +16,7 @@ import {
 } from '../../ollama/ollama-manager.js';
 import {
   resolveLlmProviderAndModel,
-} from '../../../config/provider-defaults.js';
+} from '../../../platform/config-new/provider-defaults.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime-new/tools/workspace.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { buildFallbackChain } from '@framers/agentos';

@@ -9,7 +9,7 @@ import path from 'node:path';
 import { AgentMemory, type ITool } from '@framers/agentos';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
 import { createWunderland, WunderlandConfigError } from '../index.js';
-import { resetRecordedWunderlandTokenUsage } from '../observability/token-usage.js';
+import { resetRecordedWunderlandTokenUsage } from '../platform/observability/token-usage.js';
 
 function mockOpenAIChatCompletionSequence(responses: Array<Record<string, unknown>>) {
   const queue = responses.slice();

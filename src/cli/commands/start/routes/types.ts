@@ -12,7 +12,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HumanInteractionManager } from '@framers/agentos';
 
 import type { ToolInstance } from '../../../../runtime-new/tools/tool-calling.js';
-import type { WunderlandSessionTextLogger } from '../../../../observability/session-text-log.js';
+import type { WunderlandSessionTextLogger } from '../../../../platform/observability/session-text-log.js';
 
 /**
  * Shared dependencies injected into CLI HTTP server route handler functions.

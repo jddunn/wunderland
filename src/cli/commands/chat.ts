@@ -40,8 +40,8 @@ import {
   shouldInjectResearch,
   type ResearchDepth,
 } from '../../runtime-new/agentos-bridge/research-classifier.js';
-import { startWunderlandOtel, shutdownWunderlandOtel } from '../../observability/otel.js';
-import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../observability/session-text-log.js';
+import { startWunderlandOtel, shutdownWunderlandOtel } from '../../platform/observability/otel.js';
+import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../platform/observability/session-text-log.js';
 // WunderlandAdaptiveExecutionRuntime is now created by AgentBootstrap
 import { resolveStrictToolNames } from '../../runtime-new/tools/tool-function-names.js';
 import {
@@ -59,10 +59,10 @@ import {
 } from '../../core/index.js';
 import {
   WunderlandDiscoveryManager,
-} from '../../discovery/index.js';
+} from '../../platform/discovery-new/discovery-index.js';
 import {
   resolveEffectiveAgentConfig,
-} from '../../config/effective-agent-config.js';
+} from '../../platform/config-new/effective-agent-config.js';
 import { AgentBootstrap } from '../../bootstrap/index.js';
 import { loadConfig } from '../config/config-manager.js';
 import { normalizeExtensionList } from '../extensions/aliases.js';
@@ -74,7 +74,7 @@ import { buildOllamaRuntimeOptions } from '../../runtime-new/tools/ollama-option
 import { createRequestFolderAccessTool } from '../../runtime-new/tools/RequestFolderAccessTool.js';
 import {
   resolveLlmProviderAndModel,
-} from '../../config/provider-defaults.js';
+} from '../../platform/config-new/provider-defaults.js';
 import {
   AgentStorageManager,
   resolveAgentStorageConfig,
