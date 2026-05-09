@@ -22,7 +22,7 @@ import * as path from 'node:path';
 import { HumanInteractionManager } from '@framers/agentos';
 
 import { resolveDefaultSkillsDirs } from '../skills/index.js';
-import { resolveExtensionsByNames } from '../core/PresetExtensionResolver.js';
+import { resolveExtensionsByNames } from '../agents/presets/PresetExtensionResolver.js';
 import { PairingManager } from '../pairing/PairingManager.js';
 import {
   createWunderlandSeed,

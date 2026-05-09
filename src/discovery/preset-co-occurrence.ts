@@ -8,7 +8,7 @@
  */
 
 import type { PresetCoOccurrence } from '@framers/agentos/discovery';
-import { PresetLoader } from '../core/PresetLoader.js';
+import { PresetLoader } from '../agents/presets/PresetLoader.js';
 
 /**
  * Derive PresetCoOccurrence data from all agent presets.

@@ -9,8 +9,8 @@ import { PERSONALITY_PRESETS } from '../constants.js';
 import { accent, muted, info, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { printTable } from '../ui/table.js';
-import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
-import { PresetLoader } from '../../core/PresetLoader.js';
+import { HEXACO_PRESETS } from '../../agents/builder/WunderlandSeed.js';
+import { PresetLoader } from '../../agents/presets/PresetLoader.js';
 
 export default async function cmdListPresets(
   _args: string[],

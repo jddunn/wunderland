@@ -23,7 +23,7 @@ import YAML from 'yaml';
 import type { GlobalFlags } from '../types.js';
 import { accent, dim } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
-import { exportAgent } from '../../core/AgentManifest.js';
+import { exportAgent } from '../../agents/builder/AgentManifest.js';
 
 // ---------------------------------------------------------------------------
 // Redaction helpers

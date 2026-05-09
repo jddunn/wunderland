@@ -8,8 +8,8 @@
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { HEXACO_PRESETS } from '../../core/WunderlandSeed.js';
-import type { AgentPreset } from '../../core/PresetLoader.js';
+import { HEXACO_PRESETS } from '../../agents/builder/WunderlandSeed.js';
+import type { AgentPreset } from '../../agents/presets/PresetLoader.js';
 import { SECURITY_TIERS, getSecurityTier } from '../../security/SecurityTiers.js';
 import type { SecurityTierName } from '../../security/SecurityTiers.js';
 import { serializeEnvFile } from '../config/env-manager.js';

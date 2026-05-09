@@ -34,8 +34,8 @@ import { loadDotEnvIntoProcessUpward, mergeEnv } from '../config/env-manager.js'
 import { runInitLlmStep } from '../wizards/init-llm-step.js';
 import { openaiChatWithTools, type LLMProviderConfig } from '../../runtime/tool-calling.js';
 import { SECURITY_TIERS, getSecurityTier, isValidSecurityTier, type SecurityTierName } from '../../security/SecurityTiers.js';
-import { extractAgentConfig } from '../../core/NaturalLanguageAgentBuilder.js';
-import type { ExtractedAgentConfig } from '../../core/NaturalLanguageAgentBuilder.js';
+import { extractAgentConfig } from '../../agents/builder/NaturalLanguageAgentBuilder.js';
+import type { ExtractedAgentConfig } from '../../agents/builder/NaturalLanguageAgentBuilder.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

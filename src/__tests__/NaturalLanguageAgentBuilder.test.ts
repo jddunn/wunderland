@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { extractAgentConfig, validateApiKeySetup } from '../core/NaturalLanguageAgentBuilder.js';
+import { extractAgentConfig, validateApiKeySetup } from '../agents/builder/NaturalLanguageAgentBuilder.js';
 
 describe('NaturalLanguageAgentBuilder', () => {
   describe('validateApiKeySetup', () => {

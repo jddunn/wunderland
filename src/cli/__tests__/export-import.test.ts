@@ -25,7 +25,7 @@ import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import YAML from 'yaml';
 
-import { exportAgent, importAgent, validateManifest, type AgentManifest } from '../../core/AgentManifest.js';
+import { exportAgent, importAgent, validateManifest, type AgentManifest } from '../../agents/builder/AgentManifest.js';
 
 // ---------------------------------------------------------------------------
 // Test fixtures

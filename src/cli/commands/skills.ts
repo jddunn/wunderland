@@ -13,7 +13,7 @@ import { accent, dim, muted, success as sColor, warn as wColor } from '../ui/the
 import * as fmt from '../ui/format.js';
 import { glyphs } from '../ui/glyphs.js';
 import { printTable } from '../ui/table.js';
-import { PresetLoader } from '../../core/PresetLoader.js';
+import { PresetLoader } from '../../agents/presets/PresetLoader.js';
 
 // ── Fallback catalog when @framers/agentos-skills-registry is not installed ─
 
