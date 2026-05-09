@@ -28,7 +28,7 @@ import type {
 } from '../channels/api-new/types.js';
 import type { TurnToolSelectionMode } from '../runtime-new/tools/turn-tool-selection.js';
 import type { NormalizedRuntimePolicy } from '../runtime-new/tools/policy.js';
-import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../discovery/index.js';
+import type { WunderlandDiscoveryConfig, WunderlandDiscoveryStats } from '../platform/discovery-new/discovery-index.js';
 import type { ToolInstance, LLMProviderConfig } from '../runtime-new/tools/tool-calling.js';
 import type { ToolRegistryConfig } from '../runtime-new/tools/ToolRegistry.js';
 import type { TokenUsageSummary } from '../core/TokenUsageTracker.js';

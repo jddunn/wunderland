@@ -12,9 +12,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig, type WunderlandDiscoveryStats } from '../discovery/index.js';
-import { derivePresetCoOccurrences } from '../discovery/preset-co-occurrence.js';
-import { validateWunderlandAgentConfig } from '../config/schema.js';
+import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig, type WunderlandDiscoveryStats } from '../platform/discovery-new/discovery-index.js';
+import { derivePresetCoOccurrences } from '../platform/discovery-new/preset-co-occurrence.js';
+import { validateWunderlandAgentConfig } from '../platform/config-new/schema.js';
 
 // ============================================================================
 // WunderlandDiscoveryManager

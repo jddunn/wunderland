@@ -7,7 +7,7 @@ import type { GlobalFlags } from '../../types.js';
 import { accent, dim } from '../../ui/theme.js';
 import * as fmt from '../../ui/format.js';
 import { loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
-import { shutdownWunderlandOtel, startWunderlandOtel } from '../../../observability/otel.js';
+import { shutdownWunderlandOtel, startWunderlandOtel } from '../../../platform/observability/otel.js';
 
 /**
  * Handles the `wunderland audio` CLI command.

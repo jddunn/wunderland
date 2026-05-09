@@ -12,7 +12,7 @@ import type { GlobalFlags } from '../types.js';
 import { accent, dim, info, muted } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
 import { printTable } from '../ui/table.js';
-import { resolveEffectiveAgentConfig } from '../../config/effective-agent-config.js';
+import { resolveEffectiveAgentConfig } from '../../platform/config-new/effective-agent-config.js';
 import type { WunderlandAgentConfig } from '../../channels/api-new/types.js';
 
 export default async function cmdListPersonas(

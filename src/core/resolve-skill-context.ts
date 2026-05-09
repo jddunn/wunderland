@@ -5,7 +5,7 @@
  */
 
 import { SkillRegistry } from '../skills/index.js';
-import type { DiscoverySkillEntry } from '../discovery/index.js';
+import type { DiscoverySkillEntry } from '../platform/discovery-new/discovery-index.js';
 
 type LoggerLike = {
   warn?: (msg: string, meta?: unknown) => void;

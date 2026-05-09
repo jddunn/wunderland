@@ -19,9 +19,9 @@ import { loadEnv, loadDotEnvIntoProcessUpward } from '../config/env-manager.js';
 import { checkEnvSecrets, getSecretsForPlatform } from '../config/secrets.js';
 import { CHANNEL_PLATFORMS, PERSONALITY_PRESETS } from '../constants.js';
 import type { TokenUsageSummary } from '../../core/TokenUsageTracker.js';
-import { getRecordedWunderlandTokenUsage } from '../../observability/token-usage.js';
+import { getRecordedWunderlandTokenUsage } from '../../platform/observability/token-usage.js';
 import { resolveAgentDisplayName } from '../../runtime-new/identity/agent-identity.js';
-import { resolveEffectiveAgentConfig } from '../../config/effective-agent-config.js';
+import { resolveEffectiveAgentConfig } from '../../platform/config-new/effective-agent-config.js';
 
 const CHANNEL_ALIASES: Record<string, string> = {
   'blog-publisher': 'devto',
@@ -245,7 +245,7 @@ export default async function cmdStatus(
  * Runtime writers still update this singleton for fast local state, but
  * `wunderland status` reads from the durable usage ledger on disk.
  */
-export { globalTokenTracker } from '../../observability/token-usage.js';
+export { globalTokenTracker } from '../../platform/observability/token-usage.js';
 
 function formatCost(usd: number | null): string {
   if (usd === null) return muted('unknown');

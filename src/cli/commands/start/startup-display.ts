@@ -7,7 +7,7 @@
 import * as path from 'node:path';
 import * as fmt from '../../ui/format.js';
 import { accent, dim, success as sColor, info as iColor, warn as wColor } from '../../ui/theme.js';
-import { shutdownWunderlandOtel } from '../../../observability/otel.js';
+import { shutdownWunderlandOtel } from '../../../platform/observability/otel.js';
 import { recordAgentStart } from '../../config/agent-history.js';
 
 export async function startServerAndDisplay(ctx: any, server: import('node:http').Server): Promise<void> {

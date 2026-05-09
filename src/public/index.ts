@@ -54,14 +54,14 @@ import type {
   WunderlandTaskOutcomeTelemetryConfig,
   WunderlandToolFailureMode,
 } from '../channels/api-new/types.js';
-import { WunderlandConfigError } from '../config/errors.js';
-import { loadAgentConfig, resolveLlmConfig } from '../config/load.js';
+import { WunderlandConfigError } from '../platform/config-new/errors.js';
+import { loadAgentConfig, resolveLlmConfig } from '../platform/config-new/load.js';
 import {
   buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
-} from '../config/effective-agent-config.js';
-import { WunderlandDiscoveryManager } from '../discovery/index.js';
-import type { WunderlandDiscoveryConfig, DiscoverySkillEntry } from '../discovery/index.js';
+} from '../platform/config-new/effective-agent-config.js';
+import { WunderlandDiscoveryManager } from '../platform/discovery-new/discovery-index.js';
+import type { WunderlandDiscoveryConfig, DiscoverySkillEntry } from '../platform/discovery-new/discovery-index.js';
 import { resolveSkillContext } from '../core/resolve-skill-context.js';
 import { createConfiguredRagTools } from '../memory-new/rag/runtime-tools.js';
 import { createSpeechExtensionEnvOverrides } from '../channels/voice-new/speech-catalog.js';
@@ -73,8 +73,8 @@ import {
   streamWunderlandGraph,
   type WunderlandGraphLike,
 } from '../runtime-new/execution/graph-runner.js';
-import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../observability/token-usage.js';
-import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../observability/session-text-log.js';
+import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../platform/observability/token-usage.js';
+import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../platform/observability/session-text-log.js';
 
 // Public types extracted to types.ts
 export type {
@@ -1376,8 +1376,8 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
 
 // Convenience re-exports for library consumers (types only).
 export type { WunderlandAgentConfig, WunderlandProviderId, WunderlandWorkspace } from '../channels/api-new/types.js';
-export { WunderlandConfigError } from '../config/errors.js';
-export type { WunderlandConfigIssue } from '../config/errors.js';
+export { WunderlandConfigError } from '../platform/config-new/errors.js';
+export type { WunderlandConfigIssue } from '../platform/config-new/errors.js';
 
 // Re-export AgentOS high-level API for direct access without createWunderland().
 export { generateText, streamText } from '@framers/agentos';

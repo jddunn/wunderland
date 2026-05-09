@@ -6,7 +6,7 @@
 
 import * as fmt from '../../ui/format.js';
 import { resolveDefaultSkillsDirs } from '../../../skills/index.js';
-import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig } from '../../../discovery/index.js';
+import { WunderlandDiscoveryManager, type WunderlandDiscoveryConfig } from '../../../platform/discovery-new/discovery-index.js';
 import { resolveSkillContext } from '../../../core/resolve-skill-context.js';
 
 export async function setupSkillsAndDiscovery(ctx: any): Promise<void> {

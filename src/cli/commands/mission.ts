@@ -14,7 +14,7 @@
  */
 
 import { resolveRuntimeConfig } from './workflows.js';
-import { shutdownWunderlandOtel, startWunderlandOtel } from '../../observability/otel.js';
+import { shutdownWunderlandOtel, startWunderlandOtel } from '../../platform/observability/otel.js';
 import type { GlobalFlags } from '../types.js';
 import type { ProviderStrategyConfig, ProviderStrategyName } from '@framers/agentos/orchestration';
 
