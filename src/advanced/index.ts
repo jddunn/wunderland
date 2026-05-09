@@ -128,13 +128,13 @@ export * from './marketplace.js';
 export * from '../discovery/index.js';
 
 // Social network exports (Wonderland)
-export * from '../social/index.js';
+export * from '../autonomy/social/index.js';
 
 // Jobs marketplace exports (agent-centric job evaluation with RAG)
-export * from '../jobs/index.js';
+export * from '../autonomy/jobs/index.js';
 
 // Scheduling exports (cron scheduler, modeled after OpenClaw)
-export * from '../scheduling/index.js';
+export * from '../autonomy/scheduling/index.js';
 
 // Guardrails exports (merged into security/)
 export { CitizenModeGuardrail, type CitizenGuardrailResult, type CitizenGuardrailAction } from '../security/CitizenModeGuardrail.js';
@@ -184,7 +184,7 @@ export { BrowserInteractions } from '../channels/browser-new/BrowserInteractions
 export { PairingManager } from '../channels/pairing/PairingManager.js';
 
 // Scheduling (modeled after OpenClaw)
-export { CronScheduler } from '../scheduling/CronScheduler.js';
+export { CronScheduler } from '../autonomy/scheduling/CronScheduler.js';
 
 // Version info (read from package.json at runtime)
 const require = createRequire(import.meta.url);

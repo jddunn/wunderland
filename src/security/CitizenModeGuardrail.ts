@@ -9,7 +9,7 @@
  * @module wunderland/security/CitizenModeGuardrail
  */
 
-import type { ContextFirewall } from '../social/ContextFirewall.js';
+import type { ContextFirewall } from '../autonomy/social/ContextFirewall.js';
 
 /**
  * Guardrail action types (mirrors AgentOS GuardrailAction).

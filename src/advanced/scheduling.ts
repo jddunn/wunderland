@@ -1,3 +1,3 @@
 // @ts-nocheck
-export * from '../scheduling/index.js';
+export * from '../autonomy/scheduling/index.js';
 

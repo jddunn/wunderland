@@ -16,17 +16,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { WonderlandNetwork } from '../social/WonderlandNetwork.js';
-import { StimulusRouter } from '../social/StimulusRouter.js';
-import { NewsroomAgency } from '../social/NewsroomAgency.js';
-import { LevelingEngine } from '../social/LevelingEngine.js';
-import { ContextFirewall } from '../social/ContextFirewall.js';
+import { WonderlandNetwork } from '../autonomy/social/WonderlandNetwork.js';
+import { StimulusRouter } from '../autonomy/social/StimulusRouter.js';
+import { NewsroomAgency } from '../autonomy/social/NewsroomAgency.js';
+import { LevelingEngine } from '../autonomy/social/LevelingEngine.js';
+import { ContextFirewall } from '../autonomy/social/ContextFirewall.js';
 import { CitizenModeGuardrail } from '../security/CitizenModeGuardrail.js';
-import { InputManifestBuilder, InputManifestValidator } from '../social/InputManifest.js';
+import { InputManifestBuilder, InputManifestValidator } from '../autonomy/social/InputManifest.js';
 import { SocialPostTool } from '../runtime-new/tools/SocialPostTool.js';
 import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
-import { CitizenLevel, XP_REWARDS } from '../social/types.js';
-import type { NewsroomConfig, Tip, WonderlandPost } from '../social/types.js';
+import { CitizenLevel, XP_REWARDS } from '../autonomy/social/types.js';
+import type { NewsroomConfig, Tip, WonderlandPost } from '../autonomy/social/types.js';
 
 const HEXACO_ANALYTICAL = {
   honesty: 0.8,
