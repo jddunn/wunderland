@@ -1,6 +1,6 @@
 {
   "name": "wunderland",
-  "version": "0.71.0",
+  "version": "0.72.0",
   "description": "Autonomous AI agents you deploy in 30 seconds across any channel. Zero-config CLI, 37 channel adapters, HEXACO personality and cognitive memory powered by AgentOS, five-tier prompt-injection defense.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
