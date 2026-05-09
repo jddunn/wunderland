@@ -1,8 +1,8 @@
 // @ts-nocheck
 // packages/wunderland/tests/memory/MemorySystemInitializer.spec.ts
 import { describe, it, expect, vi } from 'vitest';
-import { createMemorySystem } from '../../src/memory/MemorySystemInitializer.js';
-import type { MemorySystemConfig } from '../../src/memory/MemorySystemInitializer.js';
+import { createMemorySystem } from '../../src/memory-new/initialization/MemorySystemInitializer.js';
+import type { MemorySystemConfig } from '../../src/memory-new/initialization/MemorySystemInitializer.js';
 
 /** Minimal mock vector store. */
 function makeMockVectorStore(results: any[] = []) {

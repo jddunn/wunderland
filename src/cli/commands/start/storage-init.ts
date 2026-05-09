@@ -7,7 +7,7 @@
 import {
   AgentStorageManager,
   resolveAgentStorageConfig,
-} from '../../../storage/index.js';
+} from '../../../memory-new/storage/storage-index.js';
 
 /**
  * Initialize per-agent storage (SQLite or cloud) and attach it to the startup context.

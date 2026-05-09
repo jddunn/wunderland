@@ -11,7 +11,7 @@ import { renderOverlayBox, stampOverlay } from '../widgets/overlay.js';
 import { wrapInFrame } from '../layout.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
-import { normalizeRagApiBaseUrl } from '../../../rag/rag-client.js';
+import { normalizeRagApiBaseUrl } from '../../../memory-new/rag/rag-client.js';
 
 function getRagBackendUrl(): string {
   const base = process.env['WUNDERLAND_BACKEND_URL'] ?? process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';

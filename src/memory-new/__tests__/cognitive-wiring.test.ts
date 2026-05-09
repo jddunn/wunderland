@@ -11,9 +11,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { MemoryAutoIngestPipeline } from '../../storage/MemoryAutoIngestPipeline.js';
+import { MemoryAutoIngestPipeline } from '../auto-ingest/MemoryAutoIngestPipeline.js';
 import { createMemorySystem } from '../MemorySystemInitializer.js';
-import type { PersonalityMemoryConfig } from '../../storage/PersonalityMemoryConfig.js';
+import type { PersonalityMemoryConfig } from '../storage/PersonalityMemoryConfig.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

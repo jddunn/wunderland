@@ -74,7 +74,7 @@ export * from '../pairing/index.js';
 export * from '../skills/index.js';
 
 // RAG (Retrieval Augmented Generation) exports
-export * from '../rag/index.js';
+export * from '../memory-new/rag/rag-index.js';
 
 // Agency (multi-agent collectives) exports
 export * from './agency.js';

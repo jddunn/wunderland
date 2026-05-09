@@ -67,8 +67,8 @@ import { AgentBootstrap } from '../../bootstrap/index.js';
 import { loadConfig } from '../config/config-manager.js';
 import { normalizeExtensionList } from '../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../extensions/settings.js';
-import { createConfiguredRagTools } from '../../rag/runtime-tools.js';
-import { resolveHydeFromAgentConfig } from '../../rag/hyde-integration.js';
+import { createConfiguredRagTools } from '../../memory-new/rag/runtime-tools.js';
+import { resolveHydeFromAgentConfig } from '../../memory-new/rag/hyde-integration.js';
 import { buildAgenticSystemPrompt } from '../../runtime-new/execution/system-prompt-builder.js';
 import { buildOllamaRuntimeOptions } from '../../runtime-new/tools/ollama-options.js';
 import { createRequestFolderAccessTool } from '../../runtime-new/tools/RequestFolderAccessTool.js';
@@ -80,8 +80,8 @@ import {
   resolveAgentStorageConfig,
   MemoryAutoIngestPipeline,
   derivePersonalityMemoryConfig,
-} from '../../storage/index.js';
-import type { IMemoryAutoIngestPipeline } from '../../storage/types.js';
+} from '../../memory-new/storage/storage-index.js';
+import type { IMemoryAutoIngestPipeline } from '../../memory-new/storage/types.js';
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
