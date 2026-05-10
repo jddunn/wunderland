@@ -712,7 +712,4 @@ Looking for the on-chain agent economy? See [**Wunderland on Sol**](https://gith
 
 ## License
 
-Wunderland 0.71.0 and later: [Apache-2.0](LICENSE).
-Wunderland 0.70.0 and earlier: MIT (see [NOTICE](NOTICE) for the relicense statement).
-
-The relicense is forward-only. Recipients of MIT-licensed versions retain MIT rights to those versions in perpetuity.
+[Apache-2.0](LICENSE).

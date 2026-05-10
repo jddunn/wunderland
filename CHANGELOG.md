@@ -2,10 +2,6 @@
 
 ## [0.72.0] - 2026-05-09
 
-### License
-
-This is the first release distributed under **Apache-2.0**. Versions 0.70.0 and earlier remain available under the MIT License. See [NOTICE](NOTICE) for details. The relicense is forward-only; recipients of MIT-licensed versions retain MIT rights to those versions in perpetuity.
-
 ### BREAKING CHANGES — public surface migration
 
 The `package.json` `exports` field collapsed from 14 declared subpaths to 3. The `wunderland/advanced/*` re-export shelf was removed. Consumers should import named exports from the root `wunderland` package instead.
