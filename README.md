@@ -712,7 +712,4 @@ Looking for the on-chain agent economy? See [**Wunderland on Sol**](https://gith
 
 ## License
 
-
-
-
- MIT rights to those versions in perpetuity.
+[Apache-2.0](LICENSE).
