@@ -387,7 +387,7 @@ async function resolveStreamingTts(options: StreamingPipelineOptions): Promise<I
  * @returns A zero-arg factory that produces a fresh detector per session.
  */
 async function resolveEndpointFactory(options: StreamingPipelineOptions): Promise<EndpointFactory> {
-  const voicePipelineModule = await import('@framers/agentos/voice-pipeline') as any;
+  const voicePipelineModule = await import('@framers/agentos/io/voice-pipeline') as any;
   const { AcousticEndpointDetector, HeuristicEndpointDetector } = voicePipelineModule;
 
   switch (options.endpointing ?? 'heuristic') {
@@ -421,7 +421,7 @@ async function resolveEndpointFactory(options: StreamingPipelineOptions): Promis
  * @returns A zero-arg factory that produces a fresh handler per session.
  */
 async function resolveBargeinFactory(options: StreamingPipelineOptions): Promise<BargeinFactory> {
-  const voicePipelineModule = await import('@framers/agentos/voice-pipeline') as any;
+  const voicePipelineModule = await import('@framers/agentos/io/voice-pipeline') as any;
   const { HardCutBargeinHandler, SoftFadeBargeinHandler } = voicePipelineModule;
 
   switch (options.bargeIn ?? 'hard-cut') {
@@ -502,7 +502,7 @@ async function resolveDiarizationEngine(enabled: boolean | undefined): Promise<I
 export async function createStreamingPipeline(
   options: StreamingPipelineOptions,
 ): Promise<StreamingPipelineHandle> {
-  const voicePipelineModule = await import('@framers/agentos/voice-pipeline') as any;
+  const voicePipelineModule = await import('@framers/agentos/io/voice-pipeline') as any;
   const { VoicePipelineOrchestrator } = voicePipelineModule;
 
   const config: VoicePipelineConfig = {

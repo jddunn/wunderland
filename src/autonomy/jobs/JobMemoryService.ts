@@ -12,7 +12,7 @@
  * - Per-agent memory category (GOAL_ORIENTED_MEMORY)
  */
 
-import type { IRetrievalAugmentor, RagDocumentInput, RagRetrievalOptions } from '@framers/agentos/rag';
+import type { IRetrievalAugmentor, RagDocumentInput, RagRetrievalOptions } from '@framers/agentos/cognition/rag';
 import type { JobOutcome } from './AgentJobState.js';
 
 export interface JobMemoryEntry {

@@ -26,10 +26,10 @@ import type {
 } from '@framers/agentos/query-router';
 import {
   buildDefaultPlan,
-} from '@framers/agentos/rag';
+} from '@framers/agentos/cognition/rag';
 import type {
   RetrievalPlan,
-} from '@framers/agentos/rag';
+} from '@framers/agentos/cognition/rag';
 
 function getRagBaseUrl(): string {
   const base = process.env.WUNDERLAND_BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';

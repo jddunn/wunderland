@@ -218,7 +218,7 @@ export async function startVoiceServer(
         //
         // Use the standard WebSocketStreamTransport. Re-emit the first message
         // so the transport receives it along with all subsequent frames.
-        const { WebSocketStreamTransport } = await import('@framers/agentos/voice-pipeline');
+        const { WebSocketStreamTransport } = await import('@framers/agentos/io/voice-pipeline');
 
         const transport = new WebSocketStreamTransport(ws, { sampleRate: 16000 });
 

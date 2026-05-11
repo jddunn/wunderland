@@ -11,7 +11,7 @@
 export type {
   IPersonaDefinition,
   PersonaMoodAdaptationConfig,
-} from '@framers/agentos/cognitive_substrate/personas/IPersonaDefinition';
+} from '@framers/agentos/cognition/substrate/personas/IPersonaDefinition';
 
 // ============================================================================
 // HEXACO Personality Model

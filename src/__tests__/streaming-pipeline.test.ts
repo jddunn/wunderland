@@ -66,7 +66,7 @@ class MockSoftFadeBargeinHandler {
 }
 
 // Replace the real voice-pipeline module with lightweight stubs.
-vi.mock('@framers/agentos/voice-pipeline', () => ({
+vi.mock('@framers/agentos/io/voice-pipeline', () => ({
   VoicePipelineOrchestrator,
   HeuristicEndpointDetector: MockHeuristicEndpointDetector,
   AcousticEndpointDetector: MockAcousticEndpointDetector,

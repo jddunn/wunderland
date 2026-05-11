@@ -72,7 +72,7 @@ vi.mock('@framers/agentos/voice', () => ({
     `<?xml version="1.0" encoding="UTF-8"?>\n<Response><Stream url="${url}" /></Response>`,
 }));
 
-// ── Mock @framers/agentos/voice-pipeline ──────────────────────────────────────
+// ── Mock @framers/agentos/io/voice-pipeline ──────────────────────────────────────
 
 class MockWebSocketStreamTransport extends EventEmitter {
   readonly id = 'ws-transport-id';
@@ -84,7 +84,7 @@ class MockWebSocketStreamTransport extends EventEmitter {
   }
 }
 
-vi.mock('@framers/agentos/voice-pipeline', () => ({
+vi.mock('@framers/agentos/io/voice-pipeline', () => ({
   WebSocketStreamTransport: MockWebSocketStreamTransport,
   VoicePipelineOrchestrator: vi.fn(),
   HeuristicEndpointDetector: vi.fn(),

@@ -8,7 +8,7 @@
  */
 
 import type { IVectorStore } from '@framers/agentos';
-import { HydeRetriever, type HydeConfig } from '@framers/agentos/rag';
+import { HydeRetriever, type HydeConfig } from '@framers/agentos/cognition/rag';
 import { createMemoryReadTool } from '../../../runtime/tools/MemoryReadTool.js';
 import type { ToolExecutionContext } from '@framers/agentos';
 

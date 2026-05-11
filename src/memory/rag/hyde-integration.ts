@@ -14,7 +14,7 @@ import {
   type HydeConfig,
   type HydeLlmCaller,
   resolveHydeConfig,
-} from '@framers/agentos/rag';
+} from '@framers/agentos/cognition/rag';
 import type { IEmbeddingManager, IVectorStore } from '@framers/agentos';
 
 import type { WunderlandAgentRagConfig } from '../api/types.js';

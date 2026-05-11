@@ -4,7 +4,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { BUILT_IN_PERSONAS } from '@framers/agentos';
-import type { IPersonaDefinition } from '@framers/agentos/cognitive_substrate/personas/IPersonaDefinition';
+import type { IPersonaDefinition } from '@framers/agentos/cognition/substrate/personas/IPersonaDefinition';
 
 import type {
   WunderlandAgentConfig,

@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type {
   IPersonaDefinition,
   PersonaMoodAdaptationConfig,
-} from '@framers/agentos/cognitive_substrate/personas/IPersonaDefinition';
+} from '@framers/agentos/cognition/substrate/personas/IPersonaDefinition';
 import {
   type HEXACOTraits,
   type WunderlandSeedConfig,

@@ -28,7 +28,7 @@ import {
   type HybridSearcherConfig,
   type RaptorTreeConfig,
   type HydeConfig,
-} from '@framers/agentos/rag';
+} from '@framers/agentos/cognition/rag';
 import {
   loadBM25State,
   saveBM25State,

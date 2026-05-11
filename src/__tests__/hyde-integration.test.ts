@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ── Mock the @framers/agentos/rag module ────────────────────────────────
+// ── Mock the @framers/agentos/cognition/rag module ────────────────────────────────
 
 const { mockRetrieve, MockHydeRetriever, mockResolveHydeConfig } = vi.hoisted(() => {
   const mockRetrieve = vi.fn();
@@ -30,7 +30,7 @@ const { mockRetrieve, MockHydeRetriever, mockResolveHydeConfig } = vi.hoisted(()
   return { mockRetrieve, MockHydeRetriever, mockResolveHydeConfig };
 });
 
-vi.mock('@framers/agentos/rag', () => ({
+vi.mock('@framers/agentos/cognition/rag', () => ({
   HydeRetriever: MockHydeRetriever,
   resolveHydeConfig: mockResolveHydeConfig,
 }));

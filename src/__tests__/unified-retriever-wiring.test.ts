@@ -65,7 +65,7 @@ const {
 // The @framers/agentos package may not have a built dist/ in test environments,
 // so we mock both the root and subpath imports.
 vi.mock('@framers/agentos', () => ({}));
-vi.mock('@framers/agentos/rag', () => ({
+vi.mock('@framers/agentos/cognition/rag', () => ({
   BM25Index: MockBM25Index,
   HybridSearcher: MockHybridSearcher,
   RaptorTree: MockRaptorTree,

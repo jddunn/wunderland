@@ -79,7 +79,7 @@ export async function initializeCognitiveMemory(
     SqliteBrain,
   } = await import('@framers/agentos/memory');
   const { InMemoryWorkingMemory } = await import(
-    '@framers/agentos/cognitive_substrate/memory/InMemoryWorkingMemory'
+    '@framers/agentos/cognition/substrate/memory/InMemoryWorkingMemory'
   );
 
   const brainDir = join(tmpdir(), 'wunderland-cognitive-memory');
