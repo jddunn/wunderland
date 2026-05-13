@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  Zero-config CLI. 37 channel adapters (Discord, Telegram, voice, browser, …). HEXACO personality and cognitive memory powered by <a href="https://agentos.sh">AgentOS</a>. Five-tier prompt-injection defense. Built for indie developers who want a real autonomous agent without standing up infrastructure.
+  Interactive setup wizard. 37 channel adapters (Discord, Telegram, voice, browser, …). HEXACO personality and cognitive memory powered by <a href="https://agentos.sh">AgentOS</a>. Five-tier prompt-injection defense. Built for indie developers who want a real autonomous agent without standing up infrastructure.
 </p>
 
 <p align="center">
@@ -178,7 +178,7 @@ For config-backed agent runs, Wunderland also writes dated plain-text session lo
 
 Wunderland intentionally keeps `createWunderland()` as its public library entrypoint.
 
-- `@framers/agentos` now exposes streamlined helpers like `generateText()`, `streamText()`, and `agent()` for lightweight in-process usage.
+- `@framers/agentos` exposes streamlined helpers like `generateText()`, `streamText()`, and `agent()` for lightweight in-process usage.
 - Wunderland layers additional runtime behavior on top: curated tool loading, skills, capability discovery, approvals, extension loading, adaptive execution, workspace policies, and preset-driven configuration.
 
 That means Wunderland should document the AgentOS high-level API, but it should not replace its own runtime with `agent()` until that helper covers the same operational surface.

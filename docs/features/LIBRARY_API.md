@@ -32,7 +32,7 @@ When the app is running from a config-backed agent directory, Wunderland also wr
 
 ## Why Wunderland does not wrap AgentOS `agent()`
 
-`@framers/agentos` now exposes streamlined helpers like `generateText()`, `streamText()`, and `agent()` for lightweight app embedding.
+`@framers/agentos` exposes streamlined helpers like `generateText()`, `streamText()`, and `agent()` for lightweight app embedding.
 
 Wunderland intentionally keeps `createWunderland()` as its golden path because it layers additional runtime features on top:
 

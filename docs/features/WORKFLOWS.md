@@ -1,6 +1,6 @@
 # Workflow Engine & Automation Guide
 
-AgentOS now exposes a workflow engine so hosts can define automations, task graphs, and multi-GMI collaborations without hard-coding orchestration logic. Workflows are delivered as extensions, enabling packs to bundle reusable automations alongside tools or guardrails.
+AgentOS ships a workflow engine so hosts can define automations, task graphs, and multi-GMI collaborations without hard-coding orchestration logic. Workflows are delivered as extensions, enabling packs to bundle reusable automations alongside tools or guardrails.
 
 ---
 
@@ -13,7 +13,7 @@ AgentOS now exposes a workflow engine so hosts can define automations, task grap
 - **Workflow Engine** â€“ Runtime that loads workflow descriptors from the extension registry, creates instances, coordinates progression, and emits streaming updates.
 ### Agency telemetry baked into workflow instances
 
-- `WorkflowInstance.agencyState` now records a `WorkflowAgencySeatSnapshot` per role. Each snapshot includes the latest `gmiInstanceId`, persona assignment, metadata (e.g., last output preview, status), and a bounded seat history sourced from the `AgencyRegistry`.
+- `WorkflowInstance.agencyState` records a `WorkflowAgencySeatSnapshot` per role. Each snapshot includes the latest `gmiInstanceId`, persona assignment, metadata (e.g., last output preview, status), and a bounded seat history sourced from the `AgencyRegistry`.
 - `WorkflowRuntime.syncWorkflowAgencyState` persists that structure so the workflow store can serve rich telemetry even if the client reconnects mid-run.
 - The `WORKFLOW_UPDATE` payloads echo the same structure, enabling the Session Inspector, Workflow Overview, and backend exports to show per-seat progress without extra APIs.
 

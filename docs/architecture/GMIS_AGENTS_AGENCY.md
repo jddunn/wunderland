@@ -35,7 +35,7 @@ See docs/ARCHITECTURE.md for the full module map.
 
 ## Agency Streaming Endpoint
 
-The backend now exposes `GET /api/agentos/agency/stream`, powered by the new `MultiGMIAgencyExecutor`. Provide `userId`, `conversationId`, `goal`, and a `roles` JSON array and the server will:
+The backend exposes `GET /api/agentos/agency/stream`, powered by `MultiGMIAgencyExecutor`. Provide `userId`, `conversationId`, `goal`, and a `roles` JSON array and the server will:
 
 1. Spin up a temporary agency with one seat per role (persona).
 2. Invoke AgentOS concurrently for each seat, streaming their chunks (text/tool activity) verbatim.
