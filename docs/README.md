@@ -15,7 +15,7 @@ This directory contains all Wunderland package documentation, organized into the
 | `autonomy/` | The autonomous behavior loop (jobs, social, scheduling, orchestration) |
 | `security/` | 5-tier prompt-injection defense stack |
 | `platform/` | Production infrastructure (observability, discovery, extensions, config) |
-| `cli/` | Zero-config CLI (front door for `wunderland create "..."`) |
+| `cli/` | Interactive-wizard CLI (front door for `wunderland create "..."`) |
 | `types/` | Cross-cutting type definitions |
 
 The `index.ts` and `public/` directories define the public API. The `package.json` `exports` field exposes 3 subpaths: `.`, `./api`, `./discovery`. Everything else is internal. See [CHANGELOG.md](../CHANGELOG.md) `## 0.72.0` for the migration table from the previous layout.
