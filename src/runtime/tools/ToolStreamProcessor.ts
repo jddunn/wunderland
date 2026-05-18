@@ -14,8 +14,8 @@
  * @module wunderland/runtime/ToolStreamProcessor
  */
 
-import type { StepUpAuthorizationConfig } from '../core/types.js';
-import type { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
+import type { StepUpAuthorizationConfig } from '../../types/core-types.js';
+import type { StepUpAuthorizationManager } from '../../security/StepUpAuthorizationManager.js';
 import type { ToolInstance, LLMProviderConfig } from './tool-helpers.js';
 import {
   getBooleanProp,
@@ -37,8 +37,8 @@ import {
   resolveToolMapKeyFromFunctionName,
   sanitizeToolDefsForProvider,
 } from './tool-function-names.js';
-import type { ToolCallRequest } from './llm-stream-adapter.js';
-import { wrapStreamingLLMAsGenerator } from './llm-stream-adapter.js';
+import type { ToolCallRequest } from '../execution/llm-stream-adapter.js';
+import { wrapStreamingLLMAsGenerator } from '../execution/llm-stream-adapter.js';
 import { runToolCallingTurn } from './tool-calling.js';
 import {
   authorizeToolCall,

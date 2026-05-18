@@ -23,29 +23,29 @@
 
 import {
   StepUpAuthorizationManager,
-} from '../security/StepUpAuthorizationManager.js';
+} from '../../security/StepUpAuthorizationManager.js';
 import {
   FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
   DEFAULT_STEP_UP_AUTH_CONFIG,
   type StepUpAuthorizationConfig,
-} from '../core/types.js';
-import type { AuthorizableTool } from '../security/authorization-types.js';
+} from '../../types/core-types.js';
+import type { AuthorizableTool } from '../../security/authorization-types.js';
 import { SpanStatusCode, context, trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
-import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';
-import { SafeGuardrails } from '../security/SafeGuardrails.js';
-import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
-import { createDefaultFolderConfig } from '../security/FolderPermissions.js';
+import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../../platform/observability/otel.js';
+import { SafeGuardrails } from '../../security/SafeGuardrails.js';
+import type { FolderPermissionConfig } from '../../security/FolderPermissions.js';
+import { createDefaultFolderConfig } from '../../security/FolderPermissions.js';
 import {
   PERMISSION_SETS,
   SECURITY_TIERS,
   type PermissionSetName,
   type SecurityTierName,
-} from '../security/SecurityTiers.js';
+} from '../../security/SecurityTiers.js';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { resolveAgentWorkspaceDir } from '@framers/agentos';
-import { resolveApiKeyInput } from './api-key-resolver.js';
+import { resolveApiKeyInput } from '../identity/api-key-resolver.js';
 import {
   buildToolDefsFromMapping,
   buildToolFunctionNameMapping,
@@ -118,8 +118,8 @@ export function getGuardrails(): SafeGuardrails {
 // This is OPTIONAL — if never initialized, `getSecurityPipeline()` returns
 // `undefined` and the runtime operates without content guardrails.
 
-import type { WunderlandSecurityPipeline } from '../security/WunderlandSecurityPipeline.js';
-import type { GuardrailPackConfig } from '../security/types.js';
+import type { WunderlandSecurityPipeline } from '../../security/WunderlandSecurityPipeline.js';
+import type { GuardrailPackConfig } from '../../security/types.js';
 
 /** Singleton reference — `undefined` until explicitly initialized. */
 let _securityPipeline: WunderlandSecurityPipeline | undefined;

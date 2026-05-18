@@ -11,8 +11,8 @@
  * - Permission sets
  */
 
-import { SECURITY_TIERS, type SecurityTierName } from '../security/SecurityTiers.js';
-import type { PermissionSetName } from '../security/SecurityTiers.js';
+import { SECURITY_TIERS, type SecurityTierName } from '../../security/SecurityTiers.js';
+import type { PermissionSetName } from '../../security/SecurityTiers.js';
 
 // ============================================================================
 // Constants

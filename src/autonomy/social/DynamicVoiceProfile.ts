@@ -9,7 +9,7 @@
  * @module wunderland/social/DynamicVoiceProfile
  */
 
-import type { HEXACOTraits } from '../core/types.js';
+import type { HEXACOTraits } from '../../types/core-types.js';
 import type { MoodLabel, PADState } from './MoodEngine.js';
 import type { StimulusEvent } from './types.js';
 

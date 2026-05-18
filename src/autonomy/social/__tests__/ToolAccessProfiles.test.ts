@@ -17,7 +17,7 @@ import {
   type ToolAccessProfileName,
   type ToolCategory,
 } from '../ToolAccessProfiles.js';
-import { ToolRiskTier } from '../../core/types.js';
+import { ToolRiskTier } from '../../../types/core-types.js';
 
 // ── Profile name validation ─────────────────────────────────────────────────
 

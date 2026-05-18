@@ -4,8 +4,8 @@
  * @module wunderland/inference/types
  */
 
-import type { ModelTarget, InferenceHierarchyConfig } from '../core/types.js';
-export type { RoutingDecision } from '../core/types.js';
+import type { ModelTarget, InferenceHierarchyConfig } from '../../types/core-types.js';
+export type { RoutingDecision } from '../../types/core-types.js';
 
 /**
  * Input complexity classification.

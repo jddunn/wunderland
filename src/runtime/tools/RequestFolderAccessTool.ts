@@ -16,8 +16,8 @@ import type {
   ToolExecutionResult,
   JSONSchemaObject,
 } from '@framers/agentos';
-import type { SafeGuardrails } from '../security/SafeGuardrails.js';
-import { expandTilde, type FolderAccessRule } from '../security/FolderPermissions.js';
+import type { SafeGuardrails } from '../../security/SafeGuardrails.js';
+import { expandTilde, type FolderAccessRule } from '../../security/FolderPermissions.js';
 
 export interface FolderPermissionRequest {
   path: string;

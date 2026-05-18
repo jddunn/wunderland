@@ -22,13 +22,13 @@ const recordAgentOSUsage =
     : async () => {};
 type AgentOSUsageEvent = { model?: string; provider?: string; promptTokens?: number; completionTokens?: number; timestamp?: number; [k: string]: unknown };
 
-import { getConfigDir } from '../cli/config/config-manager.js';
-import { USAGE_LEDGER_FILE_NAME } from '../cli/constants.js';
+import { getConfigDir } from '../../cli/config/config-manager.js';
+import { USAGE_LEDGER_FILE_NAME } from '../../cli/constants.js';
 import {
   MODEL_PRICING,
   type ModelTokenUsage,
   type TokenUsageSummary,
-} from '../core/TokenUsageTracker.js';
+} from './TokenUsageTracker.js';
 
 export type WunderlandUsageEvent = AgentOSUsageEvent;
 

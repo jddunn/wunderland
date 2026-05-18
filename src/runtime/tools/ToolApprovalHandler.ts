@@ -16,8 +16,8 @@
 import * as path from 'node:path';
 import {
   ToolRiskTier,
-} from '../core/types.js';
-import type { StepUpAuthorizationManager } from '../security/StepUpAuthorizationManager.js';
+} from '../../types/core-types.js';
+import type { StepUpAuthorizationManager } from '../../security/StepUpAuthorizationManager.js';
 import type { ToolInstance } from './tool-helpers.js';
 import {
   getGuardrails,

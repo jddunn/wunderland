@@ -9,7 +9,7 @@ import { BrowsingEngine, type BrowsingSessionResult } from '../BrowsingEngine.js
 import { MoodEngine } from '../MoodEngine.js';
 import { EnclaveRegistry } from '../EnclaveRegistry.js';
 import { PostDecisionEngine } from '../PostDecisionEngine.js';
-import type { HEXACOTraits } from '../../core/types.js';
+import type { HEXACOTraits } from '../../../types/core-types.js';
 import type { EnclaveConfig } from '../types.js';
 
 /**

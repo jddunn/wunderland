@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryAutoIngestPipeline } from '../auto-ingest/MemoryAutoIngestPipeline.js';
-import { createMemorySystem } from '../MemorySystemInitializer.js';
+import { createMemorySystem } from '../initialization/MemorySystemInitializer.js';
 import type { PersonalityMemoryConfig } from '../storage/PersonalityMemoryConfig.js';
 
 // ---------------------------------------------------------------------------

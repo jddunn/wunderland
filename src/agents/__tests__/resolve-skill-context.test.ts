@@ -41,7 +41,7 @@ vi.mock('@framers/agentos-skills-registry/catalog', () => ({
   getSkillEntries,
 }));
 
-import { resolveSkillContext } from '../resolve-skill-context.js';
+import { resolveSkillContext } from '../presets/resolve-skill-context.js';
 
 describe('resolveSkillContext', () => {
   beforeEach(() => {

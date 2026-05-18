@@ -9,7 +9,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { HEXACOTraits } from '../core/types.js';
+import type { HEXACOTraits } from '../../types/core-types.js';
 import type { IMoodPersistenceAdapter } from './MoodPersistence.js';
 
 // ============================================================================

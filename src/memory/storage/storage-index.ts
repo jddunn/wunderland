@@ -7,10 +7,10 @@
 export { AgentStorageManager, resolveAgentStorageConfig } from './AgentStorageManager.js';
 export { AgentMemoryAdapter } from './AgentMemoryAdapter.js';
 export { AgentStateStore } from './AgentStateStore.js';
-export { MemoryAutoIngestPipeline } from './MemoryAutoIngestPipeline.js';
+export { MemoryAutoIngestPipeline } from '../auto-ingest/MemoryAutoIngestPipeline.js';
 export { derivePersonalityMemoryConfig } from './PersonalityMemoryConfig.js';
 export type { PersonalityMemoryConfig, FactCategory, HexacoTraits } from './PersonalityMemoryConfig.js';
-export type { LlmCaller, MemoryAutoIngestPipelineConfig } from './MemoryAutoIngestPipeline.js';
+export type { LlmCaller, MemoryAutoIngestPipelineConfig } from '../auto-ingest/MemoryAutoIngestPipeline.js';
 export type {
   IAgentStorageManager,
   IAgentMemoryAdapter,

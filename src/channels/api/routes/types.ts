@@ -12,12 +12,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HumanInteractionManager } from '@framers/agentos';
 
-import type { ToolInstance } from '../../runtime-new/tools/tool-calling.js';
-import type { NormalizedRuntimePolicy } from '../../runtime-new/tools/policy.js';
-import type { WunderlandAdaptiveExecutionRuntime } from '../../runtime-new/execution/adaptive-execution.js';
-import type { WunderlandDiscoveryManager } from '../../discovery/index.js';
+import type { ToolInstance } from '../../../runtime/tools/tool-calling.js';
+import type { NormalizedRuntimePolicy } from '../../../runtime/tools/policy.js';
+import type { WunderlandAdaptiveExecutionRuntime } from '../../../runtime/execution/adaptive-execution.js';
+import type { WunderlandDiscoveryManager } from '../../../platform/discovery/index.js';
 import type { PairingManager } from '../../pairing/PairingManager.js';
-import type { WunderlandSessionTextLogger } from '../../observability/session-text-log.js';
+import type { WunderlandSessionTextLogger } from '../../../platform/observability/session-text-log.js';
 import type { WunderlandAgentConfig, WunderlandProviderId } from '../types.js';
 
 /** Minimal logger contract accepted by route handlers. */

@@ -11,7 +11,7 @@
  * re-composition (when mood, style, or channel context changes mid-session).
  */
 
-import type { HEXACOTraits, SecurityProfile, ChannelBinding } from './types.js';
+import type { HEXACOTraits, SecurityProfile, ChannelBinding } from '../../types/core-types.js';
 import type { CommunicationStyleProfile } from './StyleAdaptation.js';
 
 // ============================================================================

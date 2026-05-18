@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { WunderlandAgentConfig } from '../api/types.js';
+import type { WunderlandAgentConfig } from '../../channels/api/types.js';
 
 // ============================================================================
 // Types

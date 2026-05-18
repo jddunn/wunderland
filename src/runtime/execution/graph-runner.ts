@@ -28,9 +28,9 @@ import {
   GraphRuntime,
   NodeExecutor,
   type NodeExecutionResult,
-} from './agentos-runtime.js';
+} from '../agentos-bridge/agentos-runtime.js';
 
-import { runToolCallingTurn, safeJsonStringify, type LLMProviderConfig, type ToolInstance } from './tool-calling.js';
+import { runToolCallingTurn, safeJsonStringify, type LLMProviderConfig, type ToolInstance } from '../tools/tool-calling.js';
 import { synthesizeEmptyOutputFallback } from './empty-output-fallback.js';
 
 export type WunderlandGraphLike =

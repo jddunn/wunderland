@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PostDecisionEngine, type PostAnalysis } from '../PostDecisionEngine.js';
 import { MoodEngine } from '../MoodEngine.js';
-import type { HEXACOTraits } from '../../core/types.js';
+import type { HEXACOTraits } from '../../../types/core-types.js';
 import type { PADState } from '../MoodEngine.js';
 import { XP_REWARDS, type EmojiReactionType, type EmojiReactionCounts } from '../types.js';
 

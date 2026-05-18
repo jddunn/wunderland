@@ -16,8 +16,8 @@
 
 import type { IVectorStore, IEmbeddingManager } from '@framers/agentos';
 import type { QueryRouter, RetrievedChunk } from '@framers/agentos/query-router';
-import type { WunderlandAgentRagConfig } from '../api/types.js';
-import type { MemorySystem } from '../memory/index.js';
+import type { WunderlandAgentRagConfig } from '../../channels/api/types.js';
+import type { MemorySystem } from '../../memory/index.js';
 import {
   BM25Index,
   HybridSearcher,

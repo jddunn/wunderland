@@ -21,54 +21,54 @@ import * as path from 'node:path';
 
 import { HumanInteractionManager } from '@framers/agentos';
 
-import { resolveDefaultSkillsDirs } from '../skills/index.js';
-import { resolveExtensionsByNames } from '../agents/presets/PresetExtensionResolver.js';
+import { resolveDefaultSkillsDirs } from '../../skills/index.js';
+import { resolveExtensionsByNames } from '../../agents/presets/PresetExtensionResolver.js';
 import { PairingManager } from '../pairing/PairingManager.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
-} from '../core/index.js';
-import { resolveSkillContext } from '../core/resolve-skill-context.js';
+} from '../../core/index.js';
+import { resolveSkillContext } from '../../agents/presets/resolve-skill-context.js';
 import {
   buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
-} from '../config/effective-agent-config.js';
-import { resolveWunderlandProviderId, resolveWunderlandTextModel } from '../config/provider-defaults.js';
-import { loadDotEnvIntoProcessUpward } from '../cli/config/env-manager.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime-new/tools/workspace.js';
+} from '../../platform/config/effective-agent-config.js';
+import { resolveWunderlandProviderId, resolveWunderlandTextModel } from '../../platform/config/provider-defaults.js';
+import { loadDotEnvIntoProcessUpward } from '../../cli/config/env-manager.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
 import {
   runToolCallingTurn,
   safeJsonStringify,
   type LLMProviderConfig,
   type ToolInstance,
-} from '../runtime-new/tools/tool-calling.js';
-import { WunderlandAdaptiveExecutionRuntime } from '../runtime-new/execution/adaptive-execution.js';
-import { resolveStrictToolNames } from '../runtime-new/tools/tool-function-names.js';
-import { createSchemaOnDemandTools } from '../runtime-new/execution/schema-on-demand.js';
-import { startWunderlandOtel, shutdownWunderlandOtel } from '../observability/otel.js';
+} from '../../runtime/tools/tool-calling.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/execution/adaptive-execution.js';
+import { resolveStrictToolNames } from '../../runtime/tools/tool-function-names.js';
+import { createSchemaOnDemandTools } from '../../runtime/execution/schema-on-demand.js';
+import { startWunderlandOtel, shutdownWunderlandOtel } from '../../platform/observability/otel.js';
 import {
   filterToolMapByPolicy,
   getPermissionsForSet,
   normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
-} from '../runtime-new/tools/policy.js';
-import { createEnvSecretResolver } from '../security/env-secrets.js';
-import { resolveAgentDisplayName } from '../runtime-new/identity/agent-identity.js';
-import { buildAgenticSystemPrompt } from '../runtime-new/execution/system-prompt-builder.js';
-import { buildOllamaRuntimeOptions } from '../runtime-new/tools/ollama-options.js';
-import { WunderlandDiscoveryManager } from '../discovery/index.js';
-import { createConfiguredRagTools } from '../memory-new/rag/runtime-tools.js';
-import { maybeProxyAgentosRagRequest } from '../memory-new/rag/http-proxy.js';
-import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
+} from '../../runtime/tools/policy.js';
+import { createEnvSecretResolver } from '../../security/env-secrets.js';
+import { resolveAgentDisplayName } from '../../runtime/identity/agent-identity.js';
+import { buildAgenticSystemPrompt } from '../../runtime/execution/system-prompt-builder.js';
+import { buildOllamaRuntimeOptions } from '../../runtime/tools/ollama-options.js';
+import { WunderlandDiscoveryManager } from '../../platform/discovery/index.js';
+import { createConfiguredRagTools } from '../../memory/rag/runtime-tools.js';
+import { maybeProxyAgentosRagRequest } from '../../memory/rag/http-proxy.js';
+import { mergeExtensionOverrides } from '../../cli/extensions/settings.js';
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
 } from '../voice/speech-catalog.js';
-import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../observability/token-usage.js';
-import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../observability/session-text-log.js';
-import type { TokenUsageSummary } from '../core/TokenUsageTracker.js';
+import { getRecordedWunderlandSessionUsage, getRecordedWunderlandTokenUsage } from '../../platform/observability/token-usage.js';
+import { resolveWunderlandTextLogConfig, WunderlandSessionTextLogger } from '../../platform/observability/session-text-log.js';
+import type { TokenUsageSummary } from '../../platform/observability/TokenUsageTracker.js';
 
 import type {
   WunderlandAdaptiveExecutionConfig,

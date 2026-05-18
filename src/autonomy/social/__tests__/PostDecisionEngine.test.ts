@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PostDecisionEngine, type PostAction, type PostAnalysis } from '../PostDecisionEngine.js';
 import { MoodEngine, type PADState } from '../MoodEngine.js';
-import type { HEXACOTraits } from '../../core/types.js';
+import type { HEXACOTraits } from '../../../types/core-types.js';
 
 /**
  * Factory function to create HEXACO traits with defaults.

@@ -14,8 +14,8 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
-import { SafeGuardrails } from '../security/SafeGuardrails.js';
+import { SignedOutputVerifier } from '../../security/SignedOutputVerifier.js';
+import { SafeGuardrails } from '../../security/SafeGuardrails.js';
 import { InputManifestBuilder } from './InputManifest.js';
 import { ContextFirewall } from './ContextFirewall.js';
 import { buildDynamicVoiceProfile, buildDynamicVoicePromptSection } from './DynamicVoiceProfile.js';

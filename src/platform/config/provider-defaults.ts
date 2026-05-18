@@ -1,5 +1,5 @@
 // @ts-nocheck
-import type { WunderlandProviderId } from '../channels/api-new/types.js';
+import type { WunderlandProviderId } from '../../channels/api/types.js';
 
 const SUPPORTED_TEXT_PROVIDERS = new Set<WunderlandProviderId>([
   'openai',

@@ -16,14 +16,14 @@
  * session-based {@link WunderlandChatRuntime} API.
  */
 
-import type { NormalizedRuntimePolicy } from '../runtime-new/tools/policy.js';
-import { runToolCallingTurn, type ToolInstance } from '../runtime-new/tools/tool-calling.js';
-import { buildOllamaRuntimeOptions } from '../runtime-new/tools/ollama-options.js';
+import type { NormalizedRuntimePolicy } from '../../runtime/tools/policy.js';
+import { runToolCallingTurn, type ToolInstance } from '../../runtime/tools/tool-calling.js';
+import { buildOllamaRuntimeOptions } from '../../runtime/tools/ollama-options.js';
 import type { WunderlandAgentConfig, WunderlandLLMConfig, WunderlandWorkspace } from './types.js';
 import { AgentMemory } from '@framers/agentos';
 import type { ICognitiveMemoryManager } from '@framers/agentos/memory';
-import { injectMemoryContext } from '../memory/index.js';
-import { AgentBootstrap } from '../bootstrap/index.js';
+import { injectMemoryContext } from '../../memory/index.js';
+import { AgentBootstrap } from '../../bootstrap/index.js';
 
 type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;

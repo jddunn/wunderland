@@ -18,38 +18,38 @@ import {
   getPermissionsForSet,
   normalizeRuntimePolicy,
   type NormalizedRuntimePolicy,
-} from '../runtime/policy.js';
-import { resolveDefaultSkillsDirs } from '../skills/index.js';
-import { createEnvSecretResolver } from '../security/env-secrets.js';
-import { createSchemaOnDemandTools } from '../runtime/schema-on-demand.js';
-import type { ToolInstance } from '../runtime/tool-helpers.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../runtime/workspace.js';
-import { resolveAgentDisplayName } from '../runtime/agent-identity.js';
-import { buildAgenticSystemPrompt } from '../runtime/system-prompt-builder.js';
+} from '../../runtime/tools/policy.js';
+import { resolveDefaultSkillsDirs } from '../../skills/index.js';
+import { createEnvSecretResolver } from '../../security/env-secrets.js';
+import { createSchemaOnDemandTools } from '../../runtime/execution/schema-on-demand.js';
+import type { ToolInstance } from '../../runtime/tools/tool-helpers.js';
+import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
+import { resolveAgentDisplayName } from '../../runtime/identity/agent-identity.js';
+import { buildAgenticSystemPrompt } from '../../runtime/execution/system-prompt-builder.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
   type IWunderlandSeed,
-} from '../core/index.js';
-import { resolveSkillContext } from '../core/resolve-skill-context.js';
+} from '../../core/index.js';
+import { resolveSkillContext } from '../presets/resolve-skill-context.js';
 import {
   buildDiscoveryOptionsFromAgentConfig,
   resolveEffectiveAgentConfig,
-} from '../config/effective-agent-config.js';
-import { resolveExtensionsByNames } from '../core/PresetExtensionResolver.js';
-import { WunderlandDiscoveryManager } from '../discovery/index.js';
-import { createConfiguredRagTools } from '../rag/runtime-tools.js';
-import { mergeExtensionOverrides } from '../cli/extensions/settings.js';
+} from '../../platform/config/effective-agent-config.js';
+import { resolveExtensionsByNames } from '../presets/PresetExtensionResolver.js';
+import { WunderlandDiscoveryManager } from '../../platform/discovery/index.js';
+import { createConfiguredRagTools } from '../../memory/rag/runtime-tools.js';
+import { mergeExtensionOverrides } from '../../cli/extensions/settings.js';
 import {
   createSpeechExtensionEnvOverrides,
   getDefaultVoiceExtensions,
-} from '../voice/speech-catalog.js';
-import type { WunderlandAgentConfig, WunderlandWorkspace } from '../api/types.js';
-import { WunderlandAdaptiveExecutionRuntime } from '../runtime/adaptive-execution.js';
-import { resolveStrictToolNames } from '../runtime/tool-function-names.js';
-import { createMemorySystem, type MemorySystem } from '../memory/index.js';
+} from '../../channels/voice/speech-catalog.js';
+import type { WunderlandAgentConfig, WunderlandWorkspace } from '../../channels/api/types.js';
+import { WunderlandAdaptiveExecutionRuntime } from '../../runtime/execution/adaptive-execution.js';
+import { resolveStrictToolNames } from '../../runtime/tools/tool-function-names.js';
+import { createMemorySystem, type MemorySystem } from '../../memory/index.js';
 
 // ---------------------------------------------------------------------------
 // Logger type (subset of console-like logger)

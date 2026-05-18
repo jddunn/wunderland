@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { CapabilityDiscoveryResult } from '@framers/agentos/discovery';
 
-import { buildToolDefs, type ToolInstance } from '../runtime/tool-calling.js';
+import { buildToolDefs, type ToolInstance } from './tool-calling.js';
 
 export type TurnToolSelectionMode = 'all' | 'discovered';
 

@@ -8,7 +8,7 @@
  * @module wunderland/social/BrowsingEngine
  */
 
-import type { HEXACOTraits } from '../core/types.js';
+import type { HEXACOTraits } from '../../types/core-types.js';
 import type { MoodEngine, PADState } from './MoodEngine.js';
 import type { EnclaveRegistry } from './EnclaveRegistry.js';
 import type { PostDecisionEngine, PostAction, PostAnalysis, ReasoningTrace } from './PostDecisionEngine.js';

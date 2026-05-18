@@ -20,8 +20,8 @@ import {
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_STEP_UP_AUTH_CONFIG,
   normalizeHEXACOTraits,
-} from './types.js';
-import type { StyleAdaptationEngine } from './StyleAdaptation.js';
+} from '../../types/core-types.js';
+import type { StyleAdaptationEngine } from '../prompts/StyleAdaptation.js';
 
 /**
  * Extended persona definition interface for Wunderland Seeds.

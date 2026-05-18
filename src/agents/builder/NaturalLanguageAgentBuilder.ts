@@ -10,8 +10,8 @@
  * - Security & permission levels
  */
 
-import type { SecurityTierName } from '../security/SecurityTiers.js';
-import type { PermissionSetName } from '../security/SecurityTiers.js';
+import type { SecurityTierName } from '../../security/SecurityTiers.js';
+import type { PermissionSetName } from '../../security/SecurityTiers.js';
 
 // ============================================================================
 // Types

@@ -8,8 +8,8 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 
-import type { WunderlandAgentConfig, WunderlandWorkspace } from '../channels/api-new/types.js';
-import { sanitizeAgentWorkspaceId } from '../runtime-new/tools/workspace.js';
+import type { WunderlandAgentConfig, WunderlandWorkspace } from '../../channels/api/types.js';
+import { sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
 
 type LoggerLike = {
   warn?: (msg: string, meta?: unknown) => void;

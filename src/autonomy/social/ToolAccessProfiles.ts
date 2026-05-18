@@ -35,7 +35,7 @@
  * ```
  */
 
-import { ToolRiskTier } from '../core/types.js';
+import { ToolRiskTier } from '../../types/core-types.js';
 
 // ============================================================================
 // Types

@@ -4,9 +4,9 @@
  * @module wunderland/api/types
  */
 
-import type { SecurityTierName, PermissionSetName } from '../security/SecurityTiers.js';
-import type { ToolAccessProfileName } from '../social/ToolAccessProfiles.js';
-import type { FolderPermissionConfig } from '../security/FolderPermissions.js';
+import type { SecurityTierName, PermissionSetName } from '../../security/SecurityTiers.js';
+import type { ToolAccessProfileName } from '../../autonomy/social/ToolAccessProfiles.js';
+import type { FolderPermissionConfig } from '../../security/FolderPermissions.js';
 import type { StorageResolutionOptions } from '@framers/sql-storage-adapter';
 
 export type WunderlandExecutionMode = 'autonomous' | 'human-all' | 'human-dangerous';

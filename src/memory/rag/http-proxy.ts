@@ -2,7 +2,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 
-import type { WunderlandAgentConfig } from '../api/types.js';
+import type { WunderlandAgentConfig } from '../../channels/api/types.js';
 import { normalizeRagApiBaseUrl } from './rag-client.js';
 
 type LoggerLike = {

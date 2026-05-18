@@ -1,9 +1,9 @@
 // @ts-nocheck
 import type { ITool, ToolExecutionContext } from '@framers/agentos';
 
-import type { WunderlandAgentConfig } from '../api/types.js';
-import { createMemoryReadTool, type MemoryReadResult } from '../runtime-new/tools/MemoryReadTool.js';
-import { RAGTool } from '../runtime-new/tools/RAGTool.js';
+import type { WunderlandAgentConfig } from '../../channels/api/types.js';
+import { createMemoryReadTool, type MemoryReadResult } from '../../runtime/tools/MemoryReadTool.js';
+import { RAGTool } from '../../runtime/tools/RAGTool.js';
 import { WunderlandRAGClient, type RAGQueryInput } from './rag-client.js';
 import { resolveHydeFromAgentConfig } from './hyde-integration.js';
 

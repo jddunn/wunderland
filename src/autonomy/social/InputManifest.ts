@@ -11,8 +11,8 @@
  */
 
 import { createHash } from 'crypto';
-import { SignedOutputVerifier, IntentChainTracker } from '../security/SignedOutputVerifier.js';
-import type { IntentChainEntry } from '../core/types.js';
+import { SignedOutputVerifier, IntentChainTracker } from '../../security/SignedOutputVerifier.js';
+import type { IntentChainEntry } from '../../types/core-types.js';
 import type { InputManifest, ManifestValidationResult, StimulusEvent } from './types.js';
 
 /**

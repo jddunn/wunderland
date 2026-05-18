@@ -8,7 +8,7 @@
 
 import type { ITool, ToolExecutionResult, ToolExecutionContext, JSONSchemaObject } from '@framers/agentos';
 import type { RAGAuditTrail } from '@framers/agentos';
-import { WunderlandRAGClient, type RAGQueryInput } from '../rag/rag-client.js';
+import { WunderlandRAGClient, type RAGQueryInput } from '../../memory/rag/rag-client.js';
 
 /** Optional audit log interface (matches ActionAuditLog.log signature). */
 interface AuditLogLike {

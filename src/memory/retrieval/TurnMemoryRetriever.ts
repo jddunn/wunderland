@@ -5,7 +5,7 @@
  * Manages insertion and removal of memory context messages.
  */
 
-import type { MemorySystem } from './MemorySystemInitializer.js';
+import type { MemorySystem } from '../initialization/MemorySystemInitializer.js';
 
 const MEMORY_CONTEXT_TAG = '__wunderland_memory_context__';
 

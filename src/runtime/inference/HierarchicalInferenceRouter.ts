@@ -11,10 +11,10 @@ import type {
   InferenceHierarchyConfig,
   ModelTarget,
   RoutingDecision,
-} from '../core/types.js';
+} from '../../types/core-types.js';
 import {
   DEFAULT_INFERENCE_HIERARCHY,
-} from '../core/types.js';
+} from '../../types/core-types.js';
 import type {
   RouterConfig,
   ComplexityAnalysis,

@@ -14,7 +14,7 @@ import type {
   WunderlandTaskOutcomeTelemetryConfig,
   WunderlandTaskOutcomeTelemetryScope,
   WunderlandToolFailureMode,
-} from '../api/types.js';
+} from '../../channels/api/types.js';
 
 type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;

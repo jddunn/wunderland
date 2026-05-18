@@ -17,14 +17,14 @@ import {
   runToolCallingTurn,
   safeJsonStringify,
   type ToolInstance,
-} from '../../runtime-new/tools/tool-calling.js';
+} from '../../../runtime/tools/tool-calling.js';
 import {
   buildPersonaSessionKey,
   createRequestScopedToolMap,
   extractRequestedPersonaId,
   resolveRequestScopedPersonaRuntime,
-} from '../../runtime-new/execution/request-persona.js';
-import { buildOllamaRuntimeOptions } from '../../runtime-new/tools/ollama-options.js';
+} from '../../../runtime/execution/request-persona.js';
+import { buildOllamaRuntimeOptions } from '../../../runtime/tools/ollama-options.js';
 
 import { readBody, sendJson } from '../server-helpers.js';
 import type { ServerDeps, RouteHandlerResult } from './types.js';

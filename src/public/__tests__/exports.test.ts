@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import * as root from '../../index.js';
 import * as advanced from '../../advanced/index.js';
-import * as security from '../../advanced/security.js';
+import * as security from '../../security/index.js';
 
 describe('wunderland package exports', () => {
   it('exposes a small library-first root API', () => {

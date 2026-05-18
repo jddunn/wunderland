@@ -11,7 +11,7 @@
  * @module wunderland/runtime/tool-failure-learner
  */
 
-import type { IMemoryAutoIngestPipeline } from '../storage/types.js';
+import type { IMemoryAutoIngestPipeline } from '../../memory/storage/types.js';
 
 /** Categorized failure pattern with suggested alternative. */
 interface FailurePattern {

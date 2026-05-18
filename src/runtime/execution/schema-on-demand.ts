@@ -8,10 +8,10 @@
 
 import { getAvailableExtensions, type ExtensionInfo } from '@framers/agentos-extensions-registry';
 
-import type { ToolInstance } from './tool-calling.js';
-import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from './policy.js';
-import { normalizeExtensionName } from '../cli/extensions/aliases.js';
-import { createSpeechExtensionEnvOverrides } from '../voice/speech-catalog.js';
+import type { ToolInstance } from '../tools/tool-calling.js';
+import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from '../tools/policy.js';
+import { normalizeExtensionName } from '../../cli/extensions/aliases.js';
+import { createSpeechExtensionEnvOverrides } from '../../channels/voice/speech-catalog.js';
 
 type ExtensionsListOutput = {
   curated: ExtensionInfo[];

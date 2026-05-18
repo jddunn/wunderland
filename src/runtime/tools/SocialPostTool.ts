@@ -10,9 +10,9 @@
  * @module wunderland/tools/SocialPostTool
  */
 
-import type { InputManifest, WonderlandPost } from '../social/types.js';
-import { InputManifestValidator } from '../social/InputManifest.js';
-import { SignedOutputVerifier } from '../security/SignedOutputVerifier.js';
+import type { InputManifest, WonderlandPost } from '../../autonomy/social/types.js';
+import { InputManifestValidator } from '../../autonomy/social/InputManifest.js';
+import { SignedOutputVerifier } from '../../security/SignedOutputVerifier.js';
 
 /**
  * Result of a publish attempt.

@@ -17,7 +17,7 @@ import {
 } from '@framers/agentos/cognition/rag';
 import type { IEmbeddingManager, IVectorStore } from '@framers/agentos';
 
-import type { WunderlandAgentRagConfig } from '../api/types.js';
+import type { WunderlandAgentRagConfig } from '../../channels/api/types.js';
 
 /** Resolve HyDE config from agent.config.json rag section. */
 export function resolveHydeFromAgentConfig(

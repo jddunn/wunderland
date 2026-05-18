@@ -11,7 +11,7 @@ import type {
   WunderlandAgentDiscoveryConfig,
   WunderlandAgentRagConfig,
   WunderlandExtensionConfig,
-} from '../api/types.js';
+} from '../../channels/api/types.js';
 
 // ============================================================================
 // Types

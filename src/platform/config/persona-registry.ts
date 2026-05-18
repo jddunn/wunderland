@@ -10,7 +10,7 @@ import type {
   WunderlandAgentConfig,
   WunderlandAgentPersonaRegistryConfig,
   WunderlandAgentRagConfig,
-} from '../channels/api-new/types.js';
+} from '../../channels/api/types.js';
 
 type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;

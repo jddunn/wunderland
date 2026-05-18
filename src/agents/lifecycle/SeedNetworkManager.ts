@@ -14,8 +14,8 @@ import type {
   HandoffContext,
   HandoffResult,
 } from '@framers/agentos';
-import type { IWunderlandSeed } from './WunderlandSeed.js';
-import type { HEXACOTraits } from './types.js';
+import type { IWunderlandSeed } from '../builder/WunderlandSeed.js';
+import type { HEXACOTraits } from '../../types/core-types.js';
 
 // Local type definitions (not exported from @framers/agentos barrel)
 type MessageHandler = (message: AgentMessage) => void | Promise<void>;

@@ -13,7 +13,7 @@
  */
 
 import type { MoodEngine, PADState } from '../social/MoodEngine.js';
-import type { HEXACOTraits } from '../core/types.js';
+import type { HEXACOTraits } from '../../types/core-types.js';
 import type { AgentJobState } from './AgentJobState.js';
 import type { JobMemoryService } from './JobMemoryService.js';
 

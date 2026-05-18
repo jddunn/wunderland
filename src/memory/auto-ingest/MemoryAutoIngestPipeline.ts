@@ -14,8 +14,8 @@ import type {
   AutoIngestResult,
   ExtractedFact,
   ResolvedAgentStorageConfig,
-} from './types.js';
-import type { PersonalityMemoryConfig, FactCategory } from './PersonalityMemoryConfig.js';
+} from '../storage/types.js';
+import type { PersonalityMemoryConfig, FactCategory } from '../storage/PersonalityMemoryConfig.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const COLLECTION_NAME = 'auto_memories';

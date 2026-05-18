@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { buildOtelEnvVars, describeObservabilityPreset } from './otel-config.js';
-import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from './otel.js';
+import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../../platform/observability/otel.js';
 
 const ENV_KEYS = [
   'WUNDERLAND_OTEL_ENABLED',

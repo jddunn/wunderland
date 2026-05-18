@@ -9,8 +9,8 @@
  */
 
 import * as os from 'node:os';
-import type { IWunderlandSeed } from '../agents/builder/WunderlandSeed.js';
-import type { NormalizedRuntimePolicy } from './policy.js';
+import type { IWunderlandSeed } from '../../agents/builder/WunderlandSeed.js';
+import type { NormalizedRuntimePolicy } from '../tools/policy.js';
 
 export interface SystemPromptOptions {
   /** The agent seed containing identity, personality, and mood configuration. */

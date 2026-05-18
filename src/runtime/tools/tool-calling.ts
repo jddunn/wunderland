@@ -17,16 +17,16 @@
 
 import {
   StepUpAuthorizationManager,
-} from '../security/StepUpAuthorizationManager.js';
+} from '../../security/StepUpAuthorizationManager.js';
 import {
   FULLY_AUTONOMOUS_STEP_UP_AUTH_CONFIG,
   type StepUpAuthorizationConfig,
-} from '../core/types.js';
+} from '../../types/core-types.js';
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
-import { isWunderlandOtelEnabled } from '../observability/otel.js';
-import { recordWunderlandTokenUsage } from '../observability/token-usage.js';
-import { resolveApiKeyInput } from './api-key-resolver.js';
+import { isWunderlandOtelEnabled } from '../../platform/observability/otel.js';
+import { recordWunderlandTokenUsage } from '../../platform/observability/token-usage.js';
+import { resolveApiKeyInput } from '../identity/api-key-resolver.js';
 import {
   buildToolDefsFromMapping,
   buildToolFunctionNameMapping,
@@ -40,7 +40,7 @@ import {
   type LoopConfig,
   type LoopContext,
 } from '@framers/agentos/orchestration';
-import { wrapLLMAsGenerator } from './llm-stream-adapter.js';
+import { wrapLLMAsGenerator } from '../execution/llm-stream-adapter.js';
 import {
   authorizeToolCall,
   executeWithGuardrails,

@@ -4,15 +4,15 @@ import {
   DEFAULT_INFERENCE_HIERARCHY,
   DEFAULT_SECURITY_PROFILE,
   DEFAULT_STEP_UP_AUTH_CONFIG,
-} from '../core/index.js';
-import { resolveEffectiveAgentConfig } from '../config/effective-agent-config.js';
-import { createConfiguredRagTools } from '../rag/runtime-tools.js';
-import type { PersonaSummary } from '../config/persona-registry.js';
-import type { WunderlandAgentConfig } from '../api/types.js';
-import { resolveAgentDisplayName } from './agent-identity.js';
+} from '../../core/index.js';
+import { resolveEffectiveAgentConfig } from '../../platform/config/effective-agent-config.js';
+import { createConfiguredRagTools } from '../../memory/rag/runtime-tools.js';
+import type { PersonaSummary } from '../../platform/config/persona-registry.js';
+import type { WunderlandAgentConfig } from '../../channels/api/types.js';
+import { resolveAgentDisplayName } from '../identity/agent-identity.js';
 import { buildAgenticSystemPrompt, type SystemPromptOptions } from './system-prompt-builder.js';
-import type { NormalizedRuntimePolicy } from './policy.js';
-import type { ToolInstance } from './tool-calling.js';
+import type { NormalizedRuntimePolicy } from '../tools/policy.js';
+import type { ToolInstance } from '../tools/tool-calling.js';
 
 type LoggerLike = {
   debug?: (msg: string, meta?: unknown) => void;

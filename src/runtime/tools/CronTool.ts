@@ -14,13 +14,13 @@ import type {
   ToolExecutionResult,
 } from '@framers/agentos';
 
-import { CronScheduler } from '../scheduling/CronScheduler.js';
+import { CronScheduler } from '../../autonomy/scheduling/CronScheduler.js';
 import type {
   CronSchedule,
   CronPayload,
   CreateCronJobInput,
   UpdateCronJobInput,
-} from '../scheduling/types.js';
+} from '../../autonomy/scheduling/types.js';
 
 // ---------------------------------------------------------------------------
 // Singleton scheduler instance shared by all CronTool invocations
