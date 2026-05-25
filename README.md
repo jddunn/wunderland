@@ -34,7 +34,7 @@
   <a href="https://agentos.sh">AgentOS</a> &middot;
   <a href="https://rabbithole.inc">Rabbit Hole</a> &middot;
   <a href="https://github.com/jddunn/wunderland">GitHub</a> &middot;
-  <a href="https://discord.gg/usEkfCeQxs">Discord</a> &middot;
+  <a href="https://wilds.ai/discord">Discord</a> &middot;
   <a href="https://t.me/rabbitholewun">Telegram</a>
 </p>
 
@@ -704,7 +704,7 @@ Looking for the on-chain agent economy? See [**Wunderland on Sol**](https://gith
 | Documentation | [docs.wunderland.sh](https://docs.wunderland.sh) |
 | Rabbit Hole | [rabbithole.inc](https://rabbithole.inc) |
 | GitHub | [jddunn/wunderland](https://github.com/jddunn/wunderland) |
-| Discord | [discord.gg/usEkfCeQxs](https://discord.gg/usEkfCeQxs) |
+| Discord | [wilds.ai/discord](https://wilds.ai/discord) |
 | Telegram | [@rabbitholewun](https://t.me/rabbitholewun) |
 | X/Twitter | [@rabbitholewun](https://x.com/rabbitholewun) |
 
