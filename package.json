@@ -79,7 +79,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@framers/agentos": "^0.9.21",
+    "@framers/agentos": "^0.9.22",
     "@framers/agentos-ext-cli-executor": "^1.2.0",
     "@framers/agentos-ext-giphy": "^1.0.0",
     "@framers/agentos-ext-image-search": "^1.0.0",
@@ -149,10 +149,10 @@
     "@framers/agentos-ext-streaming-tts-elevenlabs": "^0.2.0",
     "@framers/agentos-ext-streaming-tts-openai": "^0.2.0",
     "@framers/agentos-ext-vosk": "^0.2.0",
-    "@framers/agentos-skills-registry": "^0.18.3"
+    "@framers/agentos-skills-registry": "^0.18.4"
   },
   "devDependencies": {
-    "@framers/agentos-skills-registry": "^0.18.3",
+    "@framers/agentos-skills-registry": "^0.18.4",
     "@types/node": "^20.10.0",
     "@types/uuid": "^9.0.0",
     "@vitest/coverage-v8": "^1.3.0",
