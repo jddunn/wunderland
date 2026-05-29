@@ -369,7 +369,7 @@ async function resolveExtensionsFromOpts(opts: {
   }
 
   try {
-    const { resolveExtensionsByNames } = await import('../core/PresetExtensionResolver.js');
+    const { resolveExtensionsByNames } = await import('../agents/presets/PresetExtensionResolver.js');
 
     const result = await resolveExtensionsByNames(toolExts, voiceExts, prodExts, mergedOverrides, {
       secrets: secrets as any,
@@ -600,7 +600,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
   const isLazyMode = effectiveTools === 'lazy';
   if (isLazyMode || effectiveTools === 'curated') {
     try {
-      const { createSchemaOnDemandTools } = await import('../runtime/schema-on-demand.js');
+      const { createSchemaOnDemandTools } = await import('../runtime/execution/schema-on-demand.js');
       const sodTools = createSchemaOnDemandTools({
         toolMap: toolMap as any,
         runtimeDefaults: {
@@ -1301,7 +1301,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
    */
   const loadWorkflow: WunderlandApp['loadWorkflow'] = async (yamlPath) => {
     const { readFile } = await import('node:fs/promises');
-    const { compileWorkflowYaml } = await import('../orchestration/yaml-compiler.js');
+    const { compileWorkflowYaml } = await import('../autonomy/orchestration/yaml-compiler.js');
     const content = await readFile(yamlPath, 'utf-8');
     return compileWorkflowYaml(content);
   };
@@ -1316,7 +1316,7 @@ export async function createWunderland(opts: WunderlandOptions = {}): Promise<Wu
    */
   const loadMission: WunderlandApp['loadMission'] = async (yamlPath) => {
     const { readFile } = await import('node:fs/promises');
-    const { compileMissionYaml } = await import('../orchestration/yaml-compiler.js');
+    const { compileMissionYaml } = await import('../autonomy/orchestration/yaml-compiler.js');
     const content = await readFile(yamlPath, 'utf-8');
     return compileMissionYaml(content);
   };

@@ -189,7 +189,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
 
     // Resolve extensions to manifests using PresetExtensionResolver
     try {
-      const { resolveExtensionsByNames } = await import('../../../core/PresetExtensionResolver.js');
+      const { resolveExtensionsByNames } = await import('../../../agents/presets/PresetExtensionResolver.js');
       // Merge overrides: global < agent (agent wins)
       const globalOverrides = (globalConfig?.extensionOverrides && typeof globalConfig.extensionOverrides === 'object')
         ? (globalConfig.extensionOverrides as Record<string, any>)

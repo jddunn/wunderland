@@ -66,7 +66,7 @@ export default async function cmdVideo(
 
     try {
       const { generateVideo } = await import('@framers/agentos');
-      const { recordWunderlandTokenUsage } = await import('../../../observability/token-usage.js');
+      const { recordWunderlandTokenUsage } = await import('../../../platform/observability/token-usage.js');
       const request: Record<string, unknown> = { prompt };
       if (provider) request['provider'] = provider;
       if (model) request['model'] = model;

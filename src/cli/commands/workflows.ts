@@ -119,7 +119,7 @@ export default async function cmdWorkflows(
       }
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
-      const { compileWorkflowYaml } = await import('../../orchestration/yaml-compiler.js');
+      const { compileWorkflowYaml } = await import('../../autonomy/orchestration/yaml-compiler.js');
       const { createWunderland } = await import('../../public/index.js');
 
       const yamlPath = resolve(process.cwd(), target);
@@ -186,7 +186,7 @@ export default async function cmdWorkflows(
       if (!target) { fmt.errorBlock('Missing file', 'Usage: wunderland workflows explain <file>'); process.exitCode = 1; return; }
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
-      const { compileWorkflowYaml } = await import('../../orchestration/yaml-compiler.js');
+      const { compileWorkflowYaml } = await import('../../autonomy/orchestration/yaml-compiler.js');
 
       const yamlPath = resolve(process.cwd(), target);
       const content = await readFile(yamlPath, 'utf-8');

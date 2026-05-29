@@ -64,7 +64,7 @@ export default async function cmdNew(
     // Show available presets and let user pick
     let presets: Array<{ id: string; name: string; description: string }> = [];
     try {
-      const { PresetLoader } = await import('../../core/PresetLoader.js');
+      const { PresetLoader } = await import('../../agents/presets/PresetLoader.js');
       const loader = new PresetLoader();
       presets = loader.listPresets().map((pre) => ({
         id: pre.id,

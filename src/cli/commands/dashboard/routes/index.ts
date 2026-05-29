@@ -405,7 +405,7 @@ async function handleSpawn(
 
   try {
     /* Lazy-import the NL agent builder. */
-    const { extractAgentConfig } = await import('../../../../core/NaturalLanguageAgentBuilder.js');
+    const { extractAgentConfig } = await import('../../../../agents/builder/NaturalLanguageAgentBuilder.js');
 
     /* Build a simple LLM invoker from env vars (non-interactive). */
     const openaiKey = process.env['OPENAI_API_KEY'] || '';

@@ -66,7 +66,7 @@ export default async function cmdAudio(
 
     try {
       const { generateMusic } = await import('@framers/agentos');
-      const { recordWunderlandTokenUsage } = await import('../../../observability/token-usage.js');
+      const { recordWunderlandTokenUsage } = await import('../../../platform/observability/token-usage.js');
       const request: Record<string, unknown> = { prompt };
       if (provider) request['provider'] = provider;
       if (model) request['model'] = model;
@@ -133,7 +133,7 @@ export default async function cmdAudio(
 
     try {
       const { generateSFX } = await import('@framers/agentos');
-      const { recordWunderlandTokenUsage } = await import('../../../observability/token-usage.js');
+      const { recordWunderlandTokenUsage } = await import('../../../platform/observability/token-usage.js');
       const request: Record<string, unknown> = { prompt };
       if (provider) request['provider'] = provider;
       if (model) request['model'] = model;

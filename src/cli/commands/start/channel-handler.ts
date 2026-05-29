@@ -730,7 +730,7 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
 
     if (discordAdapterSubs && channelSettingsId) {
       try {
-        const { createChannelSubsHandler } = await import('../../../discord/channelSubsHandler.js');
+        const { createChannelSubsHandler } = await import('../../../channels/discord/channelSubsHandler.js');
         const subsHandler = createChannelSubsHandler({
           guildId: String(process.env.DISCORD_GUILD_ID || ''),
           channelSettingsId,
@@ -764,7 +764,7 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
 
     if (discordAdapterWelcome && welcomeChannelId && openaiApiKey) {
       try {
-        const { createWelcomeHandler } = await import('../../../discord/welcomeHandler.js');
+        const { createWelcomeHandler } = await import('../../../channels/discord/welcomeHandler.js');
         const welcomeHandler = createWelcomeHandler({
           channelId: welcomeChannelId,
           openaiApiKey,
@@ -793,7 +793,7 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
 
     if (discordAdapterPicks && curatedPicksChannelId && openaiKeyPicks) {
       try {
-        const { createCuratedPicksHandler } = await import('../../../discord/curatedPicksHandler.js');
+        const { createCuratedPicksHandler } = await import('../../../channels/discord/curatedPicksHandler.js');
         const picksHandler = createCuratedPicksHandler({
           channelId: curatedPicksChannelId,
           openaiApiKey: openaiKeyPicks,

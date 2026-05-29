@@ -100,7 +100,7 @@ export function createRequestFolderAccessTool(deps: RequestFolderAccessDeps): IT
       // Check if we already have access
       const existing = deps.guardrails.getFolderPermissions(deps.agentId);
       if (existing) {
-        const { checkFolderAccess } = await import('../security/FolderPermissions.js');
+        const { checkFolderAccess } = await import('../../security/FolderPermissions.js');
         const tierPerms = undefined; // We don't have tier perms here, but the guardrails check will use them
         const currentAccess = checkFolderAccess(resolved, operation, existing, tierPerms);
         if (currentAccess.allowed) {

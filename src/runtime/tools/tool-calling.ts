@@ -712,8 +712,8 @@ export async function runToolCallingTurn(opts: {
       // 2. Builds tool name mappings for this round
       // 3. Delegates to wrapLLMAsGenerator for the actual LLM call
       const self = (async function* (): AsyncGenerator<
-        import('./llm-stream-adapter.js').LoopChunk,
-        import('./llm-stream-adapter.js').LoopOutput,
+        import('../execution/llm-stream-adapter.js').LoopChunk,
+        import('../execution/llm-stream-adapter.js').LoopOutput,
         undefined
       > {
         // Fire the per-round checkpoint from the previous round (if any).
@@ -819,7 +819,7 @@ export async function runToolCallingTurn(opts: {
         const llmGen = wrapLLMAsGenerator(() => callLLMForTurn(round, toolDefs));
         let iterResult = await llmGen.next();
         while (!iterResult.done) {
-          yield iterResult.value as import('./llm-stream-adapter.js').LoopChunk;
+          yield iterResult.value as import('../execution/llm-stream-adapter.js').LoopChunk;
           iterResult = await llmGen.next();
         }
         return iterResult.value;

@@ -242,7 +242,7 @@ export interface BootstrappedAgent {
   adaptiveRuntime?: WunderlandAdaptiveExecutionRuntime;
 
   /** Per-agent storage manager. */
-  storageManager?: import('../storage/AgentStorageManager.js').AgentStorageManager;
+  storageManager?: import('../../memory/storage/AgentStorageManager.js').AgentStorageManager;
 
   /** Memory retrieval system. */
   memorySystem?: MemorySystem | null;
@@ -489,7 +489,7 @@ export class AgentBootstrap {
       null;
     try {
       const { initializeSecurityPipeline } = await import(
-        '../runtime/tool-helpers.js'
+        '../../runtime/tools/tool-helpers.js'
       );
       securityPipelineSummary = await initializeSecurityPipeline({
         securityTier: policy.securityTier,
@@ -908,7 +908,7 @@ export class AgentBootstrap {
 
     // ── Step 10: Init storage + memory ──────────────────────────────────
     let storageManager:
-      | import('../storage/AgentStorageManager.js').AgentStorageManager
+      | import('../../memory/storage/AgentStorageManager.js').AgentStorageManager
       | undefined;
     let memorySystem: MemorySystem | null = null;
     let cognitiveMemoryManager: any /* ICognitiveMemoryManager */ | undefined;
@@ -919,7 +919,7 @@ export class AgentBootstrap {
     if (!config.skipMemory && agentConfig.memory?.enabled !== false) {
       try {
         const { AgentStorageManager, resolveAgentStorageConfig } = await import(
-          '../storage/index.js'
+          '../../memory/storage/index.js'
         );
         const storageConfig = resolveAgentStorageConfig(
           seedId,
@@ -932,7 +932,7 @@ export class AgentBootstrap {
         if (agentConfig.memory?.cognitiveMechanisms) {
           try {
             const { initializeCognitiveMemory } = await import(
-              '../memory/CognitiveMemoryInitializer.js'
+              '../../memory/initialization/CognitiveMemoryInitializer.js'
             );
             const result = await initializeCognitiveMemory({
               cognitiveMechanisms: agentConfig.memory.cognitiveMechanisms,

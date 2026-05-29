@@ -107,7 +107,7 @@ export async function initializeSeed(ctx: any): Promise<void> {
   // overrides. Fail-safe: if creation fails, agent runs without content guardrails.
   let guardrailSummary: { active: string[]; total: number } | null = null;
   try {
-    const { initializeSecurityPipeline } = await import('../../../runtime/tool-helpers.js');
+    const { initializeSecurityPipeline } = await import('../../../runtime/tools/tool-helpers.js');
     guardrailSummary = await initializeSecurityPipeline({
       securityTier: policy.securityTier,
       guardrailPackOverrides: policy.guardrailPackOverrides,

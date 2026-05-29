@@ -655,7 +655,7 @@ export default async function cmdChat(
 
     // Resolve extensions using PresetExtensionResolver
     try {
-      const { resolveExtensionsByNames } = await import('../../core/PresetExtensionResolver.js');
+      const { resolveExtensionsByNames } = await import('../../agents/presets/PresetExtensionResolver.js');
       // Merge overrides: global config < agent config (agent wins)
       const globalOverrides = (globalConfig?.extensionOverrides && typeof globalConfig.extensionOverrides === 'object')
         ? (globalConfig.extensionOverrides as Record<string, any>)
@@ -1088,7 +1088,7 @@ export default async function cmdChat(
   let cognitiveMoodProvider: (() => { valence: number; arousal: number; dominance: number }) | undefined;
   if (cfg?.memory?.cognitiveMechanisms && agentStorageManager) {
     try {
-      const { initializeCognitiveMemory } = await import('../../memory/CognitiveMemoryInitializer.js');
+      const { initializeCognitiveMemory } = await import('../../memory/initialization/CognitiveMemoryInitializer.js');
       const result = await initializeCognitiveMemory({
         cognitiveMechanisms: cfg.memory.cognitiveMechanisms,
         vectorStore: agentStorageManager.getVectorStore(),
@@ -1352,7 +1352,7 @@ export default async function cmdChat(
   // ── Restore previous conversation history from per-agent storage ────────
   // Uses a stable conversationId per agent so history persists across sessions.
   const conversationId = `cli-${seedId}`;
-  let memoryAdapter: import('../../storage/types.js').IAgentMemoryAdapter | undefined;
+  let memoryAdapter: import('../../memory/storage/types.js').IAgentMemoryAdapter | undefined;
   try {
     if (agentStorageManager) {
       memoryAdapter = agentStorageManager.getMemoryAdapter();
@@ -1506,8 +1506,8 @@ export default async function cmdChat(
   if (voiceEnabled) {
     try {
       const [{ createStreamingPipeline }, { startVoiceServer }] = await Promise.all([
-        import('../../voice/streaming-pipeline.js'),
-        import('../../voice/ws-server.js'),
+        import('../../channels/voice/streaming-pipeline.js'),
+        import('../../channels/voice/ws-server.js'),
       ]);
       const pipeline = await createStreamingPipeline({
         stt: voiceStt,

@@ -200,7 +200,7 @@ export async function initializeSecurityPipeline(
 ): Promise<{ active: string[]; total: number } | null> {
   try {
     const { SECURITY_TIERS, isValidSecurityTier } = await import(
-      '../security/SecurityTiers.js'
+      '../../security/SecurityTiers.js'
     );
 
     const tierName = isValidSecurityTier(opts.securityTier)
@@ -248,7 +248,7 @@ export async function initializeSecurityPipeline(
     // Build the pipeline with the resolved pack config.
     // We import WunderlandSecurityPipeline to create with overridden packs.
     const { WunderlandSecurityPipeline: PipelineCtor } = await import(
-      '../security/WunderlandSecurityPipeline.js'
+      '../../security/WunderlandSecurityPipeline.js'
     );
 
     const pipelineConfig = {

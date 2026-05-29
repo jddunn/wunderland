@@ -87,7 +87,7 @@ export default async function cmdStructured(
 
 	    try {
 	      const { generateText } = await import('@framers/agentos');
-        const { recordWunderlandTokenUsage } = await import('../../../observability/token-usage.js');
+        const { recordWunderlandTokenUsage } = await import('../../../platform/observability/token-usage.js');
 	      const provider = flags.provider as string | undefined;
 
 	      const prompt = [

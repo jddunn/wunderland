@@ -136,7 +136,7 @@ export default async function missionCommand(
       }
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
-      const { compileMissionYaml } = await import('../../orchestration/yaml-compiler.js');
+      const { compileMissionYaml } = await import('../../autonomy/orchestration/yaml-compiler.js');
       const { createWunderland } = await import('../../public/index.js');
 
       const yamlPath = resolve(process.cwd(), target);
@@ -161,7 +161,7 @@ export default async function missionCommand(
       let compileOpts: { llmCaller?: (prompt: string) => Promise<string> } | undefined = undefined;
       if (explicitStyle === 'llm') {
         const baseRuntime = resolveRuntimeConfig();
-        const { chatCompletionsRequest } = await import('../../runtime/tool-helpers.js');
+        const { chatCompletionsRequest } = await import('../../runtime/tools/tool-helpers.js');
         compileOpts = {
           llmCaller: async (prompt: string) => {
             const result = await chatCompletionsRequest(
@@ -482,7 +482,7 @@ export default async function missionCommand(
       if (!target) { console.error('Usage: wunderland mission explain <file>'); return; }
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
-      const { compileMissionYaml } = await import('../../orchestration/yaml-compiler.js');
+      const { compileMissionYaml } = await import('../../autonomy/orchestration/yaml-compiler.js');
       const yamlPath = resolve(process.cwd(), target);
       const content = await readFile(yamlPath, 'utf-8');
       const compiled = compileMissionYaml(content);
