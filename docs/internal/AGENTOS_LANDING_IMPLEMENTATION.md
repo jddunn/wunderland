@@ -693,9 +693,9 @@ NEXT_PUBLIC_TWITTER=https://twitter.com/frame_dev
 
 # Company Info
 NEXT_PUBLIC_COMPANY_NAME=Frame.dev
-NEXT_PUBLIC_COMPANY_LLC=Manic Agency LLC
+NEXT_PUBLIC_COMPANY_LLC=Framers Lab, Inc.
 NEXT_PUBLIC_COMPANY_EMAIL=team@frame.dev
-NEXT_PUBLIC_COMPANY_WEBSITE=https://manic.agency
+NEXT_PUBLIC_COMPANY_WEBSITE=https://frame.dev
 ```
 
 ### Vercel Deployment
@@ -792,7 +792,7 @@ content/
 4. **GitHub**: github.com/framersai/agentos - "Star on GitHub"
 
 ### Footer Links
-- Company: manic.agency
+- Company: frame.dev
 - Email: team@frame.dev
 - GitHub: github.com/framersai
 - npm: npmjs.com/org/framers
