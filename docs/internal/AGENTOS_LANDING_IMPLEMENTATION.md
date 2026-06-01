@@ -7,7 +7,7 @@
 **Live Demo**: https://app.vca.chat/en (Voice Chat Assistant)
 **Marketplace**: https://vca.chat (Buy, sell, and share AI agents - FREE & PAID)
 **Organization**: Frame.dev / framersai
-**Repository**: Separate public repo/submodule at github.com/framersai/agentos.sh
+**Repository**: Separate public repo/submodule at github.com/framerslab/agentos.sh
 **License**: MIT Open Source
 **Status**: Public immediately upon push
 
@@ -533,7 +533,7 @@ const primaryCTAs = [
   { text: 'Try Voice Chat Assistant', link: 'https://app.vca.chat/en' },
   { text: 'Browse Agent Marketplace', link: 'https://vca.chat' },
   { text: 'View Documentation', link: 'https://docs.agentos.sh' },
-  { text: 'Star on GitHub', link: 'https://github.com/framersai/agentos' },
+  { text: 'Star on GitHub', link: 'https://github.com/framerslab/agentos' },
 ]
 ```
 
@@ -687,7 +687,7 @@ NEXT_PUBLIC_NEWSLETTER_ENDPOINT=/api/newsletter
 NEWSLETTER_API_KEY=your_api_key_here
 
 # Social Links
-NEXT_PUBLIC_GITHUB_ORG=https://github.com/framersai
+NEXT_PUBLIC_GITHUB_ORG=https://github.com/framerslab
 NEXT_PUBLIC_NPM_ORG=https://npmjs.com/org/framers
 NEXT_PUBLIC_TWITTER=https://twitter.com/frame_dev
 
@@ -789,12 +789,12 @@ content/
 1. **Live Demo**: app.vca.chat/en - "Try Voice Chat Assistant"
 2. **Marketplace**: vca.chat - "Browse & Share Agents"
 3. **Documentation**: docs.agentos.sh - "Read the Docs"
-4. **GitHub**: github.com/framersai/agentos - "Star on GitHub"
+4. **GitHub**: github.com/framerslab/agentos - "Star on GitHub"
 
 ### Footer Links
 - Company: frame.dev
 - Email: team@frame.dev
-- GitHub: github.com/framersai
+- GitHub: github.com/framerslab
 - npm: npmjs.com/org/framers
 - Twitter: @frame_dev
 

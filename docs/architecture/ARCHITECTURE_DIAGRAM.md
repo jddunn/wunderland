@@ -36,7 +36,7 @@
                 │                               │
                 ▼                               ▼
 ┌───────────────────────────────┐   ┌──────────────────────────────┐
-│ @framers/agentos-extensions   │   │ @framersai/agentos-personas  │
+│ @framers/agentos-extensions   │   │ @framers/agentos-personas  │
 │                               │   │                              │
 │  ONE package for ALL          │   │  Separate for marketplace    │
 │                               │   │                              │
@@ -71,7 +71,7 @@
    │   │   ├─> Guardrails (pii-redactor, etc.)
    │   │   └─> Workflows
    │   │
-   │   └─> Load from @framersai/agentos-personas
+   │   └─> Load from @framers/agentos-personas
    │       ├─> Curated personas
    │       └─> Community personas
    │
@@ -146,7 +146,7 @@ Otherwise, full access by default.
        ├──> npm (@framers/agentos-extensions)
        │    └─> Tools, Guardrails, Workflows, Auth
        │
-       ├──> npm (@framersai/agentos-personas)
+       ├──> npm (@framers/agentos-personas)
        │    └─> Personas (curated + community)
        │
        ├──> GitHub (your-org/custom-extensions)
@@ -242,7 +242,7 @@ packages/agentos-personas/
 ### Package Scopes
 - `@framers/agentos` - Core
 - `@framers/agentos-extensions` - Extensions (includes auth)
-- `@framersai/agentos-personas` - Personas
+- `@framers/agentos-personas` - Personas
 
 ### Auth Patterns
 1. **No auth** - Default, works out of box

@@ -514,7 +514,7 @@ pnpm --filter voice-chat-assistant-backend dev
 
 2. Start workbench:
 ```bash
-pnpm --filter @framersai/agentos-client dev
+pnpm --filter @framers/agentos-client dev
 ```
 
 3. Navigate to Agency Manager

@@ -75,7 +75,7 @@ This document outlines the comprehensive refactoring of AgentOS to extract auth/
 │   └── community/                       # Community PRs go here
 └── Each extension has its own docs/credits/package.json
 
-@framersai/agentos-personas (separate repo/package)
+@framers/agentos-personas (separate repo/package)
 ├── registry.json
 ├── registry/
 │   ├── curated/
@@ -105,8 +105,8 @@ interface RegistryConfig {
     tools?: RegistrySource;
   };
   defaults: {
-    extensionsRegistry: string; // "@framersai/agentos-extensions"
-    personasRegistry: string;   // "@framersai/agentos-personas"
+    extensionsRegistry: string; // "@framers/agentos-extensions"
+    personasRegistry: string;   // "@framers/agentos-personas"
   };
 }
 
@@ -183,7 +183,7 @@ export interface MultiRegistryConfig {
 
 ### Phase 2: Extract Auth into Extension (3-5 days)
 
-#### 2.1 Create `@framersai/agentos-auth` Package
+#### 2.1 Create `@framers/agentos-auth` Package
 ```
 packages/agentos-auth/
 ├── package.json
@@ -215,7 +215,7 @@ packages/agentos-auth/
 ```
 
 #### 2.2 Extract Auth Logic
-- Move `packages/agentos/src/services/user_auth/` → `@framersai/agentos-auth/src/`
+- Move `packages/agentos/src/services/user_auth/` → `@framers/agentos-auth/src/`
 - Keep interfaces in core AgentOS as contracts
 - Implement auth as extension middleware
 
@@ -482,7 +482,7 @@ packages/agentos-personas/
 export class LegacyAuthService implements IAuthService {
   constructor(private extensionManager: ExtensionManager) {
     console.warn(
-      'Built-in auth is deprecated. Please migrate to @framersai/agentos-auth extension. ' +
+      'Built-in auth is deprecated. Please migrate to @framers/agentos-auth extension. ' +
       'See: https://agentos.sh/docs/migration/auth-extension'
     );
   }

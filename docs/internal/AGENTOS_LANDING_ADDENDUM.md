@@ -20,7 +20,7 @@ export async function generateDocs() {
     excludeInternal: true,
     categorizeByGroup: true,
     navigationLinks: {
-      'GitHub': 'https://github.com/framersai/agentos',
+      'GitHub': 'https://github.com/framerslab/agentos',
       'AgentOS': 'https://agentos.sh'
     }
   });
@@ -391,7 +391,7 @@ for await (const chunk of agentOS.streamRequest(request)) {
 
 Ready to build something amazing? Join thousands of developers creating the next generation of AI applications:
 
-- Star us on [GitHub](https://github.com/framersai/agentos)
+- Star us on [GitHub](https://github.com/framerslab/agentos)
 - Join our [Discord](https://wilds.ai/discord)
 - Follow [@frame_dev](https://twitter.com/frame_dev) for updates
 
@@ -409,7 +409,7 @@ git init
 
 # Add as submodule to main repo
 cd ../voice-chat-assistant
-git submodule add https://github.com/framersai/agentos.sh apps/agentos.sh
+git submodule add https://github.com/framerslab/agentos.sh apps/agentos.sh
 
 # Structure
 agentos.sh/

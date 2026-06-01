@@ -246,7 +246,7 @@ Auth is **not** an extension kind - it's infrastructure injected via service int
 ### Package Scoping
 - `@framers/agentos` - Core library
 - `@framers/agentos-extensions` - Extensions registry (includes auth)
-- `@framersai/agentos-personas` - Personas marketplace
+- `@framers/agentos-personas` - Personas marketplace
 
 NOT using `@agentos` (taken) or per-extension packages (fragmentation).
 

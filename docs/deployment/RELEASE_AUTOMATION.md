@@ -8,7 +8,7 @@ This repository publishes multiple npm packages from dedicated submodules. Each 
 |---------|------------|-------------------|
 | `@framers/agentos` | `packages/agentos` | `.github/workflows/release.yml` |
 | `@framers/agentos-extensions` | `packages/agentos-extensions` | `.github/workflows/release.yml` |
-| `@framersai/agentos-guardrails` | `packages/agentos-guardrails` | `.github/workflows/release.yml` |
+| `@framers/agentos-guardrails` | `packages/agentos-guardrails` | `.github/workflows/release.yml` |
 | `@framers/sql-storage-adapter` | `packages/sql-storage-adapter` | `.github/workflows/release.yml` |
 
 Each submodule repository mirrors the same pattern:
@@ -75,9 +75,9 @@ Stick to `<type>: <message>` (e.g. `fix: normalise persona metadata`). Only use 
 
 | Path                   | Public repo                               |
 | ---------------------- | ----------------------------------------- |
-| `packages/agentos`     | `github.com/framersai/agentos`      |
-| `apps/agentos.sh` | `github.com/framersai/agentos.sh`   |
-| `apps/agentos-client`  | `github.com/framersai/agentos-client` |
+| `packages/agentos`     | `github.com/framerslab/agentos`      |
+| `apps/agentos.sh` | `github.com/framerslab/agentos.sh`   |
+| `apps/agentos-client`  | `github.com/framerslab/agentos-client` |
 
 Create these repos ahead of time (empty, default branch `main`). Grant a deploy key or use a GitHub App token so Actions can push.
 
@@ -112,7 +112,7 @@ Version bumps for the package still happen through PRs before tagging.
 
 We will publish the mirror in `agentos.sh` and deploy from there. For now:
 
-- Build with `pnpm --filter @framersai/agentos.sh build`.
+- Build with `pnpm --filter @framers/agentos.sh build`.
 - Export static assets with `next export -o out`.
 - Push `out/` to the public repo `gh-pages` branch or sync to the final hosting provider (to be confirmed).
 
@@ -122,7 +122,7 @@ Document the chosen hosting provider once selected (Vercel/S3/etc.).
 
 Flow mirrors the landing app:
 
-- Build with `pnpm --filter @framersai/agentos-client build`.
+- Build with `pnpm --filter @framers/agentos-client build`.
 - Artifact ends up in `dist/`.
 - TODO: decide deployment target (Linode object storage, container, etc.). Add the deployment command once we have the destination.
 
@@ -151,9 +151,9 @@ Flow mirrors the landing app:
 Complete these steps before the first release so the workflows can publish and mirror automatically.
 
 1. **Create public repositories**
-   - `github.com/framersai/agentos`
-   - `github.com/framersai/agentos.sh`
-   - `github.com/framersai/agentos-client`
+   - `github.com/framerslab/agentos`
+   - `github.com/framerslab/agentos.sh`
+   - `github.com/framerslab/agentos-client`
    - Leave them empty (default branch `main`).
 
 2. **Generate deploy keys**

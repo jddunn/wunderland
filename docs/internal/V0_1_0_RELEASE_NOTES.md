@@ -109,7 +109,7 @@ pnpm --filter voice-chat-assistant-backend test
 ### Frontend Tests
 
 ```bash
-pnpm --filter @framersai/agentos-client e2e
+pnpm --filter @framers/agentos-client e2e
 ```
 
 **Playwright setup**: ✅ Configured (baseline smoke test ready)
@@ -150,10 +150,10 @@ pnpm install --no-frozen-lockfile
 pnpm --filter voice-chat-assistant-backend dev
 
 # Run workbench
-pnpm --filter @framersai/agentos-client dev
+pnpm --filter @framers/agentos-client dev
 
 # Run website
-pnpm --filter @framersai/agentos.sh dev
+pnpm --filter @framers/agentos.sh dev
 
 # Run all tests
 pnpm test
@@ -287,7 +287,7 @@ Special thanks to:
 
 - **Documentation**: https://docs.agentos.sh
 - **API Reference**: https://docs.agentos.sh/api
-- **GitHub Issues**: https://github.com/framersai/agentos/issues
+- **GitHub Issues**: https://github.com/framerslab/agentos/issues
 - **Discord**: Coming soon
 
 ---

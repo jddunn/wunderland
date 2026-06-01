@@ -18,7 +18,7 @@ export const URLS = {
   website: 'https://wunderland.sh',
   saas: 'https://rabbithole.inc',
   docs: 'https://docs.wunderland.sh',
-  github: 'https://github.com/framersai/wunderland',
+  github: 'https://github.com/framerslab/wunderland',
 } as const;
 
 // ── Config paths ────────────────────────────────────────────────────────────

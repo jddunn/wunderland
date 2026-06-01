@@ -8,8 +8,8 @@ This document describes how to release packages from the voice-chat-assistant mo
 
 | Package                      | npm                                                           | Release Location                                                                          |
 | ---------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| @framers/agentos             | [npm](https://npmjs.com/package/@framers/agentos)             | [framersai/agentos](https://github.com/framersai/agentos/actions/workflows/release.yml)   |
-| @framers/sql-storage-adapter | [npm](https://npmjs.com/package/@framers/sql-storage-adapter) | [framersai/sql-storage-adapter](https://github.com/framersai/sql-storage-adapter/actions) |
+| @framers/agentos             | [npm](https://npmjs.com/package/@framers/agentos)             | [framersai/agentos](https://github.com/framerslab/agentos/actions/workflows/release.yml)   |
+| @framers/sql-storage-adapter | [npm](https://npmjs.com/package/@framers/sql-storage-adapter) | [framersai/sql-storage-adapter](https://github.com/framerslab/sql-storage-adapter/actions) |
 
 ---
 
@@ -41,14 +41,14 @@ Releases are **manual only** — no automatic version bumps on commits.
    ```
 
 4. **Trigger release workflow**
-   - Go to [framersai/agentos Actions](https://github.com/framersai/agentos/actions/workflows/release.yml)
+   - Go to [framersai/agentos Actions](https://github.com/framerslab/agentos/actions/workflows/release.yml)
    - Click **"Run workflow"**
    - Enter version (e.g., `0.2.0`)
    - Click **"Run workflow"**
 
 5. **Verify release**
    - Check [npm](https://npmjs.com/package/@framers/agentos)
-   - Check [GitHub Releases](https://github.com/framersai/agentos/releases)
+   - Check [GitHub Releases](https://github.com/framerslab/agentos/releases)
 
 ### Version Guidelines
 
@@ -68,7 +68,7 @@ Releases are **manual only** — no automatic version bumps on commits.
 
 ## @framers/sql-storage-adapter
 
-Same process — use the [sql-storage-adapter repo](https://github.com/framersai/sql-storage-adapter) for releases.
+Same process — use the [sql-storage-adapter repo](https://github.com/framerslab/sql-storage-adapter) for releases.
 
 ---
 
@@ -79,11 +79,11 @@ The monorepo uses git submodules for packages that are also standalone repos:
 ```
 voice-chat-assistant/
 ├── packages/
-│   ├── agentos/          → github.com/framersai/agentos
-│   └── sql-storage-adapter/ → github.com/framersai/sql-storage-adapter
+│   ├── agentos/          → github.com/framerslab/agentos
+│   └── sql-storage-adapter/ → github.com/framerslab/sql-storage-adapter
 └── apps/
-    ├── agentos.sh/       → github.com/framersai/agentos.sh
-    └── agentos-workbench/ → github.com/framersai/agentos-workbench
+    ├── agentos.sh/       → github.com/framerslab/agentos.sh
+    └── agentos-workbench/ → github.com/framerslab/agentos-workbench
 ```
 
 ### Updating Submodules

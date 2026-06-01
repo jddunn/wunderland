@@ -173,7 +173,7 @@ import {
   AgentOS,
   type AgentOSConfig,
   InMemoryWorkflowStore,
-} from '@framersai/agentos';
+} from '@framers/agentos';
 
 const config: AgentOSConfig = {
   orchestratorConfig: { maxToolCallIterations: 4, enableConversationalPersistence: true },

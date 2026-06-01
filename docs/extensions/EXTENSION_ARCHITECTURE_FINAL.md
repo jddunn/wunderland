@@ -38,7 +38,7 @@
 │       └── another-extension/
 └── Each extension has own manifest.json with author credits
 
-@framersai/agentos-personas (separate repo, separate concerns)
+@framers/agentos-personas (separate repo, separate concerns)
 ├── package.json
 ├── registry.json
 ├── registry/
@@ -61,7 +61,7 @@
 - Lazy load extensions as needed
 - Each extension dir has manifest.json with author info
 
-**Bad:** `@framersai/agentos-auth`, `@framersai/agentos-guardrails` (multiple packages)
+**Bad:** `@framers/agentos-auth`, `@framers/agentos-guardrails` (multiple packages)
 - Hard to coordinate releases
 - Community contributions fragmented
 - Dependency hell
@@ -207,9 +207,9 @@ Contributors can add extensions via PR:
 
 ### ❌ Don't create separate package per extension
 ```
-@framersai/agentos-auth         ← NO!
-@framersai/agentos-web-search   ← NO!
-@framersai/agentos-pii-redactor ← NO!
+@framers/agentos-auth         ← NO!
+@framers/agentos-web-search   ← NO!
+@framers/agentos-pii-redactor ← NO!
 ```
 
 ### ❌ Don't make auth an extension kind
