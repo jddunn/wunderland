@@ -3,7 +3,7 @@
 Private architecture note for the new `codex-internal` service that powers block-level summarisation, LLM classification, podcast/image generation, and plan-gated access inside Frame Codex.
 
 > **Status**: draft implementation blueprint  
-> **Owner**: framersai/codex-internal (private repo)  
+> **Owner**: framerslab/codex-internal (private repo)  
 > **Last updated**: 2025-11-17
 
 ---
@@ -58,8 +58,8 @@ codex-internal (Linode, private repo)
 | Component            | Repo                           | Visibility  | Notes                                                              |
 | -------------------- | ------------------------------ | ----------- | ------------------------------------------------------------------ |
 | Marketing + viewer   | `voice-chat-assistant`         | Private     | Serves static `frame.dev` + `@framers/codex-viewer`.               |
-| Public Codex content | `framersai/codex`              | Public      | Content-only repo, no proprietary code.                            |
-| Codex Internal API   | `framersai/codex-internal`     | **Private** | Implements ingestion, summarisation, classification, etc.          |
+| Public Codex content | `framerslab/codex`              | Public      | Content-only repo, no proprietary code.                            |
+| Codex Internal API   | `framerslab/codex-internal`     | **Private** | Implements ingestion, summarisation, classification, etc.          |
 | API Gateway          | `voice-chat-assistant/backend` | Private     | Routes `/api/codex-internal/*` → codex-internal via service token. |
 
 ---
@@ -243,7 +243,7 @@ Deployment steps:
 
 ## 8. Roadmap Checklist
 
-- [ ] Create `framersai/codex-internal` (private) with the structure above.
+- [ ] Create `framerslab/codex-internal` (private) with the structure above.
 - [ ] Extend `planCatalog` with `codex-free` & `codex-pro`.
 - [ ] Build plan-specific pricing UI in `apps/frame.dev`.
 - [ ] Implement `/api/codex-internal/*` proxy routes in `backend/server.ts`.

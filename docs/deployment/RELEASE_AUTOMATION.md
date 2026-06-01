@@ -163,9 +163,9 @@ Complete these steps before the first release so the workflows can publish and m
      ```
    - Add the *public* key (`~/.ssh/agentos-mirror.pub`) to the target repo under **Settings ? Deploy keys** and enable �Allow write access�.
    - Add the *private* key as a secret in this private repo (**Settings ? Secrets and variables ? Actions**):
-     - `AGENTOS_MIRROR_SSH_KEY` ? private key for `framersai/agentos`
-     - `AGENTOS_LANDING_MIRROR_SSH_KEY` ? private key for `framersai/agentos.sh`
-     - `AGENTOS_CLIENT_MIRROR_SSH_KEY` ? private key for `framersai/agentos-client`
+     - `AGENTOS_MIRROR_SSH_KEY` ? private key for `framerslab/agentos`
+     - `AGENTOS_LANDING_MIRROR_SSH_KEY` ? private key for `framerslab/agentos.sh`
+     - `AGENTOS_CLIENT_MIRROR_SSH_KEY` ? private key for `framerslab/agentos-client`
 
 3. **Add the npm token**
    - Store a publish-capable npm token as `NPM_TOKEN` in the same secrets panel.

@@ -6,7 +6,7 @@
 **Docs URL**: https://docs.agentos.sh (auto-generated TypeScript docs)
 **Live Demo**: https://app.vca.chat/en (Voice Chat Assistant)
 **Marketplace**: https://vca.chat (Buy, sell, and share AI agents - FREE & PAID)
-**Organization**: Frame.dev / framersai
+**Organization**: Frame.dev / framerslab
 **Repository**: Separate public repo/submodule at github.com/framerslab/agentos.sh
 **License**: MIT Open Source
 **Status**: Public immediately upon push
@@ -641,7 +641,7 @@ export const metricsConfig: Record<string, MetricSource> = {
   },
   githubStars: {
     type: 'github',
-    repo: 'framersai/agentos',
+    repo: 'framerslab/agentos',
     updateInterval: 3600000, // 1 hour
   },
   npmDownloads: {

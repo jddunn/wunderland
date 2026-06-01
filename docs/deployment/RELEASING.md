@@ -8,8 +8,8 @@ This document describes how to release packages from the voice-chat-assistant mo
 
 | Package                      | npm                                                           | Release Location                                                                          |
 | ---------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| @framers/agentos             | [npm](https://npmjs.com/package/@framers/agentos)             | [framersai/agentos](https://github.com/framerslab/agentos/actions/workflows/release.yml)   |
-| @framers/sql-storage-adapter | [npm](https://npmjs.com/package/@framers/sql-storage-adapter) | [framersai/sql-storage-adapter](https://github.com/framerslab/sql-storage-adapter/actions) |
+| @framers/agentos             | [npm](https://npmjs.com/package/@framers/agentos)             | [framerslab/agentos](https://github.com/framerslab/agentos/actions/workflows/release.yml)   |
+| @framers/sql-storage-adapter | [npm](https://npmjs.com/package/@framers/sql-storage-adapter) | [framerslab/sql-storage-adapter](https://github.com/framerslab/sql-storage-adapter/actions) |
 
 ---
 
@@ -41,7 +41,7 @@ Releases are **manual only** — no automatic version bumps on commits.
    ```
 
 4. **Trigger release workflow**
-   - Go to [framersai/agentos Actions](https://github.com/framerslab/agentos/actions/workflows/release.yml)
+   - Go to [framerslab/agentos Actions](https://github.com/framerslab/agentos/actions/workflows/release.yml)
    - Click **"Run workflow"**
    - Enter version (e.g., `0.2.0`)
    - Click **"Run workflow"**
