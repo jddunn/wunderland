@@ -44,7 +44,7 @@ const SMALL_MODEL_MAP: Record<string, string> = {
 /** Default model IDs per provider (the primary/powerful model). */
 const DEFAULT_MODEL_MAP: Record<string, string> = {
   openai: 'gpt-4o',
-  anthropic: 'claude-sonnet-4-6-20250514',
+  anthropic: 'claude-sonnet-4-6',
   ollama: 'llama3',
   openrouter: 'auto',
   bedrock: 'anthropic.claude-sonnet',

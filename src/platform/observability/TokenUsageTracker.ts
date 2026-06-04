@@ -11,7 +11,7 @@
  * const tracker = new TokenUsageTracker();
  * tracker.record('gpt-4o-mini', 1200, 350);
  * tracker.record('gpt-4o-mini', 800, 200);
- * tracker.record('claude-sonnet-4-6-20250514', 2000, 600);
+ * tracker.record('claude-sonnet-4-6', 2000, 600);
  *
  * const usage = tracker.getUsage();
  * console.log(usage.totalPromptTokens);   // 4000
@@ -26,7 +26,7 @@
 
 /** Per-model token usage record. */
 export interface ModelTokenUsage {
-  /** Model identifier (e.g., "gpt-4o-mini", "claude-sonnet-4-6-20250514") */
+  /** Model identifier (e.g., "gpt-4o-mini", "claude-sonnet-4-6") */
   model: string;
   /** Cumulative prompt (input) tokens for this model */
   promptTokens: number;
@@ -90,8 +90,8 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'o3-mini': { promptPer1M: 1.10, completionPer1M: 4.40 },
 
   // Anthropic
-  'claude-opus-4-6-20250514': { promptPer1M: 15.00, completionPer1M: 75.00 },
-  'claude-sonnet-4-6-20250514': { promptPer1M: 3.00, completionPer1M: 15.00 },
+  'claude-opus-4-6': { promptPer1M: 15.00, completionPer1M: 75.00 },
+  'claude-sonnet-4-6': { promptPer1M: 3.00, completionPer1M: 15.00 },
   'claude-haiku-4-5-20251001': { promptPer1M: 0.80, completionPer1M: 4.00 },
   'claude-3-5-sonnet-20241022': { promptPer1M: 3.00, completionPer1M: 15.00 },
   'claude-3-haiku-20240307': { promptPer1M: 0.25, completionPer1M: 1.25 },

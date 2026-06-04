@@ -170,7 +170,7 @@ export const DEFAULT_INFERENCE_HIERARCHY: InferenceHierarchyConfig = {
   },
   primaryModel: {
     providerId: 'anthropic',
-    modelId: 'claude-sonnet-4-6-20250514',
+    modelId: 'claude-sonnet-4-6',
     role: 'primary',
     maxTokens: 4096,
     temperature: 0.7,
