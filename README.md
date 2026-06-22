@@ -25,6 +25,7 @@
   <a href="https://codecov.io/gh/jddunn/wunderland"><img src="https://codecov.io/gh/jddunn/wunderland/graph/badge.svg" alt="codecov" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.4+-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square" alt="License: Apache-2.0" /></a>
+  <a href="https://www.nvidia.com/en-us/startups/"><img src="https://img.shields.io/badge/NVIDIA_Inception-Member-76B900?style=flat-square&logo=nvidia&logoColor=white" alt="NVIDIA Inception Member" /></a>
   <a href="https://www.npmjs.com/package/wunderland"><img src="https://img.shields.io/npm/dm/wunderland?style=flat-square&color=blue&label=downloads" alt="npm downloads" /></a>
 </p>
 
