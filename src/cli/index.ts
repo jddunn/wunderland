@@ -100,7 +100,6 @@ function printHelp(opts?: { isExporting?: boolean }): void {
       ${w('rag')}                   RAG memory management
       ${w('evaluate')}              Evaluation suite
       ${w('knowledge')}             Knowledge graph
-      ${w('discovery')}             Capability discovery & platform knowledge
       ${w('provenance')}            Audit trail & provenance
       ${w('marketplace')}           Marketplace search/install
       ${w('emergent')}              Runtime-forged tool management
@@ -273,9 +272,13 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     examples: ['wunderland status'],
   },
   hitl: {
-    summary: 'Inspect and resolve approval checkpoints.',
-    usage: ['wunderland hitl [checkpoints|actions] [options]'],
-    examples: ['wunderland hitl', 'wunderland hitl checkpoints'],
+    summary: 'Watch a running agent’s approval queue and approve or reject from the terminal.',
+    usage: ['wunderland hitl [watch] [--server <url>] [--secret <token>]'],
+    examples: ['wunderland hitl', 'wunderland hitl watch'],
+    notes: [
+      'Only `watch` is supported; it polls /hitl/pending on a running `wunderland start` server.',
+      'Approvals and checkpoints are both resolved from the watch view.',
+    ],
   },
   agents: {
     summary: 'List known agents on the local machine.',
@@ -631,13 +634,13 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     ],
   },
   discovery: {
-    summary: 'Inspect the capability discovery engine, platform knowledge base, and catalog.',
-    usage: ['wunderland discovery'],
-    examples: ['wunderland discovery'],
+    summary: 'Capability discovery — a surface inside the running agent, not a standalone command.',
+    usage: ['wunderland help discovery'],
+    examples: ['wunderland start   # then press 8 in the dashboard', 'wunderland chat    # then /discover'],
     notes: [
-      'Opens the discovery dashboard in TUI mode (press 8 in the dashboard).',
-      'In chat mode, use /discover for capability stats and /router for QueryRouter status.',
-      'For a full guide: wunderland help discovery',
+      'Discovery needs the running agent’s tool map and LLM config, so it lives inside the agent.',
+      'TUI: press 8 in the `wunderland start` dashboard for the discovery panel.',
+      'Chat: /discover for capability stats, /router for QueryRouter status.',
     ],
   },
   quickstart: {

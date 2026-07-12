@@ -12,8 +12,8 @@ async function cronList(_globals: GlobalFlags): Promise<void> {
   fmt.blank();
   fmt.skip('No cron jobs configured locally.');
   fmt.blank();
-  fmt.note(`Cron jobs are managed via the Rabbithole dashboard or the agent's ${accent('cron_manage')} tool.`);
-  fmt.note(`API: ${dim('POST /wunderland/cron')} to create jobs programmatically.`);
+  fmt.note(`The cron engine (${accent('CronScheduler')} + ${accent('cron_manage')} tool) ships in this build but is not yet wired to the agent runtime.`);
+  fmt.note(`Wiring lands next: registered tool, persisted jobs, and server routes. ${dim('No jobs run today.')}`);
   fmt.blank();
 }
 
@@ -23,9 +23,10 @@ async function cronStatus(_globals: GlobalFlags): Promise<void> {
   fmt.kvPair('Engine', accent('CronScheduler'));
   fmt.kvPair('Schedule Types', 'at (one-shot), every (interval), cron (expression)');
   fmt.kvPair('Payload Types', 'stimulus, webhook, message, custom');
+  fmt.kvPair('Status', 'engine present, not yet activated by `wunderland start`');
   fmt.blank();
-  fmt.note(`The cron scheduler runs inside the backend server.`);
-  fmt.note(`Start your server with ${accent('wunderland start')} to activate scheduling.`);
+  fmt.note(`Scheduling is inert until the engine is registered with the runtime.`);
+  fmt.note(`Until then, use ${accent('wunderland start')} with an external scheduler (cron, systemd timer) to trigger work.`);
   fmt.blank();
 }
 
