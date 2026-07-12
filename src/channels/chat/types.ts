@@ -23,6 +23,14 @@ export interface ChannelContext {
   sendFileFn: (filePath: string, caption?: string) => Promise<void>;
   /** Send a text reply to the current chat. */
   replyFn: (text: string) => Promise<void>;
+  /** Group metadata, when the adapter can supply it (drives GroupPolicy). */
+  group?: {
+    isGroup?: boolean;
+    mentions?: string[];
+    supportsMentions?: boolean;
+    senderIsBot?: boolean;
+    botUserId?: string;
+  };
 }
 
 /** Configuration for a single chat channel in agent.config.json. */
@@ -51,6 +59,8 @@ export interface ChatTaskResponderConfig {
   dbPath?: string;
   /** LLM call function — invoked with message history, returns assistant response. */
   llmCallFn?: (messages: Array<{ role: string; content: string }>, tools?: unknown[]) => Promise<string>;
+  /** Group-chat safety policy (mention gating, owner-only, allow/deny, bot-loop protection). */
+  groupPolicy?: import('@framers/agentos').GroupPolicy;
 }
 
 /** A stored conversation message. */

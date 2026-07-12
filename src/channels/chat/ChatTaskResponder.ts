@@ -14,10 +14,21 @@
  * @module wunderland/chat/ChatTaskResponder
  */
 
+import { evaluateGroupPolicy, type GroupPolicy } from '@framers/agentos';
+
 import { ChatConversationStore } from './ChatConversationStore.js';
 import { checkSecurity } from './ChannelSecurityGate.js';
 import { resolveToolAllowlist } from './ToolAllowlistResolver.js';
 import type { ChatTaskResponderConfig, ChannelContext, SecurityTier } from './types.js';
+
+/** Group metadata an adapter can attach to a channel context. */
+export interface GroupMessageContext {
+  isGroup?: boolean;
+  mentions?: string[];
+  supportsMentions?: boolean;
+  senderIsBot?: boolean;
+  botUserId?: string;
+}
 
 /**
  * Bridges incoming channel messages to the full AgentOS tool execution pipeline.
@@ -29,6 +40,7 @@ export class ChatTaskResponder {
   private tier: SecurityTier;
   private toolAllowlist: string[] | null;
   private llmCallFn?: (messages: Array<{ role: string; content: string }>, tools?: unknown[]) => Promise<string>;
+  private groupPolicy?: GroupPolicy;
 
   constructor(config: ChatTaskResponderConfig) {
     this.store = new ChatConversationStore(
@@ -39,6 +51,38 @@ export class ChatTaskResponder {
     this.tier = config.securityTier;
     this.toolAllowlist = resolveToolAllowlist(config.securityTier);
     this.llmCallFn = config.llmCallFn;
+    this.groupPolicy = config.groupPolicy;
+  }
+
+  /**
+   * Combined group-policy + security gate.
+   *
+   * Group-policy drops are SILENT (no reply) so the deny surface cannot be
+   * probed; the legacy security gate keeps its user-visible reason.
+   */
+  async shouldEngage(
+    ctx: { userId: string } & GroupMessageContext,
+  ): Promise<{ allowed: boolean; reason?: string; silent?: boolean }> {
+    const policyResult = evaluateGroupPolicy(this.groupPolicy, {
+      isGroup: ctx.isGroup === true,
+      senderId: ctx.userId,
+      senderIsBot: ctx.senderIsBot === true,
+      mentions: ctx.mentions,
+      supportsMentions: ctx.supportsMentions === true,
+      botUserId: ctx.botUserId,
+      bindingOwnerUserId: undefined,
+    });
+
+    if (policyResult.verdict === 'drop') {
+      return { allowed: false, reason: policyResult.reason, silent: true };
+    }
+
+    const securityResult = checkSecurity(ctx.userId, this.allowedUsers);
+    if (!securityResult.allowed) {
+      return { allowed: false, reason: securityResult.reason };
+    }
+
+    return { allowed: true };
   }
 
   /**
@@ -49,11 +93,17 @@ export class ChatTaskResponder {
    * @returns The assistant's text response (files are sent directly via ctx.sendFileFn).
    */
   async handle(messageText: string, ctx: ChannelContext): Promise<string> {
-    // 1. Security gate
-    const securityResult = checkSecurity(ctx.userId, this.allowedUsers);
-    if (!securityResult.allowed) {
-      await ctx.replyFn(securityResult.reason!);
-      return securityResult.reason!;
+    // 1. Group policy + security gate
+    const gate = await this.shouldEngage({ userId: ctx.userId, ...(ctx.group ?? {}) });
+    if (!gate.allowed) {
+      if (gate.silent) {
+        console.info(
+          `[ChatTaskResponder] group-policy drop reason=${gate.reason} platform=${ctx.platform} chat=${ctx.chatId} sender=${ctx.userId}`,
+        );
+        return '';
+      }
+      await ctx.replyFn(gate.reason!);
+      return gate.reason!;
     }
 
     // 2. Load conversation history
