@@ -17,6 +17,8 @@ export { handleConfigRoutes } from './config.js';
 export { handleSocialRoutes, handleFeedRoutes } from './social.js';
 export { handleHealthRoutes, handleHitlRoutes } from './health.js';
 export { handleChatRoutes } from './chat.js';
+export { handleWebhookRequest, resetWebhookRateLimiter } from './webhooks.js';
+export type { WebhookHookConfig, WebhookDeps } from './webhooks.js';
 
 /* ── re-import for the dispatch helper ─────────────────────────────────────── */
 import { handleDashboardRoutes } from './dashboard.js';
@@ -24,6 +26,8 @@ import { handleConfigRoutes } from './config.js';
 import { handleSocialRoutes, handleFeedRoutes } from './social.js';
 import { handleHealthRoutes, handleHitlRoutes } from './health.js';
 import { handleChatRoutes } from './chat.js';
+import { handleWebhookRequest, type WebhookHookConfig } from './webhooks.js';
+import { readBody } from './helpers.js';
 
 /**
  * Try all route handler groups in order. The first handler that returns `true`
@@ -66,6 +70,27 @@ export async function dispatchRoute(
 
   /* 6. Feed ingestion */
   if (await handleFeedRoutes(req, res, url, deps)) return true;
+
+  /* 7. Webhook wake endpoints (POST /webhooks/:hookId) */
+  if (url.pathname.startsWith('/webhooks/')) {
+    const hooks: WebhookHookConfig[] = Array.isArray(deps.cfg?.webhooks) ? deps.cfg.webhooks : [];
+    const rawBody = req.method === 'POST' ? await readBody(req) : '';
+    return handleWebhookRequest(req, res, rawBody, {
+      hooks,
+      enqueueTurn: async (hookId, payload) => {
+        // Wake the agent: append the payload as a user turn on a hook-scoped
+        // session, which the chat runtime drains on its next pass.
+        const sessionKey = `webhook:${hookId}`;
+        const history = deps.sessions.get(sessionKey) ?? [];
+        history.push({ role: 'user', content: payload, source: `webhook:${hookId}` });
+        deps.sessions.set(sessionKey, history);
+        deps.broadcastAgentEvent?.({ type: 'webhook_turn', hookId, payload });
+      },
+      appendFeed: async (hookId, payload) => {
+        deps.broadcastAgentEvent?.({ type: 'webhook_notify', hookId, payload });
+      },
+    });
+  }
 
   return false;
 }
