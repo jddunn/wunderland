@@ -28,7 +28,7 @@ Markers:
 
 Reference:
 
-- `packages/wunderland/src/runtime/tool-calling.ts`
+- `packages/wunderland/src/runtime/tools/tool-calling.ts`
 
 ## Human In The Loop (HITL) + Approvals
 
@@ -42,7 +42,7 @@ Wunderland uses a 3-tier model similar in spirit to OpenClaw:
 
 Reference:
 
-- `packages/wunderland/src/authorization/StepUpAuthorizationManager.ts`
+- `packages/wunderland/src/security/StepUpAuthorizationManager.ts`
 
 ### CLI execution modes (Wunderland-specific)
 
@@ -112,12 +112,35 @@ Reference:
 - `packages/wunderland/src/skills/index.ts`
 - `packages/wunderland/src/cli/commands/skills.ts`
 
+## W0 additions
+
+Recent parity work landed the following:
+
+- **Extension HTTP handlers in the core server.** AgentOS's own HTTP server now
+  dispatches `http-handler` extension descriptors (webhook endpoints, etc.)
+  before its 404 fallthrough, behind the `dispatchExtensionHandlers` config flag
+  (default on). Previously only the Wunderland CLI server mounted them.
+- **Group-chat controls.** A `GroupPolicy` contract (mention gating, owner-only
+  activation, allow/deny lists, and always-on bot-loop protection) is enforced in
+  the channel router and in the Wunderland chat responder. Group-policy drops are
+  silent, so the deny surface cannot be probed.
+- **Authenticated webhook wake endpoints.** `POST /webhooks/:hookId` wakes an
+  agent (`turn` mode) or broadcasts a payload (`notify` mode), authenticated by
+  HMAC-SHA256 (timestamped) or bearer secret, with per-hook rate limiting.
+  Unknown hooks and failed auth return the same generic 404.
+
 ## Known Gaps vs OpenClaw (Intentional)
 
-These are OpenClaw features that are not currently goals for Wunderland parity in the CLI runtime:
+Some earlier "gaps" are now shipped: Wunderland has a long-running per-agent
+server (`wunderland start`), daemonization (`serve`/`ps`/`logs`/`stop` with a
+watchdog), a multi-agent dashboard hub, and DM pairing workflows
+(`PairingManager`, ported from OpenClaw). The remaining intentional gaps in the
+CLI runtime:
 
-- Gateway daemon/control plane, sessions/presence UI, and channel-specific pairing workflows.
-- Per-command exec allowlist file + socket-based approvals (OpenClaw `exec-approvals.json`).
+- A single unified gateway control plane with a typed WebSocket protocol and
+  scoped device tokens (Wunderland runs one HTTP server per agent instead).
+- Per-command exec allowlist file + socket-based approvals (OpenClaw
+  `exec-approvals.json`). Exec-approval plan-binding is designed and upcoming.
 
 Wunderland leans on:
 
