@@ -172,7 +172,13 @@ export class CronScheduler {
   private jobs = new Map<string, CronJob>();
   private tickInterval: ReturnType<typeof setInterval> | null = null;
   private handlers: CronJobHandler[] = [];
+  /** Post-settlement handlers — fired AFTER a job's state advances. */
+  private settledHandlers: CronJobHandler[] = [];
   private readonly tickMs: number;
+  /** Re-entrancy guard: true while a tick is mid-flight (prevents overlap). */
+  private ticking = false;
+  /** Per-job in-flight guard: a slow job must not double-fire. */
+  private readonly inFlight = new Set<string>();
 
   constructor(options?: CronSchedulerOptions) {
     this.tickMs = options?.tickMs ?? 10_000;
@@ -217,6 +223,41 @@ export class CronScheduler {
       const idx = this.handlers.indexOf(handler);
       if (idx >= 0) this.handlers.splice(idx, 1);
     };
+  }
+
+  /**
+   * Register a handler invoked AFTER a job runs and its state has advanced
+   * (runCount/lastRun/lastStatus/nextRun/one-shot-disable all updated). Use for
+   * persistence write-through of post-run state. Returns an unsubscribe fn.
+   */
+  onJobSettled(handler: CronJobHandler): () => void {
+    this.settledHandlers.push(handler);
+    return () => {
+      const idx = this.settledHandlers.indexOf(handler);
+      if (idx >= 0) this.settledHandlers.splice(idx, 1);
+    };
+  }
+
+  /**
+   * Run a job immediately, out of schedule, advancing its state exactly as a
+   * due tick would (runCount, lastRun, one-shot disable, nextRun) and firing
+   * the settlement hook. No-op if the job is unknown or already in flight.
+   */
+  async runJobNow(jobId: string): Promise<void> {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+    await this.executeJob(job, Date.now());
+  }
+
+  /**
+   * Reinstate a persisted job WITHOUT resetting identity/state/timestamps the
+   * way addJob does — used by boot restore. Throws on a duplicate id.
+   */
+  restoreJob(job: CronJob): void {
+    if (this.jobs.has(job.id)) {
+      throw new Error(`Cron job ${job.id} already exists (restore duplicate)`);
+    }
+    this.jobs.set(job.id, structuredClone(job));
   }
 
   // ---------------------------------------------------------------------------
@@ -328,14 +369,21 @@ export class CronScheduler {
   // Core tick
   // ---------------------------------------------------------------------------
 
-  /** Check all jobs and fire due ones. */
+  /** Check all jobs and fire due ones. Re-entrancy-guarded so a slow handler
+   * cannot overlap with the next interval tick. */
   private async tick(): Promise<void> {
-    const now = Date.now();
-    for (const job of this.jobs.values()) {
-      if (!job.enabled) continue;
-      if (job.state.nextRunAtMs !== undefined && now >= job.state.nextRunAtMs) {
-        await this.executeJob(job, now);
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      const now = Date.now();
+      for (const job of this.jobs.values()) {
+        if (!job.enabled) continue;
+        if (job.state.nextRunAtMs !== undefined && now >= job.state.nextRunAtMs) {
+          await this.executeJob(job, now);
+        }
       }
+    } finally {
+      this.ticking = false;
     }
   }
 
@@ -343,40 +391,57 @@ export class CronScheduler {
   // Job execution
   // ---------------------------------------------------------------------------
 
-  /** Execute a single job: call all handlers, update state, compute next run. */
+  /** Execute a single job: call all handlers, update state, compute next run.
+   * Per-job in-flight guarded so a slow job can't be entered twice. */
   private async executeJob(job: CronJob, now: number): Promise<void> {
+    if (this.inFlight.has(job.id)) return;
+    this.inFlight.add(job.id);
     // Snapshot the run time before handlers execute
     const runAtMs = now;
 
     let status: 'ok' | 'error' = 'ok';
     let lastError: string | undefined;
 
-    // Call all registered handlers
-    for (const handler of this.handlers) {
+    try {
+      // Call all registered handlers
+      for (const handler of this.handlers) {
+        try {
+          await handler(structuredClone(job));
+        } catch (err: unknown) {
+          status = 'error';
+          lastError = err instanceof Error ? err.message : String(err);
+        }
+      }
+
+      // Update state
+      job.state.lastRunAtMs = runAtMs;
+      job.state.lastStatus = status;
+      job.state.lastError = lastError;
+      job.state.runCount += 1;
+
+      // For 'at' schedules, disable after execution (one-shot)
+      if (job.schedule.kind === 'at') {
+        job.enabled = false;
+        job.state.nextRunAtMs = undefined;
+      } else {
+        // Compute next run time
+        job.state.nextRunAtMs = this.computeNextRunAtMs(job.schedule, runAtMs);
+      }
+
+      job.updatedAt = Date.now();
+    } finally {
+      this.inFlight.delete(job.id);
+    }
+
+    // Post-settlement hooks fire AFTER state has advanced, carrying the updated
+    // job (for persistence write-through). Outside the in-flight window.
+    for (const handler of this.settledHandlers) {
       try {
         await handler(structuredClone(job));
-      } catch (err: unknown) {
-        status = 'error';
-        lastError = err instanceof Error ? err.message : String(err);
+      } catch (err) {
+        console.warn(`[CronScheduler] settlement handler error for ${job.id}:`, err);
       }
     }
-
-    // Update state
-    job.state.lastRunAtMs = runAtMs;
-    job.state.lastStatus = status;
-    job.state.lastError = lastError;
-    job.state.runCount += 1;
-
-    // For 'at' schedules, disable after execution (one-shot)
-    if (job.schedule.kind === 'at') {
-      job.enabled = false;
-      job.state.nextRunAtMs = undefined;
-    } else {
-      // Compute next run time
-      job.state.nextRunAtMs = this.computeNextRunAtMs(job.schedule, runAtMs);
-    }
-
-    job.updatedAt = Date.now();
   }
 
   // ---------------------------------------------------------------------------
