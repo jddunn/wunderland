@@ -52,6 +52,7 @@ export type ToolCategory =
   | 'filesystem'     // file_search, file_write, file_read
   | 'system'         // cli_executor, code_execution
   | 'productivity'   // calendar
+  | 'scheduling'     // cron_manage (scheduled jobs)
   | 'communication'; // email_send, slack_send, telegram_send, etc.
 
 /**
@@ -284,7 +285,7 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
     name: 'assistant',
     displayName: 'Assistant',
     description: 'Private assistant mode: search, media, memory, productivity, communication, and read-only file access. No CLI or system modification.',
-    allowedCategories: ['search', 'media', 'memory', 'filesystem', 'productivity', 'communication'],
+    allowedCategories: ['search', 'media', 'memory', 'filesystem', 'productivity', 'communication', 'scheduling'],
     blockedCategories: ['system', 'social'],
     allowFileSystem: true,
     allowCliExecution: false,
@@ -299,7 +300,7 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
     name: 'developer',
     displayName: 'Developer',
     description: 'Local developer assistant: full tool access including CLI execution with human-in-the-loop approval for dangerous operations.',
-    allowedCategories: ['search', 'media', 'memory', 'filesystem', 'system', 'productivity', 'communication'],
+    allowedCategories: ['search', 'media', 'memory', 'filesystem', 'system', 'productivity', 'communication', 'scheduling'],
     blockedCategories: [],
     allowFileSystem: true,
     allowCliExecution: true,
@@ -314,7 +315,7 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
     name: 'unrestricted',
     displayName: 'Unrestricted',
     description: 'Full access to all tools including CLI and system modification. Admin only — use with extreme caution.',
-    allowedCategories: ['social', 'search', 'media', 'memory', 'filesystem', 'system', 'productivity', 'communication'],
+    allowedCategories: ['social', 'search', 'media', 'memory', 'filesystem', 'system', 'productivity', 'communication', 'scheduling'],
     blockedCategories: [],
     allowFileSystem: true,
     allowCliExecution: true,

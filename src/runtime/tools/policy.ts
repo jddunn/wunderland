@@ -261,6 +261,7 @@ export function filterToolMapByPolicy(opts: {
     if (c === 'social') return 'social';
     if (c === 'system') return 'system';
     if (c === 'filesystem') return 'filesystem';
+    if (c === 'scheduling') return 'scheduling';
 
     return undefined;
   }
