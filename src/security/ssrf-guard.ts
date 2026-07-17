@@ -12,6 +12,7 @@
 
 import { URL } from 'node:url';
 import * as net from 'node:net';
+import { lookup as dnsLookup } from 'node:dns/promises';
 
 /**
  * IPv4 private/reserved ranges that should be blocked.
@@ -249,6 +250,78 @@ export function validateURL(
   }
 
   return { safe: true };
+}
+
+/** A DNS resolver returning all addresses for a host (injectable for tests). */
+export type DnsLookupAll = (host: string) => Promise<Array<{ address: string; family: number }>>;
+
+const defaultLookupAll: DnsLookupAll = (host) => dnsLookup(host, { all: true });
+
+export interface UrlWithDnsResult {
+  safe: boolean;
+  reason?: string;
+  /** Resolved addresses (present when resolution ran and all were public). */
+  resolvedAddresses?: string[];
+}
+
+/**
+ * SSRF validation that CLOSES the DNS-rebinding gap `validateURL` leaves open:
+ * a public hostname whose A/AAAA records point at a private address
+ * (10.x, 127.x, 169.254.x, ::1, …). The sync `validateURL` runs first (fast
+ * reject on literal IPs / known hosts / suffixes / protocol / custom blocklist);
+ * if the host is a real name it is then RESOLVED and rejected when ANY resolved
+ * address is private. Returns the resolved addresses so a caller can
+ * resolve-then-connect (pin the checked IP) to also close the TOCTOU window.
+ *
+ * Use this — not `validateURL` — for agent-authored outbound targets (cron
+ * webhook jobs, tool-built URLs).
+ */
+export async function validateUrlWithDns(
+  urlString: string,
+  options: {
+    allowHTTP?: boolean;
+    additionalBlockedHosts?: string[];
+    /** Injectable resolver (defaults to node:dns lookup, all records). */
+    lookup?: DnsLookupAll;
+  } = {}
+): Promise<UrlWithDnsResult> {
+  // 1. Sync checks: protocol, literal IPs, known-blocked hosts, suffixes,
+  //    custom blocklist. Catches literal-IP + named-blocklist without any DNS.
+  const sync = validateURL(urlString, {
+    allowHTTP: options.allowHTTP,
+    additionalBlockedHosts: options.additionalBlockedHosts,
+  });
+  if (!sync.safe) return { safe: false, reason: sync.reason };
+
+  // If the host is a literal IP, validateURL already vetted it — no DNS needed.
+  const host = new URL(urlString).hostname;
+  const literal = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  if (net.isIP(literal)) {
+    return { safe: true, resolvedAddresses: [literal] };
+  }
+
+  // 2. Resolve and vet EVERY address.
+  const lookup = options.lookup ?? defaultLookupAll;
+  let records: Array<{ address: string; family: number }>;
+  try {
+    records = await lookup(host);
+  } catch (err) {
+    return {
+      safe: false,
+      reason: `DNS lookup failed for ${host}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  if (!records || records.length === 0) {
+    return { safe: false, reason: `DNS lookup returned no records for ${host}` };
+  }
+
+  const addresses = records.map((r) => r.address);
+  const blocked = addresses.find((addr) => isPrivateIP(addr));
+  if (blocked) {
+    return { safe: false, reason: `Host ${host} resolves to a private/reserved address: ${blocked}` };
+  }
+
+  return { safe: true, resolvedAddresses: addresses };
 }
 
 /**
