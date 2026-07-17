@@ -28,6 +28,7 @@ import { handleHealthRoutes, handleHitlRoutes } from './health.js';
 import { handleChatRoutes } from './chat.js';
 import { handleWebhookRequest, type WebhookHookConfig } from './webhooks.js';
 import { readBody } from './helpers.js';
+import { runAgentTurn } from '../agent-turn.js';
 
 /**
  * Try all route handler groups in order. The first handler that returns `true`
@@ -78,13 +79,19 @@ export async function dispatchRoute(
     return handleWebhookRequest(req, res, rawBody, {
       hooks,
       enqueueTurn: async (hookId, payload) => {
-        // Wake the agent: append the payload as a user turn on a hook-scoped
-        // session, which the chat runtime drains on its next pass.
-        const sessionKey = `webhook:${hookId}`;
-        const history = deps.sessions.get(sessionKey) ?? [];
-        history.push({ role: 'user', content: payload, source: `webhook:${hookId}` });
-        deps.sessions.set(sessionKey, history);
-        deps.broadcastAgentEvent?.({ type: 'webhook_turn', hookId, payload });
+        // Wake the agent for real: run a full tool-calling turn from server
+        // context. Fire-and-forget — NOT awaited — so the webhook responds 202
+        // immediately instead of blocking the HTTP request on a multi-second
+        // LLM turn (which risks caller timeouts + redelivery storms). The turn
+        // captures its own failures; the .catch here is only for truly
+        // unexpected errors so they never become an unhandled rejection.
+        void runAgentTurn(deps, {
+          sessionId: `webhook:${hookId}`,
+          message: payload,
+          source: `webhook:${hookId}`,
+        }).catch((err) => {
+          console.warn(`[webhooks] unexpected turn error hook=${hookId}:`, err);
+        });
       },
       appendFeed: async (hookId, payload) => {
         deps.broadcastAgentEvent?.({ type: 'webhook_notify', hookId, payload });
