@@ -108,7 +108,7 @@ export function assertQualityFloor(model: MissionModel, opts: QualityFloorOption
   if (isLocal) {
     const src = opts.source ? ` (source: ${opts.source})` : '';
     throw new Error(
-      `Assistant mission resolved to ${model.providerId}/${model.model}${src}, which is below the assistant quality floor. ` +
+      `Assistant mission resolved to ${model.providerId}/${model.model}, which is below the assistant quality floor${src}. ` +
         `Pin a cloud model with --planner-model/--execution-model (e.g. anthropic/claude-sonnet-5).`,
     );
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMissionTools } from '../yaml-compiler.js';
+import { parseMissionTools } from '../mission-tools.js';
 
 describe('parseMissionTools', () => {
   it('returns the tools array when present', () => {

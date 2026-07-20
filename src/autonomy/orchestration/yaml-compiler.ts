@@ -534,28 +534,9 @@ interface YamlMissionDef {
   tools?: string[];
 }
 
-/**
- * Parse ONLY the `tools:` allowlist from a mission YAML without running the
- * full compiler. Returns the pack-id list, `undefined` when omitted (meaning
- * "use the default curated set"), or `[]` for an explicit empty list.
- *
- * `mission run` previously ignored a mission's `tools:` field entirely, loading
- * every curated tool with blanket auto-approval (Codex spec review F1). This is
- * the surgical parse the CLI uses to scope the runtime before graph execution.
- *
- * @param content Raw YAML mission document.
- * @throws If `tools:` is present but is not a list.
- */
-export function parseMissionTools(content: string): string[] | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const yaml = require('yaml');
-  const doc = yaml.parse(content) as { tools?: unknown } | null;
-  if (!doc || !('tools' in doc) || doc.tools == null) return undefined;
-  if (!Array.isArray(doc.tools)) {
-    throw new Error('mission `tools:` must be a list of curated tool/pack ids');
-  }
-  return doc.tools.map((t: unknown) => String(t));
-}
+// parseMissionTools lives in ./mission-tools (no agentos imports) so it stays
+// unit-testable in isolation; re-exported here for discoverability.
+export { parseMissionTools } from './mission-tools.js';
 
 /**
  * Parses a YAML string describing a mission and compiles it to a `CompiledMission`.

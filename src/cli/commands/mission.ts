@@ -137,7 +137,8 @@ export default async function missionCommand(
       }
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
-      const { compileMissionYaml, parseMissionTools } = await import('../../autonomy/orchestration/yaml-compiler.js');
+      const { compileMissionYaml } = await import('../../autonomy/orchestration/yaml-compiler.js');
+      const { parseMissionTools } = await import('../../autonomy/orchestration/mission-tools.js');
       const { createWunderland } = await import('../../public/index.js');
 
       const yamlPath = resolve(process.cwd(), target);
