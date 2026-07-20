@@ -526,7 +526,17 @@ interface YamlMissionDef {
   };
   input?: Record<string, YamlFieldDef>;
   returns?: Record<string, YamlFieldDef>;
+  /**
+   * Optional explicit tool allowlist (curated pack ids, e.g. `cli-executor`,
+   * `web-search`). When present, only these packs load for the mission instead
+   * of the full curated set. Omit for the default (all curated) behavior.
+   */
+  tools?: string[];
 }
+
+// parseMissionTools lives in ./mission-tools (no agentos imports) so it stays
+// unit-testable in isolation; re-exported here for discoverability.
+export { parseMissionTools } from './mission-tools.js';
 
 /**
  * Parses a YAML string describing a mission and compiles it to a `CompiledMission`.
