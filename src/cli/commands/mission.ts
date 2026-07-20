@@ -14,6 +14,7 @@
  */
 
 import { resolveRuntimeConfig } from './workflows.js';
+import { resolveMissionModel, type MissionModel } from './mission-model-flags.js';
 import { shutdownWunderlandOtel, startWunderlandOtel } from '../../platform/observability/otel.js';
 import type { GlobalFlags } from '../types.js';
 import type { ProviderStrategyConfig, ProviderStrategyName } from '@framers/agentos/orchestration';
@@ -136,7 +137,7 @@ export default async function missionCommand(
       }
       const { readFile } = await import('node:fs/promises');
       const { resolve } = await import('node:path');
-      const { compileMissionYaml } = await import('../../autonomy/orchestration/yaml-compiler.js');
+      const { compileMissionYaml, parseMissionTools } = await import('../../autonomy/orchestration/yaml-compiler.js');
       const { createWunderland } = await import('../../public/index.js');
 
       const yamlPath = resolve(process.cwd(), target);
@@ -158,18 +159,39 @@ export default async function missionCommand(
       // 1024 max_tokens is plenty for a 2-8 step JSON plan and stays well
       // under most pay-as-you-go credit ceilings; using 2000 hit OpenRouter
       // 402 errors on accounts with small balances.
+      // Resolve --planner-model / --execution-model into full LLM configs.
+      // These flags were previously honored ONLY on the natural-language mission
+      // path; a YAML mission always ran the runtime default regardless (Codex F4).
+      // resolveMissionModel splits provider/model on the first slash and pulls
+      // the selected provider's key/baseUrl from env (never the runtime default).
+      const missionRuntimeModel: MissionModel = {
+        providerId: String(resolveRuntimeConfig().llm.providerId ?? 'openai'),
+        model: String(resolveRuntimeConfig().llm.model),
+        apiKey: String((await Promise.resolve(resolveRuntimeConfig().llm.apiKey)) ?? ''),
+        baseUrl: resolveRuntimeConfig().llm.baseUrl,
+      };
+      const plannerResolved = resolveMissionModel(
+        flags?.['planner-model'] as string | undefined,
+        missionRuntimeModel,
+        process.env,
+      );
+      const execResolved = resolveMissionModel(
+        flags?.['execution-model'] as string | undefined,
+        missionRuntimeModel,
+        process.env,
+      );
+
       let compileOpts: { llmCaller?: (prompt: string) => Promise<string> } | undefined = undefined;
       if (explicitStyle === 'llm') {
-        const baseRuntime = resolveRuntimeConfig();
         const { chatCompletionsRequest } = await import('../../runtime/tools/tool-helpers.js');
         compileOpts = {
           llmCaller: async (prompt: string) => {
             const result = await chatCompletionsRequest(
               {
-                providerId: String(baseRuntime.llm.providerId ?? 'openai'),
-                apiKey: baseRuntime.llm.apiKey as any,
-                model: String(baseRuntime.llm.model),
-                baseUrl: baseRuntime.llm.baseUrl,
+                providerId: plannerResolved.providerId,
+                apiKey: plannerResolved.apiKey as any,
+                model: plannerResolved.model,
+                baseUrl: plannerResolved.baseUrl,
               } as any,
               [{ role: 'user', content: prompt }],
               [], // no tools — pure text completion
@@ -185,6 +207,11 @@ export default async function missionCommand(
         ? await compileMissionYaml(content, compileOpts)
         : compileMissionYaml(content);
       const ir = compiled.toIR();
+
+      // Explicit tool allowlist from the mission's `tools:` field. undefined
+      // means "default curated set"; a list scopes the runtime to those packs
+      // and drops blanket auto-approval (Codex F1).
+      const missionTools = parseMissionTools(content);
 
       // Resolve the planner style for display so the user can see WHICH
       // template the mission ran under and WHY (explicit YAML field vs
@@ -236,19 +263,23 @@ export default async function missionCommand(
       const bareOutput = flags?.['bare'] === true;
 
 	      const baseRuntime = resolveRuntimeConfig();
-        const runtimeProviderId = String(baseRuntime.llm.providerId ?? 'openai');
-        const runtimeModel = String(baseRuntime.llm.model);
-	      await startWunderlandOtel({ serviceName: 'wunderland-mission' });
-	      const app = await createWunderland({
+        // Execution model/provider come from --execution-model when given,
+        // otherwise the runtime default (Codex F4).
+        await startWunderlandOtel({ serviceName: 'wunderland-mission' });
+        const app = await createWunderland({
           configDirOverride: globals?.config,
 	        llm: {
-          providerId: runtimeProviderId as any,
-          apiKey: baseRuntime.llm.apiKey as any,
-          model: runtimeModel,
-          baseUrl: baseRuntime.llm.baseUrl,
+          providerId: execResolved.providerId as any,
+          apiKey: execResolved.apiKey as any,
+          model: execResolved.model,
+          baseUrl: execResolved.baseUrl,
         },
-        tools: 'curated',
-        approvals: { mode: 'auto-all' },
+        tools: missionTools ? { curated: { tools: missionTools } } : 'curated',
+        // A mission that declares an explicit `tools:` allowlist is scoped on
+        // purpose — do not blanket-approve every tool call. `deny-side-effects`
+        // auto-approves reads but withholds side-effecting tools. Only the
+        // default (no allowlist) legacy behavior keeps auto-all (Codex F1).
+        approvals: missionTools ? { mode: 'deny-side-effects' } : { mode: 'auto-all' },
       });
 
       console.log(`\n  ● Mission: ${ir.name}  ·  style: ${styleLabel}`);
