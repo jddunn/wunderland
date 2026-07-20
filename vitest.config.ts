@@ -50,10 +50,19 @@ export default defineConfig({
         find: new RegExp(`^${escapeRegExp(find)}$`),
         replacement,
       })),
-      {
-        find: '@framers/agentos',
-        replacement: agentosSourceDir,
-      },
+      // Catch-all PREFIX alias: rewrites every `@framers/agentos/<subpath>`
+      // to the monorepo sibling source tree. Must be guarded — in a
+      // standalone clone (GitHub CI) `../agentos` does not exist and this
+      // alias sent all 60+ agentos-importing test files to
+      // ERR_MODULE_NOT_FOUND. Without it, node resolves the published
+      // @framers/agentos package from node_modules, whose `exports` map
+      // covers every subpath the tests import.
+      ...(hasAgentosRoot
+        ? [{
+            find: '@framers/agentos',
+            replacement: agentosSourceDir,
+          }]
+        : []),
     ],
   },
   test: {
