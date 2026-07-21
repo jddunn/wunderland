@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { buildPdfArgs, csvField, htmlEscape, toCsv, toHtml, type ReportDataset } from '../report-export.js';
+import {
+  buildPdfArgs,
+  csvField,
+  htmlEscape,
+  toCsv,
+  toHtml,
+  toInteractiveHtml,
+  type ReportDataset,
+} from '../report-export.js';
 
 const ds: ReportDataset = {
   title: 'LA Hotels',
@@ -49,6 +57,38 @@ describe('htmlEscape + toHtml', () => {
     expect(html).toContain('Member rates, both windows');
     // no external resources
     expect(html).not.toMatch(/https?:\/\/[^"']*\.(css|js|woff)/);
+  });
+});
+
+describe('toInteractiveHtml', () => {
+  it('is a self-contained document with no external resources', () => {
+    const html = toInteractiveHtml(ds, { stats: [{ label: 'rows', value: '2' }] });
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).not.toMatch(/https?:\/\/[^"']*\.(css|js|woff2?)/);
+    expect(html).not.toContain('<link rel="stylesheet" href="http');
+  });
+  it('embeds the row data and column metadata for client-side rendering', () => {
+    const html = toInteractiveHtml(ds, { columns: [{ key: 'rate', numeric: true, heat: 'lower-better' }] });
+    expect(html).toContain('const DATA =');
+    expect(html).toContain('"numeric":true');
+    expect(html).toContain('"heat":"lower-better"');
+  });
+  it('ships sort, search, theme-toggle, and CSV-export controls', () => {
+    const html = toInteractiveHtml(ds);
+    expect(html).toContain('id="q"'); // search box
+    expect(html).toContain('id="themeBtn"'); // theme toggle
+    expect(html).toContain('id="csvBtn"'); // client CSV export
+    expect(html).toContain('.onclick'); // sortable headers wired
+  });
+  it('escapes </script> in embedded data to prevent breakout', () => {
+    const evil: ReportDataset = { title: 't', columns: ['x'], rows: [{ x: '</script><img>' }] };
+    const html = toInteractiveHtml(evil);
+    expect(html).not.toContain('</script><img>');
+    expect(html).toContain('\\u003c/script>');
+  });
+  it('honors an explicit theme', () => {
+    expect(toInteractiveHtml(ds, { theme: 'dark' })).toContain("setAttribute('data-theme', \"dark\")");
+    expect(toInteractiveHtml(ds, { theme: 'auto' })).not.toContain("setAttribute('data-theme', \"auto\")");
   });
 });
 
