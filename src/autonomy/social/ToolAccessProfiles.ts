@@ -129,6 +129,15 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
   'browser_wait': 'search',
   'browser_evaluate': 'search',
   'browser_session': 'search',
+  // Attach-mode tools drive the user's already-running logged-in browser
+  // (read-only research). Same 'search' category as the launch-mode browser
+  // tools, so the 'assistant' profile permits them while 'system'-blocked
+  // profiles do not.
+  'browser_attach_status': 'search',
+  'browser_attach_claim': 'search',
+  'browser_attach_goto': 'search',
+  'browser_attach_read': 'search',
+  'browser_attach_release': 'search',
   'feed_search': 'search',
 
   // Content Extraction

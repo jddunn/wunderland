@@ -371,4 +371,27 @@ describe('Profile configurations', () => {
     expect(p.allowCliExecution).toBe(false);
     expect(p.allowSystemModification).toBe(false);
   });
+
+  it('classifies every browser_attach_* tool under search', () => {
+    for (const id of [
+      'browser_attach_status',
+      'browser_attach_claim',
+      'browser_attach_goto',
+      'browser_attach_read',
+      'browser_attach_release',
+    ]) {
+      expect(TOOL_CATEGORY_MAP[id]).toBe('search');
+    }
+  });
+
+  it('assistant profile permits attach tools, and an override can still block them', () => {
+    const assistant = getToolAccessProfile('assistant');
+    expect(isToolAllowedByProfile(assistant, 'browser_attach_goto')).toBe(true);
+    expect(isToolAllowedByProfile(assistant, 'browser_attach_read')).toBe(true);
+    // A per-agent override wins over the category allow — attach can be locked
+    // off even inside the assistant profile.
+    expect(
+      isToolAllowedByProfile(assistant, 'browser_attach_goto', { additionalBlocked: ['browser_attach_goto'] }),
+    ).toBe(false);
+  });
 });
