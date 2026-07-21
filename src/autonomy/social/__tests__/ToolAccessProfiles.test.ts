@@ -379,6 +379,7 @@ describe('Profile configurations', () => {
       'browser_attach_goto',
       'browser_attach_read',
       'browser_attach_release',
+      'browser_attach_control',
     ]) {
       expect(TOOL_CATEGORY_MAP[id]).toBe('search');
     }
