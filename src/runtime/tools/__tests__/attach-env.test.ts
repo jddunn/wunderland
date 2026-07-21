@@ -34,4 +34,20 @@ describe('attachOptionsFromEnv', () => {
     expect(attachOptionsFromEnv({ WUNDERLAND_ATTACH_IDENTITY: 'x', WUNDERLAND_ATTACH_TRANSPORT: 'bogus' }).attach)
       .toEqual({ expectedIdentity: 'x' });
   });
+
+  it('parses dry-run and deadline knobs', () => {
+    const a = attachOptionsFromEnv({
+      WUNDERLAND_ATTACH_IDENTITY: 'x',
+      WUNDERLAND_ATTACH_DRYRUN: 'true',
+      WUNDERLAND_ATTACH_DEADLINE_MS: '20000',
+    }).attach;
+    expect(a).toMatchObject({ dryRun: true, deadlineMs: 20000 });
+  });
+
+  it('ignores a non-positive or non-numeric deadline', () => {
+    expect(attachOptionsFromEnv({ WUNDERLAND_ATTACH_IDENTITY: 'x', WUNDERLAND_ATTACH_DEADLINE_MS: 'nope' }).attach)
+      .toEqual({ expectedIdentity: 'x' });
+    expect(attachOptionsFromEnv({ WUNDERLAND_ATTACH_IDENTITY: 'x', WUNDERLAND_ATTACH_DEADLINE_MS: '0' }).attach)
+      .toEqual({ expectedIdentity: 'x' });
+  });
 });

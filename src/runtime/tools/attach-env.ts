@@ -19,6 +19,8 @@ export interface AttachOptions {
   leaseFile?: string;
   profileRoot?: string;
   identityProbeUrl?: string;
+  dryRun?: boolean;
+  deadlineMs?: number;
 }
 
 /**
@@ -40,5 +42,8 @@ export function attachOptionsFromEnv(env: Record<string, string | undefined>): {
   if (env.WUNDERLAND_ATTACH_LEASE?.trim()) attach.leaseFile = env.WUNDERLAND_ATTACH_LEASE.trim();
   if (env.WUNDERLAND_ATTACH_PROFILE_ROOT?.trim()) attach.profileRoot = env.WUNDERLAND_ATTACH_PROFILE_ROOT.trim();
   if (env.WUNDERLAND_ATTACH_PROBE_URL?.trim()) attach.identityProbeUrl = env.WUNDERLAND_ATTACH_PROBE_URL.trim();
+  if (env.WUNDERLAND_ATTACH_DRYRUN === '1' || env.WUNDERLAND_ATTACH_DRYRUN === 'true') attach.dryRun = true;
+  const deadline = Number(env.WUNDERLAND_ATTACH_DEADLINE_MS);
+  if (Number.isFinite(deadline) && deadline > 0) attach.deadlineMs = deadline;
   return { attach };
 }

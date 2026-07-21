@@ -138,6 +138,7 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
   'browser_attach_goto': 'search',
   'browser_attach_read': 'search',
   'browser_attach_release': 'search',
+  'browser_attach_control': 'search',
   'feed_search': 'search',
 
   // Content Extraction
