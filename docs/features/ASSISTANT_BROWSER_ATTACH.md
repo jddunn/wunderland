@@ -60,12 +60,19 @@ JXA transport.
 
 ## Running it
 
-Attach tools are **off by default**. They load only when a mission lists the
+Attach tools are **off by default**. They load only when (a) a mission lists the
 `browser-automation` pack under `tools:` (which also scopes the mission to
-`deny-side-effects` approval), and only when the pack is configured with an
-`attach.expectedIdentity`. Pin a cloud model so the planner is not a local 7B:
+`deny-side-effects` approval) and (b) `WUNDERLAND_ATTACH_IDENTITY` is set — the
+env var that supplies the `expectedIdentity` the session must match. Pin a cloud
+model so the planner is not a local 7B:
 
 ```bash
+export WUNDERLAND_ATTACH_IDENTITY='you@gmail.com'   # required to enable attach
+# optional:
+#   WUNDERLAND_ATTACH_TRANSPORT=jxa|cdp   (default jxa)
+#   WUNDERLAND_ATTACH_HOSTS=founderscard.com,hotels.com   (https allowlist)
+#   WUNDERLAND_ATTACH_PROFILE_ROOT=/path/to/Chrome   (non-default profile root)
+
 wunderland mission run examples/mission-assistant-browse.yaml \
   --planner-model anthropic/claude-sonnet-5 \
   --execution-model anthropic/claude-sonnet-5 \

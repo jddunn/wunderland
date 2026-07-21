@@ -12,6 +12,7 @@
 
 import type { ITool } from '@framers/agentos';
 import { createCuratedManifest } from '@framers/agentos-extensions-registry';
+import { attachOptionsFromEnv } from './attach-env.js';
 
 export interface ToolRegistryConfig {
   serperApiKey?: string;
@@ -105,6 +106,12 @@ export async function createWunderlandTools(config?: ToolRegistryConfig): Promis
     channels: 'none',
     secrets,
     overrides: {
+      // Attach tools (browser_attach_*) load only when WUNDERLAND_ATTACH_IDENTITY
+      // is set — the pack stays launch-mode-only otherwise. See
+      // docs/features/ASSISTANT_BROWSER_ATTACH.md.
+      'browser-automation': {
+        options: attachOptionsFromEnv(process.env),
+      },
       'voice-synthesis': {
         options: {
           openaiApiKey: config?.openaiApiKey || process.env.OPENAI_API_KEY,
