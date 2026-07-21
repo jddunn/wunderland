@@ -20,10 +20,24 @@ operate inside a single **agent tab** they claim for themselves.
 | `browser_attach_goto` | yes | Navigate the agent tab to an `https` URL (`about:blank` allowed). |
 | `browser_attach_read` | no | Read visible text (optionally by CSS selector). Returns **untrusted** page content. |
 | `browser_attach_release` | yes | Park the tab at `about:blank` and release the lease. |
+| `browser_attach_control` | yes | Runtime session controls: `pause` / `resume` / `dry_run_on` / `dry_run_off` / `status`. |
 
 There is deliberately **no arbitrary-JavaScript tool** — page script could
 submit forms, read cookies, or exfiltrate a session, which would defeat the
 read-only contract.
+
+### Session controls (robustness)
+
+- **HITL approval.** Configure an `onNavigate` approver on the controller and it
+  runs after the URL policy passes — a denial blocks the page. Use it to require
+  per-page operator approval for anything an assistant opens.
+- **Dry-run.** `WUNDERLAND_ATTACH_DRYRUN=1` (or `browser_attach_control` →
+  `dry_run_on`) validates and reports navigation/reads without touching the
+  browser — preview a mission's plan, or run it in CI, safely.
+- **Pause / resume.** `browser_attach_control` → `pause` refuses further
+  operations until `resume`. Status reports `paused`, `dryRun`, `navigations`,
+  and `lastUrl`.
+- **Deadline.** `WUNDERLAND_ATTACH_DEADLINE_MS` bounds every operation.
 
 ## The contract (enforced in code, not by convention)
 
@@ -113,6 +127,27 @@ await exportReport(
 
 The PDF renders through an **isolated** headless-Chrome `--user-data-dir`, never
 your live profile.
+
+### Interactive report
+
+Pass `interactive: true` to also emit `<basename>.interactive.html` — a
+self-contained interactive report with client-side column sort (numeric-aware),
+a live search box, value heat-shading (`heat: 'higher-better' | 'lower-better'`
+per column), stat cards, a light/dark toggle, and a client-side CSV export of
+the current view. No external resources — one shareable file.
+
+```ts
+await exportReport(dataset, './report', {
+  interactive: {
+    stats: [{ label: 'hotels', value: '23' }],
+    columns: [
+      { key: 'rate', numeric: true, heat: 'lower-better' },
+      { key: 'score', numeric: true, heat: 'higher-better' },
+    ],
+  },
+});
+// → report.csv, report.html, report.pdf, report.interactive.html
+```
 
 ## Troubleshooting
 
