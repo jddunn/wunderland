@@ -21,6 +21,10 @@ export interface AttachOptions {
   identityProbeUrl?: string;
   dryRun?: boolean;
   deadlineMs?: number;
+  /** IPC dir override for the cdp/daemon transport. */
+  ipcDir?: string;
+  /** Autostart the attach daemon ONCE when down (cdp transport; never retries). */
+  autostart?: boolean;
 }
 
 /**
@@ -45,5 +49,7 @@ export function attachOptionsFromEnv(env: Record<string, string | undefined>): {
   if (env.WUNDERLAND_ATTACH_DRYRUN === '1' || env.WUNDERLAND_ATTACH_DRYRUN === 'true') attach.dryRun = true;
   const deadline = Number(env.WUNDERLAND_ATTACH_DEADLINE_MS);
   if (Number.isFinite(deadline) && deadline > 0) attach.deadlineMs = deadline;
+  if (env.WUNDERLAND_ATTACH_IPC_DIR?.trim()) attach.ipcDir = env.WUNDERLAND_ATTACH_IPC_DIR.trim();
+  if (env.WUNDERLAND_ATTACH_AUTOSTART === '1' || env.WUNDERLAND_ATTACH_AUTOSTART === 'true') attach.autostart = true;
   return { attach };
 }

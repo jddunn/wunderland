@@ -50,4 +50,24 @@ describe('attachOptionsFromEnv', () => {
     expect(attachOptionsFromEnv({ WUNDERLAND_ATTACH_IDENTITY: 'x', WUNDERLAND_ATTACH_DEADLINE_MS: '0' }).attach)
       .toEqual({ expectedIdentity: 'x' });
   });
+
+  it('passes ipcDir and autostart through when set', () => {
+    const out = attachOptionsFromEnv({
+      WUNDERLAND_ATTACH_IDENTITY: 'you@gmail.com',
+      WUNDERLAND_ATTACH_TRANSPORT: 'cdp',
+      WUNDERLAND_ATTACH_IPC_DIR: '/tmp/attach-ipc',
+      WUNDERLAND_ATTACH_AUTOSTART: '1',
+    });
+    expect(out.attach).toMatchObject({ transport: 'cdp', ipcDir: '/tmp/attach-ipc', autostart: true });
+  });
+
+  it('omits ipcDir/autostart by default and on blank/zero values', () => {
+    const a = attachOptionsFromEnv({
+      WUNDERLAND_ATTACH_IDENTITY: 'x',
+      WUNDERLAND_ATTACH_IPC_DIR: '  ',
+      WUNDERLAND_ATTACH_AUTOSTART: '0',
+    }).attach;
+    expect(a?.ipcDir).toBeUndefined();
+    expect(a?.autostart).toBeUndefined();
+  });
 });
