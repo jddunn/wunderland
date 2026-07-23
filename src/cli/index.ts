@@ -587,6 +587,24 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
       'Without --seed the command falls back to preview/demo output.',
     ],
   },
+  attach: {
+    summary: 'Persistent browser-attach daemon: drive your live, logged-in Chrome through ONE held session.',
+    usage: ['wunderland attach <start|status|stop|run> [options]'],
+    examples: [
+      'wunderland attach start --identity you@gmail.com',
+      'wunderland attach status',
+      'wunderland attach run crawl.yaml --output ./crawl.json',
+      "wunderland attach run drive.mjs --args '{\"city\":\"LA\"}'",
+      'wunderland attach stop',
+    ],
+    notes: [
+      'One daemon holds one raw-CDP session (localhost, single tab): exactly one macOS Local Network prompt per daemon lifetime.',
+      'Never launches, quits, or restarts Chrome; closes only its own agent tab.',
+      'Chrome must run with --remote-debugging-port=9222 (start prints the exact relaunch command when missing).',
+      'run accepts a JS module (default-export async (client, args)) or declarative YAML/JSON steps (goto/read/extract/wait).',
+      'Missions reach the same held session via the browser_attach_* tools with WUNDERLAND_ATTACH_TRANSPORT=cdp.',
+    ],
+  },
   connect: {
     summary: 'Connect external services (Gmail, WhatsApp, Slack, Signal) via OAuth or setup wizard.',
     usage: ['wunderland connect <service> [--credentials <path>]'],
@@ -685,7 +703,7 @@ ${entry.notes.map((line) => `    ${d(line)}`).join('\n')}` : ''}
 // ── Command dispatch ────────────────────────────────────────────────────────
 
 /** Command registry — lazy imports for fast startup. */
-const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Promise<void> }>> = {
+export const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Promise<void> }>> = {
   setup:          () => import('./commands/setup.js'),
   init:           () => import('./commands/init.js'),
   create:         () => import('./commands/create.js'),
@@ -693,6 +711,7 @@ const COMMANDS: Record<string, () => Promise<{ default: (...args: any[]) => Prom
   'batch-create': () => import('./commands/batch-create.js'),
   start:          () => import('./commands/start/index.js'),
   chat:           () => import('./commands/chat.js'),
+  attach:         () => import('./commands/attach.js'),
   hitl:           () => import('./commands/hitl.js'),
   doctor:         () => import('./commands/doctor.js'),
   channels:       () => import('./commands/channels.js'),
