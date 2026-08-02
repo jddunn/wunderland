@@ -76,7 +76,7 @@ jobs:
           branch: chore/bump-framers-deps
           base: master
           delete-branch: true
-          add-paths: |
-            **/package.json
-            pnpm-lock.yaml
-            .gitmodules
+          # No add-paths: a pathspec naming a file a repo doesn't commit
+          # (pnpm-lock.yaml, .gitmodules) makes the action's `git add` fatal,
+          # staging NOTHING - and `**/package.json` misses the root manifest.
+          # Default collection stages every bump change.
