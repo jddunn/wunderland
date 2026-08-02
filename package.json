@@ -79,7 +79,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@framers/agentos": "^0.9.137",
+    "@framers/agentos": "^0.10.4",
     "@framers/agentos-ext-cli-executor": "^1.2.0",
     "@framers/agentos-ext-giphy": "^1.0.0",
     "@framers/agentos-ext-image-search": "^1.0.0",
@@ -87,7 +87,7 @@
     "@framers/agentos-ext-voice-synthesis": "^2.0.1",
     "@framers/agentos-ext-web-browser": "^1.2.1",
     "@framers/agentos-ext-web-search": "^1.1.1",
-    "@framers/agentos-extensions-registry": "^0.18.2",
+    "@framers/agentos-extensions-registry": "^0.18.3",
     "@framers/sql-storage-adapter": "^0.6.8",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.201.1",
@@ -113,7 +113,7 @@
   },
   "peerDependencies": {
     "@framers/agentos-ext-code-safety": "^0.2.1",
-    "@framers/agentos-ext-grounding-guard": "^0.2.1",
+    "@framers/agentos-ext-grounding-guard": "^0.2.2",
     "@framers/agentos-ext-ml-classifiers": "^0.3.1",
     "@framers/agentos-ext-pii-redaction": "^0.2.1",
     "@framers/agentos-ext-topicality": "^0.2.2"
