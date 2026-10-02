@@ -209,6 +209,10 @@ export default async function missionCommand(
         : compileMissionYaml(content);
       const ir = compiled.toIR();
 
+      // `--autonomy autonomous` opts the operator in to unattended execution;
+      // it also governs whether a scoped mission keeps blanket approval.
+      const missionAutonomy = String(flags?.['autonomy'] ?? 'guardrailed');
+
       // Explicit tool allowlist from the mission's `tools:` field. undefined
       // means "default curated set"; a list scopes the runtime to those packs
       // and drops blanket auto-approval (Codex F1).
@@ -278,9 +282,17 @@ export default async function missionCommand(
         tools: missionTools ? { curated: { tools: missionTools } } : 'curated',
         // A mission that declares an explicit `tools:` allowlist is scoped on
         // purpose — do not blanket-approve every tool call. `deny-side-effects`
-        // auto-approves reads but withholds side-effecting tools. Only the
-        // default (no allowlist) legacy behavior keeps auto-all (Codex F1).
-        approvals: missionTools ? { mode: 'deny-side-effects' } : { mode: 'auto-all' },
+        // auto-approves reads but withholds side-effecting tools (Codex F1).
+        //
+        // `--autonomy autonomous` is the operator explicitly opting IN to
+        // unattended execution, so it restores auto-all even for a scoped
+        // mission. Without this, a scoped mission whose whole point is a
+        // side-effecting tool (e.g. browser_attach_claim) silently fails every
+        // node with "Permission denied" — observed live 2026-07-24.
+        approvals:
+          missionTools && missionAutonomy !== 'autonomous'
+            ? { mode: 'deny-side-effects' }
+            : { mode: 'auto-all' },
       });
 
       console.log(`\n  ● Mission: ${ir.name}  ·  style: ${styleLabel}`);
