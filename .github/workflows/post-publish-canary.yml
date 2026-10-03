@@ -1,0 +1,90 @@
+name: Post-publish canary
+
+# Installs the version that was just published from the public registry on a
+# clean runner and smokes it. The publish job has already verified the tarball;
+# this catches what only the registry copy can show (a missing file, a bad
+# dist-tag, a dependency that npm resolves differently).
+
+on:
+  workflow_run:
+    workflows: ['Publish to npm + GitHub Release']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published wunderland version to check (for example 0.84.1)
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    name: Install from npm and smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Download the published version marker
+        id: marker
+        if: github.event_name == 'workflow_run'
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          name: published-version
+          path: published
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Resolve the version to check
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [ -f published/version.txt ]; then
+            echo "version=$(cat published/version.txt)" >> "$GITHUB_OUTPUT"
+          else
+            echo "The publish run did not publish a version; nothing to check."
+            echo "version=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install from npm
+        if: steps.version.outputs.version != ''
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          for attempt in $(seq 1 20); do
+            if npm install -g "wunderland@$VERSION" --no-audit --no-fund; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              echo "wunderland@$VERSION was not installable after 10 minutes"
+              exit 1
+            fi
+            echo "wunderland@$VERSION is not installable yet (attempt $attempt); waiting 30s"
+            sleep 30
+          done
+          wunderland --version | grep -F "v$VERSION"
+
+      - name: Smoke the installed package
+        if: steps.version.outputs.version != ''
+        run: node scripts/smoke-dist.mjs --root "$(npm root -g)/wunderland"
+
+      - name: Open an issue when the canary fails
+        if: failure() && steps.version.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "Post-publish canary failed for wunderland ${{ steps.version.outputs.version }}" \
+            --body "The published package did not pass the install-and-smoke check. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

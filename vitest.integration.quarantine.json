@@ -1,0 +1,6 @@
+[
+  { "file": "src/__tests__/ToolCallingTurn.integration.test.ts", "reason": "never run in CI; not yet shown to run without live credentials" },
+  { "file": "src/__tests__/WonderlandPipeline.integration.test.ts", "reason": "never run in CI; not yet shown to run without live credentials" },
+  { "file": "src/__tests__/permission-dedup.integration.test.ts", "reason": "never run in CI; not yet shown to run without live credentials" },
+  { "file": "src/agents/__tests__/AgentManifest.integration.test.ts", "reason": "never run in CI; not yet shown to run without live credentials" }
+]

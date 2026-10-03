@@ -2,44 +2,27 @@ name: Publish to npm + GitHub Release
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run every gate, pack and clean-install, but do not push the version bump or publish
+        type: boolean
+        default: true
   push:
     branches: [master]
 
 permissions:
   contents: write
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  test:
-    name: Test before publish
-    runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Run tests
-        run: pnpm exec vitest run --passWithNoTests 2>&1 || echo "::warning::Some tests failed — publishing anyway"
-        env:
-          CI: true
-        continue-on-error: true
-
   publish:
-    name: Auto-version + Publish
-    needs: test
+    name: Verify, version, publish
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     outputs:
       published: ${{ steps.publish.outputs.published }}
       version: ${{ steps.bump.outputs.version }}
@@ -58,6 +41,27 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # Every step from here to the publish is blocking. A red step stops the
+      # job before the version bump is pushed and before anything reaches npm.
+      - name: Unit tests
+        run: pnpm exec vitest run
+        env:
+          CI: true
+
+      - name: Integration tests
+        run: pnpm run test:integration
+        env:
+          CI: true
+
+      - name: Smoke the built dist under plain Node
+        run: node scripts/smoke-dist.mjs
+
       - name: Determine version bump from commits
         id: bump
         run: |
@@ -70,6 +74,7 @@ jobs:
 
           if [ -z "$COMMITS" ]; then
             echo "bump=none" >> "$GITHUB_OUTPUT"
+            echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
             echo "No new commits since last tag"
             exit 0
           fi
@@ -109,7 +114,10 @@ jobs:
             echo "No semantic bump needed"
           fi
 
-      - name: Bump version in package.json
+      # The bump is committed locally here and pushed only after the packed
+      # tarball has been installed and smoked, so a failed gate leaves master
+      # and npm untouched.
+      - name: Set the release version (local commit)
         if: steps.bump.outputs.bump != 'none'
         run: |
           npm version ${{ steps.bump.outputs.version }} --no-git-tag-version
@@ -117,7 +125,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json
           git commit -m "chore(release): v${{ steps.bump.outputs.version }} [skip ci]"
-          git push origin master
 
       - name: Resolve workspace protocol
         if: steps.bump.outputs.bump != 'none'
@@ -134,24 +141,57 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
 
-      - name: Install and build
-        if: steps.bump.outputs.bump != 'none'
-        run: pnpm install --no-frozen-lockfile && pnpm build
-
-      - name: Publish to npm
-        id: publish
+      - name: Pack the release tarball
+        id: pack
         if: steps.bump.outputs.bump != 'none'
         run: |
-          pnpm publish --access public --no-git-checks
+          mkdir -p "$RUNNER_TEMP/pack"
+          pnpm pack --pack-destination "$RUNNER_TEMP/pack"
+          TARBALL="$(ls "$RUNNER_TEMP"/pack/*.tgz)"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "Packed $TARBALL"
+
+      - name: Clean install of the tarball, then smoke the installed tree
+        if: steps.bump.outputs.bump != 'none'
+        env:
+          # The smoke imports modules; it never launches a browser.
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: |
+          PREFIX="$RUNNER_TEMP/clean-install"
+          mkdir -p "$PREFIX"
+          cd "$PREFIX"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "${{ steps.pack.outputs.tarball }}"
+          INSTALLED="$(./node_modules/.bin/wunderland --version)"
+          echo "Installed binary reports: $INSTALLED"
+          echo "$INSTALLED" | grep -F "v${{ steps.bump.outputs.version }}"
+          node "$GITHUB_WORKSPACE/scripts/smoke-dist.mjs" --root "$PREFIX/node_modules/wunderland"
+
+      - name: Push the version bump
+        if: steps.bump.outputs.bump != 'none' && inputs.dry_run != true
+        run: git push origin HEAD:master
+
+      - name: Publish the verified tarball to npm
+        id: publish
+        if: steps.bump.outputs.bump != 'none' && inputs.dry_run != true
+        run: |
+          npm publish "${{ steps.pack.outputs.tarball }}" --access public
           echo "published=true" >> "$GITHUB_OUTPUT"
+          echo "${{ steps.bump.outputs.version }}" > version.txt
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: No bump needed
-        if: steps.bump.outputs.bump == 'none'
-        run: |
-          echo "No conventional commits triggering a version bump (feat/fix/perf/refactor/BREAKING)"
-          echo "published=false" >> "$GITHUB_OUTPUT"
+      - name: Record the published version for the canary
+        if: steps.publish.outputs.published == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-version
+          path: version.txt
+          retention-days: 7
+
+      - name: Nothing to publish
+        if: steps.bump.outputs.bump == 'none' || inputs.dry_run == true
+        run: echo "No publish in this run (bump ${{ steps.bump.outputs.bump }}, dry run ${{ inputs.dry_run }})"
 
   release:
     name: Create GitHub Release

@@ -34,6 +34,8 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "smoke:dist": "node scripts/smoke-dist.mjs",
     "test:security": "vitest run --reporter=verbose src/security",
     "lint": "eslint src --ext .ts",
     "clean": "rm -rf dist",
