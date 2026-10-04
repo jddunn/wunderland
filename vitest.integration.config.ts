@@ -20,7 +20,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.integration.test.ts'],
     exclude: ['node_modules/**', ...quarantined],
-    passWithNoTests: true,
+    // The lane fails when nothing runs: a gate that executes no test verifies nothing.
+    passWithNoTests: false,
     server: base.test.server,
   },
 });
