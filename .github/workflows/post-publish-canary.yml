@@ -26,7 +26,10 @@ jobs:
     name: Install from npm and smoke
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # No condition on the publish run's conclusion: that run is red when the
+    # GitHub release or the bump push fails after npm already has the version.
+    # The marker artifact, uploaded right after the npm publish, decides
+    # whether there is anything to check.
     steps:
       - uses: actions/checkout@v5
         with:

@@ -92,6 +92,17 @@ jobs:
 
           if [ "$BUMP" != "none" ]; then
             CURRENT=$(node -p "require('./package.json').version")
+            # A version that is already on npm is never reused. An earlier run
+            # can have published and then failed to push its bump, which leaves
+            # package.json behind the registry.
+            PUBLISHED=$(npm view wunderland version 2>/dev/null || true)
+            if [ -n "$PUBLISHED" ]; then
+              HIGHEST=$(printf '%s\n%s\n' "$CURRENT" "$PUBLISHED" | sort -V | tail -n 1)
+              if [ "$HIGHEST" != "$CURRENT" ]; then
+                echo "::warning::npm has wunderland $PUBLISHED but package.json has $CURRENT; versioning from $PUBLISHED"
+                CURRENT="$PUBLISHED"
+              fi
+            fi
             IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
             case "$BUMP" in
               major)
@@ -114,9 +125,8 @@ jobs:
             echo "No semantic bump needed"
           fi
 
-      # The bump is committed locally here and pushed only after the packed
-      # tarball has been installed and smoked, so a failed gate leaves master
-      # and npm untouched.
+      # The bump is committed locally here and pushed only after the tarball
+      # is on npm, so a failed gate or a failed publish leaves master untouched.
       - name: Set the release version (local commit)
         if: steps.bump.outputs.bump != 'none'
         run: |
@@ -126,8 +136,10 @@ jobs:
           git add package.json
           git commit -m "chore(release): v${{ steps.bump.outputs.version }} [skip ci]"
 
+      # A dry run packs and installs the current version when no bump is due,
+      # so the packaging gates can be exercised on any commit.
       - name: Resolve workspace protocol
-        if: steps.bump.outputs.bump != 'none'
+        if: steps.bump.outputs.bump != 'none' || inputs.dry_run == true
         run: |
           node -e "
             const fs = require('fs');
@@ -143,7 +155,7 @@ jobs:
 
       - name: Pack the release tarball
         id: pack
-        if: steps.bump.outputs.bump != 'none'
+        if: steps.bump.outputs.bump != 'none' || inputs.dry_run == true
         run: |
           mkdir -p "$RUNNER_TEMP/pack"
           pnpm pack --pack-destination "$RUNNER_TEMP/pack"
@@ -152,7 +164,7 @@ jobs:
           echo "Packed $TARBALL"
 
       - name: Clean install of the tarball, then smoke the installed tree
-        if: steps.bump.outputs.bump != 'none'
+        if: steps.bump.outputs.bump != 'none' || inputs.dry_run == true
         env:
           # The smoke imports modules; it never launches a browser.
           PUPPETEER_SKIP_DOWNLOAD: 'true'
@@ -167,17 +179,20 @@ jobs:
           echo "$INSTALLED" | grep -F "v${{ steps.bump.outputs.version }}"
           node "$GITHUB_WORKSPACE/scripts/smoke-dist.mjs" --root "$PREFIX/node_modules/wunderland"
 
-      - name: Push the version bump
-        if: steps.bump.outputs.bump != 'none' && inputs.dry_run != true
-        run: git push origin HEAD:master
-
+      # npm first, master second. If the publish fails, master still holds the
+      # old version and the next run retries the same release. If the push
+      # fails after a publish, the run is red, the canary still checks the
+      # registry copy (the marker is uploaded before the push), and the next
+      # release versions from what npm holds.
+      # Only master publishes. A manual run on another ref can be a dry run
+      # only: publishing from it would also push that ref's commits to master.
       - name: Publish the verified tarball to npm
         id: publish
-        if: steps.bump.outputs.bump != 'none' && inputs.dry_run != true
+        if: steps.bump.outputs.bump != 'none' && inputs.dry_run != true && github.ref == 'refs/heads/master'
         run: |
           npm publish "${{ steps.pack.outputs.tarball }}" --access public
           echo "published=true" >> "$GITHUB_OUTPUT"
-          echo "${{ steps.bump.outputs.version }}" > version.txt
+          echo "${{ steps.bump.outputs.version }}" > "$RUNNER_TEMP/version.txt"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -186,17 +201,38 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: published-version
-          path: version.txt
+          path: ${{ runner.temp }}/version.txt
           retention-days: 7
 
+      - name: Push the version bump
+        if: steps.publish.outputs.published == 'true'
+        run: |
+          # Packing rewrote package.json in the working tree; only the commit is pushed.
+          git reset --hard HEAD
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:master; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              break
+            fi
+            echo "master moved during the run; rebasing the version bump (attempt $attempt)"
+            git fetch origin master
+            git rebase origin/master
+          done
+          echo "::error::wunderland ${{ steps.bump.outputs.version }} is on npm but its version bump could not be pushed to master. The next release versions from npm."
+          exit 1
+
       - name: Nothing to publish
-        if: steps.bump.outputs.bump == 'none' || inputs.dry_run == true
-        run: echo "No publish in this run (bump ${{ steps.bump.outputs.bump }}, dry run ${{ inputs.dry_run }})"
+        if: steps.publish.outputs.published != 'true'
+        run: echo "No publish in this run (bump ${{ steps.bump.outputs.bump }}, dry run ${{ inputs.dry_run }}, ref ${{ github.ref }})"
 
   release:
     name: Create GitHub Release
     needs: publish
-    if: needs.publish.outputs.published == 'true'
+    # Tag and release whatever reached npm, even when a later step of the
+    # publish job (the push of the version bump) failed.
+    if: always() && needs.publish.outputs.published == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
