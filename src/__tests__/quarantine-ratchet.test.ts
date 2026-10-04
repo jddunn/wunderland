@@ -17,6 +17,8 @@ const CEILINGS: Record<string, number> = {
 interface QuarantineEntry {
   file: string;
   reason: string;
+  /** Tests in the file that passed when it was quarantined; the report lane fails below this. */
+  passing?: number;
 }
 
 function entries(list: string): QuarantineEntry[] {
@@ -36,6 +38,7 @@ describe('test quarantine lists', () => {
         expect(seen.has(entry.file), `${entry.file} is listed twice`).toBe(false);
         seen.add(entry.file);
         expect((entry.reason ?? '').trim().length, `${entry.file} has no reason`).toBeGreaterThan(10);
+        expect(Number.isInteger(entry.passing) && (entry.passing as number) >= 0, `${entry.file} has no passing count`).toBe(true);
       }
     });
   }

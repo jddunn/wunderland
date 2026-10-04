@@ -59,6 +59,15 @@ jobs:
         env:
           CI: true
 
+      # The quarantined files do not block by failing. They block when a test
+      # in them that used to pass stops passing.
+      - name: Quarantined tests (regressions block)
+        run: |
+          pnpm exec vitest run --config vitest.quarantined.config.ts --reporter=json --outputFile="$RUNNER_TEMP/quarantine-report.json" || true
+          node scripts/quarantine-report.mjs "$RUNNER_TEMP/quarantine-report.json"
+        env:
+          CI: true
+
       - name: Smoke the built dist under plain Node
         run: node scripts/smoke-dist.mjs
 

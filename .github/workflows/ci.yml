@@ -51,11 +51,11 @@ jobs:
           fail_ci_if_error: false
 
   # Runs exactly the files the blocking lanes exclude and prints the state of
-  # each one in the job summary. It never blocks a merge or a publish.
+  # each one in the job summary. A quarantined file's failures do not fail the
+  # job; a test in it that used to pass and no longer does, does.
   quarantine-report:
-    name: Quarantined tests (report only)
+    name: Quarantined tests (regressions block)
     runs-on: ubuntu-latest
-    continue-on-error: true
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v5
