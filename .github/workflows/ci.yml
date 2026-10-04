@@ -49,3 +49,35 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: sdk
           fail_ci_if_error: false
+
+  # Runs exactly the files the blocking lanes exclude and prints the state of
+  # each one in the job summary. It never blocks a merge or a publish.
+  quarantine-report:
+    name: Quarantined tests (report only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run the quarantined files
+        run: pnpm exec vitest run --config vitest.quarantined.config.ts --reporter=json --outputFile=quarantine-report.json || true
+        env:
+          CI: true
+
+      - name: Report the state of each quarantined file
+        run: node scripts/quarantine-report.mjs quarantine-report.json
