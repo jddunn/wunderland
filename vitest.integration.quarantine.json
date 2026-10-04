@@ -1,4 +1,1 @@
-[
-  { "file": "src/__tests__/ToolCallingTurn.integration.test.ts", "reason": "not yet run in CI as a blocking test; the quarantine report job shows its current result" },
-  { "file": "src/__tests__/WonderlandPipeline.integration.test.ts", "reason": "not yet run in CI as a blocking test; the quarantine report job shows its current result" }
-]
+[]

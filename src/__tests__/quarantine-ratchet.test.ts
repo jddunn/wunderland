@@ -11,7 +11,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
  */
 const CEILINGS: Record<string, number> = {
   'vitest.quarantine.json': 19,
-  'vitest.integration.quarantine.json': 2,
+  'vitest.integration.quarantine.json': 0,
 };
 
 interface QuarantineEntry {
