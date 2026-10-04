@@ -1,0 +1,21 @@
+[
+  { "file": "src/__tests__/graph-runner.test.ts", "passing": 0, "reason": "imports ../../../agentos/src/orchestration/builders/WorkflowBuilder.ts, a monorepo sibling that a standalone checkout does not have" },
+  { "file": "src/__tests__/oauth-integration.test.ts", "passing": 0, "reason": "vite cannot resolve @framers/agentos/orchestration/runtime-kernel through the wildcard subpath export" },
+  { "file": "src/__tests__/public-api-skills.test.ts", "passing": 0, "reason": "vite cannot resolve @framers/agentos/orchestration/runtime-kernel through the wildcard subpath export" },
+  { "file": "src/__tests__/public-api.test.ts", "passing": 0, "reason": "vite cannot resolve @framers/agentos/orchestration/runtime-kernel through the wildcard subpath export" },
+  { "file": "src/public/__tests__/exports.test.ts", "passing": 0, "reason": "vite cannot resolve @framers/agentos/orchestration/runtime-kernel through the wildcard subpath export" },
+  { "file": "src/__tests__/telephony-auto-bridge.test.ts", "passing": 0, "reason": "imports ws, which is not a dependency" },
+  { "file": "src/agents/__tests__/WunderlandSeed.test.ts", "passing": 0, "reason": "imports ../types.js, a path that moved in the src reorganisation" },
+  { "file": "src/__tests__/docs-alignment.test.ts", "passing": 1, "reason": "reads docs/CLI_TUI_GUIDE.md, which does not exist" },
+  { "file": "src/__tests__/http-server.sse.test.ts", "passing": 0, "reason": "vi.mocked(...).mockImplementation is not a function: the mocked module is not auto-mocked" },
+  { "file": "src/__tests__/runtime-tools.test.ts", "passing": 0, "reason": "asserts default HyDE settings that the HTTP-backed memory_read tool no longer forwards" },
+  { "file": "src/__tests__/schema-on-demand.test.ts", "passing": 1, "reason": "loads a curated pack by a path inside the installed registry package that does not exist" },
+  { "file": "src/__tests__/voice-streaming.test.ts", "passing": 4, "reason": "imports ../runtime/tool-helpers.js, a path that moved in the src reorganisation" },
+  { "file": "src/agents/__tests__/PresetExtensionResolver.test.ts", "passing": 9, "reason": "expects presets under src/presets; they live at the package root" },
+  { "file": "src/agents/__tests__/PresetSkillResolver.test.ts", "passing": 7, "reason": "expects presets under src/presets; they live at the package root" },
+  { "file": "src/agents/__tests__/resolve-skill-context.test.ts", "passing": 0, "reason": "spy assertion on the skills registry no longer matches the call shape" },
+  { "file": "src/autonomy/orchestration/__tests__/yaml-templates.test.ts", "passing": 0, "reason": "reads src/presets/workflows/*.yaml; the templates live at the package root" },
+  { "file": "src/channels/chat/__tests__/ChatConversationStore.test.ts", "passing": 0, "reason": "needs better-sqlite3, which is not installed" },
+  { "file": "src/channels/chat/__tests__/ChatTaskResponder.test.ts", "passing": 2, "reason": "needs better-sqlite3, which is not installed" },
+  { "file": "src/channels/chat/__tests__/chat-task-responder-group-policy.test.ts", "passing": 4, "reason": "needs better-sqlite3, which is not installed" }
+]

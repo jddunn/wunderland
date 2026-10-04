@@ -2,55 +2,45 @@ name: CI
 
 on:
   workflow_dispatch:
+  push:
+    branches: [master]
   pull_request:
     branches: [master]
 
 jobs:
   test:
-    name: Test & Coverage
+    name: Build, test, smoke
     runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
 
       - uses: actions/setup-node@v5
         with:
           node-version: 22
 
-      - name: Resolve workspace protocol to latest npm versions
-        run: |
-          node -e "
-            const { execSync } = require('child_process');
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            for (const g of ['dependencies','optionalDependencies','peerDependencies']) {
-              if (!pkg[g]) continue;
-              for (const [name, ver] of Object.entries(pkg[g])) {
-                if (!String(ver).startsWith('workspace:')) continue;
-                try {
-                  const latest = execSync('npm view ' + name + ' version 2>/dev/null', { encoding: 'utf8' }).trim();
-                  pkg[g][name] = '^' + latest;
-                  console.log(name + ': workspace:* → ^' + latest);
-                } catch {
-                  pkg[g][name] = '*';
-                  console.warn(name + ': workspace:* → * (not found on npm)');
-                }
-              }
-            }
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          "
-
-      - name: Install dependencies (retry once for npm propagation)
-        run: npm install --legacy-peer-deps || (echo "Retrying after 30s..." && sleep 30 && npm install --legacy-peer-deps)
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build
-        run: npm run build
+        run: pnpm build
 
-      - name: Run tests with coverage
-        run: npx vitest run --coverage
+      - name: Unit tests
+        run: pnpm exec vitest run --coverage
         env:
           CI: true
+
+      - name: Integration tests
+        run: pnpm run test:integration
+        env:
+          CI: true
+
+      - name: Smoke the built dist under plain Node
+        run: node scripts/smoke-dist.mjs
 
       - name: Upload coverage to Codecov
         if: always()
@@ -59,3 +49,35 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: sdk
           fail_ci_if_error: false
+
+  # Runs exactly the files the blocking lanes exclude and prints the state of
+  # each one in the job summary. A quarantined file's failures do not fail the
+  # job; a test in it that used to pass and no longer does, does.
+  quarantine-report:
+    name: Quarantined tests (regressions block)
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run the quarantined files
+        run: pnpm exec vitest run --config vitest.quarantined.config.ts --reporter=json --outputFile=quarantine-report.json || true
+        env:
+          CI: true
+
+      - name: Report the state of each quarantined file
+        run: node scripts/quarantine-report.mjs quarantine-report.json

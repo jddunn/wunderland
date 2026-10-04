@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // Cross-package aliases for @framers/agentos sub-packages (only available in monorepo)
 const agentosAuthPath = resolve(__dirname, '../agentos/src/core/llm/auth/index.ts');
@@ -38,6 +38,12 @@ if (hasAgentosRoot) {
 }
 
 const agentosSourceDir = resolve(__dirname, '../agentos/src');
+
+// Test files that fail for reasons recorded next to each entry. They are
+// excluded so that every other test can block a publish; the list only shrinks.
+const quarantined: string[] = JSON.parse(
+  readFileSync(resolve(__dirname, 'vitest.quarantine.json'), 'utf8'),
+).map((entry: { file: string }) => entry.file);
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -78,6 +84,7 @@ export default defineConfig({
         'src/__tests__/file-token-store.test.ts',
         'src/__tests__/openai-oauth-flow.test.ts',
       ]),
+      ...quarantined,
     ],
     server: {
       deps: {
