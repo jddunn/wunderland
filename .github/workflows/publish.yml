@@ -218,7 +218,12 @@ jobs:
             fi
             echo "master moved during the run; rebasing the version bump (attempt $attempt)"
             git fetch origin master
-            git rebase origin/master
+            # A rebase that stops on a conflict must not end the step here:
+            # undo it and fall through to the error below.
+            if ! git rebase origin/master; then
+              git rebase --abort || true
+              break
+            fi
           done
           echo "::error::wunderland ${{ steps.bump.outputs.version }} is on npm but its version bump could not be pushed to master. The next release versions from npm."
           exit 1
