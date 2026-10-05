@@ -217,7 +217,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           for attempt in 1 2 3; do
-            if gh workflow run post-publish-canary.yml --ref master -f version="${{ steps.bump.outputs.version }}"; then
+            if gh workflow run post-publish-canary.yml --ref master -f version="${{ steps.bump.outputs.version }}" -f sha="${{ github.sha }}"; then
               exit 0
             fi
             echo "canary dispatch failed (attempt $attempt)"

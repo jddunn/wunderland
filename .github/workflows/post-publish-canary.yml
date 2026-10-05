@@ -5,13 +5,19 @@ name: Post-publish canary
 # this catches what only the registry copy can show (a missing file, a bad
 # dist-tag, a dependency that npm resolves differently).
 
-# The publish job starts this workflow with the version it published.
+# The publish job starts this workflow with the version it published and the
+# commit it packed, so the smoke script and its contract come from that commit
+# even when master has moved on.
 on:
   workflow_dispatch:
     inputs:
       version:
         description: Published wunderland version to check (for example 0.84.1)
         required: true
+        type: string
+      sha:
+        description: Commit whose smoke script checks the package (defaults to the head of the dispatch ref)
+        required: false
         type: string
 
 permissions:
@@ -26,6 +32,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha || github.sha }}
 
       - uses: actions/setup-node@v5
         with:
