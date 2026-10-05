@@ -5,10 +5,8 @@ name: Post-publish canary
 # this catches what only the registry copy can show (a missing file, a bad
 # dist-tag, a dependency that npm resolves differently).
 
+# The publish job starts this workflow with the version it published.
 on:
-  workflow_run:
-    workflows: ['Publish to npm + GitHub Release']
-    types: [completed]
   workflow_dispatch:
     inputs:
       version:
@@ -26,41 +24,17 @@ jobs:
     name: Install from npm and smoke
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # No condition on the publish run's conclusion: that run is red when the
-    # GitHub release or the bump push fails after npm already has the version.
-    # The marker artifact, uploaded right after the npm publish, decides
-    # whether there is anything to check.
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v5
         with:
           node-version: 22
 
-      - name: Download the published version marker
-        id: marker
-        if: github.event_name == 'workflow_run'
-        continue-on-error: true
-        uses: actions/download-artifact@v5
-        with:
-          name: published-version
-          path: published
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-
       - name: Resolve the version to check
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          elif [ -f published/version.txt ]; then
-            echo "version=$(cat published/version.txt)" >> "$GITHUB_OUTPUT"
-          else
-            echo "The publish run did not publish a version; nothing to check."
-            echo "version=" >> "$GITHUB_OUTPUT"
-          fi
+          echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
 
       - name: Install from npm
         if: steps.version.outputs.version != ''

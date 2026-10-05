@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -191,8 +192,8 @@ jobs:
       # npm first, master second. If the publish fails, master still holds the
       # old version and the next run retries the same release. If the push
       # fails after a publish, the run is red, the canary still checks the
-      # registry copy (the marker is uploaded before the push), and the next
-      # release versions from what npm holds.
+      # registry copy (it is started before the push), and the next release
+      # versions from what npm holds.
       # Only master publishes. A manual run on another ref can be a dry run
       # only: publishing from it would also push that ref's commits to master.
       - name: Publish the verified tarball to npm
@@ -201,17 +202,16 @@ jobs:
         run: |
           npm publish "${{ steps.pack.outputs.tarball }}" --access public
           echo "published=true" >> "$GITHUB_OUTPUT"
-          echo "${{ steps.bump.outputs.version }}" > "$RUNNER_TEMP/version.txt"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Record the published version for the canary
+      # The canary's workflow_run trigger did not fire after 0.84.1 or 0.85.0,
+      # so the publish job starts it directly, as soon as npm has the version.
+      - name: Start the post-publish canary
         if: steps.publish.outputs.published == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: published-version
-          path: ${{ runner.temp }}/version.txt
-          retention-days: 7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run post-publish-canary.yml --ref master -f version="${{ steps.bump.outputs.version }}"
 
       - name: Push the version bump
         if: steps.publish.outputs.published == 'true'
