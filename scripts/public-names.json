@@ -1,0 +1,10 @@
+{
+  "package": "wunderland",
+  "subpaths": {
+    "./core": ["DEFAULT_SECURITY_PROFILE", "DEFAULT_INFERENCE_HIERARCHY", "DEFAULT_STEP_UP_AUTH_CONFIG", "normalizeHEXACOTraits"],
+    "./seed": ["createWunderlandSeed"],
+    "./tools": ["createWunderlandTools", "createMemoryReadTool"],
+    "./rag": ["RAGAuditPersistence"],
+    "./jobs": ["JobScanner", "JobExecutor", "BidLifecycleManager", "DeliverableManager", "QualityChecker", "JobMemoryService"]
+  }
+}
