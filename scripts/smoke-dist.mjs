@@ -9,6 +9,7 @@
  * this way). This script imports, under plain Node:
  *
  *   1. every entry of the package `exports` map,
+ *      and the names `scripts/public-names.json` requires from its subpaths,
  *   2. every loader in the CLI `COMMANDS` table,
  *   3. the entry point of every `@framers/agentos-ext-*` dependency.
  *
@@ -78,6 +79,25 @@ for (const [subpath, target] of Object.entries(exportsMap)) {
   const file = typeof target === 'string' ? target : (target.import ?? target.default);
   if (typeof file !== 'string') continue;
   await check(`export ${subpath}`, () => importFile(path.join(root, file)));
+}
+
+// 1b. Names other packages import from the public subpaths. Dropping one in a
+// refactor breaks hosts such as RabbitHole at run time while the build stays green.
+const contractFile = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public-names.json');
+const contract = fs.existsSync(contractFile)
+  ? JSON.parse(fs.readFileSync(contractFile, 'utf8'))
+  : null;
+if (contract && contract.package === pkg.name) {
+  for (const [subpath, names] of Object.entries(contract.subpaths)) {
+    await check(`export ${subpath} names`, async () => {
+      const target = exportsMap[subpath];
+      if (!target) throw new Error('is not in the exports map');
+      const file = typeof target === 'string' ? target : (target.import ?? target.default);
+      const mod = await importFile(path.join(root, file));
+      const missing = names.filter((name) => !(name in mod));
+      if (missing.length > 0) throw new Error(`does not export ${missing.join(', ')}`);
+    });
+  }
 }
 
 // 2. CLI command loaders.

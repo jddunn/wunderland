@@ -74,6 +74,21 @@ describe('scripts/smoke-dist.mjs', () => {
     expect(result.stderr).toContain('no callable default export');
   });
 
+  it('fails when a public subpath loses a name other packages import', () => {
+    const root = fixture('export default async function chat() {}\n');
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    manifest.name = 'wunderland';
+    manifest.exports['./core'] = { import: './dist/types/core-types.js' };
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(manifest));
+    write(root, 'dist/types/core-types.js', 'export const DEFAULT_SECURITY_PROFILE = {};\n');
+    const result = runSmoke(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'export ./core names: does not export DEFAULT_INFERENCE_HIERARCHY',
+    );
+    expect(result.stderr).toContain('export ./seed names: is not in the exports map');
+  });
+
   it('fails when an extension pack dependency is not installed', () => {
     const root = fixture('export default async function chat() {}\n');
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));

@@ -17,6 +17,26 @@
     "./discovery": {
       "import": "./dist/platform/discovery/discovery-index.js",
       "types": "./dist/platform/discovery/discovery-index.d.ts"
+    },
+    "./core": {
+      "import": "./dist/types/core-types.js",
+      "types": "./dist/types/core-types.d.ts"
+    },
+    "./seed": {
+      "import": "./dist/agents/builder/WunderlandSeed.js",
+      "types": "./dist/agents/builder/WunderlandSeed.d.ts"
+    },
+    "./tools": {
+      "import": "./dist/public/tools.js",
+      "types": "./dist/public/tools.d.ts"
+    },
+    "./rag": {
+      "import": "./dist/memory/rag/rag-index.js",
+      "types": "./dist/memory/rag/rag-index.d.ts"
+    },
+    "./jobs": {
+      "import": "./dist/autonomy/jobs/index.js",
+      "types": "./dist/autonomy/jobs/index.d.ts"
     }
   },
   "files": [
