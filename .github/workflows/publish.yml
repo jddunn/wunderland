@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -191,8 +192,8 @@ jobs:
       # npm first, master second. If the publish fails, master still holds the
       # old version and the next run retries the same release. If the push
       # fails after a publish, the run is red, the canary still checks the
-      # registry copy (the marker is uploaded before the push), and the next
-      # release versions from what npm holds.
+      # registry copy (it is started before the push), and the next release
+      # versions from what npm holds.
       # Only master publishes. A manual run on another ref can be a dry run
       # only: publishing from it would also push that ref's commits to master.
       - name: Publish the verified tarball to npm
@@ -201,17 +202,28 @@ jobs:
         run: |
           npm publish "${{ steps.pack.outputs.tarball }}" --access public
           echo "published=true" >> "$GITHUB_OUTPUT"
-          echo "${{ steps.bump.outputs.version }}" > "$RUNNER_TEMP/version.txt"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Record the published version for the canary
+      # The canary's workflow_run trigger did not fire after 0.84.1 or 0.85.0,
+      # so the publish job starts it directly, as soon as npm has the version.
+      # A dispatch that still fails after the retries must not skip the
+      # version-bump push; the run is failed at the end instead.
+      - name: Start the post-publish canary
+        id: canary
         if: steps.publish.outputs.published == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: published-version
-          path: ${{ runner.temp }}/version.txt
-          retention-days: 7
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in 1 2 3; do
+            if gh workflow run post-publish-canary.yml --ref master -f version="${{ steps.bump.outputs.version }}" -f sha="${{ github.sha }}"; then
+              exit 0
+            fi
+            echo "canary dispatch failed (attempt $attempt)"
+            sleep $((attempt * 10))
+          done
+          exit 1
 
       - name: Push the version bump
         if: steps.publish.outputs.published == 'true'
@@ -235,6 +247,12 @@ jobs:
             fi
           done
           echo "::error::wunderland ${{ steps.bump.outputs.version }} is on npm but its version bump could not be pushed to master. The next release versions from npm."
+          exit 1
+
+      - name: Fail the run when the canary did not start
+        if: steps.canary.outcome == 'failure'
+        run: |
+          echo "::error::wunderland ${{ steps.bump.outputs.version }} is on npm and master, but the post-publish canary could not be started. Start it by hand: gh workflow run post-publish-canary.yml --ref master -f version=${{ steps.bump.outputs.version }}"
           exit 1
 
       - name: Nothing to publish
