@@ -48,7 +48,7 @@ The publish workflow runs the same gates again before it releases.
 
 To run one test file: `pnpm exec vitest run <path>`.
 
-Available scripts that CI does not run: `pnpm run lint` (ESLint over `src/`), `pnpm run test:security` (the suites under `src/security`), `pnpm run smoke`, `pnpm run clean`.
+Available scripts that CI does not run: `pnpm run test:security` (the suites under `src/security`), `pnpm run smoke`, `pnpm run clean`. The `lint` script names ESLint, which the repository does not install or configure, so it does not run.
 
 ## Conventions
 
