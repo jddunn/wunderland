@@ -30,7 +30,7 @@ CI ([`ci.yml`](https://github.com/jddunn/wunderland/blob/master/.github/workflow
 
 Maintainers merge a pull request only when both jobs are green. The release runs the same gates again before it publishes.
 
-To run one test file: `pnpm exec vitest run <path>`. `pnpm run lint` runs ESLint over `src/`; CI does not run it.
+To run one test file: `pnpm exec vitest run <path>`. `package.json` has a `lint` script, but ESLint is not a dependency and the repository has no ESLint configuration, so the script does not run in a fresh clone; CI does not run it.
 
 ## Commit messages
 
