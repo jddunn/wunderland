@@ -52,7 +52,7 @@ Available scripts that CI does not run: `pnpm run lint` (ESLint over `src/`), `p
 
 ## Conventions
 
-- Most files under `src/cli/` begin with `// @ts-nocheck`, and the CLI loads its commands through dynamic `import()` strings, which `tsc` does not follow. A build can pass and still ship a command that fails to load. After you move or rename a file, check every dynamic import that names it by hand, then run `pnpm build` and `node scripts/smoke-dist.mjs`.
+- Most files under `src/cli/` begin with `// @ts-nocheck`, and the CLI loads its commands through dynamic `import()` strings, which `tsc` does not follow. A build can pass and ship a command that fails to load. After you move or rename a file, check every dynamic import that names it by hand, then run `pnpm build` and `node scripts/smoke-dist.mjs`.
 - The public entry points are the `exports` map of `package.json`. A new public module needs an entry there, and the names it must export go in `scripts/public-names.json`, which the smoke test checks.
 - The unit lane runs the `*.test.ts` files under `src/`, except the integration files and the files `vitest.config.ts` excludes by name. An integration test is a `*.integration.test.ts` file under `src/`.
 - A quarantined test file is one the blocking lanes leave out. Its entry records how many of its tests pass. Do not add a file to a quarantine list to make CI green without a maintainer, and remove the entry when the file passes.

@@ -30,13 +30,13 @@ Maintainers squash-merge with the pull request title as the commit subject and a
 
 - A change that breaks users needs `!` before the colon in the title. A `BREAKING CHANGE:` footer typed into the merge box is not read.
 - The words "breaking change" anywhere in a title mark it as breaking, so use them only for one.
-- A `docs:`, `chore:`, `ci:` or `test:` title releases nothing; the push still runs the gates.
+- A `docs:`, `chore:`, `ci:` or `test:` title releases nothing; the push runs the gates.
 
 ## When a release fails
 
 - **A gate fails:** nothing is versioned or published and `master` is unchanged. Fix the cause; the next push runs the release again over the same commits.
 - **`npm publish` fails:** the version commit is not pushed and no tag is made. The next push to `master` computes the version again from the same tag and publishes it, newer commits included.
-- **The version commit cannot be pushed after the publish:** the run fails; npm has the version and `master` does not. The tag and the release are still created, and the next release counts from the version npm holds.
+- **The version commit cannot be pushed after the publish:** the run fails; npm has the version and `master` does not. The second job creates the tag and the release regardless, and the next release counts from the version npm holds.
 - **The canary cannot be started:** the run fails after the push, and its log gives the command to start the canary by hand.
 
 ## Dry runs
