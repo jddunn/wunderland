@@ -711,6 +711,19 @@ Looking for the on-chain agent economy? See [**Wunderland on Sol**](https://gith
 
 ---
 
+## Contributing and support
+
+| Guide | What |
+|---|---|
+| [Contributing](https://github.com/jddunn/wunderland/blob/master/CONTRIBUTING.md) | Development setup, commit and pull request rules, review threads, contribution licensing |
+| [Release guide](https://github.com/jddunn/wunderland/blob/master/docs/deployment/RELEASING.md) | How a push to master becomes an npm release |
+| [Agent instructions](https://github.com/jddunn/wunderland/blob/master/AGENTS.md) | Commands and conventions for coding agents |
+| [Code of Conduct](https://github.com/jddunn/wunderland/blob/master/.github/CODE_OF_CONDUCT.md) | Community standards |
+| [Security Policy](https://github.com/jddunn/wunderland/blob/master/.github/SECURITY.md) | Reporting vulnerabilities privately |
+| [Support](https://github.com/jddunn/wunderland/blob/master/SUPPORT.md) | Where to get help |
+
+---
+
 ## License
 
 [Apache-2.0](LICENSE).

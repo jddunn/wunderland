@@ -32,7 +32,7 @@ Release processes, CI/CD automation, and infrastructure setup. Covers npm packag
 
 ### [extensions/](extensions/)
 
-Extension system architecture, standards, and guides. Covers the final extension architecture design, auth extraction, marketplace integration, and extension refactoring plans.
+Extension system architecture, standards, and guides. Covers the final extension architecture design, auth extraction and marketplace integration.
 
 ### [features/](features/)
 
@@ -45,14 +45,6 @@ Onboarding, contributing guidelines, documentation standards, and CLI/TUI guide.
 ### [security/](security/)
 
 Security architecture and threat modeling. Covers isolation and sandboxing strategies, prompt injection defenses, and role-based access control (RBAC).
-
-### [internal/](internal/)
-
-Development diary, audits, TODOs, verification checklists, integration notes, release notes, and implementation summaries. Covers architecture audit, design system audit, social network audit, Wunderland integration audit, GMI integration TODO, evals harness demo, jobs implementation summary, Codex validation guide, landing page implementation notes, and v0.1.0 release notes.
-
-### [legacy/](legacy/)
-
-Outdated documents referencing superseded systems (Codex specs, OpenStrand progress, old SaaS starter, Supabase/Stripe setup, Rabbithole brand guide). Retained for historical reference.
 
 ### [moods/](moods/)
 
