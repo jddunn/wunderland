@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [master]
 
+# The weekly bump pull request's CI runs by dispatch on code no one has reviewed
+# yet (bump-framers-deps.yml), so the token is read-only.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Build, test, smoke
@@ -42,8 +47,9 @@ jobs:
       - name: Smoke the built dist under plain Node
         run: node scripts/smoke-dist.mjs
 
+      # A dispatched run gets no Codecov token: see the permissions comment above.
       - name: Upload coverage to Codecov
-        if: always()
+        if: always() && github.event_name != 'workflow_dispatch'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
