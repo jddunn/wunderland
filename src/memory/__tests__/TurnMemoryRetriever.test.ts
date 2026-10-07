@@ -1,8 +1,7 @@
 // @ts-nocheck
-// packages/wunderland/tests/memory/TurnMemoryRetriever.spec.ts
 import { describe, it, expect, vi } from 'vitest';
-import { injectMemoryContext, removeMemoryContext } from '../../src/memory/retrieval/TurnMemoryRetriever.js';
-import type { MemorySystem } from '../../src/memory/initialization/MemorySystemInitializer.js';
+import { injectMemoryContext, removeMemoryContext } from '../retrieval/TurnMemoryRetriever.js';
+import type { MemorySystem } from '../initialization/MemorySystemInitializer.js';
 
 function mockMemorySystem(result: { contextText: string; tokensUsed: number } | null): MemorySystem {
   return {

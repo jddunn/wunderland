@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { describe, it, expect } from 'vitest';
-import { getRecommendations } from '../../src/cli/extensions/recommender.js';
+import { getRecommendations } from '../recommender.js';
 
 describe('getRecommendations', () => {
   it('recommends news-search when NEWSAPI_API_KEY is set', async () => {

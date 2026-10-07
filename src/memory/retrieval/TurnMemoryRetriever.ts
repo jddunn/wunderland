@@ -18,7 +18,8 @@ export interface MessageLike {
 /**
  * Retrieves memory context and injects it into the message array.
  * Removes any previous memory context message first.
- * Returns the number of tokens used, or 0 if no context was injected.
+ * Returns the number of tokens used, or 0 if no context was injected, which
+ * includes a retrieval that failed: memory is optional for a turn.
  */
 export async function injectMemoryContext(
   messages: MessageLike[],
@@ -32,7 +33,13 @@ export async function injectMemoryContext(
     }
   }
 
-  const result = await memorySystem.retrieveForTurn(userInput);
+  let result;
+  try {
+    result = await memorySystem.retrieveForTurn(userInput);
+  } catch (err) {
+    console.warn('[TurnMemoryRetriever] Memory retrieval failed; the turn continues without memory context:', err);
+    return 0;
+  }
   if (!result || !result.contextText) return 0;
 
   // Insert after system prompt (index 1)

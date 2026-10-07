@@ -19,7 +19,6 @@ Instructions for coding agents working in this repository. People contributing b
 - `src/platform/`: configuration, observability, discovery and extensions
 - `src/public/`, `src/core/`, `src/bootstrap/`, `src/skills/`, `src/types/`, `src/index.ts`: the public library surface and shared types
 - `src/__tests__/` and the `__tests__/` folders beside each module: vitest suites
-- `tests/`: four `*.spec.ts` files outside the vitest include pattern (`src/**/*.test.ts`), so no lane runs them
 - `presets/`: the agent presets, missions, templates and workflows the package ships
 - `examples/`: runnable examples of the library, missions and workflows
 - `scripts/`: the dist smoke tests, the quarantine report and build helpers
