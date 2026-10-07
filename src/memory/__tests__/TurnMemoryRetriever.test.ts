@@ -1,5 +1,4 @@
 // @ts-nocheck
-// packages/wunderland/tests/memory/TurnMemoryRetriever.spec.ts
 import { describe, it, expect, vi } from 'vitest';
 import { injectMemoryContext, removeMemoryContext } from '../retrieval/TurnMemoryRetriever.js';
 import type { MemorySystem } from '../initialization/MemorySystemInitializer.js';
