@@ -57,7 +57,7 @@ Available scripts that CI does not run: `pnpm run test:security` (the suites und
 - A quarantined test file is one the blocking lanes leave out. Its entry records how many of its tests pass. Do not add a file to a quarantine list to make CI green without a maintainer, and remove the entry when the file passes.
 - Tests exercise the real path: an integration test for any behavior with an observable surface (a command, a route, a channel adapter), unit tests for pure logic and regression pins, no filler tests.
 - TSDoc on every exported symbol, and comments where the code is not obvious.
-- A weekly workflow opens a pull request that moves `@framers/*` version pins to the latest published versions, then dispatches CI on its branch: GitHub holds the runs of a pull request that the workflow token opens until a maintainer approves them. Do not pin an older version of a package in this family.
+- A weekly workflow opens a pull request that moves `@framers/*` version pins to the latest published versions, then runs CI on its branch by dispatch and posts the result as the `CI (workflow_dispatch)` commit status: GitHub holds the runs of a pull request that the workflow token opens until a maintainer approves them. Do not pin an older version of a package in this family.
 - A bug in a first-party package this repository uses (`@framers/agentos`, an extension pack) is fixed in that package's repository and released. Do not patch `node_modules` or copy a workaround into this repository.
 - Planning notes, audits and session logs are not published. Keep them out of the repository.
 
