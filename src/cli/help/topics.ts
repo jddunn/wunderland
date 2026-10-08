@@ -969,7 +969,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${dim('When enabled, agents can create new tools on the fly to solve problems')}`);
     console.log(`     ${dim('that existing tools cannot handle. Two creation modes:')}`);
     console.log(`     ${accent('compose')}   ${dim('Pipeline of existing tool calls with input/output mapping')}`);
-    console.log(`     ${accent('sandbox')}   ${dim('Arbitrary code in a memory/time-bounded sandbox (disabled by default)')}`);
+    console.log(`     ${accent('sandbox')}   ${dim('Agent-written code in an in-process node:vm context with a time limit (disabled by default)')}`);
     console.log();
     console.log(`  ${iColor('2')} ${bright('How to enable')}`);
     console.log(`     ${dim('Set in your agent.config.json:')}`);
@@ -988,7 +988,7 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`  ${iColor('4')} ${bright('Safety')}`);
     console.log(`     ${dim('Every forged tool passes through:')}`);
     console.log(`     ${sColor(g.ok)} ${dim('LLM-as-judge evaluation (safety, correctness, determinism, bounded execution)')}`);
-    console.log(`     ${sColor(g.ok)} ${dim('Sandbox isolation with memory/time limits and API allowlists when sandbox mode is enabled')}`);
+    console.log(`     ${sColor(g.ok)} ${dim('Sandbox mode: a time limit (memory is observed, not limited); with a ceiling (capabilities), each fetch, file read and crypto call goes through a host-side broker and is recorded')}`);
     console.log(`     ${sColor(g.ok)} ${dim('Human-in-the-loop (HITL) confirmation for shared-tier promotion')}`);
     console.log(`     ${sColor(g.ok)} ${dim('Full audit trail with judge verdicts and promotion history')}`);
     console.log();
@@ -1013,8 +1013,10 @@ export function printHelpTopic(topicRaw: string): void {
     console.log(`     ${accent('maxAgentTools')}       ${dim('Max agent-scoped tools per agent (default: 50)')}`);
     console.log(`     ${accent('allowSandboxTools')}  ${dim('Allow sandboxed code-forged tools (default: false)')}`);
     console.log(`     ${accent('persistSandboxSource')} ${dim('Persist raw sandbox source at rest (default: false)')}`);
-    console.log(`     ${accent('sandboxMemoryMB')}     ${dim('Sandbox memory limit (default: 128 MB)')}`);
+    console.log(`     ${accent('sandboxMemoryMB')}     ${dim('Nominal memory budget; observed, not limited (default: 128 MB)')}`);
     console.log(`     ${accent('sandboxTimeoutMs')}    ${dim('Sandbox time limit (default: 5000 ms)')}`);
+    console.log(`     ${accent('capabilities')}        ${dim('Ceiling for forged code: fetch hosts, fs.read roots, crypto (absent: unscoped)')}`);
+    console.log(`     ${accent('audit')}               ${dim("Effect records under a ceiling: store 'storage' | 'none', content, retainDays")}`);
     console.log(`     ${accent('judgeModel')}          ${dim('LLM model for forge-time evaluation (default: gpt-4o-mini)')}`);
     console.log(`     ${accent('promotionJudgeModel')} ${dim('LLM model for promotion reviews (default: gpt-4o)')}`);
     console.log();
