@@ -101,7 +101,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@framers/agentos": "^0.12.7",
+    "@framers/agentos": "^0.12.8",
     "@framers/agentos-ext-cli-executor": "^1.3.0",
     "@framers/agentos-ext-giphy": "^1.1.0",
     "@framers/agentos-ext-image-search": "^1.1.0",
@@ -109,7 +109,7 @@
     "@framers/agentos-ext-voice-synthesis": "^2.1.0",
     "@framers/agentos-ext-web-browser": "^1.3.0",
     "@framers/agentos-ext-web-search": "^1.3.0",
-    "@framers/agentos-extensions-registry": "^0.18.7",
+    "@framers/agentos-extensions-registry": "^0.18.8",
     "@framers/sql-storage-adapter": "^0.6.9",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.201.1",
@@ -161,8 +161,8 @@
     "@framers/agentos-ext-amazon-polly": "^0.2.1",
     "@framers/agentos-ext-diarization": "^0.2.1",
     "@framers/agentos-ext-endpoint-semantic": "^0.2.1",
-    "@framers/agentos-ext-google-cloud-stt": "^0.2.1",
-    "@framers/agentos-ext-google-cloud-tts": "^0.2.1",
+    "@framers/agentos-ext-google-cloud-stt": "^0.3.0",
+    "@framers/agentos-ext-google-cloud-tts": "^0.3.0",
     "@framers/agentos-ext-openwakeword": "^0.2.1",
     "@framers/agentos-ext-piper": "^0.2.1",
     "@framers/agentos-ext-porcupine": "^0.2.1",
@@ -171,10 +171,10 @@
     "@framers/agentos-ext-streaming-tts-elevenlabs": "^0.2.1",
     "@framers/agentos-ext-streaming-tts-openai": "^0.2.1",
     "@framers/agentos-ext-vosk": "^0.2.1",
-    "@framers/agentos-skills-registry": "^0.19.2"
+    "@framers/agentos-skills-registry": "^0.19.3"
   },
   "devDependencies": {
-    "@framers/agentos-skills-registry": "^0.19.2",
+    "@framers/agentos-skills-registry": "^0.19.3",
     "@types/node": "^20.10.0",
     "@types/uuid": "^9.0.0",
     "@vitest/coverage-v8": "^1.3.0",
