@@ -81,8 +81,10 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: 'chore(deps): bump @framers/* deps to latest published versions'
-          title: 'chore(deps): bump @framers/* deps to latest published versions'
+          # fix(deps), not chore(deps): the release skips chore commits, so a chore bump
+          # never reached npm and consumers kept the old dependency ranges.
+          commit-message: 'fix(deps): bump @framers/* deps to latest published versions'
+          title: 'fix(deps): bump @framers/* deps to latest published versions'
           body: |
             Automated weekly bump of all `@framers/*` dependencies to their
             latest npm-published versions.
