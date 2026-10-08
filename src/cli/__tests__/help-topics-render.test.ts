@@ -44,4 +44,12 @@ describe('CLI help topic rendering', () => {
     expect(output).toContain('app.runGraph');
     expect(output).toContain('scratch.judge');
   });
+
+  it('renders the emergent topic with the ceiling and no memory limit it does not enforce', () => {
+    const output = captureLogs(() => printHelpTopic('emergent'));
+    expect(output).toContain('Ceiling for forged code');
+    expect(output).toContain('Effect records under a ceiling');
+    expect(output).not.toContain('memory/time-bounded');
+    expect(output).not.toContain('Sandbox isolation with memory/time limits');
+  });
 });
