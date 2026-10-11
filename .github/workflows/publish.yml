@@ -13,8 +13,6 @@ on:
 permissions:
   contents: write
   actions: write
-  # npm trusted publishing exchanges the job's OIDC token for a publish token.
-  id-token: write
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -24,6 +22,11 @@ jobs:
   publish:
     name: Verify, version, publish
     runs-on: ubuntu-latest
+    # Only this job may request an OIDC token, which npm trusted publishing exchanges for a publish token.
+    permissions:
+      contents: write
+      actions: write
+      id-token: write
     timeout-minutes: 45
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     outputs:
