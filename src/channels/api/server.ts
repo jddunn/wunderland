@@ -212,6 +212,10 @@ export async function createWunderlandServer(opts?: {
   const availablePersonas = effectiveConfigResult.availablePersonas;
 
   const seedId = String(cfg.seedId || 'seed_local_agent');
+  // The workspace id names the agent's folder, so it is checked before
+  // telemetry or any store starts: an id whose cleaned name starts or ends
+  // with a dot is refused here with an InvalidAgentWorkspaceIdError.
+  const workspaceAgentId = sanitizeAgentWorkspaceId(opts?.workspace?.agentId ?? seedId);
   const activePersonaId =
     typeof cfg.selectedPersonaId === 'string' && cfg.selectedPersonaId.trim()
       ? cfg.selectedPersonaId.trim()
@@ -310,7 +314,6 @@ export async function createWunderlandServer(opts?: {
   const lazyTools = opts?.lazyTools === true || (cfg as any)?.lazyTools === true;
 
   const workspaceBaseDir = opts?.workspace?.baseDir ?? resolveAgentWorkspaceBaseDir();
-  const workspaceAgentId = sanitizeAgentWorkspaceId(opts?.workspace?.agentId ?? seedId);
   const sessionTextLogger = new WunderlandSessionTextLogger(
     resolveWunderlandTextLogConfig({
       agentConfig: cfg,
