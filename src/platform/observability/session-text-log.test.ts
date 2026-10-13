@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,18 +11,38 @@ import {
 } from './session-text-log.js';
 import { InvalidAgentWorkspaceIdError } from '../../runtime/tools/workspace.js';
 
+/** The environment settings that override where and whether text logs are written. */
+const TEXT_LOG_ENV = [
+  'WUNDERLAND_TEXT_LOGS_ENABLED',
+  'AGENTOS_TEXT_LOGS_ENABLED',
+  'WUNDERLAND_TEXT_LOGS_DIR',
+  'AGENTOS_TEXT_LOGS_DIR',
+];
+
 describe('Wunderland session text logs', () => {
   let workingDir: string | undefined;
+  let savedEnv: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    // One fixed date, so a case that crosses midnight still reads the dated
+    // folder it wrote; and none of the text-log settings of the shell that
+    // runs the tests.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-13T12:00:00.000Z'));
+    savedEnv = Object.fromEntries(TEXT_LOG_ENV.map((name) => [name, process.env[name]]));
+    for (const name of TEXT_LOG_ENV) delete process.env[name];
+  });
 
   afterEach(async () => {
+    vi.useRealTimers();
+    for (const name of TEXT_LOG_ENV) {
+      if (savedEnv[name] === undefined) delete process.env[name];
+      else process.env[name] = savedEnv[name];
+    }
     if (workingDir) {
       await rm(workingDir, { recursive: true, force: true });
       workingDir = undefined;
     }
-    delete process.env['WUNDERLAND_TEXT_LOGS_ENABLED'];
-    delete process.env['AGENTOS_TEXT_LOGS_ENABLED'];
-    delete process.env['WUNDERLAND_TEXT_LOGS_DIR'];
-    delete process.env['AGENTOS_TEXT_LOGS_DIR'];
   });
 
   it('enables dated per-session logs by default for config-backed agent runs', async () => {

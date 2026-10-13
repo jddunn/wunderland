@@ -260,7 +260,7 @@ interface ShellConfig {
   };
   agentWorkspace?: {
     enabled?: boolean;                       // default: true
-    baseDir?: string;                        // default: ~/Documents/AgentOS
+    baseDir?: string;                        // default: ~/Documents/AgentOS (wunderland passes its own base, ~/Documents/AgentOS/agents)
     agentId: string;
     createIfMissing?: boolean;               // default: true
     subdirs?: string[];                      // default: ['assets','exports','tmp']
