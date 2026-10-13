@@ -134,7 +134,7 @@ When `wunderland start` or `wunderland chat` runs, the extension loader (`src/cl
 }
 ```
 
-The `agentWorkspace` setting creates a per-agent directory structure under `~/Documents/AgentOS/<agentId>/` with `assets/`, `exports/`, and `tmp/` subdirectories. This is the default working directory when no explicit `cwd` is passed to `shell_execute`.
+The `agentWorkspace` setting creates a per-agent directory structure under `~/Documents/AgentOS/agents/<agentId>/` (or under `WUNDERLAND_WORKSPACES_DIR`) with `assets/`, `exports/`, and `tmp/` subdirectories. This is the default working directory when no explicit `cwd` is passed to `shell_execute`. The agent id names that folder, so it is cleaned to letters, digits, dots, dashes and underscores, and an id that starts or ends with a dot, such as `.` or `..`, is refused when the agent starts.
 
 ## Filesystem Access Policy
 

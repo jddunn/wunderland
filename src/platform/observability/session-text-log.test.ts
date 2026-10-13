@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -9,6 +9,7 @@ import {
   resolveWunderlandTextLogConfig,
   WunderlandSessionTextLogger,
 } from './session-text-log.js';
+import { InvalidAgentWorkspaceIdError } from '../../runtime/tools/workspace.js';
 
 describe('Wunderland session text logs', () => {
   let workingDir: string | undefined;
@@ -84,5 +85,57 @@ describe('Wunderland session text logs', () => {
 
     const datedDir = path.join(workingDir, 'logs', new Date().toISOString().slice(0, 10));
     expect(existsSync(datedDir)).toBe(false);
+  });
+
+  it("keeps an agent's logs in its folder under the workspace base and refuses an id that would leave it", async () => {
+    workingDir = await mkdtemp(path.join(tmpdir(), 'wunderland-text-log-workspace-'));
+    const baseDir = path.join(workingDir, 'agents');
+
+    const config = resolveWunderlandTextLogConfig({
+      agentConfig: { observability: { textLogs: { enabled: true } } },
+      workingDirectory: workingDir,
+      workspace: { agentId: 'seed_logger', baseDir },
+      defaultAgentId: 'seed_logger',
+    });
+    expect(config.directory).toBe(path.join(baseDir, 'seed_logger', 'logs'));
+
+    await new WunderlandSessionTextLogger(config).logTurn({
+      meta: { agentId: 'seed_logger' },
+      sessionId: 'session-1',
+      userText: 'hello',
+    });
+    const datedDir = path.join(baseDir, 'seed_logger', 'logs', new Date().toISOString().slice(0, 10));
+    expect(existsSync(path.join(datedDir, 'session-1.log'))).toBe(true);
+
+    // '..' would put the logs in <workingDir>/logs, beside the base; '.' in <base>/logs.
+    for (const agentId of ['..', '.', '/..']) {
+      expect(() =>
+        resolveWunderlandTextLogConfig({
+          workingDirectory: workingDir,
+          workspace: { agentId, baseDir },
+          defaultAgentId: agentId,
+        }),
+      ).toThrow(InvalidAgentWorkspaceIdError);
+    }
+  });
+
+  it('names each session log file inside the dated folder, whatever the session id', async () => {
+    workingDir = await mkdtemp(path.join(tmpdir(), 'wunderland-text-log-session-ids-'));
+
+    const config = resolveWunderlandTextLogConfig({
+      agentConfig: { seedId: 'seed_logger' },
+      workingDirectory: workingDir,
+      configBacked: true,
+    });
+    const logger = new WunderlandSessionTextLogger(config);
+    for (const sessionId of ['..', '../escape']) {
+      await logger.logTurn({ meta: { agentId: 'seed_logger' }, sessionId, userText: 'hello' });
+    }
+
+    const logsDir = path.join(workingDir, 'logs');
+    const datedDir = path.join(logsDir, new Date().toISOString().slice(0, 10));
+    expect((await readdir(datedDir)).sort()).toEqual(['...log', '..-escape.log'].sort());
+    expect((await readdir(logsDir)).sort()).toEqual([path.basename(datedDir)]);
+    expect((await readdir(workingDir)).sort()).toEqual(['logs']);
   });
 });
