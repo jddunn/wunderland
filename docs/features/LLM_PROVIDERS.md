@@ -273,7 +273,7 @@ const seed = createWunderlandSeed({
 });
 
 // Or specify explicitly via the server API
-import { createWunderlandServer } from 'wunderland';
+import { createWunderlandServer } from 'wunderland/api';
 
 const server = await createWunderlandServer({
   seedId: 'my-agent',
