@@ -5,7 +5,8 @@
  * POST /chat answers without a secret unless `chat.secret` or
  * `WUNDERLAND_CHAT_SECRET` is set, so `wunderland start`, `wunderland serve`
  * and {@link createWunderlandServer} listen on the loopback address unless a
- * host is named. `0.0.0.0` accepts connections from every machine that can
+ * host is named, and refuse a host other machines can reach until a chat
+ * secret is set. `0.0.0.0` accepts connections from every machine that can
  * reach the port.
  */
 
@@ -45,6 +46,22 @@ export function isLoopbackHost(host: string): boolean {
     bare === '::1' ||
     /^127(\.\d{1,3}){3}$/.test(bare) ||
     /^::ffff:127(\.\d{1,3}){3}$/.test(bare)
+  );
+}
+
+/**
+ * Refuses to listen where other machines can connect while POST /chat has no secret.
+ *
+ * @param host - The address the server is about to listen on.
+ * @param chatSecret - The secret /chat requires; empty when none is set.
+ * @throws Error naming the host and how to set a secret, unless the host is loopback or a secret is set.
+ */
+export function assertChatSecretForHost(host: string, chatSecret: string): void {
+  if (chatSecret || isLoopbackHost(host)) return;
+  throw new Error(
+    `Refusing to listen on ${host}: other machines could reach POST /chat, which has no secret. `
+      + 'Set chat.secret in agent.config.json or WUNDERLAND_CHAT_SECRET (createWunderlandServer() also takes '
+      + 'a chatSecret option), or listen on 127.0.0.1.',
   );
 }
 

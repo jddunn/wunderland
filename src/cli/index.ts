@@ -133,7 +133,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
 
   ${c('Command Options:')}
     ${d('--port <number>')}        Server port (default: PORT env or 3777)
-    ${d('--host <address>')}       Server address for start and serve (default: 127.0.0.1; 0.0.0.0 lets other machines in)
+    ${d('--host <address>')}       Server address for start and serve (default: 127.0.0.1; 0.0.0.0 needs a chat secret)
     ${d('--model <id>')}           LLM model override
     ${d('--preset <name>')}        Personality preset for init
     ${d('--security-tier <tier>')} Security tier (dangerous/permissive/balanced/strict/paranoid)
@@ -268,7 +268,7 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     examples: ['wunderland start', 'wunderland start --cli --port 3777', 'wunderland start --host 0.0.0.0'],
     notes: [
       'Listens on 127.0.0.1 (this machine only) unless --host names another address. --host 0.0.0.0 lets other machines connect.',
-      'POST /chat answers without a secret unless chat.secret (agent.config.json) or WUNDERLAND_CHAT_SECRET is set; set one before you listen wider.',
+      'A host other machines can reach needs a chat secret (chat.secret in agent.config.json, or WUNDERLAND_CHAT_SECRET); without one, start refuses to listen there. Clients send it in the x-wunderland-chat-secret header.',
     ],
   },
   status: {

@@ -374,8 +374,10 @@ wunderland --ascii
 # Start the agent server (127.0.0.1:3777, this machine only)
 wunderland start
 
-# Let other machines connect: set chat.secret or WUNDERLAND_CHAT_SECRET first,
-# since POST /chat answers anyone who can reach the port without one
+# Let other machines connect. start refuses this until POST /chat has a secret
+# (chat.secret in agent.config.json, or WUNDERLAND_CHAT_SECRET); clients send it
+# in the x-wunderland-chat-secret header
+export WUNDERLAND_CHAT_SECRET=<a long random value>
 wunderland start --host 0.0.0.0
 
 # Chat with your agent

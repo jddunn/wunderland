@@ -9,7 +9,12 @@ import * as fmt from '../../ui/format.js';
 import { accent, dim, success as sColor, info as iColor, warn as wColor } from '../../ui/theme.js';
 import { shutdownWunderlandOtel } from '../../../platform/observability/otel.js';
 import { recordAgentStart } from '../../config/agent-history.js';
-import { DEFAULT_LISTEN_HOST, displayHost, isLoopbackHost } from '../../../channels/api/listen-host.js';
+import {
+  DEFAULT_LISTEN_HOST,
+  assertChatSecretForHost,
+  displayHost,
+  isLoopbackHost,
+} from '../../../channels/api/listen-host.js';
 
 export async function startServerAndDisplay(ctx: any, server: import('node:http').Server): Promise<void> {
   const {
@@ -41,6 +46,8 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
   const isOllamaProvider = providerId === 'ollama';
   // cmdStart resolves --host; the loopback default covers callers that set none.
   const host: string = ctx.host || DEFAULT_LISTEN_HOST;
+  // A host other machines can reach needs a chat secret first: /chat would answer them all.
+  assertChatSecretForHost(host, chatSecret);
 
   // Auto-find a free port if the requested one is in use.
   const maxPortAttempts = 10;
@@ -186,12 +193,6 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
   fmt.ok(`Pairing:   ${iColor(`${baseUrl}/pairing`)}`);
   if (!autoApproveToolCalls) {
     fmt.note(`CLI HITL: ${accent(`wunderland hitl watch --server ${baseUrl} --secret ${hitlSecret}`)}`);
-  }
-  if (!localOnly && !chatSecret) {
-    fmt.warning(
-      'POST /chat has no secret, so anyone who can reach this address can use the agent and its model key. '
-        + 'Set chat.secret in agent.config.json or WUNDERLAND_CHAT_SECRET.',
-    );
   }
   fmt.blank();
 }

@@ -9,7 +9,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readBody, sendJson } from '../server-helpers.js';
+import { isLoopbackRequest, readBody, sendJson } from '../server-helpers.js';
 import type { ServerDeps, RouteHandlerResult } from './types.js';
 
 /**
@@ -29,10 +29,23 @@ export async function handleAgentRoutes(
 ): Promise<RouteHandlerResult> {
   const { toolMap, toolApiSecret, policy, activePersonaId } = deps;
 
+  /**
+   * The tool API runs tools in autonomous mode. With WUNDERLAND_TOOL_API_KEY it
+   * needs that key in x-api-key; without one it answers this machine only, so a
+   * server listening on a wider host never runs tools for other machines.
+   */
+  const toolApiAllowed = (): boolean =>
+    toolApiSecret ? req.headers['x-api-key'] === toolApiSecret : isLoopbackRequest(req);
+  const refuseToolApi = (): void => {
+    sendJson(res, 401, {
+      error: toolApiSecret ? 'Unauthorized' : 'Set WUNDERLAND_TOOL_API_KEY to use the tool API from another machine.',
+    });
+  };
+
   /* GET /api/tools — list all available tools */
   if (url.pathname === '/api/tools' && req.method === 'GET') {
-    if (toolApiSecret && req.headers['x-api-key'] !== toolApiSecret) {
-      sendJson(res, 401, { error: 'Unauthorized' });
+    if (!toolApiAllowed()) {
+      refuseToolApi();
       return true;
     }
     const tools = Array.from(toolMap.values()).map((t) => ({
@@ -48,8 +61,8 @@ export async function handleAgentRoutes(
 
   /* POST /api/tools/:name — execute a tool */
   if (url.pathname.startsWith('/api/tools/') && req.method === 'POST') {
-    if (toolApiSecret && req.headers['x-api-key'] !== toolApiSecret) {
-      sendJson(res, 401, { error: 'Unauthorized' });
+    if (!toolApiAllowed()) {
+      refuseToolApi();
       return true;
     }
     const toolName = decodeURIComponent(url.pathname.slice('/api/tools/'.length));

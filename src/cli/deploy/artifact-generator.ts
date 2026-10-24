@@ -221,8 +221,8 @@ export function generateEnvTemplate(opts: {
   lines.push(`OPENAI_MODEL=${opts.llmModel ?? 'gpt-4o'}`);
   lines.push('');
   lines.push(
-    '# POST /chat answers without a secret unless this is set. The container listens on',
-    '# every interface, so set it before the agent is reachable; send it in the',
+    '# Required: the container listens on every interface, and wunderland start refuses',
+    '# to until POST /chat has a secret. Use a long random value; clients send it in the',
     '# x-wunderland-chat-secret header.',
     'WUNDERLAND_CHAT_SECRET=',
     '',
