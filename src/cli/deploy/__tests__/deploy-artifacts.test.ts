@@ -40,5 +40,6 @@ describe.each(['docker', 'railway', 'fly'] as const)('wunderland deploy --target
   it('has a chat secret line in .env.example and says why in the README', () => {
     expect(files.get('.env.example')).toMatch(/^WUNDERLAND_CHAT_SECRET=$/m);
     expect(files.get('README.md')).toContain('WUNDERLAND_CHAT_SECRET');
+    expect(files.get('README.md')).toMatch(/refuses to start/);
   });
 });

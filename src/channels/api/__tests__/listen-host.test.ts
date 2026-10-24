@@ -5,7 +5,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_LISTEN_HOST, displayHost, isLoopbackHost, resolveListenHost } from '../listen-host.js';
+import {
+  DEFAULT_LISTEN_HOST,
+  assertChatSecretForHost,
+  displayHost,
+  isLoopbackHost,
+  resolveListenHost,
+} from '../listen-host.js';
 
 describe('resolveListenHost', () => {
   it('keeps the server on 127.0.0.1 when no host is named', () => {
@@ -37,6 +43,22 @@ describe('isLoopbackHost', () => {
 
   it.each(['0.0.0.0', '::', '192.168.1.20', 'example.com'])('%s lets other machines connect', (host) => {
     expect(isLoopbackHost(host)).toBe(false);
+  });
+});
+
+describe('assertChatSecretForHost', () => {
+  it('lets a loopback server run without a chat secret', () => {
+    expect(() => assertChatSecretForHost('127.0.0.1', '')).not.toThrow();
+    expect(() => assertChatSecretForHost('::1', '')).not.toThrow();
+  });
+
+  it('refuses a host other machines can reach while /chat has no secret', () => {
+    expect(() => assertChatSecretForHost('0.0.0.0', '')).toThrow(/Refusing to listen on 0\.0\.0\.0/);
+    expect(() => assertChatSecretForHost('192.168.1.20', '')).toThrow(/WUNDERLAND_CHAT_SECRET/);
+  });
+
+  it('lets a wider host run once a chat secret is set', () => {
+    expect(() => assertChatSecretForHost('0.0.0.0', 'a-chat-secret')).not.toThrow();
   });
 });
 

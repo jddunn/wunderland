@@ -5,12 +5,13 @@
  *
  * POST /chat answers without a secret unless one is configured, so
  * `wunderland start` and createWunderlandServer() listen on 127.0.0.1 unless
- * a host is named (`--host`, or the `host` option). These tests bind real
- * servers and read the address each one listens on.
+ * a host is named (`--host`, or the `host` option), and refuse a host other
+ * machines can reach until a chat secret is set. These tests bind real servers
+ * and read the address each one listens on.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createServer, type Server } from 'node:http';
+import { createServer, request, type Server } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -38,8 +39,10 @@ import { startServerAndDisplay } from '../cli/commands/start/startup-display.js'
 
 const quiet = { debug() {}, info() {}, warn() {}, error() {} };
 
+const CHAT_SECRET = 'listen-test-chat-secret';
+
 /** The context the start command's last phase reads, for an agent with nothing loaded. */
-function startContext(host?: string) {
+function startContext(host?: string, chatSecret = '') {
   return {
     host,
     port: 0,
@@ -57,7 +60,7 @@ function startContext(host?: string) {
     autoApproveToolCalls: false,
     policy: { executionMode: 'human-dangerous' },
     hitlSecret: 'hitl-test-secret',
-    chatSecret: '',
+    chatSecret,
     turnApprovalMode: 'off',
     channelUnsubs: [],
     activePacks: [],
@@ -77,10 +80,10 @@ describe('wunderland start', () => {
     );
   });
 
-  async function listenThroughStartup(host?: string): Promise<string> {
+  async function listenThroughStartup(host?: string, chatSecret = ''): Promise<string> {
     const server = createServer((_req, res) => res.end('ok'));
     servers.push(server);
-    await startServerAndDisplay(startContext(host), server);
+    await startServerAndDisplay(startContext(host, chatSecret), server);
     return server.address().address;
   }
 
@@ -88,8 +91,17 @@ describe('wunderland start', () => {
     expect(await listenThroughStartup(undefined)).toBe('127.0.0.1');
   });
 
-  it('listens on the address --host names', async () => {
-    expect(await listenThroughStartup('0.0.0.0')).toBe('0.0.0.0');
+  it('listens on the address --host names once a chat secret is set', async () => {
+    expect(await listenThroughStartup('0.0.0.0', CHAT_SECRET)).toBe('0.0.0.0');
+  });
+
+  it('refuses to listen beyond this machine while /chat has no secret', async () => {
+    const server = createServer((_req, res) => res.end('ok'));
+    servers.push(server);
+    await expect(startServerAndDisplay(startContext('0.0.0.0', ''), server)).rejects.toThrow(
+      /Refusing to listen on 0\.0\.0\.0/,
+    );
+    expect(server.listening).toBe(false);
   });
 
   it('refuses --host without an address before any startup work', async () => {
@@ -119,20 +131,24 @@ describe('createWunderlandServer', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  async function serverAddress(host?: string) {
-    const handle = await createWunderlandServer({
+  function startLibraryServer(extra: Record<string, unknown> = {}, agentConfig: Record<string, unknown> = {}) {
+    return createWunderlandServer({
       loadEnv: false,
       workingDirectory: root,
-      ...(host === undefined ? {} : { host }),
       port: 0,
       lazyTools: true,
       llm: { providerId: 'openai', apiKey: 'test-key', model: 'gpt-test' },
       workspace: { agentId: 'listen-test', baseDir: path.join(root, 'agents') },
-      agentConfig: { seedId: 'seed_listen_test', discovery: { enabled: false } },
+      agentConfig: { seedId: 'seed_listen_test', discovery: { enabled: false }, ...agentConfig },
       taskOutcomeTelemetry: { enabled: false },
       adaptiveExecution: { enabled: false },
       logger: quiet,
+      ...extra,
     });
+  }
+
+  async function serverAddress(extra: Record<string, unknown> = {}) {
+    const handle = await startLibraryServer(extra);
     try {
       return { host: handle.host, address: handle.server.address().address, url: handle.url, port: handle.port };
     } finally {
@@ -140,16 +156,83 @@ describe('createWunderlandServer', () => {
     }
   }
 
+  /** POSTs JSON to the server and resolves with the status code. */
+  function post(port: number, body: unknown, headers: Record<string, string> = {}): Promise<number> {
+    const payload = JSON.stringify(body);
+    return new Promise((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: '/chat',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), ...headers },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        },
+      );
+      req.on('error', reject);
+      req.end(payload);
+    });
+  }
+
   it('listens on 127.0.0.1 when no host is given', async () => {
-    const result = await serverAddress(undefined);
+    const result = await serverAddress();
     expect(result.host).toBe('127.0.0.1');
     expect(result.address).toBe('127.0.0.1');
     expect(result.url).toBe(`http://127.0.0.1:${result.port}`);
   });
 
-  it('listens on the host it is given', async () => {
-    const result = await serverAddress('0.0.0.0');
+  it('listens on the host it is given once a chat secret is set', async () => {
+    const result = await serverAddress({ host: '0.0.0.0', chatSecret: CHAT_SECRET });
     expect(result.address).toBe('0.0.0.0');
     expect(result.url).toBe(`http://localhost:${result.port}`);
+  });
+
+  it('refuses a host other machines can reach while /chat has no secret', async () => {
+    const outcome = await startLibraryServer({ host: '0.0.0.0' }).then(
+      async (handle) => {
+        await handle.close();
+        return 'listened';
+      },
+      (err: Error) => err,
+    );
+    expect(outcome).toBeInstanceOf(Error);
+    expect(outcome.message).toMatch(/Refusing to listen on 0\.0\.0\.0/);
+  });
+
+  describe('POST /chat', () => {
+    // A reply would need the model; the tests stop at the secret check or at the empty-message check.
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('requires the chatSecret option as the x-wunderland-chat-secret header', async () => {
+      const handle = await startLibraryServer({ chatSecret: CHAT_SECRET });
+      try {
+        expect(await post(handle.port, { message: 'hello' })).toBe(401);
+        expect(await post(handle.port, { message: 'hello' }, { 'x-wunderland-chat-secret': 'wrong' })).toBe(401);
+        // With the secret the request reaches the handler, which answers an empty message with 400.
+        expect(await post(handle.port, {}, { 'x-wunderland-chat-secret': CHAT_SECRET })).toBe(400);
+      } finally {
+        await handle.close();
+      }
+    });
+
+    it('takes the chat secret from the agent config', async () => {
+      const handle = await startLibraryServer({}, { chat: { secret: 'secret-from-config' } });
+      try {
+        expect(await post(handle.port, { message: 'hello' })).toBe(401);
+        expect(await post(handle.port, {}, { 'x-wunderland-chat-secret': 'secret-from-config' })).toBe(400);
+      } finally {
+        await handle.close();
+      }
+    });
   });
 });
