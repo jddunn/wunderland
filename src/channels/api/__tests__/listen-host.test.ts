@@ -18,6 +18,12 @@ describe('resolveListenHost', () => {
     expect(resolveListenHost(' ::1 ')).toBe('::1');
   });
 
+  it('drops the brackets from an IPv6 address, which server.listen cannot resolve', () => {
+    expect(resolveListenHost('[::1]')).toBe('::1');
+    expect(resolveListenHost('[fe80::1]')).toBe('fe80::1');
+    expect(resolveListenHost('[not-an-address]')).toBe('[not-an-address]');
+  });
+
   it('refuses --host given without an address instead of guessing one', () => {
     expect(() => resolveListenHost(true)).toThrow(/--host needs an address/);
     expect(() => resolveListenHost('   ')).toThrow(/--host needs an address/);
