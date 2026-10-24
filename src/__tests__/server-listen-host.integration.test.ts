@@ -13,7 +13,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer, request, type Server } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 const captured = vi.hoisted(() => ({ errorTitles: [] as string[] }));
@@ -157,14 +157,19 @@ describe('createWunderlandServer', () => {
   }
 
   /** POSTs JSON to the server and resolves with the status code. */
-  function post(port: number, body: unknown, headers: Record<string, string> = {}): Promise<number> {
+  function post(
+    port: number,
+    body: unknown,
+    headers: Record<string, string> = {},
+    { host = '127.0.0.1', path: urlPath = '/chat' }: { host?: string; path?: string } = {},
+  ): Promise<number> {
     const payload = JSON.stringify(body);
     return new Promise((resolve, reject) => {
       const req = request(
         {
-          host: '127.0.0.1',
+          host,
           port,
-          path: '/chat',
+          path: urlPath,
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), ...headers },
         },
@@ -201,6 +206,23 @@ describe('createWunderlandServer', () => {
     );
     expect(outcome).toBeInstanceOf(Error);
     expect(outcome.message).toMatch(/Refusing to listen on 0\.0\.0\.0/);
+  });
+
+  /** An address of this machine that is not loopback, so the server sees the request as coming from another machine. */
+  const otherAddress = Object.values(networkInterfaces())
+    .flat()
+    .find((entry) => entry && (entry.family === 'IPv4' || entry.family === 4) && !entry.internal)?.address;
+
+  it.skipIf(!otherAddress)('answers the tool API from another address only with WUNDERLAND_TOOL_API_KEY', async () => {
+    const handle = await startLibraryServer({ host: '0.0.0.0', chatSecret: CHAT_SECRET });
+    try {
+      // POST /api/tools/<name> runs a tool in autonomous mode, so with no tool key it serves this machine only.
+      expect(await post(handle.port, {}, {}, { host: otherAddress, path: '/api/tools/no_such_tool' })).toBe(401);
+      // From loopback the request reaches the route, which answers an unknown tool with 404.
+      expect(await post(handle.port, {}, {}, { path: '/api/tools/no_such_tool' })).toBe(404);
+    } finally {
+      await handle.close();
+    }
   });
 
   describe('POST /chat', () => {
