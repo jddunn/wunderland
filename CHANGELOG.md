@@ -6,7 +6,7 @@
 
 `wunderland start`, `wunderland serve` and `createWunderlandServer()` listened on `0.0.0.0`, and `POST /chat` answers without a secret unless `chat.secret` or `WUNDERLAND_CHAT_SECRET` is set, so any machine that could reach port 3777 could use the agent and its model key. They now listen on `127.0.0.1` unless a host is named.
 
-- `wunderland start --host <address>` and `wunderland serve --host <address>` listen on that address; `--host 0.0.0.0` lets other machines connect. `--host` with no address is an error.
+- `wunderland start --host <address>` and `wunderland serve --host <address>` listen on that address; `--host 0.0.0.0` lets other machines connect. A bracketed IPv6 address (`[::1]`) works too, and `--host` with no address is an error.
 - `createWunderlandServer({ host })` keeps its option; without it the server listens on `127.0.0.1`.
 - Startup prints the address, and warns when other machines can connect while `/chat` has no secret.
 - `wunderland serve` records the address with the daemon, and its health poll, the restart watchdog, `ps`, `monitor` and the dashboard check health there.

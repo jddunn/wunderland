@@ -9,6 +9,8 @@
  * reach the port.
  */
 
+import { isIPv6 } from 'node:net';
+
 /** The address the agent servers listen on when no host is named. */
 export const DEFAULT_LISTEN_HOST = '127.0.0.1';
 
@@ -16,7 +18,8 @@ export const DEFAULT_LISTEN_HOST = '127.0.0.1';
  * Resolves a `--host` flag.
  *
  * @param value - The parsed flag: undefined when absent, `true` when it was given with no address.
- * @returns The address to listen on: {@link DEFAULT_LISTEN_HOST} when no flag was given.
+ * @returns The address to listen on: {@link DEFAULT_LISTEN_HOST} when no flag was given, and a
+ *   bracketed IPv6 address (`[::1]`, URL notation) bare, the form server.listen takes.
  * @throws Error when the flag was given without an address, so a typo never widens the server.
  */
 export function resolveListenHost(value: string | boolean | undefined): string {
@@ -25,7 +28,8 @@ export function resolveListenHost(value: string | boolean | undefined): string {
   if (!host) {
     throw new Error('--host needs an address, for example --host 127.0.0.1 or --host 0.0.0.0');
   }
-  return host;
+  const bracketed = /^\[(.*)\]$/.exec(host);
+  return bracketed && isIPv6(bracketed[1]) ? bracketed[1] : host;
 }
 
 /**
