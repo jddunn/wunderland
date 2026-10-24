@@ -166,7 +166,7 @@ export const PAIRING_PAGE_HTML = `<!doctype html>
       <div class="card">
         <h2>Security</h2>
         <div class="note">
-          <div><strong>Treat the secret like a password.</strong> This server binds to <code>0.0.0.0</code> by default.</div>
+          <div><strong>Treat the secret like a password.</strong> This server listens on <code>127.0.0.1</code>, this machine only, unless it was started with another host (<code>--host</code> or the <code>host</code> option).</div>
           <ul>
             <li>Don’t share URLs containing <code>?secret=...</code> (they can end up in browser history/logs).</li>
             <li>This UI stores the secret in localStorage (<code>wunderland_hitl_secret</code>). Clear site data to forget it.</li>

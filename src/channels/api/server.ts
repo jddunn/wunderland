@@ -110,6 +110,7 @@ import {
   inferTurnApprovalMode,
   finiteNumber,
 } from "./server-helpers.js";
+import { DEFAULT_LISTEN_HOST, displayHost } from "./listen-host.js";
 
 export type WunderlandServerHandle = {
   server: Server;
@@ -146,7 +147,11 @@ export async function createWunderlandServer(opts?: {
   loadEnv?: boolean;
   /** Override global config dir for ~/.wunderland/.env */
   configDirOverride?: string;
-  /** Defaults to `0.0.0.0` (same as CLI). */
+  /**
+   * Address to listen on. Defaults to `127.0.0.1`, this machine only, as
+   * `wunderland start` does. `'0.0.0.0'` accepts every machine that can reach
+   * the port; set `chat.secret` or `WUNDERLAND_CHAT_SECRET` before using it.
+   */
   host?: string;
   /** Defaults to `process.env.PORT || 3777`. Use 0 for ephemeral port. */
   port?: number;
@@ -292,7 +297,7 @@ export async function createWunderlandServer(opts?: {
   });
 
   const port = Number.isFinite(opts?.port) ? Number(opts?.port) : (Number(process.env['PORT'] || '') || 3777);
-  const host = typeof opts?.host === 'string' && opts.host.trim() ? opts.host.trim() : '0.0.0.0';
+  const host = typeof opts?.host === 'string' && opts.host.trim() ? opts.host.trim() : DEFAULT_LISTEN_HOST;
 
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
   const openrouterFallback =
@@ -1233,7 +1238,7 @@ export async function createWunderlandServer(opts?: {
 
   const address = server.address();
   const actualPort = typeof address === 'object' && address && 'port' in address ? Number((address as any).port) : port;
-  const url = `http://${host === '0.0.0.0' ? 'localhost' : host}:${actualPort}`;
+  const url = `http://${displayHost(host)}:${actualPort}`;
 
   const close = async () => {
     for (const unsub of channelUnsubs) {

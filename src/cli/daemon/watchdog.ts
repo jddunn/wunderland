@@ -11,12 +11,15 @@
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, appendFile, open } from 'node:fs/promises';
 import * as path from 'node:path';
+import { healthUrl } from '../../channels/api/listen-host.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface WatchdogConfig {
   seedId: string;
   port: number;
+  /** Address the agent listens on (`--host`); absent means it answers on localhost. */
+  host?: string;
   /** Full args for process.execPath to respawn the agent (e.g. ['/path/to/wunderland.js', 'start', ...]). */
   spawnArgs: string[];
   /** Working directory for the spawned agent. */
@@ -47,11 +50,11 @@ function isDaemonAlive(pid: number): boolean {
   }
 }
 
-async function checkHealth(port: number): Promise<boolean> {
+async function checkHealth(port: number, host?: string): Promise<boolean> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-    const res = await fetch(`http://localhost:${port}/health`, { signal: controller.signal });
+    const res = await fetch(healthUrl(port, host), { signal: controller.signal });
     clearTimeout(timer);
     return res.ok;
   } catch {
@@ -101,7 +104,7 @@ function backoffMs(attempt: number): number {
 // ── Main watchdog loop ─────────────────────────────────────────────────────
 
 export async function runWatchdog(config: WatchdogConfig): Promise<void> {
-  const { seedId, port, spawnArgs, spawnCwd, daemonDir, maxRestarts, healthInterval } = config;
+  const { seedId, port, host, spawnArgs, spawnCwd, daemonDir, maxRestarts, healthInterval } = config;
 
   let restartCount = 0;
   let consecutiveFailures = 0;
@@ -126,7 +129,7 @@ export async function runWatchdog(config: WatchdogConfig): Promise<void> {
     // Check if process is alive.
     if (pid && isDaemonAlive(pid)) {
       // Process alive — check health.
-      const healthy = await checkHealth(port);
+      const healthy = await checkHealth(port, host);
       if (healthy) {
         consecutiveFailures = 0;
         continue;

@@ -78,6 +78,7 @@ Generated: 2026-02-22
 
   Command Options:
     --port <number>        Server port (default: PORT env or 3777)
+    --host <address>       Server address for start and serve (default: 127.0.0.1; 0.0.0.0 lets other machines in)
     --model <id>           LLM model override
     --preset <name>        Personality preset for init
     --security-tier <tier> Security tier (dangerous/permissive/balanced/strict/paranoid)
@@ -955,7 +956,7 @@ wunderland v0.27.0
 - `wunderland setup` — Interactive onboarding wizard
 - `wunderland init <dir>` — Scaffold new project (prompts for preset)
 - `wunderland create [description]` — Create agent from natural language
-- `wunderland start` — Start local agent server (long-running)
+- `wunderland start` — Start local agent server (long-running). It listens on `127.0.0.1`, this machine only; `--host 0.0.0.0` lets other machines connect, and `POST /chat` then answers anyone who can reach the port unless `chat.secret` or `WUNDERLAND_CHAT_SECRET` is set.
 - `wunderland chat` — Interactive terminal assistant (REPL)
 - `wunderland channels add` — Add channel interactively
 - `wunderland ollama-setup` — Configure Ollama (interactive)

@@ -12,6 +12,7 @@ import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
 import { CONFIG_DIR_NAME } from '../constants.js';
 import * as fmt from '../ui/format.js';
 import { InvalidAgentWorkspaceIdError, sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
+import { healthUrl } from '../../channels/api/listen-host.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ export interface DaemonInfo {
   displayName: string;
   /** Server port. */
   port: number;
+  /** Address the server listens on (`--host`); absent in records written before it existed. */
+  host?: string;
   /** OS process ID of the detached node process. */
   pid: number;
   /** Absolute path to agent.config.json used to start the daemon. */
@@ -254,16 +257,17 @@ export async function pollHealth(
   return false;
 }
 
-/** Fetch health status from a daemon's /health endpoint. */
+/** Fetch health status from a daemon's /health endpoint, at the address it listens on. */
 export async function fetchDaemonHealth(
   port: number,
   timeoutMs = 2000,
+  host?: string,
 ): Promise<{ status: 'ok' | 'slow' | 'down'; latencyMs: number; data?: HealthResponse }> {
   const start = Date.now();
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(`http://localhost:${port}/health`, { signal: controller.signal });
+    const res = await fetch(healthUrl(port, host), { signal: controller.signal });
     clearTimeout(timer);
     const latencyMs = Date.now() - start;
     if (!res.ok) return { status: 'down', latencyMs };

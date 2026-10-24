@@ -133,6 +133,7 @@ function printHelp(opts?: { isExporting?: boolean }): void {
 
   ${c('Command Options:')}
     ${d('--port <number>')}        Server port (default: PORT env or 3777)
+    ${d('--host <address>')}       Server address for start and serve (default: 127.0.0.1; 0.0.0.0 lets other machines in)
     ${d('--model <id>')}           LLM model override
     ${d('--preset <name>')}        Personality preset for init
     ${d('--security-tier <tier>')} Security tier (dangerous/permissive/balanced/strict/paranoid)
@@ -263,8 +264,12 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
   },
   start: {
     summary: 'Start the local agent server with channels, tools, and TUI dashboard.',
-    usage: ['wunderland start [--port <number>] [--oauth] [--lazy-tools] [--cli]'],
-    examples: ['wunderland start', 'wunderland start --cli --port 3777'],
+    usage: ['wunderland start [--port <number>] [--host <address>] [--oauth] [--lazy-tools] [--cli]'],
+    examples: ['wunderland start', 'wunderland start --cli --port 3777', 'wunderland start --host 0.0.0.0'],
+    notes: [
+      'Listens on 127.0.0.1 (this machine only) unless --host names another address. --host 0.0.0.0 lets other machines connect.',
+      'POST /chat answers without a secret unless chat.secret (agent.config.json) or WUNDERLAND_CHAT_SECRET is set; set one before you listen wider.',
+    ],
   },
   status: {
     summary: 'Show agent, runtime, and connectivity status for the current project.',
@@ -292,7 +297,7 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
   },
   serve: {
     summary: 'Start the current agent as a background daemon.',
-    usage: ['wunderland serve [--port <number>] [--restart] [--yes]'],
+    usage: ['wunderland serve [--port <number>] [--host <address>] [--restart] [--yes]'],
     examples: ['wunderland serve --port 3777', 'wunderland serve --restart --yes'],
   },
   ps: {

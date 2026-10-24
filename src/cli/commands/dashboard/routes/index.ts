@@ -217,7 +217,7 @@ async function handleListAgents(
   /* Running daemons (highest priority) — enrich with /health */
   for (const d of aliveDaemons) {
     const resolved = path.resolve(d.configPath);
-    const health = await fetchDaemonHealth(d.port, 2000);
+    const health = await fetchDaemonHealth(d.port, 2000, d.host);
 
     seen.set(resolved, {
       name: health.data?.name || d.displayName,

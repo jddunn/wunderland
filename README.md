@@ -371,8 +371,12 @@ wunderland extensions info image-generation
 wunderland --theme cyberpunk
 wunderland --ascii
 
-# Start the agent server
+# Start the agent server (127.0.0.1:3777, this machine only)
 wunderland start
+
+# Let other machines connect: set chat.secret or WUNDERLAND_CHAT_SECRET first,
+# since POST /chat answers anyone who can reach the port without one
+wunderland start --host 0.0.0.0
 
 # Chat with your agent
 wunderland chat
@@ -513,7 +517,7 @@ See `presets/workflows/` and `presets/missions/` for all templates.
 | `wunderland` | Open the interactive TUI dashboard (TTY only) |
 | `wunderland setup` | Interactive setup wizard (LLM provider, channels, personality) |
 | `wunderland help [topic]` | Onboarding guides + keybindings (`wunderland help tui`) |
-| `wunderland start` | Start the agent server (default port 3777) |
+| `wunderland start` | Start the agent server on 127.0.0.1:3777 (`--host` and `--port` change them) |
 | `wunderland chat` | Chat with your agent in the terminal |
 | `wunderland doctor` | Health check and diagnostics |
 | `wunderland status` | Agent & connection status |

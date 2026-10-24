@@ -9,6 +9,7 @@ import * as fmt from '../../ui/format.js';
 import { accent, dim, success as sColor, info as iColor, warn as wColor } from '../../ui/theme.js';
 import { shutdownWunderlandOtel } from '../../../platform/observability/otel.js';
 import { recordAgentStart } from '../../config/agent-history.js';
+import { DEFAULT_LISTEN_HOST, displayHost, isLoopbackHost } from '../../../channels/api/listen-host.js';
 
 export async function startServerAndDisplay(ctx: any, server: import('node:http').Server): Promise<void> {
   const {
@@ -27,6 +28,7 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
     autoApproveToolCalls,
     policy,
     hitlSecret,
+    chatSecret,
     turnApprovalMode,
     channelUnsubs,
     activePacks,
@@ -37,6 +39,8 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
   } = ctx;
 
   const isOllamaProvider = providerId === 'ollama';
+  // cmdStart resolves --host; the loopback default covers callers that set none.
+  const host: string = ctx.host || DEFAULT_LISTEN_HOST;
 
   // Auto-find a free port if the requested one is in use.
   const maxPortAttempts = 10;
@@ -54,7 +58,7 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
         };
         server.once('error', onError);
         server.once('listening', onListening);
-        server.listen(actualPort, '0.0.0.0');
+        server.listen(actualPort, host);
       });
       break; // success
     } catch (err: any) {
@@ -149,6 +153,12 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
     fmt.kvPair('Fallback', sColor(`${fbLabel} (${fbModel})`));
   }
   const activePort = ctx.port;
+  const localOnly = isLoopbackHost(host);
+  const baseUrl = `http://${displayHost(host)}:${activePort}`;
+  fmt.kvPair(
+    'Listening',
+    localOnly ? sColor(`${host} (this machine only)`) : wColor(`${host} (other machines can connect)`),
+  );
   fmt.kvPair('Port', String(activePort));
   fmt.kvPair('Tools', `${toolMap.size} loaded`);
   fmt.kvPair('Channels', `${adapterByPlatform.size} loaded`);
@@ -169,13 +179,19 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
     fmt.kvPair('Ollama', sColor('http://localhost:11434'));
   }
   fmt.blank();
-  fmt.ok(`Dashboard: ${iColor(`http://localhost:${activePort}/`)}`);
-  fmt.ok(`Health:    ${iColor(`http://localhost:${activePort}/health`)}`);
-  fmt.ok(`Chat:      ${iColor(`POST http://localhost:${activePort}/chat`)}`);
-  fmt.ok(`HITL:      ${iColor(`http://localhost:${activePort}/hitl`)}`);
-  fmt.ok(`Pairing:   ${iColor(`http://localhost:${activePort}/pairing`)}`);
+  fmt.ok(`Dashboard: ${iColor(`${baseUrl}/`)}`);
+  fmt.ok(`Health:    ${iColor(`${baseUrl}/health`)}`);
+  fmt.ok(`Chat:      ${iColor(`POST ${baseUrl}/chat`)}`);
+  fmt.ok(`HITL:      ${iColor(`${baseUrl}/hitl`)}`);
+  fmt.ok(`Pairing:   ${iColor(`${baseUrl}/pairing`)}`);
   if (!autoApproveToolCalls) {
-    fmt.note(`CLI HITL: ${accent(`wunderland hitl watch --server http://localhost:${activePort} --secret ${hitlSecret}`)}`);
+    fmt.note(`CLI HITL: ${accent(`wunderland hitl watch --server ${baseUrl} --secret ${hitlSecret}`)}`);
+  }
+  if (!localOnly && !chatSecret) {
+    fmt.warning(
+      'POST /chat has no secret, so anyone who can reach this address can use the agent and its model key. '
+        + 'Set chat.secret in agent.config.json or WUNDERLAND_CHAT_SECRET.',
+    );
   }
   fmt.blank();
 }
