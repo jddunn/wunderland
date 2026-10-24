@@ -23,6 +23,7 @@ import {
   isDaemonAlive,
   pollHealth,
 } from '../../daemon/daemon-state.js';
+import { healthUrl, resolveListenHost } from '../../../channels/api/listen-host.js';
 
 const DEFAULT_PORT = 3777;
 const HEALTH_POLL_TIMEOUT_MS = 30_000;
@@ -79,6 +80,16 @@ export default async function cmdServe(
     if (!isNaN(envPort) && envPort >= 1 && envPort <= 65535) port = envPort;
   }
 
+  // ── Resolve listen address (127.0.0.1 unless --host names another) ────
+  let host: string;
+  try {
+    host = resolveListenHost(flags['host']);
+  } catch (err) {
+    fmt.errorBlock('Invalid --host', err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+    return;
+  }
+
   // ── Check if already running ───────────────────────────────────────────
   const existing = await readDaemonInfo(seedId);
   if (existing && isDaemonAlive(existing.pid)) {
@@ -117,6 +128,9 @@ export default async function cmdServe(
   const childArgs = [wunderlandBin, 'start', '--config', configPath, '--port', String(port), '--quiet'];
 
   // Forward relevant flags
+  if (typeof flags['host'] === 'string') {
+    childArgs.push('--host', host);
+  }
   if (typeof flags['model'] === 'string') {
     childArgs.push('--model', flags['model']);
   }
@@ -171,6 +185,7 @@ export default async function cmdServe(
     seedId,
     displayName,
     port,
+    host,
     pid,
     configPath,
     startedAt: new Date().toISOString(),
@@ -184,7 +199,7 @@ export default async function cmdServe(
   }
 
   const healthy = await pollHealth(
-    `http://localhost:${port}/health`,
+    healthUrl(port, host),
     HEALTH_POLL_TIMEOUT_MS,
     HEALTH_POLL_INTERVAL_MS,
   );
@@ -211,6 +226,7 @@ export default async function cmdServe(
     watchdogPid = await spawnWatchdog({
       seedId,
       port,
+      host,
       spawnArgs: childArgs,
       spawnCwd: path.dirname(configPath),
       daemonDir,
@@ -223,6 +239,7 @@ export default async function cmdServe(
   fmt.section('Daemon Started');
   fmt.kvPair('Agent', accent(displayName));
   fmt.kvPair('Seed ID', seedId);
+  fmt.kvPair('Listening', host);
   fmt.kvPair('Port', String(port));
   fmt.kvPair('PID', String(pid));
   fmt.kvPair('Health', healthy ? sColor('ok') : iColor('pending'));
@@ -242,6 +259,7 @@ export default async function cmdServe(
 async function spawnWatchdog(config: {
   seedId: string;
   port: number;
+  host: string;
   spawnArgs: string[];
   spawnCwd: string;
   daemonDir: string;

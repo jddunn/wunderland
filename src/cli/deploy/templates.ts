@@ -37,8 +37,11 @@ USER node
 
 EXPOSE ${opts.port}
 
-# agent.config.json is mounted by docker-compose.yml
-CMD ["./node_modules/.bin/wunderland","start","--config","agent.config.json","--port","${opts.port}"]
+# agent.config.json is mounted by docker-compose.yml.
+# wunderland start listens on 127.0.0.1 unless --host names another address;
+# 0.0.0.0 lets the published port reach it, and start refuses it until
+# WUNDERLAND_CHAT_SECRET (or chat.secret) is set.
+CMD ["./node_modules/.bin/wunderland","start","--config","agent.config.json","--host","0.0.0.0","--port","${opts.port}"]
 `;
 }
 
@@ -171,6 +174,10 @@ ${instructions}
 - \`GET  /health\` — Health check
 - \`POST /chat\`   — Chat API (\`{ "message": "Hello", "sessionId": "local" }\`)
 - \`GET  /hitl\`   — Human-in-the-loop approval UI
+
+## Chat secret
+
+The container listens on every interface (\`--host 0.0.0.0\`), so \`wunderland start\` refuses to start until \`WUNDERLAND_CHAT_SECRET\` (or \`chat.secret\` in \`agent.config.json\`) is set: without it \`POST /chat\` would answer anyone who can reach the port. Set it in \`.env\` (or the platform's secrets) to a long random value, and send it in the \`x-wunderland-chat-secret\` header.
 
 ## Skills
 

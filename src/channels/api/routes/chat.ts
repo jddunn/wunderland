@@ -26,7 +26,7 @@ import {
 } from '../../../runtime/execution/request-persona.js';
 import { buildOllamaRuntimeOptions } from '../../../runtime/tools/ollama-options.js';
 
-import { readBody, sendJson } from '../server-helpers.js';
+import { isChatAuthorized, readBody, sendJson } from '../server-helpers.js';
 import type { ServerDeps, RouteHandlerResult } from './types.js';
 
 /**
@@ -73,6 +73,11 @@ export async function handleChatRoutes(
   deps: ServerDeps,
 ): Promise<RouteHandlerResult> {
   if (url.pathname !== '/chat' || req.method !== 'POST') return false;
+
+  if (!isChatAuthorized(req, url, deps.chatSecret)) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return true;
+  }
 
   const {
     seedId,

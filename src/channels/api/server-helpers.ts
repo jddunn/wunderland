@@ -93,6 +93,25 @@ export function isHitlAuthorized(req: import('node:http').IncomingMessage, url: 
   return extractHitlSecret(req, url) === hitlSecret;
 }
 
+/** Whether a request comes from this machine's loopback interface. */
+export function isLoopbackRequest(req: import('node:http').IncomingMessage): boolean {
+  const remote = req.socket?.remoteAddress || '';
+  return remote === '::1' || /^(::ffff:)?127(\.\d{1,3}){3}$/.test(remote);
+}
+
+/** The chat secret a request carries: the `x-wunderland-chat-secret` header, else `?chat_secret=` or `?secret=`. */
+export function extractChatSecret(req: import('node:http').IncomingMessage, url: URL): string {
+  const fromHeader = getHeaderString(req, 'x-wunderland-chat-secret');
+  if (fromHeader) return fromHeader;
+  return (url.searchParams.get('chat_secret') || url.searchParams.get('secret') || '').trim();
+}
+
+/** Whether a request may use POST /chat: always when no chat secret is set, otherwise only with it. */
+export function isChatAuthorized(req: import('node:http').IncomingMessage, url: URL, chatSecret: string): boolean {
+  if (!chatSecret) return true;
+  return extractChatSecret(req, url) === chatSecret;
+}
+
 export function inferTurnApprovalMode(cfg: WunderlandAgentConfig | undefined): 'off' | 'after-each-turn' | 'after-each-round' {
   const raw =
     cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl)
@@ -166,7 +185,7 @@ export const PAIRING_PAGE_HTML = `<!doctype html>
       <div class="card">
         <h2>Security</h2>
         <div class="note">
-          <div><strong>Treat the secret like a password.</strong> This server binds to <code>0.0.0.0</code> by default.</div>
+          <div><strong>Treat the secret like a password.</strong> This server listens on <code>127.0.0.1</code>, this machine only, unless it was started with another host (<code>--host</code> or the <code>host</code> option), which it does only once a chat secret is set.</div>
           <ul>
             <li>Don’t share URLs containing <code>?secret=...</code> (they can end up in browser history/logs).</li>
             <li>This UI stores the secret in localStorage (<code>wunderland_hitl_secret</code>). Clear site data to forget it.</li>

@@ -110,6 +110,7 @@ import {
   inferTurnApprovalMode,
   finiteNumber,
 } from "./server-helpers.js";
+import { DEFAULT_LISTEN_HOST, assertChatSecretForHost, displayHost, resolveListenHost } from "./listen-host.js";
 
 export type WunderlandServerHandle = {
   server: Server;
@@ -146,7 +147,12 @@ export async function createWunderlandServer(opts?: {
   loadEnv?: boolean;
   /** Override global config dir for ~/.wunderland/.env */
   configDirOverride?: string;
-  /** Defaults to `0.0.0.0` (same as CLI). */
+  /**
+   * Address to listen on. Defaults to `127.0.0.1`, this machine only, as
+   * `wunderland start` does. A host other machines can reach (`'0.0.0.0'`)
+   * needs a chat secret (`chatSecret`, `chat.secret` or `WUNDERLAND_CHAT_SECRET`);
+   * without one the server refuses to start.
+   */
   host?: string;
   /** Defaults to `process.env.PORT || 3777`. Use 0 for ephemeral port. */
   port?: number;
@@ -177,6 +183,13 @@ export async function createWunderlandServer(opts?: {
   adaptiveExecution?: WunderlandAdaptiveExecutionConfig;
   /** Override HITL secret (otherwise config/env/random). */
   hitlSecret?: string;
+  /**
+   * Secret POST /chat requires, sent as the `x-wunderland-chat-secret` header
+   * (or `?chat_secret=`). Otherwise the agent config's `chat.secret`, then
+   * `WUNDERLAND_CHAT_SECRET`; with none, /chat answers without one and the
+   * server listens only on a loopback host.
+   */
+  chatSecret?: string;
   /** Optional OpenAI-compatible fallback provider config. */
   openaiFallback?: LLMProviderConfig;
   logger?: LoggerLike;
@@ -216,6 +229,23 @@ export async function createWunderlandServer(opts?: {
   // telemetry or any store starts: an id whose cleaned name starts or ends
   // with a dot is refused here with an InvalidAgentWorkspaceIdError.
   const workspaceAgentId = sanitizeAgentWorkspaceId(opts?.workspace?.agentId ?? seedId);
+
+  // Where the server listens, and the secret /chat requires, are settled
+  // before telemetry or any store starts: a host other machines can reach is
+  // refused while /chat has no secret.
+  const host = typeof opts?.host === 'string' && opts.host.trim() ? resolveListenHost(opts.host) : DEFAULT_LISTEN_HOST;
+  const chatSecret =
+    typeof opts?.chatSecret === 'string' && opts.chatSecret.trim()
+      ? opts.chatSecret.trim()
+      : (() => {
+          const fromCfg =
+            (cfg as any)?.chat && typeof (cfg as any).chat === 'object' && !Array.isArray((cfg as any).chat)
+              ? String((cfg as any).chat.secret || '').trim()
+              : '';
+          const fromEnv = String(process.env['WUNDERLAND_CHAT_SECRET'] || '').trim();
+          return fromCfg || fromEnv;
+        })();
+  assertChatSecretForHost(host, chatSecret);
   const activePersonaId =
     typeof cfg.selectedPersonaId === 'string' && cfg.selectedPersonaId.trim()
       ? cfg.selectedPersonaId.trim()
@@ -292,7 +322,6 @@ export async function createWunderlandServer(opts?: {
   });
 
   const port = Number.isFinite(opts?.port) ? Number(opts?.port) : (Number(process.env['PORT'] || '') || 3777);
-  const host = typeof opts?.host === 'string' && opts.host.trim() ? opts.host.trim() : '0.0.0.0';
 
   const openrouterApiKey = process.env['OPENROUTER_API_KEY'] || '';
   const openrouterFallback =
@@ -1167,6 +1196,7 @@ export async function createWunderlandServer(opts?: {
     skillsPrompt,
     workingDirectory,
     hitlSecret,
+    chatSecret,
     hitlManager,
     sseClients,
     broadcastHitlUpdate,
@@ -1233,7 +1263,7 @@ export async function createWunderlandServer(opts?: {
 
   const address = server.address();
   const actualPort = typeof address === 'object' && address && 'port' in address ? Number((address as any).port) : port;
-  const url = `http://${host === '0.0.0.0' ? 'localhost' : host}:${actualPort}`;
+  const url = `http://${displayHost(host)}:${actualPort}`;
 
   const close = async () => {
     for (const unsub of channelUnsubs) {
