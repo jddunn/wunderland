@@ -427,6 +427,7 @@ The diagnostics object includes:
 | `wunderland/rag` | `WunderlandRAGClient`, `RAGAuditPersistence`, `QueryExpander` |
 | `wunderland/jobs` | `JobScanner`, `JobExecutor`, `BidLifecycleManager`, `DeliverableManager`, `QualityChecker`, `JobMemoryService` |
 | `wunderland/security` | `SafeGuardrails`, `SignedOutputVerifier`, `IntentChainTracker`, `SECURITY_TIERS`, `AuditLogger`, `StepUpAuthorizationManager`, `ContextFirewall`, `ContextFirewallConfig`, `AgentMode`, `CitizenModeGuardrail`, the folder permission helpers and `FolderPermissionConfig` |
+| `wunderland/report` | `exportReport` (CSV, print-safe HTML, interactive HTML and a PDF from a row dataset), `toCsv`, `toHtml`, `toInteractiveHtml`, `renderPdf`, `ReportDataset`, `InteractiveOptions`, `PdfOptions` |
 
 ```ts
 import { SECURITY_TIERS, SafeGuardrails } from 'wunderland/security';

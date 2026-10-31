@@ -41,6 +41,10 @@
     "./security": {
       "import": "./dist/security/index.js",
       "types": "./dist/security/index.d.ts"
+    },
+    "./report": {
+      "import": "./dist/cli/export/report-export.js",
+      "types": "./dist/cli/export/report-export.d.ts"
     }
   },
   "files": [

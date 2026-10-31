@@ -6,6 +6,7 @@
     "./tools": ["createWunderlandTools", "createMemoryReadTool", "createFeedSearchTool", "describePermissions", "getToolAccessProfile", "isToolAllowedByProfile", "resolveAllowedTools", "isValidToolAccessProfile", "TOOL_CATEGORY_MAP"],
     "./security": ["SafeGuardrails", "SignedOutputVerifier", "IntentChainTracker"],
     "./rag": ["RAGAuditPersistence"],
-    "./jobs": ["JobScanner", "JobExecutor", "BidLifecycleManager", "DeliverableManager", "QualityChecker", "JobMemoryService"]
+    "./jobs": ["JobScanner", "JobExecutor", "BidLifecycleManager", "DeliverableManager", "QualityChecker", "JobMemoryService"],
+    "./report": ["exportReport", "toCsv", "toHtml", "toInteractiveHtml", "renderPdf"]
   }
 }

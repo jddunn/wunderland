@@ -115,7 +115,7 @@ Assistant research often wants a shareable artifact. `mission run` emits CSV
 natively; the export helper adds print-safe HTML and PDF:
 
 ```ts
-import { exportReport } from 'wunderland/cli/export/report-export';
+import { exportReport } from 'wunderland/report';
 
 await exportReport(
   { title: 'LA Hotels', columns: ['hotel', 'rate'], rows: [...] },
@@ -127,6 +127,22 @@ await exportReport(
 
 The PDF renders through an **isolated** headless-Chrome `--user-data-dir`, never
 your live profile.
+
+### Untrusted rows
+
+Rows often come from scraped pages, so the helper treats every value as text:
+
+- CSV cells that a spreadsheet would run as a formula (they start with `=`,
+  `+`, `-`, `@`, a tab or a carriage return) get a leading `'`. Numbers such as
+  `-5.25` stay as written. The interactive report's CSV download does the same.
+- The HTML files escape every value, and the interactive report writes values,
+  column keys and labels into the page as text nodes, never as markup.
+- `basename` must be a plain file name. `../x`, `a/b`, `.` and `..` throw a
+  `TypeError` before anything is written.
+- `renderPdf` prints with scripts off, every request routed to a closed local
+  proxy port, and a content security policy that blocks every fetch, so the
+  page loads no image, frame, script or font from anywhere. It prints the
+  HTML it is given: pass `toHtml` output or HTML you wrote.
 
 ### Interactive report
 
