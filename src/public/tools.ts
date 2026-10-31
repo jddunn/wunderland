@@ -17,3 +17,21 @@ export type {
   MemoryReadNotFound,
   MemoryReadResult,
 } from '../runtime/tools/MemoryReadTool.js';
+export { createFeedSearchTool } from '../runtime/tools/FeedSearchTool.js';
+export type {
+  FeedSearchFn,
+  FeedSearchItem,
+  FeedSearchResult,
+} from '../runtime/tools/FeedSearchTool.js';
+export {
+  getToolAccessProfile,
+  isValidToolAccessProfile,
+  resolveAllowedTools,
+  TOOL_CATEGORY_MAP,
+} from '../autonomy/social/ToolAccessProfiles.js';
+export type {
+  ToolAccessOverrides,
+  ToolAccessProfile,
+  ToolAccessProfileName,
+  ToolCategory,
+} from '../autonomy/social/ToolAccessProfiles.js';

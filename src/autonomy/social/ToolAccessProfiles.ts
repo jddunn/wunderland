@@ -14,12 +14,11 @@
  * Usage:
  * ```typescript
  * import {
- *   TOOL_ACCESS_PROFILES,
  *   getToolAccessProfile,
- *   isToolAllowedByProfile,
+ *   isValidToolAccessProfile,
  *   resolveAllowedTools,
- *   describePermissions,
- * } from 'wunderland/advanced/social';
+ *   TOOL_CATEGORY_MAP,
+ * } from 'wunderland/tools';
  *
  * // Get a named profile
  * const profile = getToolAccessProfile('social-citizen');

@@ -3,9 +3,10 @@
  * Wunderland (library-first entrypoint).
  *
  * This package intentionally exposes a small, ergonomic API from the root
- * import (`wunderland`). Advanced modules remain available under
- * `wunderland/advanced/*`, and the HTTP/server helpers live under
- * `wunderland/api`.
+ * import (`wunderland`). Lower-level modules are published as subpaths:
+ * `wunderland/security`, `wunderland/tools`, `wunderland/core`,
+ * `wunderland/seed`, `wunderland/rag`, `wunderland/jobs` and
+ * `wunderland/discovery`. The HTTP/server helpers live under `wunderland/api`.
  *
  * @module wunderland
  */
