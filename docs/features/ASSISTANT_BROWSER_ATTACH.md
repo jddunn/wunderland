@@ -115,7 +115,7 @@ Assistant research often wants a shareable artifact. `mission run` emits CSV
 natively; the export helper adds print-safe HTML and PDF:
 
 ```ts
-import { exportReport } from 'wunderland/cli/export/report-export';
+import { exportReport } from 'wunderland/report';
 
 await exportReport(
   { title: 'LA Hotels', columns: ['hotel', 'rate'], rows: [...] },
