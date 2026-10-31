@@ -139,12 +139,15 @@ The Safe Guardrails engine validates all tool calls before execution to prevent 
 
 ```typescript
 async function validateBeforeExecution(request: GuardrailsRequest): Promise<GuardrailsResult> {
-  // 1. Get agent's folder permissions
-  const folderConfig = this.folderPermissions.get(request.agentId);
-  if (!folderConfig) return { allowed: true }; // No restrictions
-
-  // 2. Check if tool requires filesystem access
+  // 1. Check if tool requires filesystem access
   if (!isFilesystemTool(request.toolId)) return { allowed: true };
+
+  // 2. Get agent's folder permissions; an agent with none is denied
+  const folderConfig = this.folderPermissions.get(request.agentId);
+  if (!folderConfig) {
+    if (config.requireFolderPermissionsForFilesystemTools) return { allowed: false, reason, violations };
+    return { allowed: true }; // The host opted out
+  }
 
   // 3. Extract file paths from arguments
   const paths = extractFilePaths(request.toolId, request.args);
@@ -168,6 +171,8 @@ async function validateBeforeExecution(request: GuardrailsRequest): Promise<Guar
   return { allowed: true };
 }
 ```
+
+`requireFolderPermissionsForFilesystemTools` defaults to `true`. A host that wants the permissive behavior for agents with no folder permissions passes `false`.
 
 ### Supported Tools
 
@@ -196,7 +201,7 @@ Default: Write (safer to assume write when uncertain)
 
 ## Security Tier Integration
 
-The SDK ships tier-aligned folder permission presets (see `createDefaultFolderConfig()` in `wunderland/advanced/security`).
+The SDK ships tier-aligned folder permission presets (see `createDefaultFolderConfig()` in `wunderland/security`).
 
 In the CLI runtime (`wunderland chat` / `wunderland start`):
 
@@ -324,7 +329,7 @@ All permission violations are logged to structured JSON files for compliance and
 ### Querying Violations
 
 ```typescript
-import { AuditLogger } from 'wunderland/advanced/security';
+import { AuditLogger } from 'wunderland/security';
 
 const logger = new AuditLogger();
 
@@ -535,7 +540,7 @@ const guardrails = new SafeGuardrails({
 
 3. Use `validateFolderConfig()` to check for conflicts:
    ```typescript
-   import { validateFolderConfig } from 'wunderland/advanced/security';
+   import { validateFolderConfig } from 'wunderland/security';
 
    const result = validateFolderConfig(config);
    if (!result.valid) {
@@ -601,7 +606,7 @@ const guardrails = new SafeGuardrails({
 
 ```typescript
 // Check folder access
-import { checkFolderAccess } from 'wunderland/advanced/security';
+import { checkFolderAccess } from 'wunderland/security';
 
 const result = checkFolderAccess(
   '/home/user/file.txt',
@@ -618,7 +623,7 @@ if (!result.allowed) {
 ### SafeGuardrails
 
 ```typescript
-import { SafeGuardrails } from 'wunderland/advanced/security';
+import { SafeGuardrails } from 'wunderland/security';
 
 const guardrails = new SafeGuardrails({
   auditLogPath: '~/.wunderland/security/violations.log',
@@ -627,7 +632,7 @@ const guardrails = new SafeGuardrails({
   enableNotifications: true,
 });
 
-// Set folder permissions for an agent
+// Set folder permissions for an agent. Without them its filesystem tools are denied.
 guardrails.setFolderPermissions('agent-id', folderConfig);
 
 // Validate before execution
@@ -646,7 +651,7 @@ if (!result.allowed) {
 ### AuditLogger
 
 ```typescript
-import { AuditLogger } from 'wunderland/advanced/security';
+import { AuditLogger } from 'wunderland/security';
 
 const logger = new AuditLogger({
   logFilePath: '~/.wunderland/security/violations.log',

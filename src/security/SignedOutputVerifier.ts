@@ -88,7 +88,44 @@ const DEFAULT_SIGNING_CONFIG: OutputSigningConfig = {
 };
 
 /**
+ * Deep copy of an intent-chain value: Dates, arrays and plain objects are
+ * copied, and anything else (a function, a class instance) is kept by reference.
+ * Keys are defined rather than assigned so a `__proto__` key stays data, and
+ * `seen` keeps a circular value from recursing forever.
+ */
+function copyChainValue<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return new Date(value.getTime()) as T;
+  if (seen.has(value)) return seen.get(value) as T;
+
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    seen.set(value, copy);
+    for (const item of value) copy.push(copyChainValue(item, seen));
+    return copy as T;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return value;
+
+  const copy = Object.create(prototype);
+  seen.set(value, copy);
+  for (const key of Object.keys(value)) {
+    Object.defineProperty(copy, key, {
+      value: copyChainValue((value as Record<string, unknown>)[key], seen),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return copy;
+}
+
+/**
  * Intent chain tracker for maintaining audit trail.
+ *
+ * The chain is private: entries are copied on the way in and on the way out,
+ * so nothing a caller holds can rewrite a recorded step.
  */
 export class IntentChainTracker {
   private entries: IntentChainEntry[] = [];
@@ -100,13 +137,15 @@ export class IntentChainTracker {
 
   /**
    * Adds an entry to the intent chain.
+   *
+   * @returns A copy of the recorded entry.
    */
   addEntry(entry: Omit<IntentChainEntry, 'stepId' | 'timestamp'>): IntentChainEntry {
-    const fullEntry: IntentChainEntry = {
+    const fullEntry: IntentChainEntry = copyChainValue({
       stepId: uuidv4(),
       timestamp: new Date(),
       ...entry,
-    };
+    });
 
     this.entries.push(fullEntry);
 
@@ -115,14 +154,14 @@ export class IntentChainTracker {
       this.entries = this.entries.slice(-this.maxEntries);
     }
 
-    return fullEntry;
+    return copyChainValue(fullEntry);
   }
 
   /**
-   * Gets all entries in the chain.
+   * Gets a copy of all entries in the chain.
    */
   getEntries(): readonly IntentChainEntry[] {
-    return this.entries;
+    return copyChainValue(this.entries);
   }
 
   /**
@@ -133,10 +172,10 @@ export class IntentChainTracker {
   }
 
   /**
-   * Gets the last N entries.
+   * Gets a copy of the last N entries.
    */
   getLastEntries(n: number): IntentChainEntry[] {
-    return this.entries.slice(-n);
+    return copyChainValue(this.entries.slice(-n));
   }
 
   /**

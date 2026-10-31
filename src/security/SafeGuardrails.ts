@@ -100,10 +100,11 @@ export interface SafeGuardrailsConfig {
   enableNotifications?: boolean;
 
   /**
-   * When true, filesystem-affecting tools are denied unless folder permissions
-   * have been explicitly configured for the agent via {@link setFolderPermissions}.
+   * Filesystem-affecting tools are denied unless folder permissions have been
+   * configured for the agent via {@link setFolderPermissions}. Set this to
+   * `false` to allow them for an agent with no folder permissions.
    *
-   * Default: false (legacy behavior = allow when unconfigured).
+   * Default: true.
    */
   requireFolderPermissionsForFilesystemTools?: boolean;
 }
@@ -181,6 +182,7 @@ export class SafeGuardrails {
       enableAuditLogging: true,
       enableNotifications: true,
       ...config,
+      requireFolderPermissionsForFilesystemTools: config.requireFolderPermissionsForFilesystemTools ?? true,
     };
 
     // Initialize audit logger
@@ -272,7 +274,6 @@ export class SafeGuardrails {
     // 2. Get agent's folder permissions
     const folderConfig = this.folderPermissions.get(request.agentId);
     if (!folderConfig) {
-      // Legacy behavior: allow by default when unconfigured.
       if (this.config.requireFolderPermissionsForFilesystemTools) {
         return {
           allowed: false,

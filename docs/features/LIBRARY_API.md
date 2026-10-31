@@ -2,7 +2,7 @@
 
 Wunderland’s root import (`wunderland`) is the **library-first** API designed for embedding Wunderland in Node.js apps.
 
-If you need lower-level modules (security, inference, social, jobs, etc.), use `wunderland/advanced/*`.
+Lower-level modules (security, tools, core types, seeds, RAG, jobs) are published as [subpath entries](#subpath-entries).
 
 ## Quick start (in-process chat)
 
@@ -46,18 +46,17 @@ So Wunderland should document the AgentOS high-level API, but it should not repl
 
 ## Orchestration
 
-Author graphs with the AgentOS builders exposed at `wunderland/workflows`, then execute them through Wunderland with `app.runGraph(...)` or `app.streamGraph(...)`.
+Author graphs with the AgentOS builders on the app (`app.workflow(...)`, `app.mission(...)`), then execute them through Wunderland with `app.runGraph(...)` or `app.streamGraph(...)`.
 
 ```ts
 import { createWunderland } from 'wunderland';
-import { workflow } from 'wunderland/workflows';
 
 const app = await createWunderland({
   llm: { providerId: 'openai' },
   tools: 'curated',
 });
 
-const compiled = workflow('content-pipeline')
+const compiled = app.workflow('content-pipeline')
   .input({
     type: 'object',
     required: ['topic'],
@@ -416,18 +415,30 @@ The diagnostics object includes:
 - `skills` — loaded skill count and names
 - `discovery` — capability count, graph edges, initialization status
 
-## Advanced modules
+## Subpath entries
 
-Examples:
+| Entry | Holds |
+|---|---|
+| `wunderland/api` | `createWunderlandServer`, the in-process chat runtime and the HTTP helpers |
+| `wunderland/discovery` | Capability discovery |
+| `wunderland/core` | Core types and defaults: `DEFAULT_SECURITY_PROFILE`, `DEFAULT_INFERENCE_HIERARCHY`, `DEFAULT_STEP_UP_AUTH_CONFIG`, `ToolRiskTier`, `normalizeHEXACOTraits`, the HEXACO and security types |
+| `wunderland/seed` | `createWunderlandSeed`, `createDefaultWunderlandSeed`, `HEXACO_PRESETS` |
+| `wunderland/tools` | Tool factories (`createWunderlandTools`, `createMemoryReadTool`, `createFeedSearchTool`) and the tool-access helpers (`getToolAccessProfile`, `resolveAllowedTools`, `isToolAllowedByProfile`, `isValidToolAccessProfile`, `describePermissions`, `TOOL_CATEGORY_MAP`) |
+| `wunderland/rag` | `WunderlandRAGClient`, `RAGAuditPersistence`, `QueryExpander` |
+| `wunderland/jobs` | `JobScanner`, `JobExecutor`, `BidLifecycleManager`, `DeliverableManager`, `QualityChecker`, `JobMemoryService` |
+| `wunderland/security` | `SafeGuardrails`, `SignedOutputVerifier`, `IntentChainTracker`, `SECURITY_TIERS`, `AuditLogger`, `StepUpAuthorizationManager`, `ContextFirewall`, `ContextFirewallConfig`, `AgentMode`, `CitizenModeGuardrail`, the folder permission helpers and `FolderPermissionConfig` |
 
 ```ts
-import { SECURITY_TIERS } from 'wunderland/advanced/security';
-import { WonderlandNetwork } from 'wunderland/advanced/social';
+import { SECURITY_TIERS, SafeGuardrails } from 'wunderland/security';
+import { getToolAccessProfile, resolveAllowedTools, TOOL_CATEGORY_MAP } from 'wunderland/tools';
+
+const profile = getToolAccessProfile('social-citizen');
+const allowed = resolveAllowedTools(profile, Object.keys(TOOL_CATEGORY_MAP));
 ```
 
 ### TypeScript note
 
-If you import subpath exports like `wunderland/advanced/*`, ensure your app’s `tsconfig.json` uses a modern resolver that understands `package.json#exports`:
+If you import a subpath entry, ensure your app’s `tsconfig.json` uses a modern resolver that understands `package.json#exports`:
 
 ```json
 {

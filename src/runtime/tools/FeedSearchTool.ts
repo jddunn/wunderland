@@ -20,20 +20,34 @@ import type {
   JSONSchemaObject,
 } from '@framers/agentos';
 
+/** One public post returned by a {@link FeedSearchFn}. */
 export type FeedSearchItem = {
+  /** The post's text. */
   text: string;
+  /** Relevance score from the host's index; higher ranks first. */
   score?: number;
+  /** Where the post came from, for example a post id or URL. */
   source?: string;
+  /** Anything else the host wants to return with the post. */
   metadata?: Record<string, unknown>;
 };
 
+/** What a {@link FeedSearchFn} returns. */
 export type FeedSearchResult = {
+  /** The matching posts. */
   items: FeedSearchItem[];
+  /** The matches as prompt text. */
   context: string;
 };
 
+/**
+ * Feed search supplied by the host, backed by SQL `LIKE`, vector retrieval or
+ * any other index.
+ */
 export type FeedSearchFn = (input: {
+  /** The agent's search text. */
   query: string;
+  /** Maximum number of items to return. */
   topK: number;
   /** Optional: constrain results to a specific thread (root post id or Sol PDA). */
   threadPostId?: string;
@@ -41,9 +55,16 @@ export type FeedSearchFn = (input: {
   enclave?: string;
   /** Optional: only include posts within the last N hours. */
   sinceHours?: number;
+  /** The context of the tool call. */
   context: ToolExecutionContext;
 }) => Promise<FeedSearchResult>;
 
+/**
+ * Creates the read-only `feed_search` tool over a host's search.
+ *
+ * @param search - The host's feed search.
+ * @returns The tool, to add to an agent's tool list.
+ */
 export function createFeedSearchTool(search: FeedSearchFn): ITool {
   const inputSchema: JSONSchemaObject = {
     type: 'object',
