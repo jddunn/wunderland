@@ -29,7 +29,9 @@ const SECURITY_IMPORTS = `import { IntentChainTracker, SafeGuardrails, SignedOut
 const TOOLS_IMPORTS = `import {
   TOOL_CATEGORY_MAP,
   createFeedSearchTool,
+  describePermissions,
   getToolAccessProfile,
+  isToolAllowedByProfile,
   isValidToolAccessProfile,
   resolveAllowedTools,
 } from 'wunderland/tools';`;
@@ -54,13 +56,20 @@ console.log(JSON.stringify({
   unknownProfile: isValidToolAccessProfile('no-such-profile'),
   allowsFeedSearch: allowed.includes('feed_search'),
   allowsCli: allowed.includes('cli_executor'),
+  checksOneTool: isToolAllowedByProfile(profile, 'web_search'),
+  describesFilesystem: describePermissions(profile).cannot.includes('Access the file system'),
   feedToolName: feedTool.name,
   feedSucceeded: feed.success,
 }));
 `;
 
 const TYPED_CONSUMER = `${SECURITY_IMPORTS}
-import type { FolderPermissionConfig, IntentChainEntry } from 'wunderland/security';
+import type {
+  AgentMode,
+  ContextFirewallConfig,
+  FolderPermissionConfig,
+  IntentChainEntry,
+} from 'wunderland/security';
 ${TOOLS_IMPORTS}
 
 export const folderPermissions: FolderPermissionConfig = {
@@ -77,6 +86,8 @@ export const guardrails: SafeGuardrails = new SafeGuardrails({ enableAuditLoggin
 export const verifier: SignedOutputVerifier = new SignedOutputVerifier();
 export const tracker: IntentChainTracker = new IntentChainTracker();
 export const entries: readonly IntentChainEntry[] = tracker.getEntries();
+export const mode: AgentMode = 'private';
+export const firewall: Partial<ContextFirewallConfig> = { mode };
 export const allowed: string[] = isValidToolAccessProfile('social-citizen')
   ? resolveAllowedTools(getToolAccessProfile('social-citizen'), Object.keys(TOOL_CATEGORY_MAP))
   : [];
@@ -111,6 +122,8 @@ describe('a project that installs wunderland', () => {
       unknownProfile: false,
       allowsFeedSearch: true,
       allowsCli: false,
+      checksOneTool: true,
+      describesFilesystem: true,
       feedToolName: 'feed_search',
       feedSucceeded: true,
     });
