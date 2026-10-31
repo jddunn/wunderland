@@ -60,7 +60,7 @@ console.log(JSON.stringify({
 `;
 
 const TYPED_CONSUMER = `${SECURITY_IMPORTS}
-import type { FolderPermissionConfig } from 'wunderland/security';
+import type { FolderPermissionConfig, IntentChainEntry } from 'wunderland/security';
 ${TOOLS_IMPORTS}
 
 export const folderPermissions: FolderPermissionConfig = {
@@ -76,6 +76,7 @@ export const refused: FolderPermissionConfig = { defaultPolicy: 'maybe', rules: 
 export const guardrails: SafeGuardrails = new SafeGuardrails({ enableAuditLogging: false });
 export const verifier: SignedOutputVerifier = new SignedOutputVerifier();
 export const tracker: IntentChainTracker = new IntentChainTracker();
+export const entries: readonly IntentChainEntry[] = tracker.getEntries();
 export const allowed: string[] = isValidToolAccessProfile('social-citizen')
   ? resolveAllowedTools(getToolAccessProfile('social-citizen'), Object.keys(TOOL_CATEGORY_MAP))
   : [];
@@ -115,13 +116,17 @@ describe('a project that installs wunderland', () => {
     });
   });
 
-  it(
-    'compiles the same imports, FolderPermissionConfig included, against the published declarations',
-    () => {
+  it.each([
+    ['NodeNext', ts.ModuleKind.NodeNext, ts.ModuleResolutionKind.NodeNext],
+    // A host compiled with `moduleResolution: bundler`, as Nest and Next backends are.
+    ['Bundler', ts.ModuleKind.ESNext, ts.ModuleResolutionKind.Bundler],
+  ])(
+    'compiles the same imports, FolderPermissionConfig included, against the published declarations under %s resolution',
+    (_name, module, moduleResolution) => {
       const file = path.join(project, 'consumer.ts');
       const program = ts.createProgram([file], {
-        module: ts.ModuleKind.NodeNext,
-        moduleResolution: ts.ModuleResolutionKind.NodeNext,
+        module,
+        moduleResolution,
         target: ts.ScriptTarget.ES2022,
         strict: true,
         noEmit: true,

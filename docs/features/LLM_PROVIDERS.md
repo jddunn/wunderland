@@ -264,7 +264,7 @@ OPENAI_MODEL=gpt-4o                      # Override default model
 ## Programmatic API
 
 ```typescript
-import { createWunderlandSeed } from 'wunderland';
+import { createWunderlandSeed } from 'wunderland/seed';
 
 // Provider is resolved from config/env automatically
 const seed = createWunderlandSeed({

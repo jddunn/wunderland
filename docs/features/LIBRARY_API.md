@@ -46,18 +46,17 @@ So Wunderland should document the AgentOS high-level API, but it should not repl
 
 ## Orchestration
 
-Author graphs with the AgentOS builders exposed at `wunderland/workflows`, then execute them through Wunderland with `app.runGraph(...)` or `app.streamGraph(...)`.
+Author graphs with the AgentOS builders on the app (`app.workflow(...)`, `app.mission(...)`), then execute them through Wunderland with `app.runGraph(...)` or `app.streamGraph(...)`.
 
 ```ts
 import { createWunderland } from 'wunderland';
-import { workflow } from 'wunderland/workflows';
 
 const app = await createWunderland({
   llm: { providerId: 'openai' },
   tools: 'curated',
 });
 
-const compiled = workflow('content-pipeline')
+const compiled = app.workflow('content-pipeline')
   .input({
     type: 'object',
     required: ['topic'],
