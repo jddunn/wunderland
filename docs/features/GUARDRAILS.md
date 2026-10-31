@@ -139,12 +139,15 @@ The Safe Guardrails engine validates all tool calls before execution to prevent 
 
 ```typescript
 async function validateBeforeExecution(request: GuardrailsRequest): Promise<GuardrailsResult> {
-  // 1. Get agent's folder permissions
-  const folderConfig = this.folderPermissions.get(request.agentId);
-  if (!folderConfig) return { allowed: true }; // No restrictions
-
-  // 2. Check if tool requires filesystem access
+  // 1. Check if tool requires filesystem access
   if (!isFilesystemTool(request.toolId)) return { allowed: true };
+
+  // 2. Get agent's folder permissions; an agent with none is denied
+  const folderConfig = this.folderPermissions.get(request.agentId);
+  if (!folderConfig) {
+    if (config.requireFolderPermissionsForFilesystemTools) return { allowed: false, reason, violations };
+    return { allowed: true }; // The host opted out
+  }
 
   // 3. Extract file paths from arguments
   const paths = extractFilePaths(request.toolId, request.args);
@@ -168,6 +171,8 @@ async function validateBeforeExecution(request: GuardrailsRequest): Promise<Guar
   return { allowed: true };
 }
 ```
+
+`requireFolderPermissionsForFilesystemTools` defaults to `true`. A host that wants the permissive behavior for agents with no folder permissions passes `false`.
 
 ### Supported Tools
 
@@ -627,7 +632,7 @@ const guardrails = new SafeGuardrails({
   enableNotifications: true,
 });
 
-// Set folder permissions for an agent
+// Set folder permissions for an agent. Without them its filesystem tools are denied.
 guardrails.setFolderPermissions('agent-id', folderConfig);
 
 // Validate before execution
