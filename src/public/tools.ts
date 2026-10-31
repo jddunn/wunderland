@@ -24,7 +24,9 @@ export type {
   FeedSearchResult,
 } from '../runtime/tools/FeedSearchTool.js';
 export {
+  describePermissions,
   getToolAccessProfile,
+  isToolAllowedByProfile,
   isValidToolAccessProfile,
   resolveAllowedTools,
   TOOL_CATEGORY_MAP,

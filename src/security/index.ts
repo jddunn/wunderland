@@ -80,6 +80,7 @@ export {
 
 // The firewall CitizenModeGuardrail's constructor takes
 export { ContextFirewall } from '../autonomy/social/ContextFirewall.js';
+export type { AgentMode, ContextFirewallConfig } from '../autonomy/social/types.js';
 
 // Authorization types (merged from authorization/)
 export * from './authorization-types.js';

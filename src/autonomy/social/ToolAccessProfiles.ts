@@ -14,10 +14,10 @@
  * Usage:
  * ```typescript
  * import {
+ *   describePermissions,
  *   getToolAccessProfile,
- *   isValidToolAccessProfile,
+ *   isToolAllowedByProfile,
  *   resolveAllowedTools,
- *   TOOL_CATEGORY_MAP,
  * } from 'wunderland/tools';
  *
  * // Get a named profile

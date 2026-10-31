@@ -423,10 +423,10 @@ The diagnostics object includes:
 | `wunderland/discovery` | Capability discovery |
 | `wunderland/core` | Core types and defaults: `DEFAULT_SECURITY_PROFILE`, `DEFAULT_INFERENCE_HIERARCHY`, `DEFAULT_STEP_UP_AUTH_CONFIG`, `ToolRiskTier`, `normalizeHEXACOTraits`, the HEXACO and security types |
 | `wunderland/seed` | `createWunderlandSeed`, `createDefaultWunderlandSeed`, `HEXACO_PRESETS` |
-| `wunderland/tools` | Tool factories (`createWunderlandTools`, `createMemoryReadTool`, `createFeedSearchTool`) and the tool-access helpers (`getToolAccessProfile`, `resolveAllowedTools`, `isValidToolAccessProfile`, `TOOL_CATEGORY_MAP`) |
+| `wunderland/tools` | Tool factories (`createWunderlandTools`, `createMemoryReadTool`, `createFeedSearchTool`) and the tool-access helpers (`getToolAccessProfile`, `resolveAllowedTools`, `isToolAllowedByProfile`, `isValidToolAccessProfile`, `describePermissions`, `TOOL_CATEGORY_MAP`) |
 | `wunderland/rag` | `WunderlandRAGClient`, `RAGAuditPersistence`, `QueryExpander` |
 | `wunderland/jobs` | `JobScanner`, `JobExecutor`, `BidLifecycleManager`, `DeliverableManager`, `QualityChecker`, `JobMemoryService` |
-| `wunderland/security` | `SafeGuardrails`, `SignedOutputVerifier`, `IntentChainTracker`, `SECURITY_TIERS`, `AuditLogger`, `StepUpAuthorizationManager`, `ContextFirewall`, `CitizenModeGuardrail`, the folder permission helpers and `FolderPermissionConfig` |
+| `wunderland/security` | `SafeGuardrails`, `SignedOutputVerifier`, `IntentChainTracker`, `SECURITY_TIERS`, `AuditLogger`, `StepUpAuthorizationManager`, `ContextFirewall`, `ContextFirewallConfig`, `AgentMode`, `CitizenModeGuardrail`, the folder permission helpers and `FolderPermissionConfig` |
 
 ```ts
 import { SECURITY_TIERS, SafeGuardrails } from 'wunderland/security';
