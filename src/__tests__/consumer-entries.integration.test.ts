@@ -44,6 +44,12 @@ const payload = { seedId: 'seed-consumer' };
 const tracker = new IntentChainTracker();
 const guardrails = new SafeGuardrails({ enableAuditLogging: false, enableNotifications: false });
 guardrails.setFolderPermissions('seed-consumer', { defaultPolicy: 'deny', rules: [], inheritFromTier: false });
+const unconfigured = await guardrails.validateBeforeExecution({
+  toolId: 'file_read',
+  toolName: 'file_read',
+  args: { file_path: '/tmp/any-file' },
+  agentId: 'seed-with-no-folder-permissions',
+});
 const profile = getToolAccessProfile('social-citizen');
 const allowed = resolveAllowedTools(profile, Object.keys(TOOL_CATEGORY_MAP));
 const feedTool = createFeedSearchTool(async () => ({ items: [{ text: 'a post' }], context: 'a post' }));
@@ -52,6 +58,7 @@ const feed = await feedTool.execute({ query: 'posts' }, {});
 console.log(JSON.stringify({
   signatureVerified: verifier.verifyPayload(payload, verifier.signPayload(payload)),
   intentEntries: tracker.getEntries().length,
+  deniesUnconfiguredAgent: !unconfigured.allowed,
   knownProfile: isValidToolAccessProfile('social-citizen'),
   unknownProfile: isValidToolAccessProfile('no-such-profile'),
   allowsFeedSearch: allowed.includes('feed_search'),
@@ -118,6 +125,7 @@ describe('a project that installs wunderland', () => {
     expect(JSON.parse(run.stdout)).toEqual({
       signatureVerified: true,
       intentEntries: 0,
+      deniesUnconfiguredAgent: true,
       knownProfile: true,
       unknownProfile: false,
       allowsFeedSearch: true,
