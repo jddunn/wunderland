@@ -37,6 +37,10 @@
     "./jobs": {
       "import": "./dist/autonomy/jobs/index.js",
       "types": "./dist/autonomy/jobs/index.d.ts"
+    },
+    "./security": {
+      "import": "./dist/security/index.js",
+      "types": "./dist/security/index.d.ts"
     }
   },
   "files": [

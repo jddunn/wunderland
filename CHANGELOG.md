@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added: `wunderland/security`, and the tool-access helpers in `wunderland/tools`
+
+The 0.72.0 migration table sends `wunderland/advanced/*` and `wunderland/security` imports to the root entry, but the root does not export the security classes or the tool-access helpers, so no public entry held them. A host that assembles agents itself imports them from here:
+
+- `wunderland/security`: the security barrel, with `SafeGuardrails`, `SignedOutputVerifier`, `IntentChainTracker`, `FolderPermissionConfig`, `SECURITY_TIERS`, `AuditLogger`, `StepUpAuthorizationManager`, `CitizenModeGuardrail` and the `ContextFirewall` its constructor takes.
+- `wunderland/tools`: `getToolAccessProfile`, `resolveAllowedTools`, `isValidToolAccessProfile`, `TOOL_CATEGORY_MAP`, `createFeedSearchTool`, and the types their signatures use.
+
+Migration from 0.72.2's `wunderland/advanced`: `wunderland/security` and `wunderland/tools` for these names, `wunderland/core`, `wunderland/seed`, `wunderland/rag` and `wunderland/jobs` for the rest. `docs/features/LIBRARY_API.md` lists each entry.
+
 ### Breaking: the agent servers listen on 127.0.0.1, and need a chat secret to listen wider
 
 `wunderland start`, `wunderland serve` and `createWunderlandServer()` listened on `0.0.0.0`. `POST /chat` answers without a secret unless one is set, `createWunderlandServer()` never checked one, and its `POST /api/tools/<name>` runs tools in autonomous mode with no key unless `WUNDERLAND_TOOL_API_KEY` is set, so any machine that could reach port 3777 could use the agent, its model key and its tools.
