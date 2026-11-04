@@ -720,11 +720,54 @@ const PROVIDER_BASE_URLS = {
   openrouter: 'https://openrouter.ai/api/v1',
 } as const;
 
+/** The `error.code` a model proxy answers with a 402 when the agent's model allowance is used up. */
+export const ALLOWANCE_EXHAUSTED_CODE = 'allowance_exhausted';
+
+/** The reply a turn ends with when the provider answers {@link isAllowanceExhausted}. */
+export const ALLOWANCE_EXHAUSTED_LINE = 'This agent has reached its monthly model allowance.';
+
+/** A provider's non-2xx answer: the message callers already read, plus its status and error code. */
+export class ProviderHttpError extends Error {
+  /** The HTTP status the provider answered. */
+  readonly status: number;
+  /** `error.code` from the JSON body, when it has one. */
+  readonly code?: string;
+
+  /**
+   * @param message - The error's message.
+   * @param status - The HTTP status.
+   * @param body - The response body, read for `error.code`.
+   */
+  constructor(message: string, status: number, body: string) {
+    super(message);
+    this.name = 'ProviderHttpError';
+    this.status = status;
+    try {
+      const code = JSON.parse(body)?.error?.code;
+      if (typeof code === 'string') this.code = code;
+    } catch {
+      // Not JSON: an error with no code.
+    }
+  }
+}
+
+/**
+ * Whether a provider request failed because the agent's model allowance is used
+ * up: a 402 whose body's `error.code` is `allowance_exhausted`. No other provider
+ * or retry can answer such a call, so the turn ends there.
+ */
+export function isAllowanceExhausted(error: unknown): boolean {
+  const failure = error as { status?: unknown; code?: unknown } | null | undefined;
+  return failure?.status === 402 && failure?.code === ALLOWANCE_EXHAUSTED_CODE;
+}
+
 /**
  * Determines whether an error should trigger a fallback attempt.
  * Retryable: rate limits (429), server errors (500+), auth failures (401/403), network errors.
+ * Never a used-up allowance, whatever its body says: the fallback draws on the same allowance.
  */
 export function shouldFallback(error: unknown): boolean {
+  if (isAllowanceExhausted(error)) return false;
   if (error instanceof Error) {
     const msg = error.message;
     // HTTP status codes that warrant fallback
@@ -830,7 +873,7 @@ export async function chatCompletionsRequest(
   }
 
   const text = await res.text();
-  if (!res.ok) throw new Error(`${providerName} error (${res.status}): ${text.slice(0, 300)}`);
+  if (!res.ok) throw new ProviderHttpError(`${providerName} error (${res.status}): ${text.slice(0, 300)}`, res.status, text);
   const data = JSON.parse(text);
   const msg = data?.choices?.[0]?.message;
   if (!msg) throw new Error(`${providerName} returned an empty response.`);
@@ -1013,7 +1056,7 @@ export async function streamingChatCompletionsRequest(
     clearTimeout(fetchTimeout);
     signal?.removeEventListener('abort', onExternalAbort);
     const text = await res.text();
-    throw new Error(`${providerName} streaming error (${res.status}): ${text.slice(0, 300)}`);
+    throw new ProviderHttpError(`${providerName} streaming error (${res.status}): ${text.slice(0, 300)}`, res.status, text);
   }
 
   if (!res.body) {
@@ -1246,6 +1289,26 @@ export function toAnthropicMessagePayload(openaiMessages: Array<Record<string, u
   return { system, messages: out };
 }
 
+/**
+ * Anthropic's usage block with its token counts also under the names the turn's
+ * usage hooks and the usage ledger read (`prompt_tokens`, `completion_tokens`,
+ * `total_tokens`). Prompt tokens include the cache reads and writes, which
+ * Anthropic counts apart from `input_tokens`.
+ */
+function anthropicUsage(usage: any): unknown {
+  if (!usage || typeof usage !== 'object') return usage;
+  const count = (value: unknown): number => (typeof value === 'number' ? value : 0);
+  const promptTokens =
+    count(usage.input_tokens) + count(usage.cache_read_input_tokens) + count(usage.cache_creation_input_tokens);
+  const completionTokens = count(usage.output_tokens);
+  return {
+    ...usage,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
+  };
+}
+
 export async function anthropicMessagesRequest(opts: {
   apiKey: string;
   model: string;
@@ -1283,7 +1346,7 @@ export async function anthropicMessagesRequest(opts: {
   });
 
   const text = await res.text();
-  if (!res.ok) throw new Error(`Anthropic error (${res.status}): ${text.slice(0, 300)}`);
+  if (!res.ok) throw new ProviderHttpError(`Anthropic error (${res.status}): ${text.slice(0, 300)}`, res.status, text);
   const data = JSON.parse(text);
 
   const blocks: any[] = Array.isArray(data?.content) ? data.content : [];
@@ -1309,6 +1372,6 @@ export async function anthropicMessagesRequest(opts: {
     ...(tool_calls && tool_calls.length > 0 ? { tool_calls } : null),
   };
 
-  return { message, model: data?.model || opts.model, usage: data?.usage, provider: 'Anthropic' };
+  return { message, model: data?.model || opts.model, usage: anthropicUsage(data?.usage), provider: 'Anthropic' };
 }
 

@@ -376,6 +376,28 @@ describe('a turn reports its events', () => {
     expectNoTextReachedTheEventsServer();
   });
 
+  it('a checkpoint that waits on a person reports approval_requested and none of the work', async () => {
+    const reporter = newReporter();
+    const checkpoint = vi.fn(async () => ({ decision: 'continue' }));
+    const { ctx, adapter } = channelContext({
+      eventsReporter: reporter,
+      autoApproveToolCalls: false,
+      turnApprovalMode: 'after-each-round',
+      policy: normalizeRuntimePolicy({ ...CFG, executionMode: 'human-dangerous' }),
+      hitlManager: { requestApproval: vi.fn(async () => ({ approved: true })), checkpoint, cancelRequest: vi.fn(async () => {}) },
+    });
+    providerScript = [toolCallAnswer({ prompt_tokens: 1, completion_tokens: 1 }), textAnswer()];
+
+    await handleInboundChannelMessage(ctx, inbound());
+    await reporter.flush();
+
+    expect(checkpoint).toHaveBeenCalledTimes(1);
+    expect(ctx.hitlManager.requestApproval).not.toHaveBeenCalled();
+    expect(repliesOf(adapter)).toEqual([MODEL_WORDS]);
+    expect(postedKinds()).toEqual(['turn_started', 'tool_called', 'approval_requested', 'turn_finished']);
+    expectNoTextReachedTheEventsServer();
+  });
+
   it('a provider failure that falls back reports provider_error with the status, and the turn goes on', async () => {
     const reporter = newReporter();
     const { ctx, adapter } = channelContext({
