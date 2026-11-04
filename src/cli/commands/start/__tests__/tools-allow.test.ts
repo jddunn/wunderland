@@ -7,29 +7,28 @@
  * - the loader loads only the packs the list names (in place of the default
  *   packs, the config's own extension lists and the credential
  *   recommendations) and keeps only the tools it names;
+ * - a list that is not a list of names, or holds any entry that is not a
+ *   name, allows nothing;
  * - `extensions_enable` refuses a pack outside the list with `tool_not_allowed`;
  * - a turn offers the model only the listed tools, and a call to any other
  *   tool, including one registered after start, is refused at dispatch with
- *   `tool_not_allowed` and never runs: on a webhook wake (`runAgentTurn`), a
- *   channel message and `POST /chat`.
+ *   `tool_not_allowed` and never runs (a webhook wake, `runAgentTurn`; the
+ *   channel and `POST /chat` paths are in `tools-allow.integration.test.ts`).
  *
  * The packs are the real curated `web-search` and `cli-executor` packs, loaded
  * through the extensions registry exactly as `start` loads them. The model is a
  * `fetch` stub answering OpenAI's chat-completions shape.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createServer, request as httpRequest } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { loadExtensions } from '../extension-loader.js';
 import { runAgentTurn } from '../agent-turn.js';
-import { handleInboundChannelMessage } from '../channel-handler.js';
-import { handleChatRoutes } from '../routes/chat.js';
 import { getPermissionsForSet, normalizeRuntimePolicy } from '../../../../runtime/tools/policy.js';
 import { runToolCallingTurn } from '../../../../runtime/tools/tool-calling.js';
+
 
 /** Loading real extension packs takes longer than vitest's 5 s default. */
 const LOAD_TIMEOUT_MS = 120_000;
@@ -163,23 +162,6 @@ function expectRefusedAtDispatch(requests: any[], shellExecute: ReturnType<typeo
   expect(shellExecute).not.toHaveBeenCalled();
 }
 
-/** Capability discovery that ranks the shell first, so the turn's own tool list names it beside web_search. */
-const discoveryOfferingShell = {
-  discoverForTurn: async () => ({
-    tier0: 'Capabilities: shell, search',
-    tier1: [],
-    tier2: [
-      { capability: { kind: 'tool', id: 'tool:shell_execute', name: 'shell_execute' }, fullText: 'shell_execute: run a command' },
-      { capability: { kind: 'tool', id: 'tool:web_search', name: 'web_search' }, fullText: 'web_search: search the web' },
-    ],
-  }),
-};
-
-const adaptiveRuntimeStub = {
-  resolveTurnDecision: () => ({ toolFailureMode: 'fail_open', degraded: false, reason: '', actions: {}, kpi: null }),
-  recordTurnOutcome: async () => {},
-};
-
 beforeEach(async () => {
   workspaceBaseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wunderland-tools-allow-'));
 });
@@ -225,6 +207,17 @@ describe('wunderland start: tools.allow', () => {
   it('a tools.allow whose lists are not lists of names allows nothing', async () => {
     const ctx = await loadForConfig(
       unrestrictedAutonomousConfig({ tools: { allow: { packs: 'web-search', tools: { web_search: true } } } }),
+    );
+
+    expect(packNames(ctx)).toEqual([]);
+    expect(toolNames(ctx)).toEqual([]);
+  }, LOAD_TIMEOUT_MS);
+
+  it('a tools.allow list with any entry that is not a name allows nothing of its kind', async () => {
+    const ctx = await loadForConfig(
+      unrestrictedAutonomousConfig({
+        tools: { allow: { packs: ['web-search', 7], tools: ['web_search', ''] } },
+      }),
     );
 
     expect(packNames(ctx)).toEqual([]);
@@ -287,128 +280,6 @@ describe('wunderland start: tools.allow', () => {
     expectRefusedAtDispatch(requests, shellExecute);
     expect(result.toolCallCount).toBe(0);
     expect(broadcastAgentEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool_call' }));
-  }, LOAD_TIMEOUT_MS);
-
-  it('a channel message gets the same refusal, even for a tool discovery offers', async () => {
-    const cfg = unrestrictedAutonomousConfig({ tools: { allow: ALLOW_WEB_SEARCH } });
-    const ctx = await loadForConfig(cfg);
-    const shellExecute = registerShellAfterStart(ctx);
-    const requests = stubModelCallingShell();
-
-    const adapter = {
-      platform: 'telegram',
-      sendTypingIndicator: vi.fn(async () => {}),
-      sendMessage: vi.fn(async () => {}),
-    };
-    Object.assign(ctx, {
-      pairingEnabled: false,
-      pairingGroupTrigger: '!pair',
-      pairingGroupTriggerEnabled: false,
-      systemPrompt: 'SYS',
-      channelSessions: new Map(),
-      channelQueues: new Map(),
-      channelUnsubs: [],
-      discoveryManager: discoveryOfferingShell,
-      adaptiveRuntime: adaptiveRuntimeStub,
-      defaultTenantId: '',
-      canUseLLM: true,
-      seed: { seedId: 'tools_allow_test' },
-      seedId: 'tools_allow_test',
-      providerId: 'openai',
-      model: 'gpt-test',
-      llmApiKey: 'sk-test',
-      autoApproveToolCalls: true,
-      dangerouslySkipPermissions: false,
-      strictToolNames: false,
-      turnApprovalMode: 'off',
-      adapterByPlatform: new Map([['telegram', adapter]]),
-    });
-
-    await handleInboundChannelMessage(ctx, {
-      platform: 'telegram',
-      conversationId: 'chat-1',
-      conversationType: 'direct',
-      messageId: 'msg-1',
-      text: 'run id on the shell',
-      sender: { id: 'user-1' },
-    });
-
-    expectRefusedAtDispatch(requests, shellExecute);
-    const sent = adapter.sendMessage.mock.calls.map((call: any[]) => call[1]?.blocks?.[0]?.text);
-    expect(sent).toEqual(['done']);
-  }, LOAD_TIMEOUT_MS);
-
-  it('POST /chat gets the same refusal', async () => {
-    const cfg = unrestrictedAutonomousConfig({ tools: { allow: ALLOW_WEB_SEARCH } });
-    const ctx = await loadForConfig(cfg);
-    const shellExecute = registerShellAfterStart(ctx);
-    const requests = stubModelCallingShell();
-
-    const deps: any = {
-      seedId: 'tools_allow_test',
-      displayName: 'Tools Allow Test',
-      activePersonaId: 'default',
-      availablePersonas: [],
-      seed: { seedId: 'tools_allow_test' },
-      providerId: 'openai',
-      model: 'gpt-test',
-      llmApiKey: 'sk-test',
-      llmBaseUrl: undefined,
-      canUseLLM: true,
-      cfg,
-      rawAgentConfig: cfg,
-      globalConfig: {},
-      configDir: workspaceBaseDir,
-      policy: ctx.policy,
-      toolMap: ctx.toolMap,
-      sessions: new Map(),
-      systemPrompt: 'SYS',
-      adaptiveRuntime: adaptiveRuntimeStub,
-      discoveryManager: discoveryOfferingShell,
-      strictToolNames: false,
-      autoApproveToolCalls: true,
-      dangerouslySkipPermissions: false,
-      turnApprovalMode: 'off',
-      defaultTenantId: undefined,
-      workspaceAgentId: 'tools_allow_test',
-      workspaceBaseDir,
-      lazyTools: false,
-      skillsPrompt: '',
-      chatSecret: '',
-      hitlManager: ctx.hitlManager,
-      sessionTextLogger: { logTurn: async () => {} },
-    };
-    const server = createServer((req, res) => {
-      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-      handleChatRoutes(req, res, url, deps).catch((err) => {
-        res.statusCode = 500;
-        res.end(String(err));
-      });
-    });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-    try {
-      const { port } = server.address() as AddressInfo;
-      const body = JSON.stringify({ message: 'run id on the shell', autoClassify: false });
-      const answer = await new Promise<{ status: number; body: string }>((resolve, reject) => {
-        const req = httpRequest(
-          { host: '127.0.0.1', port, path: '/chat', method: 'POST', headers: { 'Content-Type': 'application/json' } },
-          (res) => {
-            let text = '';
-            res.setEncoding('utf8');
-            res.on('data', (chunk) => { text += chunk; });
-            res.on('end', () => resolve({ status: res.statusCode ?? 0, body: text }));
-          },
-        );
-        req.on('error', reject);
-        req.end(body);
-      });
-
-      expect(answer.status).toBe(200);
-      expect(JSON.parse(answer.body).reply).toBe('done');
-      expectRefusedAtDispatch(requests, shellExecute);
-    } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
   }, LOAD_TIMEOUT_MS);
 
   it('with toolFailureMode fail_closed, a refused call ends the turn without running', async () => {
