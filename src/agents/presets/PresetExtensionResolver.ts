@@ -106,7 +106,12 @@ export async function resolveExtensionsByNames(
 ): Promise<ExtensionResolutionResult> {
   const allExtensionNames = [...tools, ...voice, ...productivity];
 
-  if (allExtensionNames.length === 0) {
+  // Channel packs load from `options.channels`, so an empty extension list (an
+  // agent whose `tools.allow` names no pack) still resolves the channels it names.
+  const channels = options?.channels;
+  const wantsChannels = Array.isArray(channels) ? channels.length > 0 : channels !== undefined && channels !== 'none';
+
+  if (allExtensionNames.length === 0 && !wantsChannels) {
     return {
       manifest: { ...EMPTY_MANIFEST },
       missing: [],
