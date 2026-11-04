@@ -309,4 +309,39 @@ describe('wunderland start: tools.allow', () => {
     expect(requests[0].tools.map((t: any) => t.function.name)).toEqual(['web_search']);
     expect(shellExecute).not.toHaveBeenCalled();
   });
+
+  it('tool definitions the caller supplies (as discovery does) keep only the listed tools', async () => {
+    const shellExecute = vi.fn(async () => ({ success: true, output: 'uid=0(root)' }));
+    const toolMap = new Map([
+      ['web_search', { name: 'web_search', description: 'Search', inputSchema: { type: 'object' }, category: 'search', execute: vi.fn() }],
+      ['shell_execute', { name: 'shell_execute', description: 'Shell', inputSchema: { type: 'object' }, category: 'system', hasSideEffects: true, execute: shellExecute }],
+    ]);
+    const definition = (name: string) => ({
+      type: 'function',
+      function: { name, description: name, parameters: { type: 'object', properties: {} } },
+    });
+    const requests = stubModelCallingShell({ shellOnly: true });
+
+    const reply = await runToolCallingTurn({
+      providerId: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-test',
+      messages: [{ role: 'system', content: 'SYS' }, { role: 'user', content: 'run id' }],
+      toolMap,
+      allowedToolNames: ['web_search'],
+      // The shell first, as a discovery ranking would put it; a definition with no name is dropped too.
+      getToolDefs: () => [definition('shell_execute'), definition('web_search'), { type: 'function', function: {} }],
+      toolContext: {},
+      maxRounds: 4,
+      dangerouslySkipPermissions: true,
+      askPermission: async () => true,
+    });
+
+    expect(reply).toBe('done');
+    expect(requests).toHaveLength(2);
+    expect(requests[0].tools.map((t: any) => t.function.name)).toEqual(['web_search']);
+    const refusal = requests[1].messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call-shell');
+    expect(JSON.parse(refusal.content)).toEqual({ error: 'tool_not_allowed', tool: 'shell_execute' });
+    expect(shellExecute).not.toHaveBeenCalled();
+  });
 });
