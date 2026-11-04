@@ -19,6 +19,7 @@ import {
 } from '../../../platform/config/provider-defaults.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime/tools/workspace.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
+import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
 import { buildFallbackChain } from '@framers/agentos';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
@@ -96,19 +97,23 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   const fallbackChain = buildFallbackChain(providerId);
 
   // Map the agentos FallbackProviderEntry chain into the legacy LLMProviderConfig
-  // format expected by the wunderland tool-calling runtime.
+  // format expected by the wunderland tool-calling runtime. Each candidate is
+  // sent to its provider's base-URL variable (OPENAI_BASE_URL,
+  // ANTHROPIC_BASE_URL, OPENROUTER_BASE_URL), else to the provider's own root.
   const fallbackCandidates: Array<{ id: string; config: LLMProviderConfig }> = fallbackChain.map((fb) => {
     if (fb.provider === 'openai') {
-      return { id: 'openai', config: { apiKey: process.env['OPENAI_API_KEY']!, model: fb.model ?? 'gpt-4o-mini' } };
+      return { id: 'openai', config: { apiKey: process.env['OPENAI_API_KEY']!, model: fb.model ?? 'gpt-4o-mini', baseUrl: baseUrlFor('openai') } };
     }
     if (fb.provider === 'anthropic') {
-      return { id: 'anthropic', config: { apiKey: process.env['ANTHROPIC_API_KEY']!, model: fb.model ?? 'claude-haiku-4-5-20251001', baseUrl: 'https://api.anthropic.com/v1' } };
+      // The candidate speaks Anthropic's OpenAI-compatible endpoint
+      // (`<root>/v1/chat/completions`), the form baseUrlFor returns.
+      return { id: 'anthropic', config: { apiKey: process.env['ANTHROPIC_API_KEY']!, model: fb.model ?? 'claude-haiku-4-5-20251001', baseUrl: baseUrlFor('anthropic') } };
     }
     if (fb.provider === 'openrouter') {
       return { id: 'openrouter', config: {
         apiKey: openrouterApiKey,
         model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
-        baseUrl: 'https://openrouter.ai/api/v1',
+        baseUrl: baseUrlFor('openrouter'),
         extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
       } };
     }
@@ -139,11 +144,15 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
     // ignore
   }
 
+  // The primary provider's base URL. OpenAI, Anthropic and OpenRouter read
+  // their base-URL variable (baseUrlFor); Anthropic's is the root its Messages
+  // API and its OpenAI-compatible endpoint share, so the turn loop, HyDE and
+  // the research classifier send an Anthropic key to Anthropic's root, never
+  // to OpenAI's endpoint.
   const llmBaseUrl =
-    providerId === 'openrouter' ? 'https://openrouter.ai/api/v1'
-    : providerId === 'ollama' ? ollamaBaseUrl
+    providerId === 'ollama' ? ollamaBaseUrl
     : providerId === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta/openai'
-    : undefined;
+    : baseUrlFor(providerId);
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =
     (cfg?.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
