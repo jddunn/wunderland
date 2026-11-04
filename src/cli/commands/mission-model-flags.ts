@@ -39,8 +39,16 @@ export interface QualityFloorOptions {
  * same way. Providers absent from this map keep the runtime credentials.
  */
 const PROVIDER_ENV: Record<string, { key: string; baseUrlEnv?: string; defaultBaseUrl?: string }> = {
-  openai: { key: 'OPENAI_API_KEY', baseUrlEnv: 'OPENAI_BASE_URL' },
-  anthropic: { key: 'ANTHROPIC_API_KEY', baseUrlEnv: 'ANTHROPIC_BASE_URL' },
+  // Every entry carries an explicit defaultBaseUrl: the shared
+  // chatCompletionsRequest helper routes purely on baseUrl and falls back to
+  // the OpenAI endpoint when it is undefined — so a provider without one would
+  // send its key to OpenAI and 401 (observed live 2026-07-24 with anthropic).
+  openai: { key: 'OPENAI_API_KEY', baseUrlEnv: 'OPENAI_BASE_URL', defaultBaseUrl: 'https://api.openai.com/v1' },
+  anthropic: {
+    key: 'ANTHROPIC_API_KEY',
+    baseUrlEnv: 'ANTHROPIC_BASE_URL',
+    defaultBaseUrl: 'https://api.anthropic.com/v1',
+  },
   openrouter: { key: 'OPENROUTER_API_KEY', defaultBaseUrl: 'https://openrouter.ai/api/v1' },
   gemini: {
     key: 'GEMINI_API_KEY',

@@ -33,6 +33,17 @@ describe('resolveMissionModel', () => {
     expect(r.baseUrl).toBe('https://api.anthropic.com');
   });
 
+  it('always resolves a base URL so the shared caller cannot default to OpenAI', () => {
+    // chatCompletionsRequest routes on baseUrl alone; a provider without one
+    // would send its key to api.openai.com and 401.
+    for (const flag of ['anthropic/claude-sonnet-5', 'openai/gpt-4o', 'openrouter/x/y']) {
+      const r = resolveMissionModel(flag, runtime, providerEnv);
+      expect(r.baseUrl, `${flag} must carry a baseUrl`).toBeTruthy();
+    }
+    expect(resolveMissionModel('anthropic/claude-sonnet-5', runtime, { ANTHROPIC_API_KEY: 'an' }).baseUrl)
+      .toContain('anthropic');
+  });
+
   it('bare model with no slash keeps the runtime provider + key', () => {
     const r = resolveMissionModel('gpt-4o-mini', runtime, providerEnv);
     expect(r.providerId).toBe('openai');
