@@ -49,6 +49,17 @@ import { JobExecutor } from '../../../../autonomy/jobs/JobExecutor.js';
 import { resolveWunderlandRuntimeConfigFromEnv } from '../../../../platform/config/provider-defaults.js';
 import { resolveMissionModel, resolveMissionProviderBaseUrl } from '../../mission-model-flags.js';
 
+// Vite does not follow AgentOS's `./*` exports entry for this path; plain Node
+// does, and the dist smoke test loads the package that way. The provider stands
+// in for an Ollama server nothing answers on.
+vi.mock('@framers/agentos/core/llm/providers/implementations/OllamaProvider', () => ({
+  OllamaProvider: class {
+    async initialize(): Promise<void> {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:11434');
+    }
+  },
+}));
+
 const KEYS = {
   OPENAI_API_KEY: 'sk-openai-test',
   ANTHROPIC_API_KEY: 'sk-ant-test',
@@ -1413,6 +1424,9 @@ describe('start: a channel message falls back like the /chat route and the webho
       defaultTenantId: '',
       toolMap: new Map(),
       seed: { seedId: ctx.seedId },
+      permissions: { network: { externalApis: true }, system: { cliExecution: false } },
+      LOCAL_ONLY_CHANNELS: new Set(['webchat']),
+      CLI_REQUIRED_CHANNELS: new Set(['signal', 'zalouser']),
       autoApproveToolCalls: true,
       dangerouslySkipPermissions: false,
       strictToolNames: false,

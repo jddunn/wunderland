@@ -353,6 +353,41 @@ describe('wunderland start: tools.allow', () => {
   });
 });
 
+describe('wunderland start: channel packs under tools.allow', () => {
+  beforeEach(() => {
+    // Activation asks Telegram about this token and fails; the adapter is what is read here.
+    setEnv('TELEGRAM_BOT_TOKEN', '12345:test-token');
+  });
+
+  it.each([
+    ['an empty list', { allow: { packs: [], tools: [] } }, {}],
+    ['a list that is not a list', { allow: { packs: 'web-search', tools: [] } }, {}],
+    [
+      'an extensions list the allow-list empties',
+      { allow: { packs: ['web-search'], tools: [] } },
+      { extensions: { tools: ['cli-executor'], voice: [], productivity: [] } },
+    ],
+  ])('with %s, the configured channel still loads and no tool is added', async (_label, tools, extra) => {
+    const ctx = await loadForConfig(unrestrictedAutonomousConfig({ channels: ['telegram'], tools, ...extra }));
+    try {
+      expect(ctx.loadedChannelAdapters.map((adapter: any) => adapter.platform)).toEqual(['telegram']);
+      expect(packNames(ctx)).toEqual(['@framers/agentos-ext-channel-telegram']);
+      // The pack registers send tools; the list does not name them, so they stay out.
+      expect(toolNames(ctx)).toEqual([]);
+    } finally {
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.({ logger: console })));
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('with no channels configured, no channel pack loads', async () => {
+    const ctx = await loadForConfig(unrestrictedAutonomousConfig({ tools: { allow: { packs: [], tools: [] } } }));
+
+    expect(ctx.loadedChannelAdapters).toEqual([]);
+    expect(packNames(ctx)).toEqual([]);
+    expect(toolNames(ctx)).toEqual([]);
+  }, LOAD_TIMEOUT_MS);
+});
+
 describe('wunderland start: the refusal log line', () => {
   /** Every call the logger received, as [level, message, fields]. */
   let lines: Array<[string, unknown, Record<string, unknown> | undefined]> = [];
