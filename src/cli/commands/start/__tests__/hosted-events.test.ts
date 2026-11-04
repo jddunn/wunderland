@@ -32,6 +32,13 @@ import { handleChatRoutes } from '../routes/chat.js';
 import { runAgentTurn } from '../agent-turn.js';
 import { getPermissionsForSet, normalizeRuntimePolicy } from '../../../../runtime/tools/policy.js';
 
+/** The content security pipeline a test sets; none otherwise, as with no guardrails. */
+const securityPipeline = vi.hoisted(() => ({ current: undefined as any }));
+vi.mock('../../../../runtime/tools/tool-helpers.js', async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  getSecurityPipeline: () => securityPipeline.current,
+}));
+
 /** The header the turn's operation id goes in; AGENTOS_OPERATION_ID_HEADER names it. */
 const OP_HEADER = 'x-test-operation-id';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -240,6 +247,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  securityPipeline.current = undefined;
   provider.seen.length = 0;
   eventsServer.seen.length = 0;
   providerScript = [];
@@ -514,6 +522,7 @@ describe('without both variables nothing is posted', () => {
 
 describe('a 402 allowance_exhausted ends the turn', () => {
   it('the channel gets the fixed line, the provider sees one request and no fallback runs', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const reporter = newReporter();
     const { ctx, adapter } = channelContext({
       eventsReporter: reporter,
@@ -529,6 +538,7 @@ describe('a 402 allowance_exhausted ends the turn', () => {
     expect(postedKinds()).toEqual(['turn_started', 'provider_error', 'turn_finished']);
     expect(posted()[1].code).toBe('402');
     expectNoTextReachedTheEventsServer();
+    expect(warn.mock.calls.filter((call) => String(call[0]).includes('allowance'))).toHaveLength(1);
   });
 
   it('a number in the refusal\'s body that a fallback would read as a retryable status changes nothing', async () => {
@@ -575,6 +585,19 @@ describe('a 402 allowance_exhausted ends the turn', () => {
     expect(postedKinds()).toEqual(['turn_started', 'tool_called', 'provider_error', 'turn_finished']);
     expect(posted()[3].promptTokens).toBe(9);
     expect(posted()[3].completionTokens).toBe(4);
+  });
+
+  it('what the model gave so far passes the output check first: blocked, the line goes alone', async () => {
+    const evaluateOutput = vi.fn(async () => ({ action: 'block' }));
+    securityPipeline.current = { reset: () => {}, evaluateInput: async () => ({ action: 'allow' }), evaluateOutput };
+    const { ctx, adapter } = channelContext();
+    providerScript = [toolCallAnswer({ prompt_tokens: 9, completion_tokens: 4 }, MODEL_WORDS), allowanceRefusal()];
+
+    await handleInboundChannelMessage(ctx, inbound());
+
+    expect(evaluateOutput).toHaveBeenCalledWith({ chunk: { finalResponseText: MODEL_WORDS } });
+    expect(repliesOf(adapter)).toEqual([ALLOWANCE_LINE]);
+    expect(ctx.channelSessions.get('telegram:chat-1').at(-1)).toEqual({ role: 'assistant', content: ALLOWANCE_LINE });
   });
 
   it('the session keeps a well-formed history that ends with the line', async () => {

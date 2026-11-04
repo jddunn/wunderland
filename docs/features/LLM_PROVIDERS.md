@@ -283,6 +283,8 @@ This agent has reached its monthly model allowance.
 ```
 
 - A channel gets the reply as a message, `POST /chat` answers 200 with it, and a webhook's turn is not recorded as a failure. The session's history ends with the reply.
+- What the model gave so far passes the same output check a finished reply does. When the check blocks it, the line goes alone.
+- Each such turn writes one warning line.
 - A 402 with any other code, and any other status with that code, stays an ordinary provider error.
 - With [hosted events](OBSERVABILITY.md#hosted-events) on, the turn reports `provider_error` with code `402`, then `turn_finished`.
 

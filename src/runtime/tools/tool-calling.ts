@@ -89,6 +89,7 @@ export {
 } from './tool-helpers.js';
 import type { ToolInstance, LLMProviderConfig } from './tool-helpers.js';
 import {
+  ALLOWANCE_EXHAUSTED_CODE,
   ALLOWANCE_EXHAUSTED_LINE,
   createAuthorizationManager,
   isAllowanceExhausted,
@@ -795,6 +796,13 @@ export async function runToolCallingTurn(opts: {
    * the same output check a finished turn's reply gets, then the fixed line.
    */
   const endTurnAtAllowance = async (): Promise<string> => {
+    emitOtelLog({
+      name: 'wunderland.runtime',
+      body: ALLOWANCE_EXHAUSTED_CODE,
+      severity: SeverityNumber.WARN,
+      attributes: { round: currentRound - 1 },
+    });
+    console.warn('[tool-calling] The model allowance is used up; ending the turn.');
     let soFar = finalText.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
     if (contentPipeline && soFar) {
       try {
