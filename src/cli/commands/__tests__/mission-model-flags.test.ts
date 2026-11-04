@@ -30,7 +30,9 @@ describe('resolveMissionModel', () => {
     const r = resolveMissionModel('anthropic/claude-sonnet-5', runtime, providerEnv);
     expect(r.providerId).toBe('anthropic');
     expect(r.apiKey).toBe('an'); // NOT 'rt-key' — no cross-provider key leak
-    expect(r.baseUrl).toBe('https://api.anthropic.com');
+    // ANTHROPIC_BASE_URL names the host root; the planner's OpenAI-compatible
+    // request needs Anthropic's /v1 root.
+    expect(r.baseUrl).toBe('https://api.anthropic.com/v1');
   });
 
   it('always resolves a base URL so the shared caller cannot default to OpenAI', () => {
