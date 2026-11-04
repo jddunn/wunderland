@@ -29,6 +29,7 @@ import { runAgentTurn } from '../agent-turn.js';
 import { handleInboundChannelMessage } from '../channel-handler.js';
 import { handleChatRoutes } from '../routes/chat.js';
 import { getPermissionsForSet, normalizeRuntimePolicy } from '../../../../runtime/tools/policy.js';
+import { runToolCallingTurn } from '../../../../runtime/tools/tool-calling.js';
 
 /** Loading real extension packs takes longer than vitest's 5 s default. */
 const LOAD_TIMEOUT_MS = 120_000;
@@ -115,10 +116,10 @@ function registerShellAfterStart(ctx: any) {
 
 /**
  * Stubs `fetch` as the model: the first chat-completions call asks for
- * `shell_execute` and `extensions_enable`, the second answers `done`. Returns
- * the parsed request bodies the model received.
+ * `shell_execute` and (unless `shellOnly`) `extensions_enable`, the second
+ * answers `done`. Returns the parsed request bodies the model received.
  */
-function stubModelCallingShell(): any[] {
+function stubModelCallingShell({ shellOnly = false }: { shellOnly?: boolean } = {}): any[] {
   const requests: any[] = [];
   const replies = [
     {
@@ -130,7 +131,9 @@ function stubModelCallingShell(): any[] {
           content: null,
           tool_calls: [
             { id: 'call-shell', type: 'function', function: { name: 'shell_execute', arguments: JSON.stringify({ command: 'id' }) } },
-            { id: 'call-enable', type: 'function', function: { name: 'extensions_enable', arguments: JSON.stringify({ extension: 'cli-executor' }) } },
+            ...(shellOnly ? [] : [
+              { id: 'call-enable', type: 'function', function: { name: 'extensions_enable', arguments: JSON.stringify({ extension: 'cli-executor' }) } },
+            ]),
           ],
         },
       }],
@@ -407,4 +410,32 @@ describe('wunderland start: tools.allow', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }, LOAD_TIMEOUT_MS);
+
+  it('with toolFailureMode fail_closed, a refused call ends the turn without running', async () => {
+    const shellExecute = vi.fn(async () => ({ success: true, output: 'uid=0(root)' }));
+    const toolMap = new Map([
+      ['web_search', { name: 'web_search', description: 'Search', inputSchema: { type: 'object' }, category: 'search', execute: vi.fn() }],
+      ['shell_execute', { name: 'shell_execute', description: 'Shell', inputSchema: { type: 'object' }, category: 'system', hasSideEffects: true, execute: shellExecute }],
+    ]);
+    const requests = stubModelCallingShell({ shellOnly: true });
+
+    const reply = await runToolCallingTurn({
+      providerId: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-test',
+      messages: [{ role: 'system', content: 'SYS' }, { role: 'user', content: 'run id' }],
+      toolMap,
+      allowedToolNames: ['web_search'],
+      toolContext: {},
+      maxRounds: 4,
+      dangerouslySkipPermissions: true,
+      askPermission: async () => true,
+      toolFailureMode: 'fail_closed',
+    });
+
+    expect(reply).toBe('[tool_failure_mode=fail_closed] Tool not allowed: shell_execute.');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].tools.map((t: any) => t.function.name)).toEqual(['web_search']);
+    expect(shellExecute).not.toHaveBeenCalled();
+  });
 });
