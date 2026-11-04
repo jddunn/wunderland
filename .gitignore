@@ -93,3 +93,8 @@ docs/brand.html
 brand.html
 superpowers
 docs/superpowers/
+
+# Internal planning notes are not published
+docs/internal/
+docs/legacy/
+docs/extensions/EXTENSION_REFACTORING_PLAN.md

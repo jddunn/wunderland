@@ -2,22 +2,21 @@
 /**
  * @fileoverview Resolve per-agent workspace directories for filesystem writes.
  * @module wunderland/runtime/workspace
+ *
+ * An agent's id names its folder under the workspace base, so the id is cleaned and checked by AgentOS's
+ * `sanitizeAgentWorkspaceId`, the rule `resolveAgentWorkspaceDir` applies too. An id whose cleaned name starts or
+ * ends with a dot is refused with an `InvalidAgentWorkspaceIdError`, so `.` and `..` never name the base folder
+ * itself or the folder above it. Dots inside a name stay: `a/../b` cleans to `a-..-b`, one folder name.
  */
 
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-export function sanitizeAgentWorkspaceId(raw: string): string {
-  const cleaned = String(raw || '')
-    .trim()
-    .replace(/[\\/]/g, '-')
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-
-  return cleaned || 'agent';
-}
+export {
+  InvalidAgentWorkspaceIdError,
+  resolveAgentWorkspaceDir,
+  sanitizeAgentWorkspaceId,
+} from '@framers/agentos';
 
 export function resolveAgentWorkspaceBaseDir(): string {
   const env =

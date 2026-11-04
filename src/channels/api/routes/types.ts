@@ -73,6 +73,8 @@ export interface ServerDeps {
 
   /* ── HITL / pairing ──────────────────────────────────────────────────── */
   hitlSecret: string;
+  /** Secret POST /chat requires; empty when none is set (loopback hosts only). */
+  chatSecret: string;
   hitlManager: HumanInteractionManager;
   sseClients: Set<ServerResponse>;
   broadcastHitlUpdate: (payload: Record<string, unknown>) => Promise<void>;

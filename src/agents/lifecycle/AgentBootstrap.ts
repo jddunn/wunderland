@@ -23,7 +23,12 @@ import { resolveDefaultSkillsDirs } from '../../skills/index.js';
 import { createEnvSecretResolver } from '../../security/env-secrets.js';
 import { createSchemaOnDemandTools } from '../../runtime/execution/schema-on-demand.js';
 import type { ToolInstance } from '../../runtime/tools/tool-helpers.js';
-import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
+import {
+  InvalidAgentWorkspaceIdError,
+  resolveAgentWorkspaceBaseDir,
+  sanitizeAgentWorkspaceId,
+} from '../../runtime/tools/workspace.js';
+import { WunderlandConfigError } from '../../platform/config/errors.js';
 import { resolveAgentDisplayName } from '../../runtime/identity/agent-identity.js';
 import { buildAgenticSystemPrompt } from '../../runtime/execution/system-prompt-builder.js';
 import {
@@ -124,7 +129,10 @@ export interface AgentBootstrapConfig {
   /** Authenticated integration names (e.g. `github`, `telegram`). */
   authenticatedIntegrations?: string[];
 
-  /** Custom workspace agent ID. */
+  /**
+   * Custom workspace agent ID; the agent config's `seedId` when unset. It names the agent's folder under the
+   * workspace base, so an id whose cleaned name starts or ends with a dot (`.`, `..`) is refused.
+   */
   workspaceId?: string;
 
   /** Custom workspace base directory. */
@@ -402,6 +410,8 @@ export class AgentBootstrap {
    *
    * @param config - Unified bootstrap configuration
    * @returns A fully initialized {@link BootstrappedAgent}
+   * @throws WunderlandConfigError when the workspace id, or the seed id it
+   *   defaults to, names no safe workspace folder (see `workspaceId`).
    */
   static async create(config: AgentBootstrapConfig): Promise<BootstrappedAgent> {
     const base = defaultLogger();
@@ -435,8 +445,28 @@ export class AgentBootstrap {
       typeof agentConfig.seedId === 'string' && agentConfig.seedId.trim()
         ? agentConfig.seedId.trim()
         : `seed_${Date.now()}`;
+    // The id names the agent's folder under the workspace base. An id that
+    // would name the base itself or the folder above it (`.`, `..`) refuses
+    // the config here, before any folder, tool or store is set up.
+    let workspaceAgentId: string;
+    try {
+      workspaceAgentId = sanitizeAgentWorkspaceId(config.workspaceId ?? seedIdForWorkspace);
+    } catch (error) {
+      if (!(error instanceof InvalidAgentWorkspaceIdError)) throw error;
+      logger.warn?.(
+        '[wunderland/bootstrap] Agent config refused: its workspace id names no safe folder',
+        { error: error.message },
+      );
+      throw new WunderlandConfigError(`Invalid agent config: ${error.message}.`, [
+        {
+          path: config.workspaceId !== undefined ? 'workspace.agentId' : 'seedId',
+          message: error.message,
+          hint: 'Use an id that does not start or end with a dot.',
+        },
+      ]);
+    }
     const workspace: WunderlandWorkspace = {
-      agentId: sanitizeAgentWorkspaceId(config.workspaceId ?? seedIdForWorkspace),
+      agentId: workspaceAgentId,
       baseDir: config.workspaceBaseDir ?? resolveAgentWorkspaceBaseDir(),
     };
 

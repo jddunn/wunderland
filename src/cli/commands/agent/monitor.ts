@@ -56,7 +56,7 @@ async function renderDashboard(): Promise<void> {
   const healthMap = new Map<string, { status: 'ok' | 'slow' | 'down'; data?: HealthResponse }>();
   await Promise.all(
     alive.map(async (d) => {
-      const h = await fetchDaemonHealth(d.port);
+      const h = await fetchDaemonHealth(d.port, undefined, d.host);
       healthMap.set(d.seedId, { status: h.status, data: h.data });
     }),
   );

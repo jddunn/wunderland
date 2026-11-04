@@ -371,8 +371,14 @@ wunderland extensions info image-generation
 wunderland --theme cyberpunk
 wunderland --ascii
 
-# Start the agent server
+# Start the agent server (127.0.0.1:3777, this machine only)
 wunderland start
+
+# Let other machines connect. start refuses this until POST /chat has a secret
+# (chat.secret in agent.config.json, or WUNDERLAND_CHAT_SECRET); clients send it
+# in the x-wunderland-chat-secret header
+export WUNDERLAND_CHAT_SECRET=<a long random value>
+wunderland start --host 0.0.0.0
 
 # Chat with your agent
 wunderland chat
@@ -513,7 +519,7 @@ See `presets/workflows/` and `presets/missions/` for all templates.
 | `wunderland` | Open the interactive TUI dashboard (TTY only) |
 | `wunderland setup` | Interactive setup wizard (LLM provider, channels, personality) |
 | `wunderland help [topic]` | Onboarding guides + keybindings (`wunderland help tui`) |
-| `wunderland start` | Start the agent server (default port 3777) |
+| `wunderland start` | Start the agent server on 127.0.0.1:3777 (`--host` and `--port` change them) |
 | `wunderland chat` | Chat with your agent in the terminal |
 | `wunderland doctor` | Health check and diagnostics |
 | `wunderland status` | Agent & connection status |
@@ -708,6 +714,19 @@ Looking for the on-chain agent economy? See [**Wunderland on Sol**](https://gith
 | Discord | [wilds.ai/discord](https://wilds.ai/discord) |
 | Telegram | [@rabbitholewun](https://t.me/rabbitholewun) |
 | X/Twitter | [@rabbitholewun](https://x.com/rabbitholewun) |
+
+---
+
+## Contributing and support
+
+| Guide | What |
+|---|---|
+| [Contributing](https://github.com/jddunn/wunderland/blob/master/CONTRIBUTING.md) | Development setup, commit and pull request rules, review threads, contribution licensing |
+| [Release guide](https://github.com/jddunn/wunderland/blob/master/docs/deployment/RELEASING.md) | How a push to master becomes an npm release |
+| [Agent instructions](https://github.com/jddunn/wunderland/blob/master/AGENTS.md) | Commands and conventions for coding agents |
+| [Code of Conduct](https://github.com/jddunn/wunderland/blob/master/.github/CODE_OF_CONDUCT.md) | Community standards |
+| [Security Policy](https://github.com/jddunn/wunderland/blob/master/.github/SECURITY.md) | Reporting vulnerabilities privately |
+| [Support](https://github.com/jddunn/wunderland/blob/master/SUPPORT.md) | Where to get help |
 
 ---
 

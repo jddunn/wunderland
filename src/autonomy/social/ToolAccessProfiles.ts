@@ -14,12 +14,11 @@
  * Usage:
  * ```typescript
  * import {
- *   TOOL_ACCESS_PROFILES,
+ *   describePermissions,
  *   getToolAccessProfile,
  *   isToolAllowedByProfile,
  *   resolveAllowedTools,
- *   describePermissions,
- * } from 'wunderland/advanced/social';
+ * } from 'wunderland/tools';
  *
  * // Get a named profile
  * const profile = getToolAccessProfile('social-citizen');
@@ -77,9 +76,9 @@ export interface ToolAccessProfile {
   /** One-sentence description */
   description: string;
   /** Tool categories allowed in this profile */
-  allowedCategories: ToolCategory[];
+  allowedCategories: readonly ToolCategory[];
   /** Categories explicitly blocked (overrides allowed) */
-  blockedCategories: ToolCategory[];
+  blockedCategories: readonly ToolCategory[];
   /** Whether filesystem access is allowed */
   allowFileSystem: boolean;
   /** Whether CLI/shell execution is allowed */
@@ -237,16 +236,26 @@ export const TOOL_CATEGORY_MAP: Readonly<Record<string, ToolCategory>> = Object.
 // ============================================================================
 
 /**
+ * Freezes a profile and its category arrays: {@link getToolAccessProfile} hands
+ * the same object to every caller, so a change to one would reach every agent.
+ */
+function defineProfile(profile: ToolAccessProfile): ToolAccessProfile {
+  Object.freeze(profile.allowedCategories);
+  Object.freeze(profile.blockedCategories);
+  return Object.freeze(profile);
+}
+
+/**
  * Registry of all named tool access profiles.
  *
- * Each profile is a frozen object so consumers cannot accidentally mutate the
- * shared definitions at runtime.
+ * Each profile and its category arrays are frozen so consumers cannot mutate
+ * the shared definitions at runtime.
  */
 export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAccessProfile>> = Object.freeze({
   // --------------------------------------------------------------------------
   // Social Citizen — standard social participation
   // --------------------------------------------------------------------------
-  'social-citizen': Object.freeze<ToolAccessProfile>({
+  'social-citizen': defineProfile({
     name: 'social-citizen',
     displayName: 'Social Citizen',
     description: 'Full social participation: post, comment, vote, browse, search, use media, and consult memory for continuity. No file system, CLI, or system access.',
@@ -261,7 +270,7 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
   // --------------------------------------------------------------------------
   // Social Observer — read-only
   // --------------------------------------------------------------------------
-  'social-observer': Object.freeze<ToolAccessProfile>({
+  'social-observer': defineProfile({
     name: 'social-observer',
     displayName: 'Social Observer',
     description: 'Read-only access: browse feeds and search the web. Cannot post, comment, or vote.',
@@ -276,7 +285,7 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
   // --------------------------------------------------------------------------
   // Social Creative — enhanced social with creative tools
   // --------------------------------------------------------------------------
-  'social-creative': Object.freeze<ToolAccessProfile>({
+  'social-creative': defineProfile({
     name: 'social-creative',
     displayName: 'Social Creative',
     description: 'Enhanced social participation with creative tools: all citizen abilities plus voice synthesis and image generation.',
@@ -291,7 +300,7 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
   // --------------------------------------------------------------------------
   // Assistant — private assistant mode
   // --------------------------------------------------------------------------
-  'assistant': Object.freeze<ToolAccessProfile>({
+  'assistant': defineProfile({
     name: 'assistant',
     displayName: 'Assistant',
     description: 'Private assistant mode: search, media, memory, productivity, communication, and read-only file access. No CLI or system modification.',
@@ -306,7 +315,7 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
   // --------------------------------------------------------------------------
   // Developer — local CLI assistant with CLI execution + HITL approval
   // --------------------------------------------------------------------------
-  'developer': Object.freeze<ToolAccessProfile>({
+  'developer': defineProfile({
     name: 'developer',
     displayName: 'Developer',
     description: 'Local developer assistant: full tool access including CLI execution with human-in-the-loop approval for dangerous operations.',
@@ -321,7 +330,7 @@ export const TOOL_ACCESS_PROFILES: Readonly<Record<ToolAccessProfileName, ToolAc
   // --------------------------------------------------------------------------
   // Unrestricted — full access (admin only)
   // --------------------------------------------------------------------------
-  'unrestricted': Object.freeze<ToolAccessProfile>({
+  'unrestricted': defineProfile({
     name: 'unrestricted',
     displayName: 'Unrestricted',
     description: 'Full access to all tools including CLI and system modification. Admin only — use with extreme caution.',

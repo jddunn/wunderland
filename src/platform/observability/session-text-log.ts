@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { WunderlandAgentConfig, WunderlandWorkspace } from '../../channels/api/types.js';
-import { sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
+import { resolveAgentWorkspaceDir } from '../../runtime/tools/workspace.js';
 
 type LoggerLike = {
   warn?: (msg: string, meta?: unknown) => void;
@@ -85,9 +85,23 @@ function toIsoDatePrefix(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 10);
 }
 
+/**
+ * A session's log file name without `.log`: the session id cleaned as agent
+ * ids are, to letters, digits, dots, dashes and underscores and at most 80
+ * characters. The name is used only as `<name>.log` inside the dated folder,
+ * so it is not held to the workspace folder rule: every cleaned id, dots alone
+ * included, names one file there. An id that cleans to nothing names
+ * `agent.log`.
+ */
 function sanitizeSessionLogId(raw: string): string {
-  const cleaned = sanitizeAgentWorkspaceId(raw).slice(0, 120);
-  return cleaned || 'session';
+  const cleaned = String(raw || '')
+    .trim()
+    .replace(/[\\/]/g, '-')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return cleaned || 'agent';
 }
 
 function logLine(
@@ -98,6 +112,12 @@ function logLine(
   return `${new Date(timestamp).toISOString()} ${kind} ${JSON.stringify(payload)}\n`;
 }
 
+/**
+ * Where and whether an agent run writes its per-session text logs.
+ *
+ * @throws InvalidAgentWorkspaceIdError when the logs go to the agent's folder
+ *   under the workspace base and the agent id names no safe folder there.
+ */
 export function resolveWunderlandTextLogConfig(opts: {
   agentConfig?: WunderlandAgentConfig;
   workingDirectory: string;
@@ -128,13 +148,18 @@ export function resolveWunderlandTextLogConfig(opts: {
   } else if (opts.configBacked === true || existsSync(path.join(opts.workingDirectory, 'agent.config.json'))) {
     directory = path.join(opts.workingDirectory, 'logs');
   } else if (opts.workspace?.agentId || opts.defaultAgentId) {
+    // The agent's own folder under the workspace base, resolved as its
+    // workspace is: an id that would name the base itself or the folder above
+    // it (`.`, `..`) is refused instead of given a log folder.
     directory = path.join(
-      path.resolve(
-        typeof opts.workspace?.baseDir === 'string' && opts.workspace.baseDir.trim()
-          ? opts.workspace.baseDir
-          : opts.workingDirectory,
+      resolveAgentWorkspaceDir(
+        opts.defaultAgentId ?? String(opts.workspace?.agentId ?? 'agent'),
+        path.resolve(
+          typeof opts.workspace?.baseDir === 'string' && opts.workspace.baseDir.trim()
+            ? opts.workspace.baseDir
+            : opts.workingDirectory,
+        ),
       ),
-      sanitizeAgentWorkspaceId(opts.defaultAgentId ?? String(opts.workspace?.agentId ?? 'agent')),
       'logs',
     );
   } else {

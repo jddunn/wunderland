@@ -18,7 +18,7 @@ This directory contains all Wunderland package documentation, organized into the
 | `cli/` | Interactive-wizard CLI (front door for `wunderland create "..."`) |
 | `types/` | Cross-cutting type definitions |
 
-The `index.ts` and `public/` directories define the public API. The `package.json` `exports` field exposes 3 subpaths: `.`, `./api`, `./discovery`. Everything else is internal. See [CHANGELOG.md](../CHANGELOG.md) `## 0.72.0` for the migration table from the previous layout.
+The `index.ts` and `public/` directories define the public API. The `package.json` `exports` field exposes nine entries: `.`, `./api`, `./discovery`, `./core`, `./seed`, `./tools`, `./rag`, `./jobs` and `./security`. Everything else is internal. [Library API](features/LIBRARY_API.md#subpath-entries) lists what each one holds.
 
 ## Sections
 
@@ -32,7 +32,7 @@ Release processes, CI/CD automation, and infrastructure setup. Covers npm packag
 
 ### [extensions/](extensions/)
 
-Extension system architecture, standards, and guides. Covers the final extension architecture design, auth extraction, marketplace integration, and extension refactoring plans.
+Extension system architecture, standards, and guides. Covers the final extension architecture design, auth extraction and marketplace integration.
 
 ### [features/](features/)
 
@@ -45,14 +45,6 @@ Onboarding, contributing guidelines, documentation standards, and CLI/TUI guide.
 ### [security/](security/)
 
 Security architecture and threat modeling. Covers isolation and sandboxing strategies, prompt injection defenses, and role-based access control (RBAC).
-
-### [internal/](internal/)
-
-Development diary, audits, TODOs, verification checklists, integration notes, release notes, and implementation summaries. Covers architecture audit, design system audit, social network audit, Wunderland integration audit, GMI integration TODO, evals harness demo, jobs implementation summary, Codex validation guide, landing page implementation notes, and v0.1.0 release notes.
-
-### [legacy/](legacy/)
-
-Outdated documents referencing superseded systems (Codex specs, OpenStrand progress, old SaaS starter, Supabase/Stripe setup, Rabbithole brand guide). Retained for historical reference.
 
 ### [moods/](moods/)
 

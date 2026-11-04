@@ -1,6 +1,6 @@
 {
   "name": "wunderland",
-  "version": "0.83.0",
+  "version": "0.88.0",
   "description": "Autonomous AI agents you deploy in 30 seconds across any channel. Interactive setup wizard, 37 channel adapters, HEXACO personality and cognitive memory powered by AgentOS, five-tier prompt-injection defense.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,6 +17,34 @@
     "./discovery": {
       "import": "./dist/platform/discovery/discovery-index.js",
       "types": "./dist/platform/discovery/discovery-index.d.ts"
+    },
+    "./core": {
+      "import": "./dist/types/core-types.js",
+      "types": "./dist/types/core-types.d.ts"
+    },
+    "./seed": {
+      "import": "./dist/agents/builder/WunderlandSeed.js",
+      "types": "./dist/agents/builder/WunderlandSeed.d.ts"
+    },
+    "./tools": {
+      "import": "./dist/public/tools.js",
+      "types": "./dist/public/tools.d.ts"
+    },
+    "./rag": {
+      "import": "./dist/memory/rag/rag-index.js",
+      "types": "./dist/memory/rag/rag-index.d.ts"
+    },
+    "./jobs": {
+      "import": "./dist/autonomy/jobs/index.js",
+      "types": "./dist/autonomy/jobs/index.d.ts"
+    },
+    "./security": {
+      "import": "./dist/security/index.js",
+      "types": "./dist/security/index.d.ts"
+    },
+    "./report": {
+      "import": "./dist/cli/export/report-export.js",
+      "types": "./dist/cli/export/report-export.d.ts"
     }
   },
   "files": [
@@ -34,6 +62,8 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "smoke:dist": "node scripts/smoke-dist.mjs",
     "test:security": "vitest run --reporter=verbose src/security",
     "lint": "eslint src --ext .ts",
     "clean": "rm -rf dist",
@@ -79,16 +109,16 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
-    "@framers/agentos": "^0.9.137",
-    "@framers/agentos-ext-cli-executor": "^1.2.0",
-    "@framers/agentos-ext-giphy": "^1.0.0",
-    "@framers/agentos-ext-image-search": "^1.0.0",
-    "@framers/agentos-ext-news-search": "^1.0.0",
-    "@framers/agentos-ext-voice-synthesis": "^2.0.1",
-    "@framers/agentos-ext-web-browser": "^1.2.1",
-    "@framers/agentos-ext-web-search": "^1.1.1",
-    "@framers/agentos-extensions-registry": "^0.18.2",
-    "@framers/sql-storage-adapter": "^0.6.8",
+    "@framers/agentos": "^0.15.58",
+    "@framers/agentos-ext-cli-executor": "^1.3.2",
+    "@framers/agentos-ext-giphy": "^1.1.2",
+    "@framers/agentos-ext-image-search": "^1.1.2",
+    "@framers/agentos-ext-news-search": "^1.1.2",
+    "@framers/agentos-ext-voice-synthesis": "^3.1.1",
+    "@framers/agentos-ext-web-browser": "^1.3.3",
+    "@framers/agentos-ext-web-search": "^1.3.3",
+    "@framers/agentos-extensions-registry": "^0.18.15",
+    "@framers/sql-storage-adapter": "^0.8.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.201.1",
     "@opentelemetry/auto-instrumentations-node": "^0.59.0",
@@ -112,11 +142,11 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@framers/agentos-ext-code-safety": "^0.2.1",
-    "@framers/agentos-ext-grounding-guard": "^0.2.1",
-    "@framers/agentos-ext-ml-classifiers": "^0.3.1",
-    "@framers/agentos-ext-pii-redaction": "^0.2.1",
-    "@framers/agentos-ext-topicality": "^0.2.2"
+    "@framers/agentos-ext-code-safety": ">=0.2.1",
+    "@framers/agentos-ext-grounding-guard": ">=0.2.2",
+    "@framers/agentos-ext-ml-classifiers": ">=0.3.1",
+    "@framers/agentos-ext-pii-redaction": ">=0.2.1",
+    "@framers/agentos-ext-topicality": ">=0.2.2"
   },
   "peerDependenciesMeta": {
     "@framers/agentos-ext-pii-redaction": {
@@ -136,23 +166,23 @@
     }
   },
   "optionalDependencies": {
-    "@framers/agentos-ext-amazon-polly": "^0.2.0",
-    "@framers/agentos-ext-diarization": "^0.2.0",
-    "@framers/agentos-ext-endpoint-semantic": "^0.2.0",
-    "@framers/agentos-ext-google-cloud-stt": "^0.2.0",
-    "@framers/agentos-ext-google-cloud-tts": "^0.2.0",
-    "@framers/agentos-ext-openwakeword": "^0.2.0",
-    "@framers/agentos-ext-piper": "^0.2.0",
-    "@framers/agentos-ext-porcupine": "^0.2.0",
-    "@framers/agentos-ext-streaming-stt-deepgram": "^0.2.0",
-    "@framers/agentos-ext-streaming-stt-whisper": "^0.2.0",
-    "@framers/agentos-ext-streaming-tts-elevenlabs": "^0.2.0",
-    "@framers/agentos-ext-streaming-tts-openai": "^0.2.0",
-    "@framers/agentos-ext-vosk": "^0.2.0",
-    "@framers/agentos-skills-registry": "^0.18.4"
+    "@framers/agentos-ext-amazon-polly": "^0.2.4",
+    "@framers/agentos-ext-diarization": "^0.2.4",
+    "@framers/agentos-ext-endpoint-semantic": "^0.2.4",
+    "@framers/agentos-ext-google-cloud-stt": "^0.3.7",
+    "@framers/agentos-ext-google-cloud-tts": "^0.3.7",
+    "@framers/agentos-ext-openwakeword": "^0.2.4",
+    "@framers/agentos-ext-piper": "^0.2.4",
+    "@framers/agentos-ext-porcupine": "^0.2.4",
+    "@framers/agentos-ext-streaming-stt-deepgram": "^0.2.4",
+    "@framers/agentos-ext-streaming-stt-whisper": "^0.2.5",
+    "@framers/agentos-ext-streaming-tts-elevenlabs": "^0.2.5",
+    "@framers/agentos-ext-streaming-tts-openai": "^0.2.5",
+    "@framers/agentos-ext-vosk": "^0.2.4",
+    "@framers/agentos-skills-registry": "^0.19.8"
   },
   "devDependencies": {
-    "@framers/agentos-skills-registry": "^0.18.4",
+    "@framers/agentos-skills-registry": "^0.19.8",
     "@types/node": "^20.10.0",
     "@types/uuid": "^9.0.0",
     "@vitest/coverage-v8": "^1.3.0",

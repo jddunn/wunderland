@@ -1,10 +1,32 @@
 // @ts-nocheck
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runToolCallingTurn, type ToolInstance } from '../runtime/tools/tool-calling.js';
 import { createSchemaOnDemandTools } from '../runtime/execution/schema-on-demand.js';
+
+/**
+ * Whether the curated image-generation pack can load in this checkout.
+ *
+ * It loads from the installed npm package when that package has its entry
+ * point, or from the monorepo's sibling `agentos-extensions` checkout. The
+ * 1.0.1 tarball on npm was published without build output, so a standalone
+ * install has neither; the curated-pack test runs wherever one of them exists.
+ */
+function curatedImagePackIsLoadable(): boolean {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  if (existsSync(path.resolve(here, '../../../agentos-extensions/registry/curated/tools/image-generation'))) {
+    return true;
+  }
+  for (let dir = here; ; dir = path.dirname(dir)) {
+    const pack = path.join(dir, 'node_modules', '@framers', 'agentos-ext-image-generation');
+    if (existsSync(path.join(pack, 'package.json'))) return existsSync(path.join(pack, 'dist', 'index.js'));
+    if (path.dirname(dir) === dir) return false;
+  }
+}
 
 function mockOpenAIChatCompletionSequence(messages: Array<Record<string, unknown>>) {
   const queue = messages.slice();
@@ -724,7 +746,7 @@ describe('runToolCallingTurn (integration)', () => {
     }
   }, 20000);
 
-  it('loads local curated packs when enabling via curated extension name', async () => {
+  it.skipIf(!curatedImagePackIsLoadable())('loads local curated packs when enabling via curated extension name', async () => {
     const toolMap = new Map<string, ToolInstance>();
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wunderland-workspace-'));
     const agentId = 'agent-curated-pack-test';

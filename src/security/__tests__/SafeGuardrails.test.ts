@@ -21,7 +21,7 @@ describe('SafeGuardrails', () => {
   });
 
   describe('validateBeforeExecution', () => {
-    it('should allow tools without folder permissions configured', async () => {
+    describe('an agent with no folder permissions', () => {
       const request: GuardrailsRequest = {
         toolId: 'file_read',
         toolName: 'file_read',
@@ -29,8 +29,33 @@ describe('SafeGuardrails', () => {
         agentId: 'test-agent',
       };
 
-      const result = await guardrails.validateBeforeExecution(request);
-      expect(result.allowed).toBe(true);
+      it('is denied filesystem tools by default', async () => {
+        const result = await guardrails.validateBeforeExecution(request);
+
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("no folderPermissions configured for agent 'test-agent'");
+        expect(result.violations?.[0].severity).toBe('high');
+      });
+
+      it('is denied when the option is passed as undefined', async () => {
+        const strict = new SafeGuardrails({
+          enableAuditLogging: false,
+          enableNotifications: false,
+          requireFolderPermissionsForFilesystemTools: undefined,
+        });
+
+        expect((await strict.validateBeforeExecution(request)).allowed).toBe(false);
+      });
+
+      it('is allowed only when the host opts out', async () => {
+        const permissive = new SafeGuardrails({
+          enableAuditLogging: false,
+          enableNotifications: false,
+          requireFolderPermissionsForFilesystemTools: false,
+        });
+
+        expect((await permissive.validateBeforeExecution(request)).allowed).toBe(true);
+      });
     });
 
     it('should allow non-filesystem tools', async () => {

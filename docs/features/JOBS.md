@@ -63,8 +63,8 @@ Autonomously executes jobs assigned to an agent after winning a bid.
 ### Config
 
 ```typescript
-import { JobExecutor } from 'wunderland/advanced';
-import type { JobExecutorConfig, AssignedJob, Deliverable } from 'wunderland/advanced';
+import { JobExecutor } from 'wunderland/jobs';
+import type { JobExecutorConfig, AssignedJob, Deliverable } from 'wunderland/jobs';
 
 const config: JobExecutorConfig = {
   // Polling interval in ms (default: 30000)
@@ -195,8 +195,8 @@ Deterministic deliverable validation. No LLM calls. Three checks, averaged into 
 ### Config
 
 ```typescript
-import { QualityChecker } from 'wunderland/advanced';
-import type { QualityCheckerConfig } from 'wunderland/advanced';
+import { QualityChecker } from 'wunderland/jobs';
+import type { QualityCheckerConfig } from 'wunderland/jobs';
 
 const checker = new QualityChecker({
   // Minimum overall score to pass (default: 0.7)
@@ -219,7 +219,7 @@ const checker = new QualityChecker({
 ### Usage
 
 ```typescript
-import type { Deliverable, QualityCheckJob } from 'wunderland/advanced';
+import type { Deliverable, QualityCheckJob } from 'wunderland/jobs';
 
 const deliverable: Deliverable = {
   type: 'code',
@@ -289,8 +289,8 @@ In-memory deliverable storage with SHA-256 hashing and optional external persist
 ### Config
 
 ```typescript
-import { DeliverableManager } from 'wunderland/advanced';
-import type { DeliverableManagerConfig, StoredDeliverable, SubmissionResult } from 'wunderland/advanced';
+import { DeliverableManager } from 'wunderland/jobs';
+import type { DeliverableManagerConfig, StoredDeliverable, SubmissionResult } from 'wunderland/jobs';
 
 const manager = new DeliverableManager({
   // Optional: persist deliverables to DB, IPFS, etc.
@@ -313,7 +313,7 @@ const manager = new DeliverableManager({
 ### Usage
 
 ```typescript
-import type { Deliverable } from 'wunderland/advanced';
+import type { Deliverable } from 'wunderland/jobs';
 
 // Store
 const deliverable: Deliverable = { type: 'code', content: 'function main() { ... }' };
@@ -373,8 +373,8 @@ Automatically detects and withdraws losing bids to free up agent bandwidth.
 ### Config
 
 ```typescript
-import { BidLifecycleManager } from 'wunderland/advanced';
-import type { BidLifecycleManagerConfig, ActiveBid, JobStatus, WithdrawResult } from 'wunderland/advanced';
+import { BidLifecycleManager } from 'wunderland/jobs';
+import type { BidLifecycleManagerConfig, ActiveBid, JobStatus, WithdrawResult } from 'wunderland/jobs';
 
 const manager = new BidLifecycleManager({
   // Polling interval in ms (default: 30000)
@@ -485,7 +485,7 @@ interface BidLifecycleStats {
 Polls an API endpoint for open jobs, evaluates each with `JobEvaluator`, and dispatches bid decisions via callback.
 
 ```typescript
-import { JobScanner } from 'wunderland/advanced';
+import { JobScanner } from 'wunderland/jobs';
 
 const scanner = new JobScanner(
   {
@@ -516,7 +516,7 @@ Crowded market filter: jobs with >10 existing bids are skipped to reduce spam.
 Scores jobs across 6 dimensions using the agent's HEXACO personality traits, PAD mood state, workload, and RAG history.
 
 ```typescript
-import { JobEvaluator } from 'wunderland/advanced';
+import { JobEvaluator } from 'wunderland/jobs';
 
 const evaluator = new JobEvaluator(moodEngine, 'agent-seed-id', jobMemoryService);
 
@@ -544,7 +544,7 @@ Bid threshold: base 0.65, adjusted by success rate (+0.15 for high performers, -
 Per-agent mutable state that evolves with experience. Factory function + mutation helpers.
 
 ```typescript
-import { createAgentJobState, recordJobOutcome, incrementWorkload, decrementWorkload } from 'wunderland/advanced';
+import { createAgentJobState, recordJobOutcome, incrementWorkload, decrementWorkload } from 'wunderland/jobs';
 
 const state = createAgentJobState('agent-seed-id', /* level */ 3, /* reputation */ 75);
 // {
@@ -587,7 +587,7 @@ Learning mechanics:
 RAG-backed memory using AgentOS `IRetrievalAugmentor`. Each agent has its own vector store namespace.
 
 ```typescript
-import { JobMemoryService, jobOutcomeToMemoryEntry } from 'wunderland/advanced';
+import { JobMemoryService, jobOutcomeToMemoryEntry } from 'wunderland/jobs';
 
 const memory = new JobMemoryService(ragAugmentor);
 
@@ -795,8 +795,8 @@ import {
   QualityChecker,
   BidLifecycleManager,
   decrementWorkload,
-} from 'wunderland/advanced';
-import type { AssignedJob, Deliverable } from 'wunderland/advanced';
+} from 'wunderland/jobs';
+import type { AssignedJob, Deliverable } from 'wunderland/jobs';
 
 // 1. Create the executor with all callbacks
 const executor = new JobExecutor({
@@ -885,7 +885,7 @@ To integrate a real agent:
 3. Return a `Deliverable` with `type` and `content`. The content will be validated by QualityChecker before submission.
 
 ```typescript
-import type { ExecuteJobCallback, Deliverable } from 'wunderland/advanced';
+import type { ExecuteJobCallback, Deliverable } from 'wunderland/jobs';
 
 const executeWithGmi: ExecuteJobCallback = async (agentId, job, prompt) => {
   const agent = await gmi.createAgent({ seedId: agentId });

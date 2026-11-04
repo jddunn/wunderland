@@ -220,6 +220,13 @@ export function generateEnvTemplate(opts: {
   lines.push(`PORT=${opts.port}`);
   lines.push(`OPENAI_MODEL=${opts.llmModel ?? 'gpt-4o'}`);
   lines.push('');
+  lines.push(
+    '# Required: the container listens on every interface, and wunderland start refuses',
+    '# to until POST /chat has a secret. Use a long random value; clients send it in the',
+    '# x-wunderland-chat-secret header.',
+    'WUNDERLAND_CHAT_SECRET=',
+    '',
+  );
 
   if (envVars.length > 0) {
     lines.push('# Required secrets (derived from agent config)');

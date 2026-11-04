@@ -19,15 +19,29 @@ import { initChannelRuntime, wireDiscordExtensions, subscribeChannelAdapters } f
 import { createAgentHttpServer } from './http-server.js';
 import { startServerAndDisplay } from './startup-display.js';
 import { bootstrapRagKnowledge } from './rag-bootstrap.js';
+import { resolveListenHost } from '../../../channels/api/listen-host.js';
 
 export default async function cmdStart(
   _args: string[],
   flags: Record<string, string | boolean>,
   globals: GlobalFlags,
 ): Promise<void> {
+  // POST /chat answers without a secret unless one is configured, so the
+  // server listens on 127.0.0.1 unless --host names another address. A bad
+  // --host stops here, before any startup work.
+  let host: string;
+  try {
+    host = resolveListenHost(flags['host']);
+  } catch (err) {
+    fmt.errorBlock('Invalid --host', err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+    return;
+  }
+
   const ctx: any = {
     flags,
     globals,
+    host,
     startTime: Date.now(),
   };
 

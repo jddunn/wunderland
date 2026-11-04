@@ -11,6 +11,7 @@ import {
   getPermissionsForSet,
 } from '../../../runtime/tools/policy.js';
 import { startWunderlandOtel } from '../../../platform/observability/otel.js';
+import { sanitizeAgentWorkspaceId } from '../../../runtime/tools/workspace.js';
 import {
   createWunderlandSeed,
   DEFAULT_INFERENCE_HIERARCHY,
@@ -41,6 +42,10 @@ export async function initializeSeed(ctx: any): Promise<void> {
   }
 
   const seedId = String(cfg.seedId || 'seed_local_agent');
+  // The seed id names the agent's workspace folder, so it is checked before
+  // telemetry or storage starts: an id whose cleaned name starts or ends with
+  // a dot stops startup here with the rule's message.
+  sanitizeAgentWorkspaceId(seedId);
   const displayName = resolveAgentDisplayName({
     displayName: cfg.displayName,
     agentName: cfg.agentName,

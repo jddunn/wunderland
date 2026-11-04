@@ -39,7 +39,7 @@ export default async function cmdPs(
     : new Map(
         await Promise.all(
           alive.map(async (d) => {
-            const h = await fetchDaemonHealth(d.port);
+            const h = await fetchDaemonHealth(d.port, undefined, d.host);
             return [d.seedId, { status: h.status, mem: h.data?.memory?.rss }] as const;
           }),
         ),

@@ -108,6 +108,7 @@ const GLOBAL_FLAGS = [
   '--no-tui',
   '--config',
   '--port',
+  '--host',
   '--model',
   '--preset',
   '--security-tier',
