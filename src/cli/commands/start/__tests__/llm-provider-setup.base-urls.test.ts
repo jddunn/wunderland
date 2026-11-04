@@ -438,6 +438,46 @@ describe('start: the discovery index', () => {
     expect(embedding?.baseUrl).toBe(`${origin}${base}`);
     expect(embedding?.apiKey).toBe(KEYS[keyName]);
   });
+
+  // `discovery.embeddingProvider` in agent.config.json names an embedding
+  // provider other than the LLM's: the index embeds with that provider's own
+  // key at its own base-URL variable, never with the LLM provider's key or URL.
+  it.each([
+    ['anthropic', 'openai', 'OPENAI_API_KEY', '/openai/v1'],
+    ['openrouter', 'openai', 'OPENAI_API_KEY', '/openai/v1'],
+    ['openai', 'openrouter', 'OPENROUTER_API_KEY', '/openrouter/api/v1'],
+    ['anthropic', 'openrouter', 'OPENROUTER_API_KEY', '/openrouter/api/v1'],
+  ])('a %s primary with discovery.embeddingProvider %s embeds with %s at its base-URL variable', async (provider, embeddingProvider, keyName, base) => {
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY');
+    const ctx = await startCtx(provider);
+
+    const embedding = resolveEmbeddingConfig({
+      embeddingProvider,
+      llmProviderId: ctx.providerId,
+      llmApiKey: ctx.llmApiKey,
+      llmBaseUrl: ctx.llmBaseUrl,
+    });
+
+    expect(embedding?.providerId).toBe(embeddingProvider);
+    expect(embedding?.baseUrl).toBe(`${origin}${base}`);
+    expect(embedding?.apiKey).toBe(KEYS[keyName]);
+  });
+
+  it("an embedding provider whose key is unset gets no index, never the LLM provider's key", async () => {
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY');
+    const ctx = await startCtx('openai');
+
+    const embedding = resolveEmbeddingConfig({
+      embeddingProvider: 'openrouter',
+      llmProviderId: ctx.providerId,
+      llmApiKey: ctx.llmApiKey,
+      llmBaseUrl: ctx.llmBaseUrl,
+    });
+
+    expect(embedding).toBeNull();
+  });
 });
 
 describe('start: with the variables unset', () => {
