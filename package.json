@@ -96,6 +96,9 @@
     "url": "https://rabbithole.inc"
   },
   "license": "Apache-2.0",
+  "publishConfig": {
+    "provenance": true
+  },
   "homepage": "https://wunderland.sh",
   "repository": {
     "type": "git",
