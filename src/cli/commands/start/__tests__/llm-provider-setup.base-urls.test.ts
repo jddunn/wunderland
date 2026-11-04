@@ -87,10 +87,12 @@ function answer(method: string, url: string, body: any): { status: number; json:
   }
   if (method === 'GET' && pathname.endsWith('/headlines')) {
     // The curated picks scraper: one headline per category, unique per request.
+    // The title is one random word, so no two titles read as similar.
     const category = pathname.split('/').at(-2) ?? 'tech';
+    const word = Math.random().toString(36).slice(2);
     return {
       status: 200,
-      json: { headlines: [{ title: `A ${category} story ${Math.random()}`, url: `https://news.example.com/${category}/${Date.now()}-${Math.random()}`, date: '' }] },
+      json: { headlines: [{ title: word, url: `https://news.example.com/${category}/${word}`, date: '' }] },
     };
   }
   if (pathname.endsWith('/embeddings')) {
@@ -781,6 +783,34 @@ describe('start: the Discord welcome and curated picks posts', () => {
       expect(hits[0].headers[OP_HEADER]).not.toBe(hits[1].headers[OP_HEADER]);
       expect(service.sent.map((s) => s.channelId)).toEqual(['picks-channel']);
       expect(escaped).toEqual([]);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('cycles started together run one at a time, so they post no more than the daily limit of 2', async () => {
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY');
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'wunderland-picks-'));
+    try {
+      const service = fakeDiscordService();
+      const picks = createCuratedPicksHandler({
+        channelId: 'picks-channel',
+        openaiApiKey: KEYS.OPENAI_API_KEY,
+        systemPrompt: '',
+        scraperApiUrl: `${origin}/scraper`,
+        cacheFile: path.join(dir, 'curated-picks-cache.json'),
+      });
+
+      await Promise.all([
+        picks.runCurationCycle(service),
+        picks.runCurationCycle(service),
+        picks.runCurationCycle(service),
+      ]);
+
+      expect(service.sent).toHaveLength(2);
+      const cache = JSON.parse(await fs.readFile(path.join(dir, 'curated-picks-cache.json'), 'utf8'));
+      expect(cache).toHaveLength(2);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
