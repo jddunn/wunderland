@@ -34,6 +34,7 @@ import {
   resolveRequestScopedPersonaRuntime,
 } from '../../../../runtime/execution/request-persona.js';
 import { buildOllamaRuntimeOptions } from '../../../../runtime/tools/ollama-options.js';
+import { allowedToolNamesFor } from '../../../../runtime/tools/tool-allow-list.js';
 
 import {
   readBody,
@@ -344,6 +345,8 @@ export async function handleChatRoutes(
         model,
         messages: workingMessages,
         toolMap: requestToolMap,
+        // tools.allow holds for every persona the request selects.
+        allowedToolNames: allowedToolNamesFor(cfg),
         ...(apiFilteredGetToolDefs && { getToolDefs: apiFilteredGetToolDefs }),
         toolContext,
         maxRounds: 8,

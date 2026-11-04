@@ -956,7 +956,7 @@ wunderland v0.27.0
 - `wunderland setup` — Interactive onboarding wizard
 - `wunderland init <dir>` — Scaffold new project (prompts for preset)
 - `wunderland create [description]` — Create agent from natural language
-- `wunderland start` — Start local agent server (long-running). It listens on `127.0.0.1`, this machine only. `--host 0.0.0.0` lets other machines connect once a chat secret is set (`chat.secret` in `agent.config.json` or `WUNDERLAND_CHAT_SECRET`); without one, start refuses to listen there, since `POST /chat` would answer anyone who can reach the port.
+- `wunderland start` — Start local agent server (long-running). It listens on `127.0.0.1`, this machine only. `--host 0.0.0.0` lets other machines connect once a chat secret is set (`chat.secret` in `agent.config.json` or `WUNDERLAND_CHAT_SECRET`); without one, start refuses to listen there, since `POST /chat` would answer anyone who can reach the port. `tools.allow` in `agent.config.json` (`{ "tools": { "allow": { "packs": ["web-search"], "tools": ["web_search"] } } }`) limits the agent to the packs it names and the tools it names: start loads no other extension pack (channel packs still load from `channels`), `extensions_enable` refuses any other pack, and a call to any other tool is answered `tool_not_allowed` and never runs, whatever the permission set, tool access profile and execution mode allow ([Tool Allow-List](features/PRESETS_AND_PERMISSIONS.md#tool-allow-list-toolsallow)).
 - `wunderland chat` — Interactive terminal assistant (REPL)
 - `wunderland channels add` — Add channel interactively
 - `wunderland ollama-setup` — Configure Ollama (interactive)

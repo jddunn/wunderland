@@ -12,6 +12,7 @@ import type { ToolInstance } from '../tools/tool-calling.js';
 import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile } from '../tools/policy.js';
 import { normalizeExtensionName } from '../../cli/extensions/aliases.js';
 import { createSpeechExtensionEnvOverrides } from '../../channels/voice/speech-catalog.js';
+import { TOOL_NOT_ALLOWED } from '../tools/tool-allow-list.js';
 
 type ExtensionsListOutput = {
   curated: ExtensionInfo[];
@@ -126,6 +127,14 @@ export function createSchemaOnDemandTools(opts: {
    * Default: false.
    */
   allowUnknownPackages?: boolean;
+  /**
+   * The only packs `extensions_enable` may load (an agent config's
+   * `tools.allow.packs`), by curated name (`web-search`) or package name. A
+   * request for any other pack, by either name, is answered
+   * `tool_not_allowed` before anything is imported. Omitted, every curated
+   * pack is eligible.
+   */
+  allowedPackages?: readonly string[];
   logger?: { info?: (...args: any[]) => void; warn?: (...args: any[]) => void; error?: (...args: any[]) => void };
   /** Called after extensions_enable loads new tools into toolMap. */
   onToolsChanged?: (toolsAdded: string[]) => void;
@@ -135,6 +144,9 @@ export function createSchemaOnDemandTools(opts: {
   const allowPackages =
     typeof opts.allowPackages === 'boolean' ? opts.allowPackages : process.env['NODE_ENV'] !== 'production';
   const allowUnknownPackages = opts.allowUnknownPackages === true;
+  const allowedPackages = Array.isArray(opts.allowedPackages)
+    ? new Set(opts.allowedPackages.map((name) => normalizeExtensionName(String(name ?? ''))).filter(Boolean))
+    : undefined;
 
   for (const pkg of opts.initialEnabledPackages ?? []) {
     if (pkg) enabledPackages.add(String(pkg));
@@ -216,6 +228,17 @@ export function createSchemaOnDemandTools(opts: {
           : undefined;
 
       const catalog = await getCatalog();
+
+      if (allowedPackages) {
+        // A pack is allowed when the list names it by its curated name or its
+        // package name; an unknown name is outside the list.
+        const named = catalog.find((e) => e.name === ref || e.packageName === ref);
+        const names = [ref, named?.name, named?.packageName].filter(Boolean) as string[];
+        if (!names.some((name) => allowedPackages.has(name))) {
+          log.warn?.(`[schema-on-demand] extensions_enable refused ${ref}: not in tools.allow.packs`);
+          return { success: false, error: TOOL_NOT_ALLOWED };
+        }
+      }
 
       let entry: ExtensionInfo | undefined;
       let packageName: string | undefined;

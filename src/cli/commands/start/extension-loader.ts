@@ -10,6 +10,7 @@ import * as fmt from '../../ui/format.js';
 import { type ToolInstance, getGuardrailsInstance } from '../../../runtime/tools/tool-calling.js';
 import { createSchemaOnDemandTools } from '../../../runtime/execution/schema-on-demand.js';
 import { filterToolMapByPolicy } from '../../../runtime/tools/policy.js';
+import { confineToolMap, resolveToolAllowList } from '../../../runtime/tools/tool-allow-list.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { normalizeExtensionList } from '../../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../../extensions/settings.js';
@@ -62,6 +63,13 @@ export async function loadExtensions(ctx: any): Promise<void> {
     LOCAL_ONLY_CHANNELS,
     CLI_REQUIRED_CHANNELS,
   } = ctx;
+
+  // tools.allow: the only packs this agent may load and the only tools it may
+  // keep, whatever the permission set, tool access profile or defaults say.
+  const toolAllowList = resolveToolAllowList(cfg);
+  const allowedPacks = toolAllowList ? new Set(toolAllowList.packs) : undefined;
+  const confinePacks = (names: string[]): string[] =>
+    allowedPacks ? names.filter((name) => allowedPacks.has(name)) : names;
 
   const preloadedPackages: string[] = [];
   let activePacks: any[] = [];
@@ -137,7 +145,10 @@ export async function loadExtensions(ctx: any): Promise<void> {
 
     // Merge: agent config > global config > hardcoded defaults
     const globalExts = globalConfig?.extensions;
-    const hardcodedTools = ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'image-generation', 'video-generation', 'audio-generation', 'vision-pipeline', 'news-search', 'weather', 'skills', 'deep-research', 'github', 'web-scraper', 'document-export', 'widget-generator'];
+    // With tools.allow, its packs are the default in place of this list.
+    const hardcodedTools = toolAllowList
+      ? [...toolAllowList.packs]
+      : ['cli-executor', 'web-search', 'web-browser', 'browser-automation', 'content-extraction', 'credential-vault', 'giphy', 'image-search', 'image-generation', 'video-generation', 'audio-generation', 'vision-pipeline', 'news-search', 'weather', 'skills', 'deep-research', 'github', 'web-scraper', 'document-export', 'widget-generator'];
 
     // Category-aware loading: if agent config defines extensionCategories,
     // expand categories to extension IDs instead of using hardcoded defaults.
@@ -158,6 +169,18 @@ export async function loadExtensions(ctx: any): Promise<void> {
       extensionsFromConfig?.productivity ?? globalExts?.productivity ?? [],
     );
 
+    // A config or global extension list can narrow tools.allow, never widen it.
+    if (allowedPacks) {
+      const configured = [...toolExtensions, ...voiceExtensions, ...productivityExtensions];
+      toolExtensions = confinePacks(toolExtensions);
+      voiceExtensions = confinePacks(voiceExtensions);
+      productivityExtensions = confinePacks(productivityExtensions);
+      const skipped = configured.filter((name) => !allowedPacks.has(name));
+      if (skipped.length > 0) {
+        fmt.note(`tools.allow: not loading ${[...new Set(skipped)].join(', ')}`);
+      }
+    }
+
     // Smart extension recommendations based on detected credentials
     const allEnabled = [
       ...(toolExtensions ?? []),
@@ -165,10 +188,11 @@ export async function loadExtensions(ctx: any): Promise<void> {
       ...(productivityExtensions ?? []),
     ];
 
-    const recs = await getRecommendations({
+    // Credential-based recommendations stay inside tools.allow too.
+    const recs = (await getRecommendations({
       env: process.env,
       enabledExtensions: allEnabled,
-    });
+    })).filter((r) => !allowedPacks || allowedPacks.has(r.extensionId));
 
     if (recs.length > 0) {
       const summary = formatRecommendations(recs);
@@ -469,7 +493,9 @@ export async function loadExtensions(ctx: any): Promise<void> {
     secrets: schemaOnDemandSecrets,
     getSecret: schemaOnDemandGetSecret,
     defaultExtensionOptions: schemaOnDemandOptions,
-    allowPackages: true,
+    // With tools.allow: no packages by npm name, and only the listed packs.
+    allowPackages: !toolAllowList,
+    ...(toolAllowList ? { allowedPackages: toolAllowList.packs } : {}),
     logger: console,
     onToolsChanged: () => {
       ctx.discoveryManager?.reindex?.({ toolMap }).catch(() => {});
@@ -544,8 +570,17 @@ export async function loadExtensions(ctx: any): Promise<void> {
   toolMap.clear();
   for (const [k, v] of filtered.toolMap.entries()) toolMap.set(k, v);
 
+  // tools.allow: keep only the listed tools, whatever registered the others.
+  const confineToAllowList = (): void => {
+    if (!toolAllowList) return;
+    const dropped = confineToolMap(toolMap, toolAllowList.tools);
+    if (dropped.length > 0) fmt.note(`tools.allow: dropped ${dropped.join(', ')}`);
+  };
+  confineToAllowList();
+
   // ── Agent wallet extension (opt-in via agent.config.json wallet.enabled) ──
-  if (cfg?.wallet?.enabled) {
+  // With tools.allow, the wallet pack loads only when the list names `wallet`.
+  if (cfg?.wallet?.enabled && (!allowedPacks || allowedPacks.has('wallet'))) {
     try {
       const { createExtensionPack: createWalletPack } = await import(
         '@framers/agentos-ext-wallet' as string
@@ -604,6 +639,10 @@ export async function loadExtensions(ctx: any): Promise<void> {
     });
     toolMap.set('request_folder_access', folderAccessTool as any);
   }
+
+  // The wallet pack and the folder-access tool register after the policy
+  // filter; the list holds for them too.
+  confineToAllowList();
 
   ctx.toolMap = toolMap;
   ctx.activePacks = activePacks;
