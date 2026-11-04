@@ -365,6 +365,33 @@ describe('start: the fallback chain', () => {
   });
 });
 
+describe('start: the Gemini fallback candidate', () => {
+  it("goes to Gemini's OpenAI-compatible endpoint with the Gemini key, never to OpenAI", async () => {
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY');
+    process.env['GEMINI_API_KEY'] = 'gemini-test-key';
+    const ctx = await startCtx('openai');
+    expect(ctx.openrouterFallback.baseUrl).toBe('https://generativelanguage.googleapis.com/v1beta/openai');
+
+    await openaiChatWithTools({
+      apiKey: 'sk-down',
+      model: 'model-down',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [],
+      temperature: 0,
+      maxTokens: 8,
+      baseUrl: `${origin}/down/v1`,
+      fallback: ctx.openrouterFallback,
+    });
+
+    // Gemini has no base-URL variable, so its request is the one that leaves
+    // for the provider's own endpoint (answered in process by the guard).
+    expect(escaped.map((r) => r.url)).toEqual([
+      'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?key=gemini-test-key',
+    ]);
+  });
+});
+
 describe('start: the LLM judge', () => {
   it.each([
     ['openai', 'gpt-4o-mini', '/openai/v1/'],
