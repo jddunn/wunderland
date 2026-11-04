@@ -389,6 +389,23 @@ export type WunderlandAgentConfig = {
   toolAccessProfile?: ToolAccessProfileName | string | null;
   executionMode?: WunderlandExecutionMode | string | null;
   lazyTools?: boolean;
+  /**
+   * Tool settings for `wunderland start`.
+   */
+  tools?: {
+    /**
+     * The only extension packs the agent may load (`packs`, curated names such
+     * as `web-search`) and the only tools it may be offered and run (`tools`,
+     * names such as `web_search`). A ceiling over `permissionSet`,
+     * `toolAccessProfile` and `executionMode`: a call to any other tool is
+     * answered `tool_not_allowed` and never runs. A list that is not an array
+     * of names allows nothing.
+     */
+    allow?: {
+      packs?: string[];
+      tools?: string[];
+    };
+  };
   skills?: string[];
   extensions?: WunderlandExtensionConfig;
   extensionOverrides?: Record<

@@ -47,6 +47,14 @@ import {
   buildToolResultPayload,
   buildToolErrorPayload,
 } from './ToolApprovalHandler.js';
+import { TOOL_NOT_ALLOWED } from './tool-allow-list.js';
+
+/** The function name of an OpenAI-shaped tool definition (`{ function: { name } }`), or `''`. */
+function toolDefFunctionName(def: Record<string, unknown>): string {
+  const fn = def?.['function'] as Record<string, unknown> | undefined;
+  const name = fn?.['name'] ?? def?.['name'];
+  return typeof name === 'string' ? name : '';
+}
 
 type LoopToolCallRequest = {
   id: string;
@@ -122,6 +130,15 @@ export async function runToolCallingTurn(opts: {
     toolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }>;
   }) => Promise<boolean>;
   onToolCall?: (tool: ToolInstance, args: Record<string, unknown>) => void;
+  /**
+   * The only tool names this turn may offer or run (an agent config's
+   * `tools.allow.tools`). Each round's tool definitions keep only these names,
+   * whatever `toolMap`, `toolDefs` or `getToolDefs` hold, and a call to any
+   * other name is answered `tool_not_allowed` before lookup, approval or
+   * `onToolCall`, so it never runs. Omitted, every tool in `toolMap` is
+   * eligible.
+   */
+  allowedToolNames?: readonly string[];
   /** Called after each tool execution with the result. Use for logging, learning, metrics. */
   onToolResult?: (info: {
     toolName: string;
@@ -198,6 +215,18 @@ export async function runToolCallingTurn(opts: {
     'fail_open',
   );
   const failClosedOnToolFailure = toolFailureMode === 'fail_closed';
+  const allowedToolNames = Array.isArray(opts.allowedToolNames)
+    ? new Set(opts.allowedToolNames)
+    : undefined;
+  /** The tools a round may offer and dispatch: `toolMap` read live, less any name outside the allow-list. */
+  const toolMapForRound = (): Map<string, ToolInstance> => {
+    if (!allowedToolNames) return opts.toolMap;
+    const allowed = new Map<string, ToolInstance>();
+    for (const [name, tool] of opts.toolMap) {
+      if (allowedToolNames.has(name)) allowed.set(name, tool);
+    }
+    return allowed;
+  };
   const executionMode = (getStringProp(opts.toolContext, 'executionMode') || '').toLowerCase();
   const turnApprovalMode = (getStringProp(opts.toolContext, 'turnApprovalMode') || '').toLowerCase();
   const requireCheckpointAfterRound =
@@ -523,12 +552,14 @@ export async function runToolCallingTurn(opts: {
   let currentRound = 0;
   let currentNameMapping: ReturnType<typeof buildToolFunctionNameMapping> | null = null;
   let currentSanitizedDefs: ReturnType<typeof sanitizeToolDefsForProvider> | null = null;
+  let currentToolMap: Map<string, ToolInstance> = opts.toolMap;
   const roundToolCalls: Array<{ toolName: string; hasSideEffects: boolean; args: Record<string, unknown> }> = [];
 
   const executeToolWithContext = async (tc: LoopToolCallRequest): Promise<ToolCallResult> => {
     const round = currentRound;
     const nameMapping = currentNameMapping!;
     const sanitizedDefs = currentSanitizedDefs!;
+    const roundToolMap = currentToolMap;
 
     const maybeFailClosed = (reason: string): string | null => {
       if (!failClosedOnToolFailure) return null;
@@ -550,11 +581,37 @@ export async function runToolCallingTurn(opts: {
 
     const resolvedToolKey = resolveToolMapKeyFromFunctionName({
       functionName: requestedToolName,
-      toolMap: opts.toolMap,
+      toolMap: roundToolMap,
       mapping: nameMapping,
       sanitizedAliasByName: sanitizedDefs.aliasBySanitizedName,
     });
-    const tool = resolvedToolKey ? opts.toolMap.get(resolvedToolKey) : undefined;
+    const tool = resolvedToolKey ? roundToolMap.get(resolvedToolKey) : undefined;
+
+    // The allow-list refuses before lookup, approval and onToolCall: a name
+    // outside it never runs, whoever registered the tool and whenever.
+    if (
+      allowedToolNames
+      && (tool
+        ? typeof tool.name === 'string' && tool.name !== '' && !allowedToolNames.has(tool.name)
+        : !allowedToolNames.has(requestedToolName))
+    ) {
+      const refusedName = tool?.name || requestedToolName;
+      emitOtelLog({
+        name: 'wunderland.runtime',
+        body: TOOL_NOT_ALLOWED,
+        severity: SeverityNumber.WARN,
+        attributes: { requested_tool_name: refusedName, round },
+      });
+      opts.messages.push({
+        role: 'tool',
+        tool_call_id: callId,
+        content: JSON.stringify({ error: TOOL_NOT_ALLOWED, tool: refusedName }),
+      });
+      const failReply = maybeFailClosed(`Tool not allowed: ${refusedName}.`);
+      if (failReply) { earlyReturn = failReply; }
+      return { id: callId, name: refusedName, success: false, error: TOOL_NOT_ALLOWED };
+    }
+
     if (!tool) {
       emitOtelLog({
         name: 'wunderland.runtime',
@@ -639,7 +696,7 @@ export async function runToolCallingTurn(opts: {
           opts.onToolResult({ toolName, args, success: false, error: errMsg, durationMs });
         } catch { /* ignore */ }
       }
-      const errorPayload = await buildToolErrorPayload(errMsg, toolName, opts.toolMap);
+      const errorPayload = await buildToolErrorPayload(errMsg, toolName, roundToolMap);
       opts.messages.push({ role: 'tool', tool_call_id: callId, content: errorPayload });
       const failReply = maybeFailClosed(`Tool ${toolName} threw: ${errMsg}`);
       if (failReply) { earlyReturn = failReply; }
@@ -671,7 +728,7 @@ export async function runToolCallingTurn(opts: {
       result,
       toolName,
       callId,
-      opts.toolMap,
+      roundToolMap,
       shouldWrapToolOutputs,
       debugMode,
     );
@@ -737,8 +794,10 @@ export async function runToolCallingTurn(opts: {
         const round = currentRound - 1;
         roundToolCalls.length = 0;
 
-        // Build tool name mapping and defs for this round.
-        const nameMapping = buildToolFunctionNameMapping(opts.toolMap);
+        // Build tool name mapping and defs for this round, from the tools the
+        // allow-list leaves (all of toolMap when there is none).
+        const roundToolMap = toolMapForRound();
+        const nameMapping = buildToolFunctionNameMapping(roundToolMap);
         if (nameMapping.rewrites.length > 0) {
           const summary = formatToolNameRewriteSummary(nameMapping.rewrites);
           if (strictToolNames) {
@@ -768,9 +827,16 @@ export async function runToolCallingTurn(opts: {
           }
         }
 
-        const rawToolDefs = opts.getToolDefs
-          ? opts.getToolDefs()
-          : opts.toolDefs ?? buildToolDefsFromMapping(opts.toolMap, nameMapping);
+        const callerToolDefs = opts.getToolDefs ? opts.getToolDefs() : opts.toolDefs;
+        const rawToolDefs = !callerToolDefs
+          ? buildToolDefsFromMapping(roundToolMap, nameMapping)
+          : allowedToolNames
+            ? callerToolDefs.filter((def) => {
+              const functionName = toolDefFunctionName(def);
+              return functionName !== ''
+                && resolveToolMapKeyFromFunctionName({ functionName, toolMap: roundToolMap, mapping: nameMapping }) !== null;
+            })
+            : callerToolDefs;
 
         const sanitizedDefs = sanitizeToolDefsForProvider(rawToolDefs);
         if (sanitizedDefs.rewrites.length > 0) {
@@ -812,6 +878,7 @@ export async function runToolCallingTurn(opts: {
         // Stash for executeTool to reference.
         currentNameMapping = nameMapping;
         currentSanitizedDefs = sanitizedDefs;
+        currentToolMap = roundToolMap;
 
         const toolDefs = sanitizedDefs.toolDefs;
 

@@ -6,6 +6,7 @@ This guide explains how Wunderland (the SDK and CLI runtime) composes:
 - **Security tiers** (LLM-side security pipeline posture)
 - **Permission sets** (coarse-grained capability allow/deny)
 - **Tool access profiles** (semantic tool-category allow/deny)
+- **Tool allow-list** (`tools.allow`: the only packs and tools an agent may load and run)
 - **Execution modes** (human-in-the-loop behavior)
 - **Folder permissions** (path-level filesystem sandbox)
 
@@ -73,6 +74,33 @@ Defined in `packages/wunderland/src/social/ToolAccessProfiles.ts`.
 - `social-creative`: social + search + media + memory. Blocks filesystem/system/communication.
 - `assistant`: search + media + memory + filesystem + productivity. Blocks system + social.
 - `unrestricted`: all categories.
+
+## Tool Allow-List (`tools.allow`)
+
+`tools.allow` names the extension packs `wunderland start` may load and the tools it may offer the model and run. It is a ceiling over the permission set, the tool access profile and the execution mode: they can narrow it, never widen it. An agent with the settings below can search the web and do nothing else, even though `unrestricted` and `autonomous` would otherwise give it the shell:
+
+```json
+{
+  "permissionSet": "unrestricted",
+  "toolAccessProfile": "unrestricted",
+  "executionMode": "autonomous",
+  "tools": {
+    "allow": {
+      "packs": ["web-search", "news-search"],
+      "tools": ["web_search", "news_search"]
+    }
+  }
+}
+```
+
+`packs` takes curated pack names, the names an `extensions` list takes (`web-search`, `cli-executor`, `wunderland extensions info web-search`). `tools` takes tool names as the packs register them; a pack can register several (`web-search` registers `web_search`, `research_aggregate` and `fact_check`), and only the named ones are kept. With `tools.allow` set, `start`:
+
+- **Loads only the listed packs.** The list takes the place of the default packs. An `extensions` list in the agent config or the global config, an `extensionCategories` list, and a pack recommended because its credential is set load only where `packs` names them. The agent wallet pack loads only when `packs` names `wallet`. Channel packs load from `channels` as before; a tool a channel pack registers is kept only if `tools` names it.
+- **Keeps only the listed tools.** After the permission set and the tool access profile filter the tools, every tool `tools` does not name is dropped, whichever pack or part of `start` registered it: the schema-on-demand tools (`extensions_list`, `extensions_enable`, `extensions_status`), the working-memory tools, `memory_read`, the RAG tools and `request_folder_access` included.
+- **Confines `extensions_enable`.** When `tools` names it, it loads only the listed packs, and answers a request for any other pack, by curated name or package name, with `tool_not_allowed`. Loading a pack by npm package name (`source: "package"`) is off.
+- **Refuses at dispatch.** Every turn (`POST /chat` for any persona, a channel message, a webhook wake) offers the model only the listed tools. A call to any other tool, including one registered after start, is answered with `{"error":"tool_not_allowed","tool":"<name>"}` before approval and never runs; with `toolFailureMode: "fail_closed"` it ends the turn.
+
+A `packs` or `tools` that is not a list of names allows nothing of its kind, so a mistake in the list never widens it. Without `tools.allow`, none of this applies.
 
 ## Execution Modes (Human In The Loop)
 

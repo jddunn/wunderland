@@ -15,6 +15,7 @@ import {
   type ToolInstance,
 } from '../../../runtime/tools/tool-calling.js';
 import { buildOllamaRuntimeOptions } from '../../../runtime/tools/ollama-options.js';
+import { allowedToolNamesFor } from '../../../runtime/tools/tool-allow-list.js';
 import * as fmt from '../../ui/format.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -460,6 +461,8 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
         model,
         messages,
         toolMap,
+        // tools.allow: offer and run only the listed tools.
+        allowedToolNames: allowedToolNamesFor(ctx.cfg),
         ...(filteredGetToolDefs && { getToolDefs: filteredGetToolDefs }),
         toolContext,
         maxRounds: 8,

@@ -18,6 +18,7 @@
 import { runToolCallingTurn } from '../../../runtime/tools/tool-calling.js';
 import { buildPersonaSessionKey } from '../../../runtime/execution/request-persona.js';
 import { KeyedMutex } from '../../../runtime/execution/keyed-mutex.js';
+import { allowedToolNamesFor } from '../../../runtime/tools/tool-allow-list.js';
 
 /** One shared mutex per process: serializes turns that share a session key. */
 const sessionMutex = new KeyedMutex();
@@ -100,6 +101,9 @@ export async function runAgentTurn(
         model: deps.model,
         messages: workingMessages,
         toolMap: deps.toolMap,
+        // tools.allow: offer and run only the listed tools; any other call is
+        // answered tool_not_allowed at dispatch.
+        allowedToolNames: allowedToolNamesFor(deps.cfg),
         toolContext: {
           seedId: deps.seedId,
           sessionId: req.sessionId,
