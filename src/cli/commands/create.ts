@@ -5,6 +5,7 @@
  */
 
 import { existsSync } from 'node:fs';
+import { anthropicApiUrl } from '../../platform/config/provider-base-urls.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as p from '@clack/prompts';
@@ -95,7 +96,7 @@ async function createLLMInvoker(globals: GlobalFlags): Promise<{ invoker: (promp
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required for Anthropic provider.');
 
     const invoker = async (prompt: string): Promise<string> => {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(anthropicApiUrl('messages'), {
         method: 'POST',
         headers: {
           'x-api-key': apiKey,

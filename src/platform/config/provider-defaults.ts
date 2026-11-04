@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { WunderlandProviderId } from '../../channels/api/types.js';
+import { baseUrlFor } from './provider-base-urls.js';
 
 const SUPPORTED_TEXT_PROVIDERS = new Set<WunderlandProviderId>([
   'openai',
@@ -217,7 +218,7 @@ export function resolveWunderlandRuntimeConfigFromEnv(): {
       providerId,
       apiKey: String(process.env['OPENROUTER_API_KEY'] || '').trim(),
       model,
-      baseUrl: 'https://openrouter.ai/api/v1',
+      baseUrl: baseUrlFor('openrouter'),
     };
   }
   if (providerId === 'ollama') {
@@ -241,6 +242,9 @@ export function resolveWunderlandRuntimeConfigFromEnv(): {
       providerId,
       apiKey: String(process.env['ANTHROPIC_API_KEY'] || '').trim(),
       model,
+      // Anthropic's /v1 root: the Messages API and the OpenAI-compatible
+      // endpoint the mission planner uses both sit under it.
+      baseUrl: baseUrlFor('anthropic'),
     };
   }
   if (providerId === 'claude-code-cli') {
@@ -261,5 +265,6 @@ export function resolveWunderlandRuntimeConfigFromEnv(): {
     providerId,
     apiKey: String(process.env['OPENAI_API_KEY'] || '').trim(),
     model,
+    baseUrl: baseUrlFor(providerId),
   };
 }

@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../../platform/config/operation-id.js';
 
 const COLLECTION_NAME = 'knowledge_base';
 const STATE_KEY = 'rag_bootstrap:v1';
@@ -62,6 +63,8 @@ async function generateEmbeddings(texts: string[], apiKey: string, baseUrl: stri
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
+        // Each batch is its own call, with its own operation id.
+        ...operationIdHeaders(),
       },
       body: JSON.stringify({
         model: 'text-embedding-3-small',

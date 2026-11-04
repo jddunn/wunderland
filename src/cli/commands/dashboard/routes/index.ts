@@ -14,6 +14,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { anthropicApiUrl } from '../../../../platform/config/provider-base-urls.js';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
@@ -421,7 +422,7 @@ async function handleSpawn(
 
     const invoker = async (prompt: string): Promise<string> => {
       if (anthropicKey && !apiKey) {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
+        const r = await fetch(anthropicApiUrl('messages'), {
           method: 'POST',
           headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
           body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, temperature: 0.1, messages: [{ role: 'user', content: prompt }] }),

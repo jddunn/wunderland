@@ -5,6 +5,7 @@
  */
 
 import type { GlobalFlags } from '../types.js';
+import { anthropicApiUrl } from '../../platform/config/provider-base-urls.js';
 import { LLM_PROVIDERS } from '../constants.js';
 import { accent, info, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
@@ -147,7 +148,7 @@ async function testProvider(args: string[], globals: GlobalFlags): Promise<void>
       latency = Date.now() - start;
     } else if (providerEntry.id === 'anthropic') {
       // Anthropic doesn't have a public list endpoint; just check reachability
-      const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+      const res = await fetchWithTimeout(anthropicApiUrl('messages'), {
         method: 'POST',
         headers: {
           'x-api-key': process.env['ANTHROPIC_API_KEY'] || '',
