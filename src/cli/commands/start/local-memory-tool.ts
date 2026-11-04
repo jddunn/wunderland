@@ -12,6 +12,7 @@ import { HydeRetriever, type HydeConfig } from '@framers/agentos/cognition/rag';
 import { createMemoryReadTool } from '../../../runtime/tools/MemoryReadTool.js';
 import type { ToolExecutionContext } from '@framers/agentos';
 import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../../platform/config/operation-id.js';
 
 const COLLECTIONS = ['knowledge_base', 'auto_memories'] as const;
 
@@ -41,6 +42,7 @@ async function generateQueryEmbedding(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
+      ...operationIdHeaders(),
     },
     body: JSON.stringify({ input: text, model }),
   });
@@ -69,6 +71,7 @@ function createOpenAICompatibleLlmCaller(config: LocalMemoryLlmConfig) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${config.apiKey}`,
         ...(config.extraHeaders ?? {}),
+        ...operationIdHeaders(),
       },
       body: JSON.stringify({
         model: config.model,

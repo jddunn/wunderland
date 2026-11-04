@@ -3,10 +3,11 @@
  * provider's base-URL variable.
  *
  * `wunderland start` sends every call to OpenAI, Anthropic and OpenRouter
- * (the primary provider's turns, the fallback chain, the local memory tool,
- * the RAG bootstrap and the discovery index) to the URL this module returns,
- * so a proxy or gateway named by `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL` or
- * `OPENROUTER_BASE_URL` sees every one of them.
+ * (the primary provider's turns, including the turn a webhook wakes, the
+ * fallback chain, the local memory tool, the RAG bootstrap, the discovery
+ * index and the Discord welcome and curated picks posts) to the URL this
+ * module returns, so a proxy or gateway named by `OPENAI_BASE_URL`,
+ * `ANTHROPIC_BASE_URL` or `OPENROUTER_BASE_URL` sees every one of them.
  *
  * @module wunderland/platform/config/provider-base-urls
  */
@@ -58,8 +59,52 @@ export function baseUrlFor(
 ): string | undefined {
   if (!isBaseUrlProvider(providerId)) return undefined;
   const raw = env[PROVIDER_BASE_URL_ENV[providerId]];
-  const value = typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';
+  const value = trimBaseUrl(raw);
   if (!value) return PROVIDER_DEFAULT_BASE_URLS[providerId];
-  if (providerId === 'anthropic') return `${value.replace(/\/v1$/, '')}/v1`;
+  if (providerId === 'anthropic') return anthropicV1Root(value, env);
   return value;
+}
+
+/** A base URL with surrounding spaces and trailing slashes removed; '' when blank. */
+function trimBaseUrl(raw: string | undefined): string {
+  return typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';
+}
+
+/**
+ * Anthropic's `/v1` root for `baseUrl`, the one join every Anthropic caller
+ * uses. `baseUrl` may name the host root (`https://api.anthropic.com`, as
+ * Anthropic's SDK reads ANTHROPIC_BASE_URL) or the `/v1` root, with or without
+ * a trailing slash; either way the result ends in exactly one `/v1`. With
+ * `baseUrl` unset or blank, ANTHROPIC_BASE_URL is read, else Anthropic's own
+ * root.
+ *
+ * @param baseUrl - A host root or `/v1` root; ANTHROPIC_BASE_URL by default.
+ * @param env - The environment to read; `process.env` by default.
+ * @returns The `/v1` root, e.g. `https://api.anthropic.com/v1`.
+ */
+export function anthropicV1Root(
+  baseUrl?: string,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const value = trimBaseUrl(baseUrl) || trimBaseUrl(env[PROVIDER_BASE_URL_ENV.anthropic]);
+  if (!value) return PROVIDER_DEFAULT_BASE_URLS.anthropic;
+  return `${value.replace(/\/v1$/, '')}/v1`;
+}
+
+/**
+ * The URL of an Anthropic API path: `<anthropicV1Root(baseUrl)>/<path>`, such
+ * as `anthropicApiUrl('messages')` for the Messages API or
+ * `anthropicApiUrl('chat/completions')` for the OpenAI-compatible endpoint.
+ *
+ * @param path - The path under `/v1`, without the `/v1`.
+ * @param baseUrl - A host root or `/v1` root; ANTHROPIC_BASE_URL by default.
+ * @param env - The environment to read; `process.env` by default.
+ * @returns The full URL.
+ */
+export function anthropicApiUrl(
+  path: string,
+  baseUrl?: string,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return `${anthropicV1Root(baseUrl, env)}/${path.replace(/^\/+/, '')}`;
 }

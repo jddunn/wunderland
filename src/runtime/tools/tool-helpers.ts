@@ -46,6 +46,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { resolveAgentWorkspaceDir } from '@framers/agentos';
 import { resolveApiKeyInput } from '../identity/api-key-resolver.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
+import { anthropicApiUrl } from '../../platform/config/provider-base-urls.js';
 import {
   buildToolDefsFromMapping,
   buildToolFunctionNameMapping,
@@ -733,12 +735,22 @@ export function shouldFallback(error: unknown): boolean {
   return false;
 }
 
+/**
+ * One OpenAI-compatible chat completions request to `provider.baseUrl`
+ * (OpenAI's own root when unset).
+ *
+ * @param operationHeaders - The call's operation id header
+ *   ({@link operationIdHeaders}). A caller that sends several attempts of one
+ *   call (a primary and its fallback) makes it once and passes it to each;
+ *   when omitted, the request is its own call and gets a new id.
+ */
 export async function chatCompletionsRequest(
   provider: LLMProviderConfig,
   messages: Array<Record<string, unknown>>,
   tools: Array<Record<string, unknown>>,
   temperature: number,
   maxTokens: number,
+  operationHeaders: Record<string, string> = operationIdHeaders(),
 ): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
   const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter'
@@ -774,6 +786,7 @@ export async function chatCompletionsRequest(
       ...authHeaders,
       'Content-Type': 'application/json',
       ...(provider.extraHeaders || {}),
+      ...operationHeaders,
     },
     body: JSON.stringify({
       model: provider.model,
@@ -846,9 +859,12 @@ export async function openaiChatWithTools(opts: {
     baseUrl: opts.baseUrl,
     getApiKey: opts.getApiKey,
   };
+  // One operation id for the call: the primary attempt and the fallback
+  // attempt send the same value.
+  const operationHeaders = operationIdHeaders();
 
   try {
-    return await chatCompletionsRequest(primary, opts.messages, opts.tools, opts.temperature, opts.maxTokens);
+    return await chatCompletionsRequest(primary, opts.messages, opts.tools, opts.temperature, opts.maxTokens, operationHeaders);
   } catch (err) {
     // If no fallback configured, or error isn't retryable, re-throw
     if (!opts.fallback || !shouldFallback(err)) throw err;
@@ -857,7 +873,7 @@ export async function openaiChatWithTools(opts: {
     const fallbackName = opts.fallback.baseUrl?.includes('openrouter') ? 'OpenRouter' : 'fallback';
     opts.onFallback?.(primaryError, fallbackName);
 
-    return await chatCompletionsRequest(opts.fallback, opts.messages, opts.tools, opts.temperature, opts.maxTokens);
+    return await chatCompletionsRequest(opts.fallback, opts.messages, opts.tools, opts.temperature, opts.maxTokens, operationHeaders);
   }
 }
 
@@ -912,6 +928,7 @@ export async function streamingChatCompletionsRequest(
   temperature: number,
   maxTokens: number,
   signal?: AbortSignal,
+  operationHeaders: Record<string, string> = operationIdHeaders(),
 ): Promise<AsyncIterable<string>> {
   const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter'
@@ -956,6 +973,7 @@ export async function streamingChatCompletionsRequest(
       ...authHeaders,
       'Content-Type': 'application/json',
       ...(provider.extraHeaders || {}),
+      ...operationHeaders,
     },
     body: JSON.stringify({
       model: provider.model,
@@ -1100,9 +1118,11 @@ export async function streamingOpenaiChatWithTools(opts: {
     getApiKey: opts.getApiKey,
   };
 
+  const operationHeaders = operationIdHeaders();
+
   try {
     return await streamingChatCompletionsRequest(
-      primary, opts.messages, opts.tools, opts.temperature, opts.maxTokens, opts.signal,
+      primary, opts.messages, opts.tools, opts.temperature, opts.maxTokens, opts.signal, operationHeaders,
     );
   } catch (err) {
     if (!opts.fallback || !shouldFallback(err)) throw err;
@@ -1112,7 +1132,7 @@ export async function streamingOpenaiChatWithTools(opts: {
     opts.onFallback?.(primaryError, fallbackName);
 
     return await streamingChatCompletionsRequest(
-      opts.fallback, opts.messages, opts.tools, opts.temperature, opts.maxTokens, opts.signal,
+      opts.fallback, opts.messages, opts.tools, opts.temperature, opts.maxTokens, opts.signal, operationHeaders,
     );
   }
 }
@@ -1231,6 +1251,8 @@ export async function anthropicMessagesRequest(opts: {
   model: string;
   baseUrl?: string;
   extraHeaders?: Record<string, string>;
+  /** The call's operation id header; a new one when omitted. */
+  operationHeaders?: Record<string, string>;
   system?: string;
   messages: Array<{ role: 'user' | 'assistant'; content: AnthropicContentBlock[] }>;
   tools: Array<Record<string, unknown>>;
@@ -1239,15 +1261,16 @@ export async function anthropicMessagesRequest(opts: {
 }): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
   // The base is the API host root (`https://api.anthropic.com`, as Anthropic's
   // SDK reads ANTHROPIC_BASE_URL) or the `/v1` root the OpenAI-compatible
-  // callers use; either way the request goes to `<root>/v1/messages`.
-  const baseUrl = (opts.baseUrl || 'https://api.anthropic.com').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
-  const res = await fetch(`${baseUrl}/v1/messages`, {
+  // callers use; either way the request goes to `<root>/v1/messages`. With no
+  // base, ANTHROPIC_BASE_URL is read.
+  const res = await fetch(anthropicApiUrl('messages', opts.baseUrl), {
     method: 'POST',
     headers: {
       'x-api-key': opts.apiKey,
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
       ...(opts.extraHeaders || {}),
+      ...(opts.operationHeaders ?? operationIdHeaders()),
     },
     body: JSON.stringify({
       model: opts.model,

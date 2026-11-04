@@ -17,6 +17,8 @@
  * @module wunderland/cli/mission-model-flags
  */
 
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
+
 /** Runtime LLM config shape shared by the mission-run and NL-mission paths. */
 export interface MissionModel {
   providerId: string;
@@ -39,17 +41,15 @@ export interface QualityFloorOptions {
  * same way. Providers absent from this map keep the runtime credentials.
  */
 const PROVIDER_ENV: Record<string, { key: string; baseUrlEnv?: string; defaultBaseUrl?: string }> = {
-  // Every entry carries an explicit defaultBaseUrl: the shared
+  // Every entry resolves a base URL (resolveMissionProviderBaseUrl): the shared
   // chatCompletionsRequest helper routes purely on baseUrl and falls back to
   // the OpenAI endpoint when it is undefined — so a provider without one would
   // send its key to OpenAI and 401 (observed live 2026-07-24 with anthropic).
-  openai: { key: 'OPENAI_API_KEY', baseUrlEnv: 'OPENAI_BASE_URL', defaultBaseUrl: 'https://api.openai.com/v1' },
-  anthropic: {
-    key: 'ANTHROPIC_API_KEY',
-    baseUrlEnv: 'ANTHROPIC_BASE_URL',
-    defaultBaseUrl: 'https://api.anthropic.com/v1',
-  },
-  openrouter: { key: 'OPENROUTER_API_KEY', defaultBaseUrl: 'https://openrouter.ai/api/v1' },
+  // OpenAI, Anthropic and OpenRouter read their base-URL variable through
+  // baseUrlFor, the same join `start` uses, so they carry no default here.
+  openai: { key: 'OPENAI_API_KEY' },
+  anthropic: { key: 'ANTHROPIC_API_KEY' },
+  openrouter: { key: 'OPENROUTER_API_KEY' },
   gemini: {
     key: 'GEMINI_API_KEY',
     baseUrlEnv: 'GEMINI_BASE_URL',
@@ -98,8 +98,33 @@ export function resolveMissionModel(
   if (!apiKey) {
     throw new Error(`Provider "${providerId}" selected but no API key found in env (${spec.key}).`);
   }
-  const baseUrl = (spec.baseUrlEnv ? env[spec.baseUrlEnv] : undefined) ?? spec.defaultBaseUrl;
+  const baseUrl = resolveMissionProviderBaseUrl(providerId, env);
   return { providerId, model, apiKey, baseUrl };
+}
+
+/**
+ * The base URL a mission sends `providerId`'s requests to.
+ *
+ * OpenAI, Anthropic and OpenRouter read OPENAI_BASE_URL, ANTHROPIC_BASE_URL
+ * and OPENROUTER_BASE_URL through {@link baseUrlFor}, the join `wunderland
+ * start` uses: Anthropic's value may name the host root or the `/v1` root,
+ * with or without a trailing slash, and resolves to the `/v1` root the
+ * OpenAI-compatible request needs. Other providers read their own variable,
+ * else their default root.
+ *
+ * @param providerId - The provider id (`openai`, `anthropic`, `groq`, ...).
+ * @param env - The environment to read.
+ * @returns The base URL, or `undefined` for a provider this module does not know.
+ */
+export function resolveMissionProviderBaseUrl(
+  providerId: string,
+  env: Record<string, string | undefined>,
+): string | undefined {
+  const fromVariable = baseUrlFor(providerId, env);
+  if (fromVariable) return fromVariable;
+  const spec = PROVIDER_ENV[providerId];
+  if (!spec) return undefined;
+  return (spec.baseUrlEnv ? env[spec.baseUrlEnv] : undefined) ?? spec.defaultBaseUrl;
 }
 
 /**

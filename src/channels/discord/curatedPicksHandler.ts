@@ -10,6 +10,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
 
 const BRAND_COLOR = 0x8b6914;
 
@@ -103,6 +105,10 @@ export interface CuratedPicksConfig {
   intervalMs?: number;
   /** Separate bot token for posting news (posts as "Wunderland News" bot instead of the agent bot) */
   newsBotToken?: string;
+  /** Root of the OpenAI API the judge and copy requests go to. Default: OPENAI_BASE_URL, else `https://api.openai.com/v1`. */
+  openaiBaseUrl?: string;
+  /** The dedup cache file. Default: `~/.wunderland/curated-picks-cache.json`. */
+  cacheFile?: string;
 }
 
 function extractJsonObject(content: string): string | null {
@@ -118,10 +124,10 @@ function extractJsonObject(content: string): string | null {
 // Dedup cache helpers
 // ---------------------------------------------------------------------------
 
-function loadCache(): CacheEntry[] {
+function loadCache(cacheFile: string = CACHE_FILE): CacheEntry[] {
   try {
-    if (!fs.existsSync(CACHE_FILE)) return [];
-    const raw = fs.readFileSync(CACHE_FILE, 'utf-8');
+    if (!fs.existsSync(cacheFile)) return [];
+    const raw = fs.readFileSync(cacheFile, 'utf-8');
     const entries: CacheEntry[] = JSON.parse(raw);
     // Prune old entries
     const cutoff = Date.now() - CACHE_MAX_AGE_MS;
@@ -131,14 +137,15 @@ function loadCache(): CacheEntry[] {
   }
 }
 
-function saveCache(entries: CacheEntry[]): void {
+function saveCache(entries: CacheEntry[], cacheFile: string = CACHE_FILE): void {
   try {
-    if (!fs.existsSync(CACHE_DIR)) {
-      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    const cacheDir = path.dirname(cacheFile);
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
     }
     const cutoff = Date.now() - CACHE_MAX_AGE_MS;
     const pruned = entries.filter(e => e.timestamp > cutoff).slice(-CACHE_MAX_ENTRIES);
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(pruned, null, 2));
+    fs.writeFileSync(cacheFile, JSON.stringify(pruned, null, 2));
   } catch (err: any) {
     console.warn('[CuratedPicks] Failed to save cache:', err?.message ?? err);
   }
@@ -195,12 +202,14 @@ function isTooSimilar(title: string, cache: CacheEntry[]): boolean {
 export function createCuratedPicksHandler(config: CuratedPicksConfig) {
   const model = config.model || 'gpt-4o';
   const interval = config.intervalMs || BASE_INTERVAL;
+  const cacheFile = config.cacheFile || CACHE_FILE;
+  const openaiBaseUrl = (config.openaiBaseUrl || baseUrlFor('openai')).trim().replace(/\/+$/, '');
   const postedUrls = new Set<string>();
   let picksToday = 0;
   let lastResetDate = new Date().toDateString();
 
   // Initialize in-memory set from persistent cache
-  const initialCache = loadCache();
+  const initialCache = loadCache(cacheFile);
   for (const entry of initialCache) {
     postedUrls.add(entry.url);
   }
@@ -262,11 +271,12 @@ export function createCuratedPicksHandler(config: CuratedPicksConfig) {
     const judgePrompt = `Here are today's articles:\n\n${articleList}`;
 
     try {
-      const judgeRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      const judgeRes = await fetch(`${openaiBaseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${config.openaiApiKey}`,
+          ...operationIdHeaders(),
         },
         body: JSON.stringify({
           model,
@@ -303,11 +313,12 @@ Category: ${article.category}
 Date: ${article.date || 'unknown'}
 URL: ${article.url}`;
 
-      const copyRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      const copyRes = await fetch(`${openaiBaseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${config.openaiApiKey}`,
+          ...operationIdHeaders(),
         },
         body: JSON.stringify({
           model,
@@ -344,7 +355,19 @@ URL: ${article.url}`;
     }
   }
 
-  async function runCurationCycle(service: any): Promise<void> {
+  /**
+   * Cycles run one at a time: each one reads the daily count, the posted URLs
+   * and the cache, and a cycle that overlapped another would read them before
+   * the other's post and could post past the daily limit or post twice.
+   */
+  let cycleChain: Promise<void> = Promise.resolve();
+  function runCurationCycle(service: any): Promise<void> {
+    const next = cycleChain.then(() => runOneCurationCycle(service));
+    cycleChain = next.catch(() => {});
+    return next;
+  }
+
+  async function runOneCurationCycle(service: any): Promise<void> {
     maybeResetDaily();
     if (picksToday >= MAX_PICKS_PER_DAY) {
       console.log('[CuratedPicks] Daily limit reached, skipping cycle');
@@ -360,7 +383,7 @@ URL: ${article.url}`;
     }
 
     // Load persistent cache for similarity checking
-    const cache = loadCache();
+    const cache = loadCache(cacheFile);
 
     // Filter out already-posted URLs AND similar titles
     const fresh = candidates.filter(a => {
@@ -411,7 +434,7 @@ URL: ${article.url}`;
       // Update both in-memory and persistent cache
       postedUrls.add(pick.article.url);
       cache.push({ title: pick.article.title, url: pick.article.url, timestamp: Date.now() });
-      saveCache(cache);
+      saveCache(cache, cacheFile);
 
       picksToday++;
       console.log(`[CuratedPicks] Posted: "${pick.article.title}" (${pick.article.category})`);
@@ -423,15 +446,19 @@ URL: ${article.url}`;
   function startSchedule(service: any): NodeJS.Timeout[] {
     const timers: NodeJS.Timeout[] = [];
 
+    // The schedule never holds the process open on its own: start's HTTP
+    // server and channel adapters do that.
     const startup = setTimeout(() => {
       runCurationCycle(service);
 
       const recurring = setInterval(() => {
         const jitter = Math.floor(Math.random() * JITTER_MAX);
-        setTimeout(() => runCurationCycle(service), jitter);
+        setTimeout(() => runCurationCycle(service), jitter).unref?.();
       }, interval);
+      recurring.unref?.();
       timers.push(recurring);
     }, STARTUP_DELAY);
+    startup.unref?.();
 
     timers.push(startup as unknown as NodeJS.Timeout);
 
@@ -439,7 +466,11 @@ URL: ${article.url}`;
     return timers;
   }
 
-  return { startSchedule };
+  return {
+    startSchedule,
+    /** Run one curation cycle now: fetch candidates, judge, write the copy, post. */
+    runCurationCycle,
+  };
 }
 
 export const __testing = {

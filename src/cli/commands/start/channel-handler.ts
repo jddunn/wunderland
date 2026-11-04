@@ -16,6 +16,7 @@ import {
 } from '../../../runtime/tools/tool-calling.js';
 import { buildOllamaRuntimeOptions } from '../../../runtime/tools/ollama-options.js';
 import * as fmt from '../../ui/format.js';
+import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -770,6 +771,8 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
           openaiApiKey,
           systemPrompt: (cfg as any)?.systemPrompt || '',
           model: 'gpt-4o',  // Always use gpt-4o for welcome messages — personalization quality matters
+          // OpenAI's key, so OpenAI's base-URL variable.
+          openaiBaseUrl: baseUrlFor('openai'),
         });
         if (discordAdapterWelcome.service) {
           welcomeHandler.registerOnService(discordAdapterWelcome.service);
@@ -800,6 +803,7 @@ export async function wireDiscordExtensions(ctx: ChannelRuntimeCtx): Promise<voi
           systemPrompt: (cfg as any)?.systemPrompt || '',
           scraperApiUrl: scraperUrl,
           model: 'gpt-4o',  // Always use gpt-4o for curated picks — quality matters
+          openaiBaseUrl: baseUrlFor('openai'),
           newsBotToken: process.env.WUNDERBOT_NEWS_TOKEN,  // Post as "Wunderland News" bot
         });
         if (discordAdapterPicks.service) {

@@ -12,6 +12,7 @@
  */
 
 import { existsSync } from 'node:fs';
+import { anthropicApiUrl } from '../../platform/config/provider-base-urls.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -289,7 +290,7 @@ async function createAgencyLLMInvoker(globals: GlobalFlags): Promise<(prompt: st
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required for Anthropic provider.');
 
     return async (prompt: string): Promise<string> => {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(anthropicApiUrl('messages'), {
         method: 'POST',
         headers: {
           'x-api-key': apiKey,
