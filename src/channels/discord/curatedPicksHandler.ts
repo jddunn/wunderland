@@ -355,7 +355,19 @@ URL: ${article.url}`;
     }
   }
 
-  async function runCurationCycle(service: any): Promise<void> {
+  /**
+   * Cycles run one at a time: each one reads the daily count, the posted URLs
+   * and the cache, and a cycle that overlapped another would read them before
+   * the other's post and could post past the daily limit or post twice.
+   */
+  let cycleChain: Promise<void> = Promise.resolve();
+  function runCurationCycle(service: any): Promise<void> {
+    const next = cycleChain.then(() => runOneCurationCycle(service));
+    cycleChain = next.catch(() => {});
+    return next;
+  }
+
+  async function runOneCurationCycle(service: any): Promise<void> {
     maybeResetDaily();
     if (picksToday >= MAX_PICKS_PER_DAY) {
       console.log('[CuratedPicks] Daily limit reached, skipping cycle');
