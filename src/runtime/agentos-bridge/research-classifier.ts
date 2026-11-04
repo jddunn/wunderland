@@ -59,9 +59,18 @@ Respond with ONLY a JSON object: {"depth": "none|quick|moderate|deep", "reasonin
 
 Do NOT explain. Do NOT add extra text. ONLY the JSON object.`;
 
+/**
+ * The small model the classifier asks the primary provider for. Anthropic's is
+ * a Claude model, sent to Anthropic's OpenAI-compatible endpoint
+ * (`<ANTHROPIC_BASE_URL>/v1/chat/completions`), which serves Claude models only.
+ *
+ * @param providerId - The primary provider's id.
+ * @returns The model id.
+ */
 export function resolveResearchClassifierModel(providerId?: string): string {
   if (providerId === 'ollama') return 'qwen2.5:3b';
   if (providerId === 'gemini') return 'gemini-2.0-flash-lite';
+  if (providerId === 'anthropic') return 'claude-haiku-4-5-20251001';
   return 'gpt-4o-mini';
 }
 
