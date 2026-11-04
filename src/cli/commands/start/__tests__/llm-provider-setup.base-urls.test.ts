@@ -23,6 +23,7 @@ import { createLocalMemoryReadTool } from '../local-memory-tool.js';
 import { bootstrapRagKnowledge } from '../rag-bootstrap.js';
 import { runToolCallingTurn, openaiChatWithTools } from '../../../../runtime/tools/tool-calling.js';
 import { resolveEmbeddingConfig } from '../../../../platform/discovery/WunderlandDiscoveryManager.js';
+import { createResearchClassifierLlmCall } from '../../../../runtime/agentos-bridge/research-classifier.js';
 
 const KEYS = {
   OPENAI_API_KEY: 'sk-openai-test',
@@ -383,6 +384,32 @@ describe('start: the local memory tool', () => {
 
     expect(posts('/anthropic/v1/chat/completions')).toHaveLength(1);
     expect(posts('/openai/v1/embeddings').length).toBeGreaterThanOrEqual(1);
+    expect(escaped).toEqual([]);
+  });
+});
+
+describe("start: the chat route's research classifier", () => {
+  // routes/chat.ts builds the classifier's call from the primary provider's id,
+  // key and base URL.
+  it.each([
+    ['openai', '/openai/v1/chat/completions', `Bearer ${KEYS.OPENAI_API_KEY}`, /^gpt-/],
+    ['anthropic', '/anthropic/v1/chat/completions', `Bearer ${KEYS.ANTHROPIC_API_KEY}`, /^claude-/],
+  ])('a %s primary classifies at its base-URL variable with a model that provider serves', async (provider, expectedPath, authorization, model) => {
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY', 'ANTHROPIC_API_KEY');
+    const ctx = await startCtx(provider);
+    const llmCall = createResearchClassifierLlmCall({
+      providerId: ctx.providerId,
+      apiKey: ctx.llmApiKey,
+      baseUrl: ctx.llmBaseUrl,
+    });
+
+    await llmCall('classify', 'what is the weather today');
+
+    const hits = posts(expectedPath);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].headers['authorization']).toBe(authorization);
+    expect(hits[0].body.model).toMatch(model);
     expect(escaped).toEqual([]);
   });
 });
