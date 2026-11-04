@@ -16,6 +16,7 @@
 import { resolveRuntimeConfig } from './workflows.js';
 import { resolveMissionModel, type MissionModel } from './mission-model-flags.js';
 import { shutdownWunderlandOtel, startWunderlandOtel } from '../../platform/observability/otel.js';
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
 import type { GlobalFlags } from '../types.js';
 import type { ProviderStrategyConfig, ProviderStrategyName } from '@framers/agentos/orchestration';
 
@@ -87,7 +88,11 @@ function resolveProviderBaseUrl(
   candidate: MissionProviderCandidate,
   env: NodeJS.ProcessEnv,
 ): string | undefined {
-  return (candidate.baseUrlEnv ? env[candidate.baseUrlEnv] : undefined) ?? candidate.defaultBaseUrl;
+  // OpenAI, Anthropic and OpenRouter join their base-URL variable the way
+  // `start` does (an ANTHROPIC_BASE_URL with or without /v1 reaches /v1).
+  return baseUrlFor(candidate.id, env)
+    ?? (candidate.baseUrlEnv ? env[candidate.baseUrlEnv] : undefined)
+    ?? candidate.defaultBaseUrl;
 }
 
 function resolveProviderApiKey(

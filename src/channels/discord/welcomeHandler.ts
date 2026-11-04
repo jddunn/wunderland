@@ -2,6 +2,7 @@
 /**
  * Welcome handler — generates personalized, on-brand welcome messages for new
  * Discord members using OpenAI (gpt-4o) and the Rabbit Hole AI personality.
+ * The request goes to OPENAI_BASE_URL when it is set.
  *
  * Fires AFTER onboarding completes (guildMemberUpdate: pending → not pending)
  * so we can read the member's onboarding roles and personalize the message.
@@ -10,6 +11,9 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
 
 const BRAND_COLOR = 0x8b6914;
 
@@ -70,10 +74,13 @@ export interface WelcomeConfig {
   openaiApiKey: string;
   systemPrompt: string;
   model?: string;
+  /** Root of the OpenAI API the welcome request goes to. Default: OPENAI_BASE_URL, else `https://api.openai.com/v1`. */
+  openaiBaseUrl?: string;
 }
 
 export function createWelcomeHandler(config: WelcomeConfig) {
   const model = config.model || 'gpt-4o';
+  const openaiBaseUrl = (config.openaiBaseUrl || baseUrlFor('openai')).trim().replace(/\/+$/, '');
 
   /** Detect onboarding roles on a member. */
   function detectOnboardingRoles(member: any): { interests: string[]; professions: string[] } {
@@ -162,11 +169,12 @@ export function createWelcomeHandler(config: WelcomeConfig) {
     const userPrompt = `New member: ${displayName} (@${username}). Account created ${accountAge}.${personalization}${contextStr}\n\nWrite their personalized welcome message.`;
 
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetch(`${openaiBaseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${config.openaiApiKey}`,
+          ...operationIdHeaders(),
         },
         body: JSON.stringify({
           model,

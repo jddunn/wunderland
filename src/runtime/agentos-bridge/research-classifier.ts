@@ -15,6 +15,8 @@
  * @module wunderland/runtime/research-classifier
  */
 
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
+
 export type ResearchDepth = 'none' | 'quick' | 'moderate' | 'deep';
 
 export interface ResearchClassification {
@@ -89,6 +91,7 @@ export function createResearchClassifierLlmCall(
         headers: {
           Authorization: `Bearer ${options.apiKey ?? ''}`,
           'Content-Type': 'application/json',
+          ...operationIdHeaders(),
         },
         body: JSON.stringify({
           model,

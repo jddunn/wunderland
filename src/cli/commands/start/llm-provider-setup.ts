@@ -20,6 +20,7 @@ import {
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime/tools/workspace.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
+import { OPERATION_ID_HEADER_ENV, resolveOperationIdHeader } from '../../../platform/config/operation-id.js';
 import { buildFallbackChain } from '@framers/agentos';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
@@ -42,6 +43,20 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   } catch (err) {
     fmt.errorBlock(
       'Unsupported LLM provider',
+      err instanceof Error ? err.message : String(err),
+    );
+    process.exitCode = 1;
+    return false;
+  }
+
+  // AGENTOS_OPERATION_ID_HEADER names the header every provider request
+  // carries its operation id in. A name that is not a header, or that names a
+  // header the requests set themselves, would fail every call: stop here.
+  try {
+    resolveOperationIdHeader();
+  } catch (err) {
+    fmt.errorBlock(
+      `Invalid ${OPERATION_ID_HEADER_ENV}`,
       err instanceof Error ? err.message : String(err),
     );
     process.exitCode = 1;
@@ -118,7 +133,9 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
       } };
     }
     if (fb.provider === 'gemini') {
-      return { id: 'gemini', config: { apiKey: process.env['GEMINI_API_KEY']!, model: fb.model ?? 'gemini-2.5-flash' } };
+      // Gemini's OpenAI-compatible endpoint; without a base URL the request
+      // would go to OpenAI's with the Gemini key.
+      return { id: 'gemini', config: { apiKey: process.env['GEMINI_API_KEY']!, model: fb.model ?? 'gemini-2.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' } };
     }
     // Generic fallback entry for any other provider discovered by buildFallbackChain
     return { id: fb.provider, config: { apiKey: '', model: fb.model ?? '' } };

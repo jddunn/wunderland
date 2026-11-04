@@ -12,7 +12,10 @@
  *  - gates tools autonomously (read-only auto-approved; side-effect tools run
  *    only under an explicit skip/auto-approve flag — never an interactive prompt
  *    that would hang a headless turn, never a silent side effect),
- *  - persists the reply back onto the session the `/chat` reader also uses.
+ *  - persists the reply back onto the session the `/chat` reader also uses,
+ *  - sends the turn where `/chat` sends it: the primary provider's base URL
+ *    (`deps.llmBaseUrl`) and, when the primary fails, the fallback candidate
+ *    (`deps.openrouterFallback`).
  */
 
 import { runToolCallingTurn } from '../../../runtime/tools/tool-calling.js';
@@ -109,6 +112,15 @@ export async function runAgentTurn(
         maxRounds: 8,
         dangerouslySkipPermissions: deps.dangerouslySkipPermissions === true,
         askPermission: makeAutonomousAskPermission(deps),
+        // The same provider routing the /chat route uses: the primary
+        // provider's base URL (its base-URL variable), the fallback candidate
+        // and the OAuth key resolver.
+        baseUrl: deps.llmBaseUrl,
+        fallback: deps.openrouterFallback,
+        onFallback: (err: Error, provider: string) => {
+          console.warn(`[runAgentTurn] primary provider failed (${err.message}), routing to ${provider} source=${req.source}`);
+        },
+        getApiKey: deps.oauthGetApiKey,
         onToolCall: (tool: { name?: string }, args: Record<string, unknown>) => {
           toolCallCount += 1;
           deps.broadcastAgentEvent?.({
