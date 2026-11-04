@@ -176,6 +176,11 @@ function emitDiscoveryLog(opts: {
  * OpenAI's own root), and OpenRouter embeds at OPENROUTER_BASE_URL (else
  * OpenRouter's own root).
  *
+ * An `embeddingProvider` other than the LLM provider embeds with its own key
+ * and at its own base URL, never the LLM provider's: `openai` with
+ * OPENAI_API_KEY at OPENAI_BASE_URL, `openrouter` with OPENROUTER_API_KEY at
+ * OPENROUTER_BASE_URL.
+ *
  * @returns The embedding config, or `null` when no embedding provider applies
  *   or it has no key.
  */
@@ -199,8 +204,14 @@ export function resolveEmbeddingConfig(opts: {
   let providerId = providerHint;
   let baseUrl = opts.llmBaseUrl;
 
-  if (providerHint === 'anthropic' || providerHint === 'groq') {
-    // These don't have their own embedding API — fall back to OpenAI
+  if (
+    providerHint === 'anthropic' ||
+    providerHint === 'groq' ||
+    (providerHint === 'openai' && opts.llmProviderId !== 'openai')
+  ) {
+    // Anthropic and Groq have no embedding API of their own, and an `openai`
+    // embedding provider under another LLM provider is OpenAI's: both embed
+    // with OpenAI's key at OpenAI's base URL.
     const openaiKey = process.env['OPENAI_API_KEY'];
     if (!openaiKey) return null;
     apiKey = openaiKey;
@@ -209,7 +220,13 @@ export function resolveEmbeddingConfig(opts: {
   }
 
   if (providerHint === 'openrouter') {
-    // OpenRouter uses its own API key but OpenAI-compatible endpoint
+    // OpenRouter's OpenAI-compatible endpoint, with OpenRouter's key: the LLM
+    // provider's own when OpenRouter is the LLM provider, else OPENROUTER_API_KEY.
+    if (opts.llmProviderId !== 'openrouter') {
+      const openrouterKey = process.env['OPENROUTER_API_KEY'];
+      if (!openrouterKey) return null;
+      apiKey = openrouterKey;
+    }
     baseUrl = baseUrlFor('openrouter');
   }
 

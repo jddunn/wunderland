@@ -232,13 +232,13 @@ wunderland start
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | The host root, as Anthropic's SDK reads it. `start` adds `/v1`, and a value that already ends in `/v1` keeps one |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | The API root |
 
-Spaces around a value and trailing slashes are ignored. The calls that follow the variables:
+`start` ignores spaces around a value and trailing slashes; the LLM judge, which AgentOS runs, reads the value as set, so give it without them. The calls that follow the variables:
 
 - **The primary provider's turns.** Anthropic's go to `<ANTHROPIC_BASE_URL>/v1/messages`, OpenAI's and OpenRouter's to `<base>/chat/completions`.
 - **The fallback chain.** Each candidate goes to its own provider's variable. The Anthropic candidate uses Anthropic's OpenAI-compatible endpoint, `<ANTHROPIC_BASE_URL>/v1/chat/completions`.
 - **The local `memory_read` tool.** Query embeddings go to `<OPENAI_BASE_URL>/embeddings` with `OPENAI_API_KEY`; the HyDE hypothesis call goes to the primary provider's base URL.
 - **The knowledge bootstrap** (the `knowledge/*.md` files seeded on start). Embeddings go to `<OPENAI_BASE_URL>/embeddings` with `OPENAI_API_KEY`.
-- **The capability discovery index.** An OpenAI or Anthropic primary embeds through OpenAI at `OPENAI_BASE_URL`; an OpenRouter primary embeds at `OPENROUTER_BASE_URL`.
+- **The capability discovery index.** An OpenAI or Anthropic primary embeds through OpenAI at `OPENAI_BASE_URL`; an OpenRouter primary embeds at `OPENROUTER_BASE_URL`. A `discovery.embeddingProvider` other than the primary provider embeds with that provider's own key and variable: `openai` with `OPENAI_API_KEY` at `OPENAI_BASE_URL`, `openrouter` with `OPENROUTER_API_KEY` at `OPENROUTER_BASE_URL`. With that key unset, the index is not built.
 - **The LLM judge** (`hitl.mode: "llm-judge"`) with `judgeProvider` set to `openai` or `openrouter`. AgentOS reads those two variables itself. An `anthropic` judge goes to `https://api.anthropic.com` whatever `ANTHROPIC_BASE_URL` says, because AgentOS's judge takes no base URL.
 
 ---
