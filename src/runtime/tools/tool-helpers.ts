@@ -1237,7 +1237,10 @@ export async function anthropicMessagesRequest(opts: {
   temperature: number;
   maxTokens: number;
 }): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
-  const baseUrl = opts.baseUrl || 'https://api.anthropic.com';
+  // The base is the API host root (`https://api.anthropic.com`, as Anthropic's
+  // SDK reads ANTHROPIC_BASE_URL) or the `/v1` root the OpenAI-compatible
+  // callers use; either way the request goes to `<root>/v1/messages`.
+  const baseUrl = (opts.baseUrl || 'https://api.anthropic.com').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
   const res = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {

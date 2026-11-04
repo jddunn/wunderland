@@ -93,7 +93,17 @@ function answer(method: string, url: string, body: any): { status: number; json:
       status: 200,
       json: {
         object: 'list',
-        data: ['gpt-4o-mini', 'openai/gpt-4o-mini', 'text-embedding-3-small'].map((id) => ({ id, object: 'model', created: 0, owned_by: 'test' })),
+        // OpenRouter's provider reads name, pricing and context_length from each row.
+        data: ['gpt-4o-mini', 'openai/gpt-4o-mini', 'text-embedding-3-small'].map((id) => ({
+          id,
+          object: 'model',
+          created: 0,
+          owned_by: 'test',
+          name: id,
+          description: id,
+          pricing: { prompt: '0', completion: '0' },
+          context_length: 128000,
+        })),
       },
     };
   }
@@ -206,11 +216,14 @@ afterEach(() => {
   }
 });
 
-/** Points the three variables at the fake, with the spacing and slashes a person might type. */
-function pointVariablesAtFake(opts: { anthropicSuffix?: string } = {}): void {
-  process.env['OPENAI_BASE_URL'] = `  ${origin}/openai/v1/  `;
+/**
+ * Points the three variables at the fake, with the spacing and trailing
+ * slashes a person might type unless `plain` is set.
+ */
+function pointVariablesAtFake(opts: { anthropicSuffix?: string; plain?: boolean } = {}): void {
+  process.env['OPENAI_BASE_URL'] = opts.plain ? `${origin}/openai/v1` : `  ${origin}/openai/v1/  `;
   process.env['ANTHROPIC_BASE_URL'] = `${origin}/anthropic${opts.anthropicSuffix ?? ''}`;
-  process.env['OPENROUTER_BASE_URL'] = `${origin}/openrouter/api/v1/`;
+  process.env['OPENROUTER_BASE_URL'] = opts.plain ? `${origin}/openrouter/api/v1` : `${origin}/openrouter/api/v1/`;
 }
 
 function setKeys(...names: Array<keyof typeof KEYS>): void {
@@ -322,7 +335,9 @@ describe('start: the LLM judge', () => {
     ['openai', 'gpt-4o-mini', '/openai/v1/'],
     ['openrouter', 'openai/gpt-4o-mini', '/openrouter/api/v1/'],
   ])('a %s judge sends its request to the base-URL variable', async (judgeProvider, judgeModel, prefix) => {
-    pointVariablesAtFake();
+    // The judge is AgentOS's: it reads the variable itself and appends its
+    // paths to the value as set, without trimming, so these values are plain.
+    pointVariablesAtFake({ plain: true });
     setKeys('OPENAI_API_KEY', 'OPENROUTER_API_KEY');
     const ctx = await startCtx('openai', { hitl: { mode: 'llm-judge', judgeProvider, judgeModel } });
     expect(typeof ctx.llmJudgeHandler).toBe('function');

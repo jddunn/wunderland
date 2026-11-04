@@ -11,6 +11,7 @@ import type { IVectorStore } from '@framers/agentos';
 import { HydeRetriever, type HydeConfig } from '@framers/agentos/cognition/rag';
 import { createMemoryReadTool } from '../../../runtime/tools/MemoryReadTool.js';
 import type { ToolExecutionContext } from '@framers/agentos';
+import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
 
 const COLLECTIONS = ['knowledge_base', 'auto_memories'] as const;
 
@@ -26,14 +27,16 @@ type LocalMemoryHydeConfig = Partial<HydeConfig> & {
 };
 
 /**
- * Generate an embedding for a query string using OpenAI embeddings API.
+ * Generate an embedding for a query string using the OpenAI embeddings API
+ * at `baseUrl` (OPENAI_BASE_URL, else OpenAI's own root).
  */
 async function generateQueryEmbedding(
   text: string,
   apiKey: string,
   model = 'text-embedding-3-small',
+  baseUrl = normalizeBaseUrl(baseUrlFor('openai')),
 ): Promise<number[]> {
-  const res = await fetch('https://api.openai.com/v1/embeddings', {
+  const res = await fetch(`${baseUrl}/embeddings`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -127,14 +130,20 @@ async function queryCollections(opts: {
 /**
  * Create a memory_read tool backed by the local SqlVectorStore.
  * Returns null if required dependencies (vectorStore, apiKey) are missing.
+ *
+ * Query embeddings go to `openaiBaseUrl` when given, else to OPENAI_BASE_URL,
+ * else to OpenAI's own root; HyDE's hypothesis call goes to `hyde.llm.baseUrl`.
  */
 export function createLocalMemoryReadTool(opts: {
   vectorStore: IVectorStore;
   openaiApiKey: string;
+  /** Base URL of the OpenAI embeddings API. Default: OPENAI_BASE_URL, else `https://api.openai.com/v1`. */
+  openaiBaseUrl?: string;
   embeddingModel?: string;
   hyde?: LocalMemoryHydeConfig;
 }) {
   const { vectorStore, openaiApiKey, embeddingModel } = opts;
+  const embeddingsBaseUrl = normalizeBaseUrl(opts.openaiBaseUrl ?? baseUrlFor('openai'));
   const hydeConfig = opts.hyde?.enabled ? opts.hyde : undefined;
   const hydeRetriever =
     hydeConfig?.llm
@@ -145,7 +154,7 @@ export function createLocalMemoryReadTool(opts: {
             generateEmbeddings: async ({ texts }: { texts: string | string[] }) => {
               const firstText = Array.isArray(texts) ? texts[0] : texts;
               return {
-                embeddings: [await generateQueryEmbedding(firstText, openaiApiKey, embeddingModel)],
+                embeddings: [await generateQueryEmbedding(firstText, openaiApiKey, embeddingModel, embeddingsBaseUrl)],
               };
             },
           } as any,
@@ -181,6 +190,7 @@ export function createLocalMemoryReadTool(opts: {
       queryTextForEmbedding,
       openaiApiKey,
       embeddingModel,
+      embeddingsBaseUrl,
     );
     if (embedding.length === 0) {
       return { items: [], context: 'No embedding generated for query.' };

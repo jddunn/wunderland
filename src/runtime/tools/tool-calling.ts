@@ -326,6 +326,7 @@ export async function runToolCallingTurn(opts: {
         return await anthropicMessagesRequest({
           apiKey: anthropicApiKey,
           model: opts.model,
+          baseUrl: opts.baseUrl,
           system: payload.system,
           messages: payload.messages,
           tools: toAnthropicTools(toolDefs),

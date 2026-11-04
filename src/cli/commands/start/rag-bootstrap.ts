@@ -13,6 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
 
 const COLLECTION_NAME = 'knowledge_base';
 const STATE_KEY = 'rag_bootstrap:v1';
@@ -49,14 +50,14 @@ function chunkText(text: string, chunkSize: number, overlap: number): string[] {
   return chunks;
 }
 
-/** Generate embeddings via OpenAI API. */
-async function generateEmbeddings(texts: string[], apiKey: string): Promise<number[][]> {
+/** Generate embeddings with the OpenAI embeddings API at `baseUrl`. */
+async function generateEmbeddings(texts: string[], apiKey: string, baseUrl: string): Promise<number[][]> {
   const batchSize = 20; // OpenAI supports up to 2048 inputs but let's be conservative
   const allEmbeddings: number[][] = [];
 
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize);
-    const res = await fetch('https://api.openai.com/v1/embeddings', {
+    const res = await fetch(`${baseUrl}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,7 +89,9 @@ export async function bootstrapRagKnowledge(ctx: any): Promise<void> {
     return;
   }
 
-  const apiKey = ctx.llmApiKey || process.env.OPENAI_API_KEY;
+  // The embeddings are OpenAI's, so they take OpenAI's key and OPENAI_BASE_URL;
+  // the primary provider's key (an Anthropic or OpenRouter key) never goes there.
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     console.log('[RAG Bootstrap] No OpenAI API key — skipping RAG seeding');
     return;
@@ -152,7 +155,7 @@ export async function bootstrapRagKnowledge(ctx: any): Promise<void> {
 
   // Generate embeddings
   const texts = allChunks.map(c => c.text);
-  const embeddings = await generateEmbeddings(texts, apiKey);
+  const embeddings = await generateEmbeddings(texts, apiKey, baseUrlFor('openai'));
 
   // Build VectorDocument array
   const vectorDocs = allChunks.map((chunk, i) => ({

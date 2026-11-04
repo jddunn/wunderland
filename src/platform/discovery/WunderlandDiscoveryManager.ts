@@ -33,6 +33,7 @@ import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { derivePresetCoOccurrences } from './preset-co-occurrence.js';
 import { isWunderlandOtelEnabled, shouldExportWunderlandOtelLogs } from '../observability/otel.js';
 import { resolveApiKeyInput, type ApiKeyInput } from '../../runtime/identity/api-key-resolver.js';
+import { baseUrlFor } from '../config/provider-base-urls.js';
 
 // ============================================================================
 // TYPES
@@ -167,7 +168,18 @@ function emitDiscoveryLog(opts: {
   }
 }
 
-function resolveEmbeddingConfig(opts: {
+/**
+ * The embedding provider, key, model and base URL the capability index uses.
+ *
+ * The LLM provider's own embeddings, except that Anthropic and Groq, which have
+ * none, embed through OpenAI with OPENAI_API_KEY at OPENAI_BASE_URL (else
+ * OpenAI's own root), and OpenRouter embeds at OPENROUTER_BASE_URL (else
+ * OpenRouter's own root).
+ *
+ * @returns The embedding config, or `null` when no embedding provider applies
+ *   or it has no key.
+ */
+export function resolveEmbeddingConfig(opts: {
   embeddingProvider?: string;
   embeddingModel?: string;
   llmProviderId: string;
@@ -193,12 +205,12 @@ function resolveEmbeddingConfig(opts: {
     if (!openaiKey) return null;
     apiKey = openaiKey;
     providerId = 'openai';
-    baseUrl = undefined;
+    baseUrl = baseUrlFor('openai');
   }
 
   if (providerHint === 'openrouter') {
     // OpenRouter uses its own API key but OpenAI-compatible endpoint
-    baseUrl = 'https://openrouter.ai/api/v1';
+    baseUrl = baseUrlFor('openrouter');
   }
 
   if (!apiKey) return null;

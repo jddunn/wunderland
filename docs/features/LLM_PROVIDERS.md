@@ -215,6 +215,34 @@ Your keys are stored in `~/.wunderland/.env` and all configured providers are av
 
 ---
 
+## Provider base URLs
+
+`wunderland start` sends its calls to OpenAI, Anthropic and OpenRouter to the URL in that provider's base-URL variable, so a proxy or gateway in front of the provider sees every one of them. With a variable unset or blank, the calls go to the provider's own endpoint.
+
+```bash
+export OPENAI_BASE_URL=https://gateway.example.com/openai/v1
+export ANTHROPIC_BASE_URL=https://gateway.example.com/anthropic
+export OPENROUTER_BASE_URL=https://gateway.example.com/openrouter/api/v1
+wunderland start
+```
+
+| Variable | Unset, the calls go to | What the value names |
+|----------|------------------------|----------------------|
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | The API root, as OpenAI's SDK reads it |
+| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | The host root, as Anthropic's SDK reads it. `start` adds `/v1`, and a value that already ends in `/v1` keeps one |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | The API root |
+
+Spaces around a value and trailing slashes are ignored. The calls that follow the variables:
+
+- **The primary provider's turns.** Anthropic's go to `<ANTHROPIC_BASE_URL>/v1/messages`, OpenAI's and OpenRouter's to `<base>/chat/completions`.
+- **The fallback chain.** Each candidate goes to its own provider's variable. The Anthropic candidate uses Anthropic's OpenAI-compatible endpoint, `<ANTHROPIC_BASE_URL>/v1/chat/completions`.
+- **The local `memory_read` tool.** Query embeddings go to `<OPENAI_BASE_URL>/embeddings` with `OPENAI_API_KEY`; the HyDE hypothesis call goes to the primary provider's base URL.
+- **The knowledge bootstrap** (the `knowledge/*.md` files seeded on start). Embeddings go to `<OPENAI_BASE_URL>/embeddings` with `OPENAI_API_KEY`.
+- **The capability discovery index.** An OpenAI or Anthropic primary embeds through OpenAI at `OPENAI_BASE_URL`; an OpenRouter primary embeds at `OPENROUTER_BASE_URL`.
+- **The LLM judge** (`hitl.mode: "llm-judge"`) with `judgeProvider` set to `openai` or `openrouter`. AgentOS reads those two variables itself. An `anthropic` judge goes to `https://api.anthropic.com` whatever `ANTHROPIC_BASE_URL` says, because AgentOS's judge takes no base URL.
+
+---
+
 ## Environment Variables Reference
 
 ```bash
@@ -223,6 +251,11 @@ OPENAI_API_KEY=sk-...                    # OpenAI
 ANTHROPIC_API_KEY=sk-ant-...             # Anthropic (Claude)
 GEMINI_API_KEY=AIza...                   # Google Gemini
 OPENROUTER_API_KEY=sk-or-...             # OpenRouter
+
+# Provider base URLs (wunderland start; see Provider base URLs)
+OPENAI_BASE_URL=https://api.openai.com/v1      # OpenAI API root
+ANTHROPIC_BASE_URL=https://api.anthropic.com   # Anthropic host root
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
 # Ollama
 OLLAMA_BASE_URL=http://localhost:11434   # Ollama server URL (local or remote)
