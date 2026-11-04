@@ -399,7 +399,8 @@ export type WunderlandAgentConfig = {
      * names such as `web_search`). A ceiling over `permissionSet`,
      * `toolAccessProfile` and `executionMode`: a call to any other tool is
      * answered `tool_not_allowed` and never runs. A list that is not an array
-     * of names allows nothing.
+     * of names, or holds any entry that is not a non-empty name, allows
+     * nothing.
      */
     allow?: {
       packs?: string[];

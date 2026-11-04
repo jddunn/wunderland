@@ -30,13 +30,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** The non-empty strings of `value`, trimmed and without duplicates; anything but an array gives none. */
+/**
+ * The names `value` lists, trimmed and without duplicates. Anything but an
+ * array of non-empty strings gives none: one entry that is not a name (a
+ * number, `null`, an empty string) voids the whole list, so a mistake in it
+ * never grants the entries beside it.
+ */
 function namesOf(value: unknown, normalize: (name: string) => string = (name) => name): string[] {
   if (!Array.isArray(value)) return [];
-  const names = value
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => normalize(entry.trim()))
-    .filter((entry) => entry.length > 0);
+  const names: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string') return [];
+    const name = normalize(entry.trim());
+    if (name.length === 0) return [];
+    names.push(name);
+  }
   return [...new Set(names)];
 }
 
@@ -45,8 +53,9 @@ function namesOf(value: unknown, normalize: (name: string) => string = (name) =>
  *
  * Returns `undefined` when the config has no `tools.allow` (no restriction).
  * When it has one, the restriction holds even if the value is malformed: a
- * `packs` or `tools` that is not an array of names allows none, so a mistake
- * in the list never widens it.
+ * `packs` or `tools` that is not an array of names, or holds any entry that
+ * is not a non-empty name, allows none, so a mistake in the list never widens
+ * it.
  *
  * @param agentConfig - The agent config `start` runs with (`agent.config.json`).
  */

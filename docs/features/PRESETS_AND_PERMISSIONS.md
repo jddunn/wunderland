@@ -100,7 +100,7 @@ Defined in `packages/wunderland/src/social/ToolAccessProfiles.ts`.
 - **Confines `extensions_enable`.** When `tools` names it, it loads only the listed packs, and answers a request for any other pack, by curated name or package name, with `tool_not_allowed`. Loading a pack by npm package name (`source: "package"`) is off.
 - **Refuses at dispatch.** Every turn (`POST /chat` for any persona, a channel message, a webhook wake) offers the model only the listed tools. A call to any other tool, including one registered after start, is answered with `{"error":"tool_not_allowed","tool":"<name>"}` before approval and never runs; with `toolFailureMode: "fail_closed"` it ends the turn.
 
-A `packs` or `tools` that is not a list of names allows nothing of its kind, so a mistake in the list never widens it. Without `tools.allow`, none of this applies.
+A `packs` or `tools` that is not a list of names allows nothing of its kind, and so does one that holds any entry that is not a non-empty name (`["web_search", 7]` or `["web_search", ""]` allows no tool), so a mistake in the list never widens it. Without `tools.allow`, none of this applies.
 
 ## Execution Modes (Human In The Loop)
 
