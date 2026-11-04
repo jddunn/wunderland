@@ -47,7 +47,7 @@ import * as os from 'node:os';
 import { resolveAgentWorkspaceDir } from '@framers/agentos';
 import { resolveApiKeyInput } from '../identity/api-key-resolver.js';
 import { operationIdHeaders } from '../../platform/config/operation-id.js';
-import { anthropicApiUrl } from '../../platform/config/provider-base-urls.js';
+import { anthropicApiUrl, baseUrlFor } from '../../platform/config/provider-base-urls.js';
 import {
   buildToolDefsFromMapping,
   buildToolFunctionNameMapping,
@@ -714,12 +714,6 @@ export function parseProviderId(value: unknown): LLMProviderId | undefined {
   return undefined;
 }
 
-/** Default API base URLs for known providers. */
-const PROVIDER_BASE_URLS = {
-  openai: 'https://api.openai.com/v1',
-  openrouter: 'https://openrouter.ai/api/v1',
-} as const;
-
 /**
  * Determines whether an error should trigger a fallback attempt.
  * Retryable: rate limits (429), server errors (500+), auth failures (401/403), network errors.
@@ -737,7 +731,7 @@ export function shouldFallback(error: unknown): boolean {
 
 /**
  * One OpenAI-compatible chat completions request to `provider.baseUrl`
- * (OpenAI's own root when unset).
+ * (OPENAI_BASE_URL, else OpenAI's own root, when unset).
  *
  * @param operationHeaders - The call's operation id header
  *   ({@link operationIdHeaders}). A caller that sends several attempts of one
@@ -752,7 +746,7 @@ export async function chatCompletionsRequest(
   maxTokens: number,
   operationHeaders: Record<string, string> = operationIdHeaders(),
 ): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
-  const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
+  const baseUrl = provider.baseUrl || baseUrlFor('openai')!;
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter'
     : baseUrl.includes('generativelanguage.googleapis.com') ? 'Gemini'
     : baseUrl.includes('anthropic') ? 'Anthropic'
@@ -930,7 +924,7 @@ export async function streamingChatCompletionsRequest(
   signal?: AbortSignal,
   operationHeaders: Record<string, string> = operationIdHeaders(),
 ): Promise<AsyncIterable<string>> {
-  const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
+  const baseUrl = provider.baseUrl || baseUrlFor('openai')!;
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter'
     : baseUrl.includes('generativelanguage.googleapis.com') ? 'Gemini'
     : baseUrl.includes('anthropic') ? 'Anthropic'

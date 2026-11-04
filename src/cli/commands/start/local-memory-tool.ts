@@ -58,7 +58,7 @@ async function generateQueryEmbedding(
 
 function normalizeBaseUrl(baseUrl?: string): string {
   const trimmed = typeof baseUrl === 'string' ? baseUrl.trim() : '';
-  return trimmed ? trimmed.replace(/\/+$/, '') : 'https://api.openai.com/v1';
+  return trimmed ? trimmed.replace(/\/+$/, '') : baseUrlFor('openai')!;
 }
 
 function createOpenAICompatibleLlmCaller(config: LocalMemoryLlmConfig) {

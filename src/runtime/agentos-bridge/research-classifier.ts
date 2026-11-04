@@ -16,6 +16,7 @@
  */
 
 import { operationIdHeaders } from '../../platform/config/operation-id.js';
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
 
 export type ResearchDepth = 'none' | 'quick' | 'moderate' | 'deep';
 
@@ -43,8 +44,8 @@ export interface ResearchClassifierLlmCallOptions {
 }
 
 function normalizeBaseUrl(value: string | undefined): string {
-  const trimmed = (value || 'https://api.openai.com/v1').trim();
-  return trimmed.replace(/\/+$/, '');
+  const trimmed = (value ?? '').trim().replace(/\/+$/, '');
+  return trimmed || baseUrlFor('openai')!;
 }
 
 const CLASSIFIER_SYSTEM_PROMPT = `You are a query complexity classifier. Given a user query, classify it into ONE of these research depth tiers:

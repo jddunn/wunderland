@@ -5,7 +5,8 @@
  */
 
 import type { GlobalFlags } from '../types.js';
-import { anthropicApiUrl } from '../../platform/config/provider-base-urls.js';
+import { anthropicApiUrl, baseUrlFor } from '../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
 import { LLM_PROVIDERS } from '../constants.js';
 import { accent, info, muted, success as sColor } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
@@ -141,7 +142,7 @@ async function testProvider(args: string[], globals: GlobalFlags): Promise<void>
     let latency = 0;
 
     if (providerEntry.id === 'openai') {
-      const res = await fetchWithTimeout('https://api.openai.com/v1/models', {
+      const res = await fetchWithTimeout(`${baseUrlFor('openai')}/models`, {
         headers: { 'Authorization': `Bearer ${process.env['OPENAI_API_KEY']}` },
       });
       reachable = res.ok;
@@ -154,6 +155,7 @@ async function testProvider(args: string[], globals: GlobalFlags): Promise<void>
           'x-api-key': process.env['ANTHROPIC_API_KEY'] || '',
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
+          ...operationIdHeaders(),
         },
         body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
       });

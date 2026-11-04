@@ -91,7 +91,9 @@ import { createMemorySystem, type MemorySystem } from '../../memory/index.js';
 import { injectMemoryContext } from '../../memory/index.js';
 import { ContextWindowManager, MarkdownWorkingMemory } from '@framers/agentos/memory';
 import type { InfiniteContextConfig } from '@framers/agentos/memory';
+import { agentosBaseUrlFor, baseUrlFor, primaryBaseUrlFor } from '../../platform/config/provider-base-urls.js';
 import {
+  createChatLlmCaller,
   initCliQueryRouter,
   getCliQueryRouter,
   type CliQueryRouterOptions,
@@ -396,7 +398,7 @@ export default async function cmdChat(
     ? {
         apiKey: openrouterApiKey,
         model: typeof flags['openrouter-model'] === 'string' ? flags['openrouter-model'] : 'auto',
-        baseUrl: 'https://openrouter.ai/api/v1',
+        baseUrl: baseUrlFor('openrouter'),
         extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
       }
     : undefined;
@@ -415,14 +417,9 @@ export default async function cmdChat(
     return `${normalized}/v1`;
   })();
 
-  const llmBaseUrl =
-    providerId === 'openrouter'
-      ? 'https://openrouter.ai/api/v1'
-      : providerId === 'ollama'
-        ? ollamaBaseUrl
-        : providerId === 'gemini'
-          ? 'https://generativelanguage.googleapis.com/v1beta/openai'
-          : undefined;
+  // The same base URL `start` uses: OpenAI, Anthropic and OpenRouter read their
+  // base-URL variable.
+  const llmBaseUrl = primaryBaseUrlFor(providerId, { ollamaBaseUrl });
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =
     (cfg?.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
@@ -1215,12 +1212,15 @@ export default async function cmdChat(
       seedId,
     );
 
+    // The router's Anthropic calls go through AgentOS's provider, which takes the
+    // host root; every other provider takes the API root.
+    const queryRouterBaseUrl = (providerId === 'anthropic' ? agentosBaseUrlFor('anthropic') : llmBaseUrl) || undefined;
     const qrOpts: CliQueryRouterOptions = {
       apiKey: llmApiKey || undefined,
-      baseUrl: llmBaseUrl || undefined,
+      baseUrl: queryRouterBaseUrl,
       embeddingApiKey: process.env['OPENAI_API_KEY'] || llmApiKey || undefined,
       embeddingBaseUrl:
-        process.env['OPENAI_API_KEY'] ? undefined : (llmBaseUrl || undefined),
+        process.env['OPENAI_API_KEY'] ? undefined : queryRouterBaseUrl,
       model: model || undefined,
       extraCorpusPaths: typeof cfg?.queryRouter?.corpusPaths === 'object' && Array.isArray(cfg.queryRouter.corpusPaths)
         ? (cfg.queryRouter.corpusPaths as string[])
@@ -1234,19 +1234,7 @@ export default async function cmdChat(
       vectorStore: agentStorageManager?.getVectorStore(),
       agentDir,
       llmCaller: canUseLLM && llmApiKey && model
-        ? async (prompt: string) => {
-            const { default: OpenAI } = await import('openai');
-            const client = new OpenAI({
-              apiKey: llmApiKey,
-              baseURL: llmBaseUrl || undefined,
-            });
-            const resp = await client.chat.completions.create({
-              model,
-              messages: [{ role: 'user', content: prompt }],
-              max_tokens: 512,
-            });
-            return resp.choices?.[0]?.message?.content ?? '';
-          }
+        ? createChatLlmCaller({ apiKey: llmApiKey, model, baseUrl: llmBaseUrl })
         : undefined,
     };
     // Fire and forget — we await lazily when the first user message arrives.
@@ -1436,6 +1424,7 @@ export default async function cmdChat(
           'Evaluate whether this tool call is safe, relevant to the user request, and appropriate given the security context.',
         confidenceThreshold: (cfg?.hitl as any)?.judgeConfidenceThreshold ?? 0.7,
         apiKey: judgeApiKey,
+        baseUrl: agentosBaseUrlFor(judgeProvider),
       });
       llmJudgeHandler = async (tool: ToolInstance, args: Record<string, unknown>): Promise<boolean> => {
         const decision = await judgeHandler({

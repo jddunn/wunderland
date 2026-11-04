@@ -2,12 +2,13 @@
  * @fileoverview The base URL each provider's calls are sent to, read from the
  * provider's base-URL variable.
  *
- * `wunderland start` sends every call to OpenAI, Anthropic and OpenRouter
- * (the primary provider's turns, including the turn a webhook wakes, the
- * fallback chain, the local memory tool, the RAG bootstrap, the discovery
- * index and the Discord welcome and curated picks posts) to the URL this
- * module returns, so a proxy or gateway named by `OPENAI_BASE_URL`,
- * `ANTHROPIC_BASE_URL` or `OPENROUTER_BASE_URL` sees every one of them.
+ * Every call wunderland sends to OpenAI, Anthropic and OpenRouter goes to the
+ * URL this module returns, so a proxy or gateway named by `OPENAI_BASE_URL`,
+ * `ANTHROPIC_BASE_URL` or `OPENROUTER_BASE_URL` sees every one of them:
+ * `start`'s calls (the primary provider's turns, including the turn a webhook
+ * wakes, the fallback chain, the LLM judge, the local memory tool, the RAG
+ * bootstrap, the discovery index and the Discord welcome and curated picks
+ * posts), `chat`'s, the job executor's and the other commands'.
  *
  * @module wunderland/platform/config/provider-base-urls
  */
@@ -32,6 +33,12 @@ export const PROVIDER_DEFAULT_BASE_URLS: Readonly<Record<BaseUrlProviderId, stri
   anthropic: 'https://api.anthropic.com/v1',
   openrouter: 'https://openrouter.ai/api/v1',
 };
+
+/**
+ * Gemini's OpenAI-compatible root. It has no base-URL variable in `start` or
+ * `chat`; `wunderland mission` reads `GEMINI_BASE_URL` for its own requests.
+ */
+export const GEMINI_OPENAI_COMPATIBLE_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
 
 function isBaseUrlProvider(providerId: string): providerId is BaseUrlProviderId {
   return Object.prototype.hasOwnProperty.call(PROVIDER_BASE_URL_ENV, providerId);
@@ -63,6 +70,48 @@ export function baseUrlFor(
   if (!value) return PROVIDER_DEFAULT_BASE_URLS[providerId];
   if (providerId === 'anthropic') return anthropicV1Root(value, env);
   return value;
+}
+
+/**
+ * The base URL an agent's primary provider sends to, the one `start` and `chat`
+ * share: {@link baseUrlFor} for OpenAI, Anthropic and OpenRouter, the Ollama URL
+ * for Ollama, Gemini's OpenAI-compatible root for Gemini.
+ *
+ * @param providerId - The primary provider.
+ * @param opts.ollamaBaseUrl - The `/v1` root of the Ollama server.
+ * @param env - The environment to read; `process.env` by default.
+ * @returns The base URL, or `undefined` for any other provider.
+ */
+export function primaryBaseUrlFor(
+  providerId: string,
+  opts: { ollamaBaseUrl: string },
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  if (providerId === 'ollama') return opts.ollamaBaseUrl;
+  if (providerId === 'gemini') return GEMINI_OPENAI_COMPATIBLE_BASE_URL;
+  return baseUrlFor(providerId, env);
+}
+
+/**
+ * The provider's variable in the form AgentOS's provider of that name takes as
+ * its base URL, for a call AgentOS sends (the LLM judge): the API root for
+ * OpenAI and OpenRouter, the host root for Anthropic, whose provider adds
+ * `/v1/messages` itself. A value that ends in `/v1` or a trailing slash is
+ * normalized the way wunderland's own requests read it.
+ *
+ * @param providerId - The provider AgentOS sends to.
+ * @param env - The environment to read; `process.env` by default.
+ * @returns The base URL, or `undefined` when the variable is unset or blank or
+ *   the provider has none, which leaves the call on the provider's own endpoint.
+ */
+export function agentosBaseUrlFor(
+  providerId: string,
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  if (!isBaseUrlProvider(providerId)) return undefined;
+  const value = trimBaseUrl(env[PROVIDER_BASE_URL_ENV[providerId]]);
+  if (!value) return undefined;
+  return providerId === 'anthropic' ? value.replace(/\/v1$/, '') : value;
 }
 
 /** A base URL with surrounding spaces and trailing slashes removed; '' when blank. */

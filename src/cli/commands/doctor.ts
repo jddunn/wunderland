@@ -18,6 +18,7 @@ import { checkEnvSecrets } from '../config/secrets.js';
 import { loadConfig } from '../config/config-manager.js';
 import { execFile } from 'node:child_process';
 import { URLS, LLM_PROVIDERS, TOOL_KEY_PROVIDERS } from '../constants.js';
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ export default async function cmdDoctor(
   }
 
   const endpoints = [
-    { label: 'OpenAI API', url: 'https://api.openai.com/v1/models' },
+    { label: 'OpenAI API', url: `${baseUrlFor('openai')}/models` },
     { label: URLS.website, url: URLS.website },
   ];
 

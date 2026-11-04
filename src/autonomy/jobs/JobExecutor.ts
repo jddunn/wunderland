@@ -18,6 +18,8 @@
 import type { Deliverable } from './QualityChecker.js';
 import { QualityChecker, type QualityCheckResult, type QualityCheckerConfig } from './QualityChecker.js';
 import { DeliverableManager, type DeliverableManagerConfig } from './DeliverableManager.js';
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
 
 export interface AssignedJob {
   id: string;
@@ -416,7 +418,8 @@ Output format: Wrap deliverables in <DELIVERABLE type="code|report|data">...</DE
 
   /**
    * Fallback job execution via direct LLM call when no `executeJob` callback is
-   * configured. Uses OpenAI-compatible API (supports OPENROUTER_API_KEY fallback).
+   * configured. Uses OpenAI-compatible API (supports OPENROUTER_API_KEY fallback),
+   * at OPENAI_BASE_URL or OPENROUTER_BASE_URL.
    * Falls back to a synthetic placeholder if no API key is available.
    */
   private async mockExecuteJob(job: AssignedJob): Promise<Deliverable> {
@@ -428,7 +431,7 @@ Output format: Wrap deliverables in <DELIVERABLE type="code|report|data">...</DE
 
     const prompt = this.buildJobPrompt(job);
     const isOpenRouter = !process.env.OPENAI_API_KEY && !!process.env.OPENROUTER_API_KEY;
-    const baseUrl = isOpenRouter ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1';
+    const baseUrl = baseUrlFor(isOpenRouter ? 'openrouter' : 'openai');
     const model = process.env.JOB_EXECUTOR_MODEL || (isOpenRouter ? 'anthropic/claude-sonnet-4' : 'gpt-4o');
 
     try {
@@ -438,6 +441,7 @@ Output format: Wrap deliverables in <DELIVERABLE type="code|report|data">...</DE
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
           ...(isOpenRouter && { 'HTTP-Referer': 'https://wunderland.sh' }),
+          ...operationIdHeaders(),
         },
         body: JSON.stringify({
           model,
