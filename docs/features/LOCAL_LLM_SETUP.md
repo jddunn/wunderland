@@ -90,7 +90,8 @@ wunderland config set llmModel dolphin-llama3:8b
 
 **Programmatic API**
 ```ts
-import { createWunderlandSeed, HEXACO_PRESETS, DEFAULT_SECURITY_PROFILE, DEFAULT_INFERENCE_HIERARCHY, DEFAULT_STEP_UP_AUTH_CONFIG } from 'wunderland/advanced';
+import { createWunderlandSeed, HEXACO_PRESETS } from 'wunderland/seed';
+import { DEFAULT_SECURITY_PROFILE, DEFAULT_INFERENCE_HIERARCHY, DEFAULT_STEP_UP_AUTH_CONFIG } from 'wunderland/core';
 import { AgentOS } from '@framers/agentos';
 
 const seed = createWunderlandSeed({

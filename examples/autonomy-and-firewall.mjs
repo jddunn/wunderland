@@ -7,12 +7,12 @@
  *   node examples/autonomy-and-firewall.mjs
  */
 
+import { ToolRiskTier } from 'wunderland/core';
 import {
   StepUpAuthorizationManager,
-  ToolRiskTier,
   ContextFirewall,
   CitizenModeGuardrail,
-} from 'wunderland/advanced';
+} from 'wunderland/security';
 
 function fmtTier(tier) {
   switch (tier) {

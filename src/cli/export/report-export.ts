@@ -29,9 +29,19 @@ export interface ReportDataset {
   summary?: string;
 }
 
-/** Escape one CSV field per RFC 4180 (quote when it holds `," \n \r`). */
+/** A cell a spreadsheet would evaluate: it starts with `=`, `+`, `-`, `@`, tab or CR. */
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+/** A signed number such as `-5.25`, `+44` or `1e-3`, which stays as written. */
+const PLAIN_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+
+/**
+ * Escape one CSV field per RFC 4180 (quote when it holds `," \n \r`). A text
+ * cell a spreadsheet would read as a formula (`=HYPERLINK(...)`, `@SUM(...)`)
+ * gets a leading `'`, so it opens as text; numbers are left as they are.
+ */
 export function csvField(value: string | number): string {
-  const s = String(value ?? '');
+  let s = String(value ?? '');
+  if (typeof value !== 'number' && FORMULA_LEAD.test(s) && !PLAIN_NUMBER.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -103,6 +113,9 @@ export interface InteractiveOptions {
  * column sort, a live search box, per-column filters, stat cards, optional
  * value heat-shading, and a light/dark toggle. No external resources — all CSS
  * and JS are inlined, so it opens offline and is safe to share as one file.
+ * Row values and column keys and labels reach the page as text nodes, never as
+ * markup, and its CSV download neutralizes formula cells the way
+ * {@link csvField} does.
  */
 export function toInteractiveHtml(ds: ReportDataset, opts: InteractiveOptions = {}): string {
   const specs: ColumnSpec[] = opts.columns ?? ds.columns.map((k) => ({ key: k }));
@@ -173,14 +186,21 @@ function shade(c, v){ const h=heats[c.key]; if(!h)return ''; const n=num(v); if(
 function rows(){ let rs=DATA.rows; if(state.q){ const q=state.q.toLowerCase(); rs=rs.filter(r=>DATA.cols.some(c=>String(r[c.key]??'').toLowerCase().includes(q))); }
   if(state.sortKey){ const c=DATA.cols.find(x=>x.key===state.sortKey); rs=rs.slice().sort((a,b)=>{ let av=a[state.sortKey], bv=b[state.sortKey]; if(c&&c.numeric){ av=num(av)??-Infinity; bv=num(bv)??-Infinity; return (av-bv)*state.dir;} return String(av??'').localeCompare(String(bv??''))*state.dir; }); }
   return rs; }
+function el(tag, cls, text){ const e=document.createElement(tag); if(cls)e.className=cls; if(text!=null)e.textContent=text; return e; }
 function render(){ const th=document.getElementById('thead'), tb=document.getElementById('tbody');
-  th.innerHTML='<tr>'+DATA.cols.map(c=>'<th class="'+(c.numeric?'num ':'')+(state.sortKey===c.key?'sorted':'')+'" data-k="'+c.key+'">'+c.label+'<span class="ar">'+(state.sortKey===c.key?(state.dir>0?'▲':'▼'):'⇅')+'</span></th>').join('')+'</tr>';
-  const rs=rows(); tb.innerHTML = rs.length? rs.map(r=>'<tr>'+DATA.cols.map(c=>{const v=r[c.key]??''; return '<td class="'+(c.numeric?'num':'wrapcell')+'" style="'+shade(c,v)+'">'+String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>';}).join('')+'</tr>').join('') : '<tr><td class="empty" colspan="'+DATA.cols.length+'">No matching rows</td></tr>';
-  document.getElementById('count').textContent=rs.length+' / '+DATA.rows.length+' rows';
-  th.querySelectorAll('th').forEach(h=>h.onclick=()=>{ const k=h.dataset.k; if(state.sortKey===k)state.dir*=-1; else {state.sortKey=k;state.dir=1;} render(); }); }
+  const hr=document.createElement('tr');
+  for(const c of DATA.cols){ const h=el('th', ((c.numeric?'num ':'')+(state.sortKey===c.key?'sorted':'')).trim(), String(c.label));
+    h.appendChild(el('span','ar', state.sortKey===c.key?(state.dir>0?'▲':'▼'):'⇅'));
+    h.onclick=()=>{ if(state.sortKey===c.key)state.dir*=-1; else {state.sortKey=c.key;state.dir=1;} render(); };
+    hr.appendChild(h); }
+  th.replaceChildren(hr);
+  const rs=rows(); tb.replaceChildren();
+  for(const r of rs){ const tr=document.createElement('tr'); for(const c of DATA.cols){ const v=r[c.key]??''; const td=el('td', c.numeric?'num':'wrapcell', String(v)); td.style.cssText=shade(c,v); tr.appendChild(td); } tb.appendChild(tr); }
+  if(!rs.length){ const tr=document.createElement('tr'); const td=el('td','empty','No matching rows'); td.colSpan=DATA.cols.length; tr.appendChild(td); tb.appendChild(tr); }
+  document.getElementById('count').textContent=rs.length+' / '+DATA.rows.length+' rows'; }
 document.getElementById('q').addEventListener('input', e=>{ state.q=e.target.value; render(); });
 document.getElementById('themeBtn').onclick=()=>{ const r=document.documentElement; const cur=r.getAttribute('data-theme')|| (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'); r.setAttribute('data-theme', cur==='dark'?'light':'dark'); };
-document.getElementById('csvBtn').onclick=()=>{ const esc=v=>{const s=String(v??'');return /[",\\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}; const cols=DATA.cols.map(c=>c.key); const csv=[cols.map(esc).join(',')].concat(rows().map(r=>cols.map(c=>esc(r[c])).join(','))).join('\\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='report.csv'; a.click(); };
+document.getElementById('csvBtn').onclick=()=>{ const esc=v=>{let s=String(v??''); if(typeof v!=='number'&&/^[=+\\-@\\t\\r]/.test(s)&&!/^[+-]?(\\d+\\.?\\d*|\\.\\d+)(e[+-]?\\d+)?$/i.test(s))s="'"+s; return /[",\\n\\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}; const cols=DATA.cols.map(c=>c.key); const csv=[cols.map(esc).join(',')].concat(rows().map(r=>cols.map(c=>esc(r[c])).join(','))).join('\\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='report.csv'; a.click(); };
 ${theme !== 'auto' ? `document.documentElement.setAttribute('data-theme', ${JSON.stringify(theme)});` : ''}
 render();
 </script>
@@ -198,9 +218,26 @@ export interface PdfOptions {
 const DEFAULT_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 /**
+ * Content security policy put ahead of the HTML a PDF is printed from: inline
+ * styles and data: images and fonts only, so the page fetches nothing (no
+ * network URL, no other file:// path, no frame).
+ */
+export const PDF_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
+
+/**
+ * Prepare HTML for PDF printing: one doctype, then a charset and the
+ * {@link PDF_CSP} policy, then the caller's document. Pure + exported for tests.
+ */
+export function preparePdfHtml(html: string): string {
+  const rest = html.replace(/^\uFEFF?\s*<!DOCTYPE[^>]*>/i, '');
+  return `<!DOCTYPE html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}">${rest}`;
+}
+
+/**
  * Build the headless-Chrome argv for PDF rendering. Pure + exported for tests.
  * The `--user-data-dir` MUST be an isolated throwaway directory, never the
- * user's live profile.
+ * user's live profile. Scripts are off, and every request goes to a proxy on
+ * a closed local port (loopback included), so the page reaches no host.
  */
 export function buildPdfArgs(htmlPath: string, pdfPath: string, userDataDir: string): string[] {
   return [
@@ -209,6 +246,9 @@ export function buildPdfArgs(htmlPath: string, pdfPath: string, userDataDir: str
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
     '--no-default-browser-check',
+    '--blink-settings=scriptEnabled=false',
+    '--proxy-server=127.0.0.1:9',
+    '--proxy-bypass-list=<-loopback>',
     `--print-to-pdf=${pdfPath}`,
     '--no-pdf-header-footer',
     `file://${htmlPath}`,
@@ -217,31 +257,44 @@ export function buildPdfArgs(htmlPath: string, pdfPath: string, userDataDir: str
 
 /**
  * Render `html` to a PDF at `pdfPath` via an isolated headless Chrome. Throws
- * if the binary is missing or the render times out.
+ * if the binary is missing or the render times out. The page prints with
+ * scripts off, behind {@link PDF_CSP} and with no network route.
  */
 export async function renderPdf(html: string, pdfPath: string, opts: PdfOptions = {}): Promise<string> {
   const { writeFileSync } = await import('node:fs');
   const work = mkdtempSync(join(tmpdir(), 'wl-report-'));
   const htmlPath = join(work, 'report.html');
   const profileDir = join(work, 'chrome-profile'); // throwaway — NEVER the live profile
-  writeFileSync(htmlPath, html);
+  writeFileSync(htmlPath, preparePdfHtml(html));
   const args = buildPdfArgs(htmlPath, pdfPath, profileDir);
   await pExecFile(opts.chromeBinary ?? DEFAULT_CHROME, args, { timeout: opts.timeoutMs ?? 90_000 });
   return pdfPath;
 }
 
 /**
+ * Refuse a basename that is not a plain file name, so every output path stays
+ * inside `outDir` (`../x`, `a/b`, `a\b`, `.`, `..` and `''` throw).
+ */
+function plainBasename(base: string): string {
+  if (!base || base === '.' || base === '..' || /[\\/\0]/.test(base)) {
+    throw new TypeError(`exportReport: basename must be a plain file name, got ${JSON.stringify(base)}`);
+  }
+  return base;
+}
+
+/**
  * Write CSV + HTML for a dataset (always) and a PDF (best-effort, when a Chrome
- * binary is available). Returns the paths that were written.
+ * binary is available). Returns the paths that were written. Throws a
+ * TypeError before writing anything when `basename` is not a plain file name.
  */
 export async function exportReport(
   ds: ReportDataset,
   outDir: string,
   opts: { basename?: string; pdf?: boolean; interactive?: boolean | InteractiveOptions } & PdfOptions = {},
 ): Promise<{ csv: string; html: string; pdf?: string; interactive?: string }> {
+  const base = plainBasename(opts.basename ?? 'report');
   const { mkdirSync, writeFileSync } = await import('node:fs');
   mkdirSync(outDir, { recursive: true });
-  const base = opts.basename ?? 'report';
   const csv = join(outDir, `${base}.csv`);
   const html = join(outDir, `${base}.html`);
   writeFileSync(csv, toCsv(ds));

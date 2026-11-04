@@ -18,7 +18,7 @@ This directory contains all Wunderland package documentation, organized into the
 | `cli/` | Interactive-wizard CLI (front door for `wunderland create "..."`) |
 | `types/` | Cross-cutting type definitions |
 
-The `index.ts` and `public/` directories define the public API. The `package.json` `exports` field exposes 3 subpaths: `.`, `./api`, `./discovery`. Everything else is internal. See [CHANGELOG.md](../CHANGELOG.md) `## 0.72.0` for the migration table from the previous layout.
+The `index.ts` and `public/` directories define the public API. The `package.json` `exports` field exposes nine entries: `.`, `./api`, `./discovery`, `./core`, `./seed`, `./tools`, `./rag`, `./jobs` and `./security`. Everything else is internal. [Library API](features/LIBRARY_API.md#subpath-entries) lists what each one holds.
 
 ## Sections
 

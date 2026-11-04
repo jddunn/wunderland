@@ -10,7 +10,9 @@ import * as path from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
 import { CONFIG_DIR_NAME } from '../constants.js';
-import { sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
+import * as fmt from '../ui/format.js';
+import { InvalidAgentWorkspaceIdError, sanitizeAgentWorkspaceId } from '../../runtime/tools/workspace.js';
+import { healthUrl } from '../../channels/api/listen-host.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +23,8 @@ export interface DaemonInfo {
   displayName: string;
   /** Server port. */
   port: number;
+  /** Address the server listens on (`--host`); absent in records written before it existed. */
+  host?: string;
   /** OS process ID of the detached node process. */
   pid: number;
   /** Absolute path to agent.config.json used to start the daemon. */
@@ -57,7 +61,12 @@ export function getDaemonsDir(): string {
   return path.join(os.homedir(), CONFIG_DIR_NAME, 'daemons');
 }
 
-/** Per-daemon directory: ~/.wunderland/daemons/{sanitized-seedId}/ */
+/**
+ * Per-daemon directory: ~/.wunderland/daemons/{sanitized-seedId}/
+ *
+ * @throws InvalidAgentWorkspaceIdError when the seed id's cleaned name starts
+ *   or ends with a dot, so it names no folder of its own in the daemons folder.
+ */
 export function getDaemonDir(seedId: string): string {
   return path.join(getDaemonsDir(), sanitizeAgentWorkspaceId(seedId));
 }
@@ -84,27 +93,33 @@ export async function readDaemonInfo(seedId: string): Promise<DaemonInfo | null>
   }
 }
 
-/** Scan all daemon directories and return their info. */
-export async function readAllDaemons(): Promise<DaemonInfo[]> {
+/** Each daemon directory that holds a readable daemon.json, with its info. */
+async function readDaemonEntries(): Promise<Array<{ dir: string; info: DaemonInfo }>> {
   const daemonsDir = getDaemonsDir();
   if (!existsSync(daemonsDir)) return [];
 
   const entries = await readdir(daemonsDir, { withFileTypes: true });
-  const results: DaemonInfo[] = [];
+  const results: Array<{ dir: string; info: DaemonInfo }> = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const jsonPath = path.join(daemonsDir, entry.name, 'daemon.json');
+    const dir = path.join(daemonsDir, entry.name);
+    const jsonPath = path.join(dir, 'daemon.json');
     if (!existsSync(jsonPath)) continue;
     try {
       const raw = await readFile(jsonPath, 'utf-8');
-      results.push(JSON.parse(raw) as DaemonInfo);
+      results.push({ dir, info: JSON.parse(raw) as DaemonInfo });
     } catch {
-      // Corrupt entry — skip
+      // A corrupt entry is skipped.
     }
   }
 
   return results;
+}
+
+/** Scan all daemon directories and return their info. */
+export async function readAllDaemons(): Promise<DaemonInfo[]> {
+  return (await readDaemonEntries()).map((entry) => entry.info);
 }
 
 /** Merge-update daemon.json fields without overwriting the entire file. */
@@ -123,9 +138,22 @@ export async function updateDaemonInfo(
   return updated;
 }
 
-/** Remove daemon state directory (PID file, logs, metadata). */
+/**
+ * Remove daemon state directory (PID file, logs, metadata). A seed id whose
+ * cleaned name starts or ends with a dot names no state folder, so nothing is
+ * removed for it and one warning line says why; state an older release left
+ * under such a name is removed by {@link cleanStaleDaemons} once its process
+ * has exited.
+ */
 export async function removeDaemonInfo(seedId: string): Promise<void> {
-  const dir = getDaemonDir(seedId);
+  let dir: string;
+  try {
+    dir = getDaemonDir(seedId);
+  } catch (error) {
+    if (!(error instanceof InvalidAgentWorkspaceIdError)) throw error;
+    fmt.warning(`Daemon state for ${JSON.stringify(seedId)} left in place: ${error.message}.`);
+    return;
+  }
   if (existsSync(dir)) {
     await rm(dir, { recursive: true, force: true });
   }
@@ -143,15 +171,20 @@ export function isDaemonAlive(pid: number): boolean {
   }
 }
 
-/** Remove daemon entries whose PID is no longer alive. Returns removed entries. */
+/**
+ * Remove daemon entries whose PID is no longer alive. Returns removed entries.
+ * Each is removed by the directory it was read from, which lies directly in
+ * the daemons folder, so the seed id its daemon.json records never decides
+ * what is removed, and an entry an older release wrote under a seed id that is
+ * now refused is removed too.
+ */
 export async function cleanStaleDaemons(): Promise<DaemonInfo[]> {
-  const all = await readAllDaemons();
   const stale: DaemonInfo[] = [];
 
-  for (const info of all) {
+  for (const { dir, info } of await readDaemonEntries()) {
     if (!isDaemonAlive(info.pid)) {
       stale.push(info);
-      await removeDaemonInfo(info.seedId);
+      await rm(dir, { recursive: true, force: true });
     }
   }
 
@@ -224,16 +257,17 @@ export async function pollHealth(
   return false;
 }
 
-/** Fetch health status from a daemon's /health endpoint. */
+/** Fetch health status from a daemon's /health endpoint, at the address it listens on. */
 export async function fetchDaemonHealth(
   port: number,
   timeoutMs = 2000,
+  host?: string,
 ): Promise<{ status: 'ok' | 'slow' | 'down'; latencyMs: number; data?: HealthResponse }> {
   const start = Date.now();
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(`http://localhost:${port}/health`, { signal: controller.signal });
+    const res = await fetch(healthUrl(port, host), { signal: controller.signal });
     clearTimeout(timer);
     const latencyMs = Date.now() - start;
     if (!res.ok) return { status: 'down', latencyMs };

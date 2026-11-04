@@ -67,6 +67,19 @@ describe('getToolAccessProfile', () => {
       expect(Object.isFrozen(profile)).toBe(true);
     }
   });
+
+  it('a mutated category array cannot open a blocked tool to other agents', () => {
+    for (const name of Object.keys(TOOL_ACCESS_PROFILES) as ToolAccessProfileName[]) {
+      const profile = getToolAccessProfile(name);
+      const allowed = profile.allowedCategories as ToolCategory[];
+      const blocked = profile.blockedCategories as ToolCategory[];
+
+      expect(() => allowed.push('system')).toThrow(TypeError);
+      expect(() => blocked.splice(0, blocked.length, 'social')).toThrow(TypeError);
+    }
+
+    expect(isToolAllowedByProfile(getToolAccessProfile('social-citizen'), 'cli_executor')).toBe(false);
+  });
 });
 
 // ── Tool category mapping ───────────────────────────────────────────────────
