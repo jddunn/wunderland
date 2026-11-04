@@ -89,7 +89,10 @@ export {
 } from './tool-helpers.js';
 import type { ToolInstance, LLMProviderConfig } from './tool-helpers.js';
 import {
+  ALLOWANCE_EXHAUSTED_CODE,
+  ALLOWANCE_EXHAUSTED_LINE,
   createAuthorizationManager,
+  isAllowanceExhausted,
   parseProviderId,
   toAnthropicMessagePayload,
   anthropicMessagesRequest,
@@ -176,6 +179,13 @@ export async function runToolCallingTurn(opts: {
   fallback?: LLMProviderConfig;
   /** Called when a fallback is triggered. */
   onFallback?: (primaryError: Error, fallbackProvider: string) => void;
+  /**
+   * Called for each provider request that fails: a primary whose call falls back
+   * and a failure that ends the round alike. A `ProviderHttpError` carries the
+   * status. A used-up allowance reaches this hook and does not throw: the turn
+   * ends with what the model gave so far and `ALLOWANCE_EXHAUSTED_LINE`.
+   */
+  onProviderError?: (error: unknown) => void;
   /** Async key resolver for OAuth. When set, called instead of using the static apiKey. */
   getApiKey?: () => string | Promise<string>;
   /** Native Ollama request options such as num_ctx / num_gpu. */
@@ -302,6 +312,14 @@ export async function runToolCallingTurn(opts: {
         })()
       : null;
 
+  const notifyProviderError = (error: unknown): void => {
+    try {
+      opts.onProviderError?.(error);
+    } catch {
+      // A reporting hook never changes the turn.
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // Extracted helper: callLLMForTurn
   // Performs the provider-specific LLM call with OTel instrumentation, fallback
@@ -316,7 +334,7 @@ export async function runToolCallingTurn(opts: {
     let fallbackTriggered = false;
     let fallbackProvider = '';
 
-    const invoke = async () => {
+    const callProvider = async () => {
       if (providerId === 'ollama') {
         const provider = await ollamaProviderPromise!;
         const result = await provider.generateCompletion(
@@ -376,10 +394,20 @@ export async function runToolCallingTurn(opts: {
         onFallback: (primaryError, providerName) => {
           fallbackTriggered = true;
           fallbackProvider = providerName;
+          notifyProviderError(primaryError);
           opts.onFallback?.(primaryError, providerName);
         },
         getApiKey: opts.getApiKey,
       });
+    };
+
+    const invoke = async () => {
+      try {
+        return await callProvider();
+      } catch (error) {
+        notifyProviderError(error);
+        throw error;
+      }
     };
 
     const llmResult = !isWunderlandOtelEnabled()
@@ -763,6 +791,34 @@ export async function runToolCallingTurn(opts: {
   /** Accumulates text within a single round (reset when tool_call_request arrives). */
   let pendingText = '';
 
+  /**
+   * The reply of a turn the allowance ended: what the model gave so far, through
+   * the same output check a finished turn's reply gets, then the fixed line.
+   */
+  const endTurnAtAllowance = async (): Promise<string> => {
+    emitOtelLog({
+      name: 'wunderland.runtime',
+      body: ALLOWANCE_EXHAUSTED_CODE,
+      severity: SeverityNumber.WARN,
+      attributes: { round: currentRound - 1 },
+    });
+    console.warn('[tool-calling] The model allowance is used up; ending the turn.');
+    let soFar = finalText.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
+    if (contentPipeline && soFar) {
+      try {
+        const outputResult = await contentPipeline.evaluateOutput({
+          chunk: { finalResponseText: soFar },
+        } as any);
+        if (outputResult?.action === 'block') soFar = '';
+      } catch {
+        // Non-fatal, as for a finished turn's reply.
+      }
+    }
+    const reply = soFar ? `${soFar}\n\n${ALLOWANCE_EXHAUSTED_LINE}` : ALLOWANCE_EXHAUSTED_LINE;
+    opts.messages.push({ role: 'assistant', content: reply });
+    return reply;
+  };
+
   const loopContext: LoopContext = {
     generateStream: () => {
       // We return an async generator that:
@@ -885,7 +941,17 @@ export async function runToolCallingTurn(opts: {
         // Delegate to the LLM adapter generator, yielding all chunks and
         // returning its LoopOutput as our own return value.
         const llmGen = wrapLLMAsGenerator(() => callLLMForTurn(round, toolDefs));
-        let iterResult = await llmGen.next();
+        let iterResult;
+        try {
+          // The provider is called on this first step.
+          iterResult = await llmGen.next();
+        } catch (error) {
+          if (!isAllowanceExhausted(error)) throw error;
+          // No retry and no other provider: an empty output ends the loop, and
+          // the main loop returns earlyReturn.
+          earlyReturn = await endTurnAtAllowance();
+          return { responseText: '', toolCalls: [], finishReason: 'stop' };
+        }
         while (!iterResult.done) {
           yield iterResult.value as import('../execution/llm-stream-adapter.js').LoopChunk;
           iterResult = await llmGen.next();

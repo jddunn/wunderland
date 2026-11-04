@@ -20,6 +20,7 @@ import { createAgentHttpServer } from './http-server.js';
 import { startServerAndDisplay } from './startup-display.js';
 import { bootstrapRagKnowledge } from './rag-bootstrap.js';
 import { resolveListenHost } from '../../../channels/api/listen-host.js';
+import { createEventsReporterFromEnv } from './hosted-events.js';
 
 export default async function cmdStart(
   _args: string[],
@@ -102,6 +103,10 @@ export default async function cmdStart(
 
     // Phase 7: Pairing manager
     phase('pairing', () => initPairing(ctx));
+
+    // Phase 7.5: The hosted events reporter, when both of its variables are set.
+    // Channels, the HTTP routes and the shutdown path all read it from ctx.
+    ctx.eventsReporter = createEventsReporterFromEnv();
 
     // Phase 8: Channel runtime (adapter map, Discord extensions, subscriptions)
     await phase('channels', async () => {

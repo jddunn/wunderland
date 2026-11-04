@@ -13,6 +13,7 @@ import type { HumanInteractionManager } from '@framers/agentos';
 
 import type { ToolInstance } from '../../../../runtime/tools/tool-calling.js';
 import type { WunderlandSessionTextLogger } from '../../../../platform/observability/session-text-log.js';
+import type { EventsReporter } from '../hosted-events.js';
 
 /**
  * Shared dependencies injected into CLI HTTP server route handler functions.
@@ -81,6 +82,8 @@ export interface CliServerDeps {
 
   /* ── observability ────────────────────────────────────────────────────── */
   sessionTextLogger: WunderlandSessionTextLogger;
+  /** Set when the events variables are; posts each turn's coarse events. */
+  eventsReporter?: EventsReporter;
 
   /* ── dashboard ──────────────────────────────────────────────────────── */
   /** Extension packs loaded at startup (used by dashboard extensions tab). */

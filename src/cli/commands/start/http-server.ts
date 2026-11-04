@@ -138,6 +138,7 @@ export function createAgentHttpServer(ctx: any): import('node:http').Server {
     adapterByPlatform,
     loadedHttpHandlers,
     sessionTextLogger,
+    eventsReporter: ctx.eventsReporter,
     activePacks: ctx.activePacks ?? [],
     eventSseClients,
     broadcastAgentEvent,

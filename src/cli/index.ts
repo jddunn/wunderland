@@ -269,6 +269,7 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
     notes: [
       'Listens on 127.0.0.1 (this machine only) unless --host names another address. --host 0.0.0.0 lets other machines connect.',
       'A host other machines can reach needs a chat secret (chat.secret in agent.config.json, or WUNDERLAND_CHAT_SECRET); without one, start refuses to listen there. Clients send it in the x-wunderland-chat-secret header.',
+      'With WUNDERLAND_EVENTS_URL and WUNDERLAND_EVENTS_TOKEN set, start posts the coarse events of each turn (names, counts, codes, times; no text) to <url>/events.',
     ],
   },
   status: {
