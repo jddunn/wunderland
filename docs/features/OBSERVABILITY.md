@@ -255,12 +255,12 @@ With both variables set, `wunderland start` posts the coarse events of what the 
 | `turn_started` | A turn begins: a channel message, a `POST /chat`, or a webhook's `mode: "turn"` wake | none |
 | `tool_called` | The model called a tool the agent has, before that call's approval | `toolName` |
 | `approval_requested` | The turn waits on a person: a tool's approval or a turn checkpoint | none |
-| `provider_error` | A provider request failed, including a primary that then falls back | `code`: the HTTP status, as a string |
+| `provider_error` | A provider request failed, including a primary that then falls back | `code`: the HTTP status, as a string; none when the request got no answer |
 | `turn_finished` | The turn ended, however it ended | `promptTokens`, `completionTokens`: the turn's totals across its rounds |
-| `channel_auth_failed` | A channel adapter emitted an `error` event whose data has `code: "auth_failed"`, which a channel pack does when the platform rejects its token. It belongs to no turn | `code`: the platform |
+| `channel_auth_failed` | A channel adapter emitted an `error` event whose data has `code: "auth_failed"`: the platform rejected its token. A pack that emits no such event reports nothing. It belongs to no turn | `code`: the platform |
 | `referral_sent` | The reporter's kind for a guardrail pack that counts the referrals it sends; `start` itself sends none | none |
 
-`at` is milliseconds since the epoch. A field that does not hold what it should is left out: `code`, `toolName` and the operation id go out only as a single word (letters, digits and `_ . : -`), so a caller that passes text by mistake loses the field rather than posting the text.
+`at` is milliseconds since the epoch. `count`, when set, says how many times the event happened; `start`'s own events leave it out, so a server counts one. A field that does not hold what it should is left out: `code`, `toolName` and the operation id go out only as a single word (letters, digits and `_ . : -`), so a caller that passes text by mistake loses the field rather than posting the text.
 
 - **Batching.** A post goes out every 5 seconds while events wait, with at most 200 events. Each turn's events go in their own post, with a new UUID in the header `AGENTOS_OPERATION_ID_HEADER` names. With that variable unset, no header is sent; an event outside a turn sends none either.
 - **The queue.** The reporter holds 1,000 events and drops the oldest past that.
