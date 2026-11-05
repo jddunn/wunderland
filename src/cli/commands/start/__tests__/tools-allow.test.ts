@@ -355,7 +355,8 @@ describe('wunderland start: tools.allow', () => {
 
 describe('wunderland start: channel packs under tools.allow', () => {
   beforeEach(() => {
-    // Activation asks Telegram about this token and fails; the adapter is what is read here.
+    // Activation asks Telegram about this token and fails, which `start` reports and
+    // survives; the adapter is what is read here.
     setEnv('TELEGRAM_BOT_TOKEN', '12345:test-token');
   });
 
@@ -368,7 +369,13 @@ describe('wunderland start: channel packs under tools.allow', () => {
       { extensions: { tools: ['cli-executor'], voice: [], productivity: [] } },
     ],
   ])('with %s, the configured channel still loads and no tool is added', async (_label, tools, extra) => {
-    const ctx = await loadForConfig(unrestrictedAutonomousConfig({ channels: ['telegram'], tools, ...extra }));
+    const ctx = await loadForConfig(unrestrictedAutonomousConfig({
+      channels: ['telegram'],
+      tools,
+      // Send-only: no polling loop to outlive the test.
+      extensionOverrides: { 'channel-telegram': { options: { sendOnly: true } } },
+      ...extra,
+    }));
     try {
       expect(ctx.loadedChannelAdapters.map((adapter: any) => adapter.platform)).toEqual(['telegram']);
       expect(packNames(ctx)).toEqual(['@framers/agentos-ext-channel-telegram']);
