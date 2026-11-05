@@ -253,10 +253,11 @@ export class StatusView {
     const hitlMode = (() => {
       if (hitlCfg?.mode === 'llm-judge') return 'llm-judge';
       if (hitlCfg?.mode === 'auto-approve') return 'auto-approve';
+      if (hitlCfg?.mode === 'remote') return 'remote';
       return 'human';
     })();
     const hitlModeColor = hitlMode === 'human' ? sColor(hitlMode)
-      : hitlMode === 'llm-judge' ? iColor(hitlMode)
+      : hitlMode === 'llm-judge' || hitlMode === 'remote' ? iColor(hitlMode)
       : wColor(hitlMode);
     lines.push(`    ${muted('HITL Mode'.padEnd(20))} ${hitlModeColor}`);
     const guardrailOverride = hitlCfg?.guardrailOverride !== false;

@@ -14,6 +14,7 @@ import type { HumanInteractionManager } from '@framers/agentos';
 import type { ToolInstance } from '../../../../runtime/tools/tool-calling.js';
 import type { WunderlandSessionTextLogger } from '../../../../platform/observability/session-text-log.js';
 import type { EventsReporter } from '../hosted-events.js';
+import type { RemoteApprovalHandler } from '../remote-approvals.js';
 
 /**
  * Shared dependencies injected into CLI HTTP server route handler functions.
@@ -54,6 +55,8 @@ export interface CliServerDeps {
   autoApproveToolCalls: boolean;
   /** Pre-built LLM judge handler for tool approval decisions (--llm-judge). */
   llmJudgeHandler?: (tool: { name: string; hasSideEffects?: boolean }, args: Record<string, unknown>) => Promise<boolean>;
+  /** Set when `hitl.mode` is `remote`: outward tools ask it, and it stands in for the local approval queue. */
+  remoteApprovalHandler?: RemoteApprovalHandler;
   dangerouslySkipPermissions: boolean;
   turnApprovalMode: 'off' | 'after-each-turn' | 'after-each-round';
   defaultTenantId: string | undefined;

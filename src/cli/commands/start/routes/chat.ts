@@ -36,6 +36,7 @@ import {
 import { buildOllamaRuntimeOptions } from '../../../../runtime/tools/ollama-options.js';
 import { allowedToolNamesFor } from '../../../../runtime/tools/tool-allow-list.js';
 import { startReportedTurn } from '../hosted-events.js';
+import { askRemoteApproval, outwardApprovalFor } from '../remote-approvals.js';
 
 import {
   readBody,
@@ -101,6 +102,7 @@ export async function handleChatRoutes(
     strictToolNames,
     autoApproveToolCalls,
     llmJudgeHandler,
+    remoteApprovalHandler,
     dangerouslySkipPermissions,
     turnApprovalMode,
     defaultTenantId,
@@ -369,6 +371,8 @@ export async function handleChatRoutes(
             args,
           });
         },
+        // hitl.mode "remote": outward tools ask first, whatever the tiers and flags say.
+        outwardApproval: outwardApprovalFor(remoteApprovalHandler, { reportedTurn }),
         askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
           if (autoApproveToolCalls) return true;
 
@@ -392,6 +396,11 @@ export async function handleChatRoutes(
             (isLoopbackRequest(req) || (!!chatSecret && isChatAuthorized(req, url, chatSecret)))
           ) {
             return true;
+          }
+
+          // hitl.mode "remote": the server answers; no one watches the local queue.
+          if (remoteApprovalHandler) {
+            return (await askRemoteApproval(remoteApprovalHandler, tool, args, { reportedTurn })).approved;
           }
 
           reportedTurn.approvalRequested();

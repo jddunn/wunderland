@@ -11,7 +11,8 @@
  *  - serializes turns on the same session (shared history is a plain Map),
  *  - gates tools autonomously (read-only auto-approved; side-effect tools run
  *    only under an explicit skip/auto-approve flag — never an interactive prompt
- *    that would hang a headless turn, never a silent side effect),
+ *    that would hang a headless turn, never a silent side effect), and with
+ *    `hitl.mode: "remote"` asks the server before an outward tool,
  *  - persists the reply back onto the session the `/chat` reader also uses,
  *  - sends the turn where `/chat` sends it: the primary provider's base URL
  *    (`deps.llmBaseUrl`) and, when the primary fails, the fallback candidate
@@ -23,6 +24,7 @@ import { buildPersonaSessionKey } from '../../../runtime/execution/request-perso
 import { KeyedMutex } from '../../../runtime/execution/keyed-mutex.js';
 import { allowedToolNamesFor } from '../../../runtime/tools/tool-allow-list.js';
 import { startReportedTurn } from './hosted-events.js';
+import { askRemoteApproval, outwardApprovalFor } from './remote-approvals.js';
 
 /** One shared mutex per process: serializes turns that share a session key. */
 const sessionMutex = new KeyedMutex();
@@ -50,15 +52,18 @@ const HISTORY_KEEP_TAIL = 120;
 /**
  * Autonomous tool-approval policy: read-only tools are always allowed;
  * side-effect tools require an explicit skip/auto-approve flag. Returns false
- * (deny) otherwise — a headless turn must never block on a human, and must
- * never run a side effect the operator did not authorize.
+ * (deny) otherwise — a headless turn must never block on a human it has no way
+ * to reach, and must never run a side effect the operator did not authorize.
+ * With `hitl.mode: "remote"` it has a way: the server is asked instead of a deny.
  */
-function makeAutonomousAskPermission(deps: any) {
+function makeAutonomousAskPermission(deps: any, reportedTurn: any) {
   const allowSideEffects =
     deps.dangerouslySkipPermissions === true || deps.autoApproveToolCalls === true;
-  return async (tool: { hasSideEffects?: boolean }): Promise<boolean> => {
+  return async (tool: { name?: string; hasSideEffects?: boolean }, args: Record<string, unknown>): Promise<boolean> => {
     if (tool?.hasSideEffects !== true) return true;
-    return allowSideEffects;
+    if (allowSideEffects) return true;
+    if (!deps.remoteApprovalHandler) return false;
+    return (await askRemoteApproval(deps.remoteApprovalHandler, tool, args, { reportedTurn })).approved;
   };
 }
 
@@ -117,7 +122,9 @@ export async function runAgentTurn(
         },
         maxRounds: 8,
         dangerouslySkipPermissions: deps.dangerouslySkipPermissions === true,
-        askPermission: makeAutonomousAskPermission(deps),
+        // hitl.mode "remote": outward tools ask first, whatever the tiers and flags say.
+        outwardApproval: outwardApprovalFor(deps.remoteApprovalHandler, { reportedTurn }),
+        askPermission: makeAutonomousAskPermission(deps, reportedTurn),
         // The same provider routing the /chat route uses: the primary
         // provider's base URL (its base-URL variable), the fallback candidate
         // and the OAuth key resolver.

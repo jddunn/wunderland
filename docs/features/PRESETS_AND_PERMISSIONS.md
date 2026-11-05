@@ -134,6 +134,86 @@ To require a human checkpoint between tool-calling rounds (useful for multi-step
 
 - `agent.config.json`: `hitl.turnApprovalMode = "after-each-round"` (or `"after-each-turn"`)
 
+## Remote Approvals (`hitl.mode: "remote"`)
+
+```json
+{
+  "executionMode": "autonomous",
+  "hitl": { "mode": "remote" }
+}
+```
+
+```bash
+export WUNDERLAND_EVENTS_URL=https://control.example.com/agent
+export WUNDERLAND_EVENTS_TOKEN=<the agent's token>
+export AGENTOS_OPERATION_ID_HEADER=x-operation-id   # optional
+wunderland start
+```
+
+```http
+POST /agent/approvals
+Authorization: Bearer <the agent's token>
+x-operation-id: 0b7c1f4e-5a0e-4d2b-9a55-1f2f3c6f7a10
+Content-Type: application/json
+
+{
+  "toolName": "telegramChannelSendMessage",
+  "action": {
+    "summary": "telegramChannelSendMessage to 12345",
+    "text": "{\n  \"chatId\": \"12345\",\n  \"text\": \"The report is ready.\"\n}"
+  },
+  "operationId": "0b7c1f4e-5a0e-4d2b-9a55-1f2f3c6f7a10"
+}
+```
+
+A 2xx answer carries the request's id: `{ "id": "apr_1" }`. The agent then reads the answer:
+
+```http
+GET /agent/approvals/apr_1
+Authorization: Bearer <the agent's token>
+x-operation-id: 0b7c1f4e-5a0e-4d2b-9a55-1f2f3c6f7a10
+```
+
+```json
+{ "state": "waiting" }
+```
+
+With `hitl.mode: "remote"`, `wunderland start` asks this server before an outward tool runs, in every turn: a channel message, `POST /chat` and a webhook's turn. The check comes after [`tools.allow`](#tool-allow-list-toolsallow), so a tool outside the list is refused before anyone is asked, and ahead of the execution mode, the risk tiers, `--auto-approve-tools` and `--dangerously-skip-permissions`, none of which can pass a call it refuses. A yes runs the call once, with no second approval. Without `hitl.mode: "remote"`, none of this applies.
+
+| `state` | What the turn does |
+|---------|--------------------|
+| `approved` | The tool runs. |
+| `declined`, `expired`, `withdrawn` | The tool does not run. The turn ends with the word in its reply and the model is not called again. |
+| `waiting`, or anything else | The agent reads again 5 seconds after the answer. Only `approved` is a yes. |
+
+The agent waits 10 minutes from the server's answer to the request, then reads the state once more and ends the turn `expired`. A server may hold a read open until it has an answer. The agent lets one read run for at most 35 seconds, and in the last seconds of the wait for what is left of it, with a floor of 5 seconds, so a server's hold should end by the request's own deadline.
+
+The turn's reply is what the model said so far, then a line such as `The request to run telegramChannelSendMessage was declined, so it did not run.`. Any other tool calls of that round do not run either and are answered `turn_ended` in the history, so the conversation's next turn is valid.
+
+**Which calls ask.** A call asks when either of these holds:
+
+- The tool's name has a write verb (`send`, `post`, `publish`, `purchase`, `buy`, `pay`, `broadcast`, `bulk`, `webhook`), and its category is `channel`, `communication`, `communications`, `social` or `tools`, or it does not declare `hasSideEffects: false`. The first read or write verb in the name decides: `sendMessage` writes and `getPost` reads. A send to the conversation's own channel asks too; a turn's plain reply needs no tool and asks nothing.
+- The tool declares `hasSideEffects: true` and its arguments aim at a channel other than the conversation's own: `chatId`, `channelId`, `channel`, `conversationId`, `roomId`, `jid`, `recipient`, `to`, `target`, or a `platform` other than the conversation's. `POST /chat` and a webhook's turn have no channel of their own, so any target counts.
+
+Every other call follows `executionMode`, with this server in place of the local `/hitl` queue: a call that would wait for a person there asks here. A read tool asks nothing. [Turn checkpoints](#turn-checkpoints-human-after-each-round) stay on `/hitl`.
+
+**The request.** `action.summary` names the tool and its first target. `action.text` is the call's arguments as JSON, up to 1,800 characters, with any field named like a secret (`apiKey`, `token`, `password`, `authorization`) masked. This route is the only place the agent sends tool arguments; they never reach the [hosted events](OBSERVABILITY.md#hosted-events) or a log line.
+
+**It fails closed.**
+
+| What goes wrong | What happens |
+|-----------------|--------------|
+| `WUNDERLAND_EVENTS_URL` or `WUNDERLAND_EVENTS_TOKEN` is unset, blank or not a URL | Nothing is asked. Every outward call is refused `approval_unavailable`, with one warning line at startup, and read tools still run. |
+| The request gets no answer within 10 seconds, or any status but 2xx, or a 2xx with no `id` | `approval_unavailable`. The request is not sent again. |
+| A read gets a 4xx other than 408, 425 or 429 | `approval_unavailable` at once: the token or the request is gone. |
+| A read gets no answer, a 408, 425, 429 or 5xx | The agent keeps reading until the wait ends. |
+
+Failures go to `console.warn`, one line a minute at most, with a status or an error's name, never the token and never the action.
+
+A wait lives in the running process. Stopping the agent ends the turn with the tool not run, and the request stays on the server until the server expires it. A channel conversation's next message waits behind the turn that is asking.
+
+Code: `src/cli/commands/start/remote-approvals.ts`.
+
 ## System Prompt Confidentiality
 
 The system prompt includes explicit confidentiality instructions that direct the LLM to refuse all prompt extraction attempts. This defends against:

@@ -19,6 +19,7 @@ import { allowedToolNamesFor } from '../../../runtime/tools/tool-allow-list.js';
 import * as fmt from '../../ui/format.js';
 import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
 import { isChannelAuthFailure, startReportedTurn, type EventsReporter } from './hosted-events.js';
+import { askRemoteApproval, outwardApprovalFor, type RemoteApprovalHandler } from './remote-approvals.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,8 @@ export interface ChannelRuntimeCtx {
   autoApproveToolCalls: boolean;
   /** Pre-built LLM judge handler for tool approval decisions (--llm-judge). */
   llmJudgeHandler?: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
+  /** Set when `hitl.mode` is `remote`: outward tools ask it, and it stands in for the local approval queue. */
+  remoteApprovalHandler?: RemoteApprovalHandler;
   dangerouslySkipPermissions: boolean;
   strictToolNames: boolean;
   openrouterFallback: any;
@@ -236,6 +239,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
     policy,
     autoApproveToolCalls,
     llmJudgeHandler,
+    remoteApprovalHandler,
     dangerouslySkipPermissions,
     strictToolNames,
     openrouterFallback,
@@ -491,6 +495,11 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
         },
         onUsage: reportedTurn.usage,
         onProviderError: reportedTurn.providerError,
+        // hitl.mode "remote": outward tools ask first, whatever the tiers and flags say.
+        outwardApproval: outwardApprovalFor(remoteApprovalHandler, {
+          conversation: { platform, conversationId },
+          reportedTurn,
+        }),
         askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
           if (autoApproveToolCalls) return true;
 
@@ -501,6 +510,11 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
             } catch {
               // Judge failed — fall through to HITL manager prompt
             }
+          }
+
+          // hitl.mode "remote": the server answers; no one watches the local queue.
+          if (remoteApprovalHandler) {
+            return (await askRemoteApproval(remoteApprovalHandler, tool, args, { reportedTurn })).approved;
           }
 
           reportedTurn.approvalRequested();

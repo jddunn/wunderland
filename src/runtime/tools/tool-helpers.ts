@@ -726,6 +726,9 @@ export const ALLOWANCE_EXHAUSTED_CODE = 'allowance_exhausted';
 /** The reply a turn ends with when the provider answers {@link isAllowanceExhausted}. */
 export const ALLOWANCE_EXHAUSTED_LINE = 'This agent has reached its monthly model allowance.';
 
+/** What a tool call is refused with when its approval cannot be asked for or read. */
+export const APPROVAL_UNAVAILABLE = 'approval_unavailable';
+
 /** A provider's non-2xx answer: the message callers already read, plus its status and error code. */
 export class ProviderHttpError extends Error {
   /** The HTTP status the provider answered. */
