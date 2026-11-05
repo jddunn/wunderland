@@ -170,7 +170,10 @@ export function createSchemaOnDemandTools(opts: {
    * pack is eligible.
    */
   allowedPackages?: readonly string[];
-  /** How `extensions_enable` loads the packs the curated registry does not list. */
+  /**
+   * How `extensions_enable` loads the packs the curated registry does not list. Omitted, it loads
+   * none of them and `extensions_list` names none.
+   */
   packagePacks?: SchemaOnDemandPackagePacks;
   logger?: { info?: (...args: any[]) => void; warn?: (...args: any[]) => void; error?: (...args: any[]) => void };
   /** Called after extensions_enable loads new tools into toolMap. */
@@ -227,7 +230,9 @@ export function createSchemaOnDemandTools(opts: {
 
       const out: ExtensionsListOutput = {
         curated: filtered,
-        packagePacks: Object.entries(PACKAGE_PACKS).map(([name, pack]) => ({ name, packageName: pack.package })),
+        packagePacks: opts.packagePacks
+          ? Object.entries(PACKAGE_PACKS).map(([name, pack]) => ({ name, packageName: pack.package }))
+          : [],
         enabledPackages: [...enabledPackages.values()].sort(),
       };
       return { success: true, output: out };
@@ -352,7 +357,9 @@ export function createSchemaOnDemandTools(opts: {
 
       const catalog = await getCatalog();
       // A pack the curated registry does not list, named by its config name or its npm package.
-      const packagePack = packagePackFor(ref);
+      // Only a host that gives packagePacks (start) loads one: the others have no narrowing,
+      // handler rule or shutdown for it, and do not read its extensionOverrides entry.
+      const packagePack = opts.packagePacks ? packagePackFor(ref) : undefined;
 
       if (allowedPackages) {
         // A pack is allowed when the list names it by its curated name or its
