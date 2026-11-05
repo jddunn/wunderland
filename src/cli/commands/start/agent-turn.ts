@@ -22,6 +22,7 @@ import { runToolCallingTurn } from '../../../runtime/tools/tool-calling.js';
 import { buildPersonaSessionKey } from '../../../runtime/execution/request-persona.js';
 import { KeyedMutex } from '../../../runtime/execution/keyed-mutex.js';
 import { allowedToolNamesFor } from '../../../runtime/tools/tool-allow-list.js';
+import { startReportedTurn } from './hosted-events.js';
 
 /** One shared mutex per process: serializes turns that share a session key. */
 const sessionMutex = new KeyedMutex();
@@ -97,6 +98,7 @@ export async function runAgentTurn(
     // the persisted history.
     const workingMessages = [...messages];
 
+    const reportedTurn = startReportedTurn(deps.eventsReporter);
     try {
       const reply = await runToolCallingTurn({
         providerId: deps.providerId,
@@ -125,8 +127,11 @@ export async function runAgentTurn(
           console.warn(`[runAgentTurn] primary provider failed (${err.message}), routing to ${provider} source=${req.source}`);
         },
         getApiKey: deps.oauthGetApiKey,
+        onUsage: reportedTurn.usage,
+        onProviderError: reportedTurn.providerError,
         onToolCall: (tool: { name?: string }, args: Record<string, unknown>) => {
           toolCallCount += 1;
+          reportedTurn.toolCalled(tool?.name);
           deps.broadcastAgentEvent?.({
             type: 'tool_call',
             toolName: tool?.name ?? 'unknown',
@@ -152,6 +157,8 @@ export async function runAgentTurn(
         error: err instanceof Error ? err.message : String(err),
       });
       return { reply: '', toolCallCount, failed: true };
+    } finally {
+      reportedTurn.finished();
     }
   });
 }

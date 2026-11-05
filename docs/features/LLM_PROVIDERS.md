@@ -276,6 +276,26 @@ export AGENTOS_OPERATION_ID_HEADER=x-operation-id
 
 The requests that carry it: the primary provider's turns and their fallback attempts, the research classifier, the `memory_read` embedding and HyDE call, the knowledge bootstrap, the Discord welcome and curated picks requests, `chat`'s LLM caller, the job executor's own LLM call, and the model requests of `create`, `batch-create`, `spawn`, `agency`, `dashboard`, `models` and the setup wizard's Anthropic key check. The discovery index's embeddings, the LLM judge and `chat`'s query router go through AgentOS's providers, which read the same variable; each of their calls carries its own id across its retries. A `GET` or `HEAD` check (`models` for OpenAI, `doctor`, the wizard's other key checks) carries none.
 
+### A used-up allowance
+
+A gateway that meters an agent's model use answers a call past the agent's allowance with a 402 and this `error.code`:
+
+```json
+{ "error": { "code": "allowance_exhausted" } }
+```
+
+The turn ends there, with no retry and no request to the fallback chain, since the fallback goes through the same gateway and draws on the same allowance. The reply is what the model gave so far, then this line, or the line alone when the model gave nothing:
+
+```text
+This agent has reached its monthly model allowance.
+```
+
+- A channel gets the reply as a message, `POST /chat` answers 200 with it, and a webhook's turn is not recorded as a failure. The session's history ends with the reply.
+- What the model gave so far passes the same output check a finished reply does. When the check blocks it, the line goes alone.
+- Each such turn writes one warning line.
+- A 402 with any other code, and any other status with that code, stays an ordinary provider error.
+- With [hosted events](OBSERVABILITY.md#hosted-events) on, the turn reports `provider_error` with code `402`, then `turn_finished`.
+
 ---
 
 ## Environment Variables Reference

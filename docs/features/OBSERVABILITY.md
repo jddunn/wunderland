@@ -225,3 +225,46 @@ Code:
 - OTEL config: `packages/wunderland/src/cli/observability/otel-config.ts`
 - OTEL bootstrap: `packages/wunderland/src/observability/` (runtime-level)
 - LLM/tool spans: `packages/wunderland/src/runtime/tool-calling.ts`
+
+## Hosted events
+
+```bash
+export WUNDERLAND_EVENTS_URL=https://control.example.com/agent
+export WUNDERLAND_EVENTS_TOKEN=<the agent's token>
+export AGENTOS_OPERATION_ID_HEADER=x-operation-id   # optional
+wunderland start
+```
+
+```http
+POST /agent/events
+Authorization: Bearer <the agent's token>
+x-operation-id: 0b7c1f4e-5a0e-4d2b-9a55-1f2f3c6f7a10
+Content-Type: application/json
+
+{ "events": [
+  { "kind": "turn_started", "at": 1793836800000 },
+  { "kind": "tool_called", "toolName": "web_search", "at": 1793836801200 },
+  { "kind": "turn_finished", "promptTokens": 1204, "completionTokens": 88, "at": 1793836803500 }
+] }
+```
+
+With both variables set, `wunderland start` posts the coarse events of what the agent does to `<WUNDERLAND_EVENTS_URL>/events`, so a control plane that runs the agent can see it working. Names, counts, codes and times go out; message text, tool arguments, tool output and provider error messages never do. With either variable unset or blank, no reporter exists and nothing is posted. A `WUNDERLAND_EVENTS_URL` that does not parse makes no reporter and writes one warning line.
+
+| Kind | When | Fields beside `kind` and `at` |
+|------|------|-------------------------------|
+| `turn_started` | A turn begins: a channel message, a `POST /chat`, or a webhook's `mode: "turn"` wake | none |
+| `tool_called` | The model called a tool the agent has, before that call's approval | `toolName` |
+| `approval_requested` | The turn waits on a person: a tool's approval or a turn checkpoint | none |
+| `provider_error` | A provider request failed, including a primary that then falls back | `code`: the HTTP status, as a string; none when the request got no answer |
+| `turn_finished` | The turn ended, however it ended | `promptTokens`, `completionTokens`: the turn's totals across its rounds |
+| `channel_auth_failed` | A channel adapter emitted an `error` event whose data has `code: "auth_failed"`: the platform rejected its token. A pack that emits no such event reports nothing. It belongs to no turn | `code`: the platform |
+| `referral_sent` | The reporter's kind for a guardrail pack that counts the referrals it sends; `start` itself sends none | none |
+
+`at` is milliseconds since the epoch. `count`, when set, says how many times the event happened; `start`'s own events leave it out, so a server counts one. A field that does not hold what it should is left out: `code`, `toolName` and the operation id go out only as a single word (letters, digits and `_ . : -`), so a caller that passes text by mistake loses the field rather than posting the text.
+
+- **Batching.** A post goes out every 5 seconds while events wait, with at most 200 events. Each turn's events go in their own post, with a new UUID in the header `AGENTOS_OPERATION_ID_HEADER` names. With that variable unset, no header is sent; an event outside a turn sends none either.
+- **The queue.** The reporter holds 1,000 events and drops the oldest past that.
+- **Failures.** A post that gets no answer within 10 seconds, a 429 or a 5xx keeps its batch for the next try. Any other refusal drops the batch. The reason goes to `console.warn`, one line a minute at most, never with the token.
+- **Shutdown.** On SIGINT or SIGTERM, `start` posts what waits before the rest of its teardown and waits up to 2 seconds for the answer.
+
+Code: `src/cli/commands/start/hosted-events.ts`.

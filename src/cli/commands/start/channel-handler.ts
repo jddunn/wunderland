@@ -18,6 +18,7 @@ import { buildOllamaRuntimeOptions } from '../../../runtime/tools/ollama-options
 import { allowedToolNamesFor } from '../../../runtime/tools/tool-allow-list.js';
 import * as fmt from '../../ui/format.js';
 import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
+import { isChannelAuthFailure, startReportedTurn, type EventsReporter } from './hosted-events.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,8 @@ export interface ChannelRuntimeCtx {
   activePacks: any[];
   cfg: any;
   adapterByPlatform: Map<string, IChannelAdapter>;
+  /** Set when the events variables are; posts each turn's coarse events. */
+  eventsReporter?: EventsReporter;
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -399,6 +402,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
   let turnFailed = false;
   let fallbackTriggered = false;
   let toolCallCount = 0;
+  const reportedTurn = startReportedTurn(ctx.eventsReporter);
   try {
     if (canUseLLM) {
       const toolContext = {
@@ -473,6 +477,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
         ollamaOptions: buildOllamaRuntimeOptions(ctx.cfg?.ollama),
         onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
           toolCallCount += 1;
+          reportedTurn.toolCalled((tool as any)?.name);
           if (!explain) return;
           try {
             traceCalls.push({
@@ -484,6 +489,8 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
             // ignore
           }
         },
+        onUsage: reportedTurn.usage,
+        onProviderError: reportedTurn.providerError,
         askPermission: async (tool: ToolInstance, args: Record<string, unknown>) => {
           if (autoApproveToolCalls) return true;
 
@@ -496,6 +503,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
             }
           }
 
+          reportedTurn.approvalRequested();
           const preview = safeJsonStringify(args, 1800);
           const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
           const actionId = `tool-${seedId}-${randomUUID()}`;
@@ -515,6 +523,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
         askCheckpoint: turnApprovalMode === 'off' ? undefined : async ({ round, toolCalls }: any) => {
           if (autoApproveToolCalls) return true;
 
+          reportedTurn.approvalRequested();
           const checkpointId = `checkpoint-${seedId}-${sessionKey}-${round}-${randomUUID()}`;
           const completedWork = toolCalls.map((c: any) => {
             const effect = c.hasSideEffects ? 'side effects' : 'read-only';
@@ -565,6 +574,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
     turnFailed = true;
     throw error;
   } finally {
+    reportedTurn.finished();
     try {
       await adaptiveRuntime.recordTurnOutcome({
         scope: {
@@ -844,6 +854,12 @@ export function subscribeChannelAdapters(ctx: ChannelRuntimeCtx): void {
           });
         }, ['message']);
         channelUnsubs.push(unsub);
+        if (ctx.eventsReporter) {
+          // A rejected token: the platform name says which channel to reconnect.
+          channelUnsubs.push(adapter.on((event: any) => {
+            if (isChannelAuthFailure(event)) ctx.eventsReporter?.report('channel_auth_failed', { code: platform });
+          }, ['error']));
+        }
       } catch (err) {
         console.warn(`[channels] Failed to subscribe to ${platform} adapter:`, err instanceof Error ? err.message : String(err));
       }

@@ -35,6 +35,7 @@ import {
 } from '../../../../runtime/execution/request-persona.js';
 import { buildOllamaRuntimeOptions } from '../../../../runtime/tools/ollama-options.js';
 import { allowedToolNamesFor } from '../../../../runtime/tools/tool-allow-list.js';
+import { startReportedTurn } from '../hosted-events.js';
 
 import {
   readBody,
@@ -110,6 +111,7 @@ export async function handleChatRoutes(
     chatSecret,
     hitlManager,
     sessionTextLogger,
+    eventsReporter,
   } = deps;
 
   if (!isChatAuthorized(req, url, chatSecret)) {
@@ -254,6 +256,7 @@ export async function handleChatRoutes(
    */
   const workingMessages = [...messages];
 
+  const reportedTurn = startReportedTurn(eventsReporter);
   try {
     if (canUseLLM) {
       /* ── Capability discovery — inject tiered context AND build filtered tool set ── */
@@ -354,8 +357,11 @@ export async function handleChatRoutes(
         strictToolNames,
         toolFailureMode: adaptiveDecision.toolFailureMode,
         ollamaOptions: buildOllamaRuntimeOptions(cfg?.ollama),
+        onUsage: reportedTurn.usage,
+        onProviderError: reportedTurn.providerError,
         onToolCall: (tool: ToolInstance, args: Record<string, unknown>) => {
           toolCallCount += 1;
+          reportedTurn.toolCalled(tool?.name);
           deps.broadcastAgentEvent?.({
             type: 'tool_call',
             toolName: tool?.name ?? 'unknown',
@@ -388,6 +394,7 @@ export async function handleChatRoutes(
             return true;
           }
 
+          reportedTurn.approvalRequested();
           const preview = safeJsonStringify(args, 1800);
           const effectLabel = tool.hasSideEffects === true ? 'side effects' : 'read-only';
           const actionId = `tool-${seedId}-${randomUUID()}`;
@@ -407,6 +414,7 @@ export async function handleChatRoutes(
         askCheckpoint: turnApprovalMode === 'off' ? undefined : async ({ round, toolCalls }: any) => {
           if (autoApproveToolCalls) return true;
 
+          reportedTurn.approvalRequested();
           const checkpointId = `checkpoint-${seedId}-${internalSessionId}-${round}-${randomUUID()}`;
           const completedWork = toolCalls.map((c: any) => {
             const effect = c.hasSideEffects ? 'side effects' : 'read-only';
@@ -488,6 +496,7 @@ export async function handleChatRoutes(
       throw error;
     }
   } finally {
+    reportedTurn.finished();
     try {
       await adaptiveRuntime.recordTurnOutcome({
         scope: {

@@ -1493,6 +1493,22 @@ describe('start: a channel message falls back like the /chat route and the webho
     expect(posts('/openai/v1/chat/completions')).toEqual([]);
   });
 
+  it('an Anthropic primary past its model allowance ends the turn with the line and no fallback', async () => {
+    process.env['ANTHROPIC_BASE_URL'] = `${origin}/down`;
+    process.env['OPENAI_BASE_URL'] = `${origin}/openai/v1`;
+    setKeys('ANTHROPIC_API_KEY', 'OPENAI_API_KEY');
+    const ctx = await startCtx('anthropic');
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/down/')) {
+        return new Response(JSON.stringify({ error: { code: 'allowance_exhausted' } }), { status: 402 });
+      }
+      return guardedFetch(input, init);
+    });
+
+    await expect(runPrimaryTurn(ctx)).resolves.toBe('This agent has reached its monthly model allowance.');
+    expect(posts('/openai/v1/chat/completions')).toEqual([]);
+  });
+
   it('an Ollama primary that cannot be reached goes to the fallback candidate', async () => {
     process.env['OLLAMA_BASE_URL'] = `${origin}/down/ollama`;
     process.env['OPENAI_BASE_URL'] = `${origin}/openai/v1`;

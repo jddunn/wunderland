@@ -106,6 +106,8 @@ export async function startServerAndDisplay(ctx: any, server: import('node:http'
       for (const unsub of channelUnsubs) {
         try { unsub(); } catch { /* ignore */ }
       }
+      // Before the slower teardown below: a container's stop grace is short.
+      await ctx.eventsReporter?.stop();
       await Promise.allSettled(
         (activePacks || [])
           .map((p: any) =>
