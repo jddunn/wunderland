@@ -755,6 +755,9 @@ export function isAllowanceExhausted(error: unknown): boolean {
   return failure?.status === 402 && failure?.code === ALLOWANCE_EXHAUSTED_CODE;
 }
 
+/** The HTTP statuses that warrant a fallback attempt. */
+const FALLBACK_STATUSES: ReadonlySet<number> = new Set([401, 403, 429, 500, 502, 503, 504]);
+
 /**
  * Determines whether an error should trigger a fallback attempt.
  * Retryable: rate limits (429), server errors (500+), auth failures (401/403), network errors.
@@ -762,12 +765,17 @@ export function isAllowanceExhausted(error: unknown): boolean {
  */
 export function shouldFallback(error: unknown): boolean {
   if (isAllowanceExhausted(error)) return false;
+  // A structured status (`ProviderHttpError.status`, an Ollama error's
+  // `httpStatus`) decides for an error whose message names none.
+  const failure = error as { status?: unknown; httpStatus?: unknown } | null | undefined;
+  const status = failure?.status ?? failure?.httpStatus;
+  if (typeof status === 'number' && FALLBACK_STATUSES.has(status)) return true;
   if (error instanceof Error) {
     const msg = error.message;
     // HTTP status codes that warrant fallback
     if (/\b(429|500|502|503|504|401|403)\b/.test(msg)) return true;
     // Network-level failures
-    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND/i.test(msg)) return true;
+    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNABORTED|timeout of \d+ms exceeded/i.test(msg)) return true;
   }
   return false;
 }
