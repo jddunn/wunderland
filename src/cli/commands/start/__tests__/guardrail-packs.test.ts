@@ -28,6 +28,7 @@ import { handleInboundChannelMessage } from '../channel-handler.js';
 import { handleChatRoutes } from '../routes/chat.js';
 import { runAgentTurn } from '../agent-turn.js';
 import { createEventsReporter } from '../hosted-events.js';
+import { guardrailPackNamesFor, guardrailPackOptions } from '../guardrail-packs.js';
 import { getPermissionsForSet, normalizeRuntimePolicy } from '../../../../runtime/tools/policy.js';
 
 /** Loading the pack and the registry takes longer than vitest's 5 s default. */
@@ -412,6 +413,47 @@ describe('start loads guardrail packs from the agent config', () => {
       loadForConfig({ ...BASE_CFG, extensions: { ...NO_TOOL_PACKS, guardrails: ['no-such-guard'] } }),
     ).rejects.toThrow(/no-such-guard/);
   }, LOAD_TIMEOUT_MS);
+});
+
+describe("a judge's key and base URL come from the host", () => {
+  const host = (secrets: Record<string, string> = {}) => ({
+    providerId: 'openai',
+    llmApiKey: TURN_KEY,
+    getSecret: (id: string) => secrets[id],
+  });
+
+  it("gets the agent's own key only when the judge's provider is the agent's", () => {
+    expect(guardrailPackOptions({ judgeModel: { provider: 'openai', model: 'm' } }, host()).judgeModel)
+      .toMatchObject({ apiKey: TURN_KEY });
+    // Another provider's judge never gets the agent's key: it goes without one.
+    const other = guardrailPackOptions({ judgeModel: { provider: 'anthropic', model: 'm' } }, host()).judgeModel;
+    expect(other).not.toHaveProperty('apiKey');
+    expect(guardrailPackOptions({ judgeModel: { provider: 'anthropic', model: 'm' } }, host({ 'anthropic.apiKey': 'sk-ant' })).judgeModel)
+      .toMatchObject({ apiKey: 'sk-ant' });
+  });
+
+  it('keeps a key and a base URL the config gives, and fills the base URL from the variable', () => {
+    expect(guardrailPackOptions(
+      { judgeModel: { provider: 'openai', model: 'm', apiKey: 'sk-own', baseUrl: 'http://judge.example/v1' } },
+      host({ 'openai.apiKey': JUDGE_KEY }),
+    ).judgeModel).toEqual({ provider: 'openai', model: 'm', apiKey: 'sk-own', baseUrl: 'http://judge.example/v1' });
+    expect(guardrailPackOptions({ judgeModel: { provider: 'openai', model: 'm' } }, host()).judgeModel)
+      .toMatchObject({ baseUrl: `${judge.origin}/v1` });
+  });
+
+  it('leaves options with no judgeModel as they are', () => {
+    expect(guardrailPackOptions({ country: 'GB' }, host())).toEqual({ country: 'GB' });
+    expect(guardrailPackOptions(undefined, host())).toEqual({});
+  });
+});
+
+describe('extensions.guardrails that is not a list of names stops startup', () => {
+  it.each([['a string', 'self-harm-referral'], ['a list with an empty name', ['self-harm-referral', '']], ['a list with a number', [7]]])(
+    '%s',
+    (_what, guardrails) => {
+      expect(() => guardrailPackNamesFor({ cfg: { extensions: { guardrails } } })).toThrow(/extensions\.guardrails/);
+    },
+  );
 });
 
 describe.each(PATHS)('a guardrail pack on %s', (_path, runTurn) => {
