@@ -157,11 +157,20 @@ Code: `src/cli/commands/start/guardrail-packs.ts`.
 
 | Name | Package | Options wunderland gives it | Secret |
 |---|---|---|---|
-| `wildweave-film` | `@framers/agentos-ext-wildweave-film` | `{ "baseUrl": "https://wilds.ai", "http": { "path": "/mcp/wildweave-film" } }` | `wildweave.studio.key` (`WILDWEAVE_STUDIO_KEY`) |
+| `wildweave-film` | `@framers/agentos-ext-wildweave-film` | `{ "baseUrl": "https://wilds.ai", "http": { "path": "/mcp/wildweave-film", "token": <the endpoint token> } }` | `wildweave.studio.key` (`WILDWEAVE_STUDIO_KEY`); `wildweave.studio.http_token` (`WILDWEAVE_STUDIO_HTTP_TOKEN`) |
 
 `wildweave-film` is WildWeave's film studio: 22 `wildweave_film_*` tools that read and edit a film in a wilds.ai account, export it to its repository and run the film engine of a wilds-ai checkout (`extensionOverrides["wildweave-film"].options.engineDir`). The key comes from the agent config's `secrets["wildweave.studio.key"]` or from `WILDWEAVE_STUDIO_KEY` in the shell or `~/.wunderland/.env`; with the variable set, `start` adds the pack as it adds other packs whose keys it finds. Without a key the tools still load, and each studio tool answers `key_missing`.
 
-The pack also serves its tools over MCP's streamable HTTP on `start`'s own server, at `POST /mcp/wildweave-film`, beside the other pack HTTP handlers. It answers callers on the same machine alone: a peer address, `Host` or browser `Origin` outside the loopback gets 403. So `--host 0.0.0.0` does not open the studio key to other machines.
+The pack also serves its tools over MCP's streamable HTTP on `start`'s own server, at `POST /mcp/wildweave-film`, beside the other pack HTTP handlers, to a caller that sends `Authorization: Bearer <token>`. `start` reads the token from the agent config's `secrets["wildweave.studio.http_token"]` or from `WILDWEAVE_STUDIO_HTTP_TOKEN` and passes it to the pack as `http.token`. It takes 32 or more letters, digits or the characters `-._~+/` (then any `=`), such as `openssl rand -hex 32` writes; a token of another form stops the pack from loading, with an error naming `http.token`. With no token stored, `start` loads the tools without the endpoint (`POST /mcp/wildweave-film` answers 404) and notes which secret to set.
+
+Each request passes the pack's checks before its body is read: a peer address, `Host` or browser `Origin` outside the loopback gets 403, and a request without the token gets 401 with a `WWW-Authenticate: Bearer` challenge. So `--host 0.0.0.0` does not open the studio key to other machines, and neither does a reverse proxy on the same host, which forwards every caller from the loopback with a loopback `Host`.
+
+```json
+{
+  "secrets": { "wildweave.studio.http_token": "<openssl rand -hex 32>" },
+  "extensions": { "tools": ["wildweave-film"] }
+}
+```
 
 The endpoint serves all 22 tools, and its calls are not the agent's turns: `tools.allow`, the tool access profile and the permission set do not filter them, and the execution mode and `hitl` do not ask before them. So `start` mounts it only when the agent keeps every one of the pack's tools. Where `tools.allow`, the profile or the permission set drops any, the agent keeps the rest, the endpoint is not mounted (`POST /mcp/wildweave-film` answers 404) and `start` notes it. `"http": null` in `extensionOverrides["wildweave-film"].options` turns the endpoint off and keeps every tool.
 
