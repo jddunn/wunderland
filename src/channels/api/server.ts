@@ -58,6 +58,7 @@ import { createEnvSecretResolver } from '../../security/env-secrets.js';
 import { resolveAgentDisplayName } from '../../runtime/identity/agent-identity.js';
 import { buildAgenticSystemPrompt } from '../../runtime/execution/system-prompt-builder.js';
 import { buildOllamaRuntimeOptions } from '../../runtime/tools/ollama-options.js';
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
 import { WunderlandDiscoveryManager } from '../../platform/discovery/index.js';
 import { createConfiguredRagTools } from '../../memory/rag/runtime-tools.js';
 import { maybeProxyAgentosRagRequest } from '../../memory/rag/http-proxy.js';
@@ -330,7 +331,7 @@ export async function createWunderlandServer(opts?: {
       ? ({
           apiKey: openrouterApiKey,
           model: 'auto',
-          baseUrl: 'https://openrouter.ai/api/v1',
+          baseUrl: baseUrlFor('openrouter'),
           extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
         } satisfies LLMProviderConfig)
       : undefined);
@@ -369,7 +370,7 @@ export async function createWunderlandServer(opts?: {
 
   const llmBaseUrl =
     providerId === 'openrouter'
-      ? (opts?.llm?.baseUrl ?? 'https://openrouter.ai/api/v1')
+      ? (opts?.llm?.baseUrl ?? baseUrlFor('openrouter'))
       : providerId === 'ollama'
         ? ollamaBaseUrl
         : providerId === 'gemini'

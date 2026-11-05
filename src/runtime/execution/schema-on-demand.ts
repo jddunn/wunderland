@@ -13,6 +13,7 @@ import { filterToolMapByPolicy, getPermissionsForSet, normalizeToolAccessProfile
 import { normalizeExtensionName } from '../../cli/extensions/aliases.js';
 import { createSpeechExtensionEnvOverrides } from '../../channels/voice/speech-catalog.js';
 import { TOOL_NOT_ALLOWED } from '../tools/tool-allow-list.js';
+import { logToolRefusal } from '../tools/tool-refusal-log.js';
 
 type ExtensionsListOutput = {
   curated: ExtensionInfo[];
@@ -235,7 +236,7 @@ export function createSchemaOnDemandTools(opts: {
         const named = catalog.find((e) => e.name === ref || e.packageName === ref);
         const names = [ref, named?.name, named?.packageName].filter(Boolean) as string[];
         if (!names.some((name) => allowedPackages.has(name))) {
-          log.warn?.(`[schema-on-demand] extensions_enable refused ${ref}: not in tools.allow.packs`);
+          logToolRefusal({ kind: 'pack', name: ref });
           return { success: false, error: TOOL_NOT_ALLOWED };
         }
       }

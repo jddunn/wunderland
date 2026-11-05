@@ -573,7 +573,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
           return (decision as any)?.decision === 'continue';
         },
         baseUrl: llmBaseUrl,
-        fallback: providerId === 'openai' ? openrouterFallback : undefined,
+        fallback: openrouterFallback,
         onFallback: (err: Error, provider: string) => {
           fallbackTriggered = true;
           console.warn(`[fallback] Primary provider failed (${err.message}), routing to ${provider}`);

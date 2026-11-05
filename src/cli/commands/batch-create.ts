@@ -24,7 +24,8 @@
  */
 
 import { existsSync } from 'node:fs';
-import { anthropicApiUrl } from '../../platform/config/provider-base-urls.js';
+import { anthropicApiUrl, baseUrlFor } from '../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { GlobalFlags } from '../types.js';
@@ -108,6 +109,7 @@ async function createLLMInvoker(globals: GlobalFlags): Promise<{
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
+          ...operationIdHeaders(),
         },
         body: JSON.stringify({
           model,
@@ -129,7 +131,7 @@ async function createLLMInvoker(globals: GlobalFlags): Promise<{
   }
 
   const openaiBaseUrl =
-    provider === 'openrouter' ? 'https://openrouter.ai/api/v1'
+    provider === 'openrouter' ? baseUrlFor('openrouter')
     : provider === 'ollama' ? 'http://localhost:11434/v1'
     : undefined;
 
@@ -147,7 +149,7 @@ async function createLLMInvoker(globals: GlobalFlags): Promise<{
       ? {
           apiKey: process.env['OPENROUTER_API_KEY'] || '',
           model: 'auto',
-          baseUrl: 'https://openrouter.ai/api/v1',
+          baseUrl: baseUrlFor('openrouter'),
           extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderbot' },
         }
       : undefined;

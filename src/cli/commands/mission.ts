@@ -679,7 +679,7 @@ async function runNaturalLanguageMission(
     const availableProviders: string[] = [];
     const providerConfigs: Record<string, { providerId?: string; apiKey: string; model?: string; baseUrl?: string }> = {};
     const providerEnvMap = [
-      { env: 'OPENROUTER_API_KEY', id: 'openrouter', runtimeId: 'openrouter', defaultBaseUrl: 'https://openrouter.ai/api/v1' },
+      { env: 'OPENROUTER_API_KEY', id: 'openrouter', runtimeId: 'openrouter' },
       { env: 'OPENAI_API_KEY', id: 'openai', runtimeId: 'openai', baseUrlEnv: 'OPENAI_BASE_URL' },
       { env: 'ANTHROPIC_API_KEY', id: 'anthropic', runtimeId: 'anthropic', baseUrlEnv: 'ANTHROPIC_BASE_URL' },
       { env: 'GEMINI_API_KEY', id: 'gemini', runtimeId: 'gemini', baseUrlEnv: 'GEMINI_BASE_URL', defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },

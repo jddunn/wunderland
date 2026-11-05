@@ -217,7 +217,7 @@ Your keys are stored in `~/.wunderland/.env` and all configured providers are av
 
 ## Provider base URLs
 
-`wunderland start` sends its calls to OpenAI, Anthropic and OpenRouter to the URL in that provider's base-URL variable, so a proxy or gateway in front of the provider sees each call the list below names. With a variable unset or blank, the calls go to the provider's own endpoint.
+Wunderland sends its calls to OpenAI, Anthropic and OpenRouter to the URL in that provider's base-URL variable, so a proxy or gateway in front of the provider sees each call the lists below name. With a variable unset or blank, the calls go to the provider's own endpoint.
 
 ```bash
 export OPENAI_BASE_URL=https://gateway.example.com/openai/v1
@@ -232,26 +232,34 @@ wunderland start
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | The host root, as Anthropic's SDK reads it. Wunderland adds `/v1`, and a value that already ends in `/v1` keeps one |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | The API root |
 
-Wunderland ignores spaces around a value and trailing slashes; the LLM judge, which AgentOS runs, reads the value as set, so give it without them. Every Anthropic request wunderland makes joins the value and the path with one helper (`anthropicApiUrl` in `src/platform/config/provider-base-urls.ts`), so `https://gateway.example.com/anthropic`, `https://gateway.example.com/anthropic/v1` and either with a trailing slash all reach `https://gateway.example.com/anthropic/v1/messages`.
+Wunderland ignores spaces around a value and trailing slashes. Every Anthropic request wunderland makes joins the value and the path with one helper (`anthropicApiUrl` in `src/platform/config/provider-base-urls.ts`), so `https://gateway.example.com/anthropic`, `https://gateway.example.com/anthropic/v1` and either with a trailing slash all reach `https://gateway.example.com/anthropic/v1/messages`.
 
-The calls that follow the variables:
+The calls of `wunderland start` that follow the variables:
 
 - **The primary provider's turns**: a `/chat` request, a channel message, and the turn a webhook in `agent.config.json` `webhooks` wakes (`mode: "turn"`). Anthropic's go to `<ANTHROPIC_BASE_URL>/v1/messages`, OpenAI's and OpenRouter's to `<base>/chat/completions`.
-- **The fallback chain.** Each candidate goes to its own provider's variable. The Anthropic candidate uses Anthropic's OpenAI-compatible endpoint, `<ANTHROPIC_BASE_URL>/v1/chat/completions`. The `/chat` route and the webhook turn fall back for every primary; a channel message falls back only for an OpenAI primary.
+- **The fallback chain.** Each candidate goes to its own provider's variable. The Anthropic candidate uses Anthropic's OpenAI-compatible endpoint, `<ANTHROPIC_BASE_URL>/v1/chat/completions`. A `/chat` request, a channel message and a webhook turn fall back for every primary provider, Anthropic and Ollama included, when the primary's error warrants it (a 401, 403, 429, 5xx or network failure).
 - **The research classifier** that picks a chat request's research depth. It goes to the primary provider's base URL (`<base>/chat/completions`); an Anthropic primary's uses Anthropic's OpenAI-compatible endpoint with `claude-haiku-4-5-20251001`.
 - **The local `memory_read` tool.** Query embeddings go to `<OPENAI_BASE_URL>/embeddings` with `OPENAI_API_KEY`; the HyDE hypothesis call goes to the primary provider's base URL.
 - **The knowledge bootstrap** (the `knowledge/*.md` files seeded on start). Embeddings go to `<OPENAI_BASE_URL>/embeddings` with `OPENAI_API_KEY`.
 - **The Discord welcome and curated picks posts** (`feeds.channels.welcome`, and the curated picks channel). Both use `OPENAI_API_KEY` and `gpt-4o`, so both go to `<OPENAI_BASE_URL>/chat/completions` whatever the primary provider is.
 - **The capability discovery index.** An OpenAI or Anthropic primary embeds through OpenAI at `OPENAI_BASE_URL`; an OpenRouter primary embeds at `OPENROUTER_BASE_URL`. A `discovery.embeddingProvider` other than the primary provider embeds with that provider's own key and variable: `openai` with `OPENAI_API_KEY` at `OPENAI_BASE_URL`, `openrouter` with `OPENROUTER_API_KEY` at `OPENROUTER_BASE_URL`. With that key unset, the index is not built.
-- **The LLM judge** (`hitl.mode: "llm-judge"`) with `judgeProvider` set to `openai` or `openrouter`. AgentOS reads those two variables itself.
+- **The LLM judge** (`hitl.mode: "llm-judge"`) with `judgeProvider` set to `openai`, `anthropic` or `openrouter`. An Anthropic judge goes to `<ANTHROPIC_BASE_URL>/v1/messages`.
 
-Outside `start`, `wunderland mission` (the planner's `--planner-model` and `--execution-model` providers and its runtime default) and the Anthropic requests of `create`, `batch-create`, `spawn`, `agency`, `models` and `dashboard` read the same variables through the same helpers.
+Outside `start`, these read the same variables through the same helpers:
+
+- **`wunderland chat`**: the primary provider's turns and the OpenRouter fallback, the LLM judge, the query router (its classifier, its generator and its corpus embeddings) and the LLM caller it gives the retriever.
+- **`wunderland mission`**: the planner's `--planner-model` and `--execution-model` providers and its runtime default.
+- **The job executor's own LLM call**, when `JobExecutor` has no `executeJob` callback: `<OPENAI_BASE_URL>/chat/completions` with `OPENAI_API_KEY`, else `<OPENROUTER_BASE_URL>/chat/completions` with `OPENROUTER_API_KEY`.
+- **`create`, `batch-create`, `spawn`, `agency` and `dashboard`**: each provider's request and the OpenRouter fallback.
+- **The library's providers** (`createWunderland` and the API server): the OpenRouter primary, the OpenRouter fallback, and an OpenAI primary with no `llm.baseUrl`. An `llm.baseUrl` the caller gives wins.
+- **The checks**: the OpenAI and Anthropic requests of `models`, the OpenAI reachability check of `doctor`, and the key check of the setup wizard for OpenAI, Anthropic and OpenRouter.
 
 Calls that do not follow the variables:
 
-- **An `anthropic` LLM judge** goes to `https://api.anthropic.com` whatever `ANTHROPIC_BASE_URL` says, because AgentOS's judge takes no base URL.
 - **Tools from extension packs** make their own requests with their own settings; this section does not cover them.
-- **Gemini and Ollama** have no base-URL variable here: Gemini's calls go to `https://generativelanguage.googleapis.com/v1beta/openai`, Ollama's to `OLLAMA_BASE_URL`.
+- **Gemini and Ollama** have no base-URL variable here: Gemini's calls go to `https://generativelanguage.googleapis.com/v1beta/openai`, Ollama's to `OLLAMA_BASE_URL`. `wunderland mission` reads `GEMINI_BASE_URL` for its own Gemini requests.
+- **Groq, Together, Mistral and xAI** are `wunderland mission` providers with their own variables: `GROQ_BASE_URL`, `TOGETHER_BASE_URL`, `MISTRAL_BASE_URL`, `XAI_BASE_URL`.
+- **The other providers `models` and the setup wizard list** are checked at the address in the provider catalogue (`src/cli/constants.ts`).
 
 ### Operation id across retries
 
@@ -266,7 +274,7 @@ export AGENTOS_OPERATION_ID_HEADER=x-operation-id
 - With the variable unset or blank, no header is sent.
 - A value that is not an HTTP header name, or that names a header the requests set themselves (`Authorization`, `x-api-key`, `Content-Type`, `anthropic-version`, ...), stops `start` with an error before any request.
 
-The requests that carry it: the primary provider's turns and their fallback attempts, the research classifier, the `memory_read` embedding and HyDE call, the knowledge bootstrap, and the Discord welcome and curated picks requests. The discovery index's embeddings and the LLM judge go through AgentOS's providers, which read the same variable in an AgentOS release that has the operation id option; with an older AgentOS they send no header.
+The requests that carry it: the primary provider's turns and their fallback attempts, the research classifier, the `memory_read` embedding and HyDE call, the knowledge bootstrap, the Discord welcome and curated picks requests, `chat`'s LLM caller, the job executor's own LLM call, and the model requests of `create`, `batch-create`, `spawn`, `agency`, `dashboard`, `models` and the setup wizard's Anthropic key check. The discovery index's embeddings, the LLM judge and `chat`'s query router go through AgentOS's providers, which read the same variable; each of their calls carries its own id across its retries. A `GET` or `HEAD` check (`models` for OpenAI, `doctor`, the wizard's other key checks) carries none.
 
 ### A used-up allowance
 

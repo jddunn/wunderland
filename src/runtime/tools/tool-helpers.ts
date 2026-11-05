@@ -47,7 +47,7 @@ import * as os from 'node:os';
 import { resolveAgentWorkspaceDir } from '@framers/agentos';
 import { resolveApiKeyInput } from '../identity/api-key-resolver.js';
 import { operationIdHeaders } from '../../platform/config/operation-id.js';
-import { anthropicApiUrl } from '../../platform/config/provider-base-urls.js';
+import { anthropicApiUrl, baseUrlFor } from '../../platform/config/provider-base-urls.js';
 import {
   buildToolDefsFromMapping,
   buildToolFunctionNameMapping,
@@ -714,12 +714,6 @@ export function parseProviderId(value: unknown): LLMProviderId | undefined {
   return undefined;
 }
 
-/** Default API base URLs for known providers. */
-const PROVIDER_BASE_URLS = {
-  openai: 'https://api.openai.com/v1',
-  openrouter: 'https://openrouter.ai/api/v1',
-} as const;
-
 /** The `error.code` a model proxy answers with a 402 when the agent's model allowance is used up. */
 export const ALLOWANCE_EXHAUSTED_CODE = 'allowance_exhausted';
 
@@ -764,6 +758,9 @@ export function isAllowanceExhausted(error: unknown): boolean {
   return failure?.status === 402 && failure?.code === ALLOWANCE_EXHAUSTED_CODE;
 }
 
+/** The HTTP statuses that warrant a fallback attempt. */
+const FALLBACK_STATUSES: ReadonlySet<number> = new Set([401, 403, 429, 500, 502, 503, 504]);
+
 /**
  * Determines whether an error should trigger a fallback attempt.
  * Retryable: rate limits (429), server errors (500+), auth failures (401/403), network errors.
@@ -771,19 +768,24 @@ export function isAllowanceExhausted(error: unknown): boolean {
  */
 export function shouldFallback(error: unknown): boolean {
   if (isAllowanceExhausted(error)) return false;
+  // A structured status (`ProviderHttpError.status`, an Ollama error's
+  // `httpStatus`) decides for an error whose message names none.
+  const failure = error as { status?: unknown; httpStatus?: unknown } | null | undefined;
+  const status = failure?.status ?? failure?.httpStatus;
+  if (typeof status === 'number' && FALLBACK_STATUSES.has(status)) return true;
   if (error instanceof Error) {
     const msg = error.message;
     // HTTP status codes that warrant fallback
     if (/\b(429|500|502|503|504|401|403)\b/.test(msg)) return true;
     // Network-level failures
-    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND/i.test(msg)) return true;
+    if (/fetch failed|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNABORTED|timeout of \d+ms exceeded/i.test(msg)) return true;
   }
   return false;
 }
 
 /**
  * One OpenAI-compatible chat completions request to `provider.baseUrl`
- * (OpenAI's own root when unset).
+ * (OPENAI_BASE_URL, else OpenAI's own root, when unset).
  *
  * @param operationHeaders - The call's operation id header
  *   ({@link operationIdHeaders}). A caller that sends several attempts of one
@@ -798,7 +800,7 @@ export async function chatCompletionsRequest(
   maxTokens: number,
   operationHeaders: Record<string, string> = operationIdHeaders(),
 ): Promise<{ message: ToolCallMessage; model: string; usage: unknown; provider: string }> {
-  const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
+  const baseUrl = provider.baseUrl || baseUrlFor('openai')!;
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter'
     : baseUrl.includes('generativelanguage.googleapis.com') ? 'Gemini'
     : baseUrl.includes('anthropic') ? 'Anthropic'
@@ -976,7 +978,7 @@ export async function streamingChatCompletionsRequest(
   signal?: AbortSignal,
   operationHeaders: Record<string, string> = operationIdHeaders(),
 ): Promise<AsyncIterable<string>> {
-  const baseUrl = provider.baseUrl || PROVIDER_BASE_URLS.openai;
+  const baseUrl = provider.baseUrl || baseUrlFor('openai')!;
   const providerName = baseUrl.includes('openrouter') ? 'OpenRouter'
     : baseUrl.includes('generativelanguage.googleapis.com') ? 'Gemini'
     : baseUrl.includes('anthropic') ? 'Anthropic'

@@ -48,6 +48,8 @@ import {
   buildToolErrorPayload,
 } from './ToolApprovalHandler.js';
 import { TOOL_NOT_ALLOWED } from './tool-allow-list.js';
+import { logToolRefusal } from './tool-refusal-log.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
 
 /** The function name of an OpenAI-shaped tool definition (`{ function: { name } }`), or `''`. */
 function toolDefFunctionName(def: Record<string, unknown>): string {
@@ -103,6 +105,8 @@ import {
   parseProviderId,
   toAnthropicMessagePayload,
   anthropicMessagesRequest,
+  chatCompletionsRequest,
+  shouldFallback,
   toAnthropicTools,
   openaiChatWithTools,
   getStringProp,
@@ -331,6 +335,8 @@ export async function runToolCallingTurn(opts: {
           return provider;
         })()
       : null;
+  // A failed connection is read when the first round awaits it.
+  ollamaProviderPromise?.catch(() => {});
 
   const notifyProviderError = (error: unknown): void => {
     try {
@@ -354,8 +360,29 @@ export async function runToolCallingTurn(opts: {
     let fallbackTriggered = false;
     let fallbackProvider = '';
 
+    // Anthropic's and Ollama's turns are not OpenAI-compatible requests, so
+    // openaiChatWithTools's fallback does not cover them: a failure that warrants
+    // one goes to the same candidate here, with the same operation id.
+    const withFallback = async (
+      callPrimary: (operationHeaders: Record<string, string>) => Promise<any>,
+    ) => {
+      const operationHeaders = operationIdHeaders();
+      try {
+        return await callPrimary(operationHeaders);
+      } catch (err) {
+        if (!opts.fallback || !shouldFallback(err)) throw err;
+        const primaryError = err instanceof Error ? err : new Error(String(err));
+        const providerName = opts.fallback.baseUrl?.includes('openrouter') ? 'OpenRouter' : 'fallback';
+        fallbackTriggered = true;
+        fallbackProvider = providerName;
+        notifyProviderError(primaryError);
+        opts.onFallback?.(primaryError, providerName);
+        return await chatCompletionsRequest(opts.fallback, opts.messages, toolDefs, 0.2, 1400, operationHeaders);
+      }
+    };
+
     const callProvider = async () => {
-      if (providerId === 'ollama') {
+      if (providerId === 'ollama') return await withFallback(async () => {
         const provider = await ollamaProviderPromise!;
         const result = await provider.generateCompletion(
           opts.model,
@@ -382,9 +409,9 @@ export async function runToolCallingTurn(opts: {
           },
           provider: 'Ollama',
         };
-      }
+      });
 
-      if (providerId === 'anthropic') {
+      if (providerId === 'anthropic') return await withFallback(async (operationHeaders) => {
         const anthropicApiKey = await resolveApiKeyInput(
           opts.getApiKey ? opts.getApiKey : opts.apiKey,
           { source: 'Anthropic Messages API' },
@@ -394,13 +421,14 @@ export async function runToolCallingTurn(opts: {
           apiKey: anthropicApiKey,
           model: opts.model,
           baseUrl: opts.baseUrl,
+          operationHeaders,
           system: payload.system,
           messages: payload.messages,
           tools: toAnthropicTools(toolDefs),
           temperature: 0.2,
           maxTokens: 1400,
         });
-      }
+      });
 
       return await openaiChatWithTools({
         apiKey: opts.apiKey,
@@ -659,6 +687,7 @@ export async function runToolCallingTurn(opts: {
         : !allowedToolNames.has(requestedToolName))
     ) {
       const refusedName = tool?.name || requestedToolName;
+      logToolRefusal({ kind: 'tool', name: refusedName });
       emitOtelLog({
         name: 'wunderland.runtime',
         body: TOOL_NOT_ALLOWED,

@@ -14,7 +14,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { anthropicApiUrl } from '../../../../platform/config/provider-base-urls.js';
+import { anthropicApiUrl, baseUrlFor } from '../../../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../../../platform/config/operation-id.js';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
@@ -416,7 +417,7 @@ async function handleSpawn(
       sendJson(res, 500, { error: 'No LLM API key found in environment (OPENAI_API_KEY, OPENROUTER_API_KEY, or ANTHROPIC_API_KEY)' });
       return true;
     }
-    const baseUrl = orKey ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1';
+    const baseUrl = baseUrlFor(orKey ? 'openrouter' : 'openai');
     const apiKey = orKey || openaiKey;
     const llmModel = orKey ? 'openai/gpt-4o' : 'gpt-4o';
 
@@ -424,7 +425,7 @@ async function handleSpawn(
       if (anthropicKey && !apiKey) {
         const r = await fetch(anthropicApiUrl('messages'), {
           method: 'POST',
-          headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+          headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', ...operationIdHeaders() },
           body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, temperature: 0.1, messages: [{ role: 'user', content: prompt }] }),
         });
         const text = await r.text();
@@ -434,7 +435,7 @@ async function handleSpawn(
       }
       const r = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', ...operationIdHeaders() },
         body: JSON.stringify({ model: llmModel, temperature: 0.1, max_tokens: 2048, messages: [{ role: 'user', content: prompt }] }),
       });
       const text = await r.text();

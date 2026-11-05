@@ -15,6 +15,7 @@ import { getConfigPath } from '../../config/config-manager.js';
 import { getEnvPath, loadDotEnvIntoProcessUpward } from '../../config/env-manager.js';
 import { checkEnvSecrets } from '../../config/secrets.js';
 import { URLS } from '../../constants.js';
+import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
 import { glyphs } from '../../ui/glyphs.js';
 import { getUiRuntime } from '../../ui/runtime.js';
 
@@ -98,7 +99,7 @@ export class DoctorView {
     // Connectivity checks
     const connIdx = 3 + keyEntries.length;
     for (let i = 0; i < 2; i++) {
-      const url = i === 0 ? 'https://api.openai.com/v1/models' : URLS.website;
+      const url = i === 0 ? `${baseUrlFor('openai')}/models` : URLS.website;
       try {
         const start = Date.now();
         const controller = new AbortController();

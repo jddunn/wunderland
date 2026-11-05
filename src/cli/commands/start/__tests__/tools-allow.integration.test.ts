@@ -12,6 +12,8 @@
  * and webhook-wake cases are in `tools-allow.test.ts`.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import * as fs from 'node:fs/promises';
@@ -285,5 +287,56 @@ describe('wunderland start: tools.allow on the channel and POST /chat routes', (
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  }, LOAD_TIMEOUT_MS);
+});
+
+/**
+ * The refusal line as a host reads it: from the standard output of a process
+ * that runs the built package under plain Node, with OTEL off and no logger set.
+ * CI builds before this lane runs.
+ */
+describe('wunderland start: the refusal line on standard output', () => {
+  const dist = path.resolve(__dirname, '../../../../../dist');
+  const haveDist = existsSync(path.join(dist, 'runtime/tools/tool-calling.js'));
+
+  it.skipIf(!haveDist && !process.env['CI'])('a refused call and a refused pack each write one JSON line', async () => {
+    const script = `
+      const { runToolCallingTurn } = await import(${JSON.stringify(path.join(dist, 'runtime/tools/tool-calling.js'))});
+      const { createSchemaOnDemandTools } = await import(${JSON.stringify(path.join(dist, 'runtime/execution/schema-on-demand.js'))});
+      const replies = [
+        { model: 'm', usage: {}, choices: [{ message: { role: 'assistant', content: null, tool_calls: [
+          { id: 'c1', type: 'function', function: { name: 'shell_execute', arguments: JSON.stringify({ command: 'cat secret-canary' }) } },
+        ] } }] },
+        { model: 'm', usage: {}, choices: [{ message: { role: 'assistant', content: 'done' } }] },
+      ];
+      globalThis.fetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify(replies.shift()) });
+      await runToolCallingTurn({
+        providerId: 'openai', apiKey: 'sk-test', model: 'm',
+        messages: [{ role: 'user', content: 'run it' }],
+        toolMap: new Map([['shell_execute', { name: 'shell_execute', description: 'Shell', inputSchema: { type: 'object' }, category: 'system', hasSideEffects: true, execute: async () => ({ success: true }) }]]),
+        allowedToolNames: ['web_search'],
+        toolContext: {}, maxRounds: 4, dangerouslySkipPermissions: true, askPermission: async () => true,
+      });
+      const tools = createSchemaOnDemandTools({ toolMap: new Map(), runtimeDefaults: {}, allowedPackages: ['web-search'] });
+      await tools.find((tool) => tool.name === 'extensions_enable').execute({ extension: 'cli-executor', options: { token: 'secret-canary' } }, {});
+    `;
+    const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'production' };
+    for (const name of ['OTEL_ENABLED', 'WUNDERLAND_OTEL_ENABLED', 'AGENTOS_LOG_LEVEL', 'AGENTOS_DEBUG']) delete env[name];
+
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile(process.execPath, ['--input-type=module', '-e', script], { env, maxBuffer: 16 * 1024 * 1024 }, (error, out) => {
+        if (error) reject(error);
+        else resolve(out);
+      });
+    });
+
+    const refusals = stdout
+      .split('\n')
+      .filter((line) => line.includes('tool_not_allowed'))
+      .map((line) => JSON.parse(line));
+    expect(refusals).toHaveLength(2);
+    expect(refusals[0]).toMatchObject({ msg: 'tool_not_allowed', tool: 'shell_execute', level: 40 });
+    expect(refusals[1]).toMatchObject({ msg: 'tool_not_allowed', pack: 'cli-executor', level: 40 });
+    expect(stdout).not.toContain('secret-canary');
   }, LOAD_TIMEOUT_MS);
 });

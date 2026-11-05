@@ -19,7 +19,7 @@ import {
 } from '../../../platform/config/provider-defaults.js';
 import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../../runtime/tools/workspace.js';
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
-import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
+import { agentosBaseUrlFor, baseUrlFor, GEMINI_OPENAI_COMPATIBLE_BASE_URL, primaryBaseUrlFor } from '../../../platform/config/provider-base-urls.js';
 import { OPERATION_ID_HEADER_ENV, resolveOperationIdHeader } from '../../../platform/config/operation-id.js';
 import { remoteApprovalHandlerForMode } from './remote-approvals.js';
 import { buildFallbackChain } from '@framers/agentos';
@@ -136,7 +136,7 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
     if (fb.provider === 'gemini') {
       // Gemini's OpenAI-compatible endpoint; without a base URL the request
       // would go to OpenAI's with the Gemini key.
-      return { id: 'gemini', config: { apiKey: process.env['GEMINI_API_KEY']!, model: fb.model ?? 'gemini-2.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' } };
+      return { id: 'gemini', config: { apiKey: process.env['GEMINI_API_KEY']!, model: fb.model ?? 'gemini-2.5-flash', baseUrl: GEMINI_OPENAI_COMPATIBLE_BASE_URL } };
     }
     // Generic fallback entry for any other provider discovered by buildFallbackChain
     return { id: fb.provider, config: { apiKey: '', model: fb.model ?? '' } };
@@ -167,10 +167,7 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   // API and its OpenAI-compatible endpoint share, so the turn loop, HyDE and
   // the research classifier send an Anthropic key to Anthropic's root, never
   // to OpenAI's endpoint.
-  const llmBaseUrl =
-    providerId === 'ollama' ? ollamaBaseUrl
-    : providerId === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta/openai'
-    : baseUrlFor(providerId);
+  const llmBaseUrl = primaryBaseUrlFor(providerId, { ollamaBaseUrl });
   // Resolve auth method (OAuth or API key)
   const authMethod: 'api-key' | 'oauth' =
     (cfg?.llmAuthMethod === 'oauth' || flags['oauth'] === true) && providerId === 'openai'
@@ -241,7 +238,9 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
   // Create LLM judge HITL handler when active and an LLM is available.
   // The handler wraps the AgentOS hitl.llmJudge() factory to evaluate each
   // tool call via an LLM, converting the ApprovalRequest interface into the
-  // simpler (tool, args) => boolean used by askPermission handlers.
+  // simpler (tool, args) => boolean used by askPermission handlers. The judge
+  // goes to the judge provider's base-URL variable, and AgentOS's providers add
+  // the operation id header.
   const judgeProvider = (cfg?.hitl as any)?.judgeProvider || 'openai';
   const judgeApiKey = (() => {
     const cfgSecrets =
@@ -276,6 +275,7 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
           'Evaluate whether this tool call is safe, relevant to the user request, and appropriate given the security context.',
         confidenceThreshold: (cfg?.hitl as any)?.judgeConfidenceThreshold ?? 0.7,
         apiKey: judgeApiKey,
+        baseUrl: agentosBaseUrlFor(judgeProvider),
       });
       const agentDisplayName = cfg?.displayName || cfg?.agentName || seedId || 'Wunderland Agent';
       ctx.llmJudgeHandler = async (tool: any, args: Record<string, unknown>): Promise<boolean> => {

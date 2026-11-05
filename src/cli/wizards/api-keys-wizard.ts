@@ -10,14 +10,27 @@ import type { WizardState } from '../types.js';
 import { LLM_PROVIDERS } from '../constants.js';
 import { accent } from '../ui/theme.js';
 import * as fmt from '../ui/format.js';
+import { anthropicApiUrl, baseUrlFor } from '../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
 import { glyphs } from '../ui/glyphs.js';
 import { importEnvBlock } from '../config/env-manager.js';
 
 // ── Key validation ──────────────────────────────────────────────────────────
 
+/**
+ * The URL a key is checked against: the provider's base-URL variable for OpenAI,
+ * Anthropic and OpenRouter, the catalogue's URL for any other provider.
+ */
+function validationUrlFor(providerId: string, catalogueUrl: string): string {
+  if (providerId === 'anthropic') return anthropicApiUrl('messages');
+  const baseUrl = baseUrlFor(providerId);
+  return baseUrl ? `${baseUrl}/models` : catalogueUrl;
+}
+
 async function validateApiKey(providerId: string, apiKey: string): Promise<{ valid: boolean; detail: string; latency: number }> {
   const provider = LLM_PROVIDERS.find((p) => p.id === providerId);
   if (!provider?.validationUrl) return { valid: true, detail: 'no validation endpoint', latency: 0 };
+  const validationUrl = validationUrlFor(providerId, provider.validationUrl);
 
   const start = Date.now();
   try {
@@ -29,8 +42,9 @@ async function validateApiKey(providerId: string, apiKey: string): Promise<{ val
       headers['x-api-key'] = apiKey;
       headers['anthropic-version'] = '2023-06-01';
       headers['content-type'] = 'application/json';
+      Object.assign(headers, operationIdHeaders());
       // Send minimal request — 400 = key is valid, 401 = invalid
-      const res = await fetch(provider.validationUrl, {
+      const res = await fetch(validationUrl, {
         method: 'POST', signal: controller.signal, headers,
         body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
       });
@@ -43,7 +57,7 @@ async function validateApiKey(providerId: string, apiKey: string): Promise<{ val
     // Default: Bearer token + HEAD/GET
     headers['Authorization'] = `Bearer ${apiKey}`;
     const method = providerId === 'gemini' ? 'GET' : 'HEAD';
-    const url = providerId === 'gemini' ? `${provider.validationUrl}?key=${apiKey}` : provider.validationUrl;
+    const url = providerId === 'gemini' ? `${validationUrl}?key=${apiKey}` : validationUrl;
     const finalHeaders = providerId === 'gemini' ? {} : headers;
 
     const res = await fetch(url, { method, signal: controller.signal, headers: finalHeaders });

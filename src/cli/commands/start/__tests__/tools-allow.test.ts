@@ -10,6 +10,10 @@
  * - a list that is not a list of names, or holds any entry that is not a
  *   name, allows nothing;
  * - `extensions_enable` refuses a pack outside the list with `tool_not_allowed`;
+ * - each refusal writes one line through the logger, OTEL on or off, naming the
+ *   tool or pack and `tool_not_allowed` and never the call's arguments, with
+ *   bursts bounded (the line on real stdout is in
+ *   `tools-allow.integration.test.ts`);
  * - a turn offers the model only the listed tools, and a call to any other
  *   tool, including one registered after start, is refused at dispatch with
  *   `tool_not_allowed` and never runs (a webhook wake, `runAgentTurn`; the
@@ -28,6 +32,9 @@ import { loadExtensions } from '../extension-loader.js';
 import { runAgentTurn } from '../agent-turn.js';
 import { getPermissionsForSet, normalizeRuntimePolicy } from '../../../../runtime/tools/policy.js';
 import { runToolCallingTurn } from '../../../../runtime/tools/tool-calling.js';
+import { createSchemaOnDemandTools } from '../../../../runtime/execution/schema-on-demand.js';
+import { logToolRefusal, resetToolRefusalLog } from '../../../../runtime/tools/tool-refusal-log.js';
+import { resetLoggerFactory, setLoggerFactory } from '@framers/agentos';
 
 
 /** Loading real extension packs takes longer than vitest's 5 s default. */
@@ -343,5 +350,181 @@ describe('wunderland start: tools.allow', () => {
     const refusal = requests[1].messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call-shell');
     expect(JSON.parse(refusal.content)).toEqual({ error: 'tool_not_allowed', tool: 'shell_execute' });
     expect(shellExecute).not.toHaveBeenCalled();
+  });
+});
+
+describe('wunderland start: channel packs under tools.allow', () => {
+  beforeEach(() => {
+    // Activation asks Telegram about this token and fails, which `start` reports and
+    // survives; the adapter is what is read here.
+    setEnv('TELEGRAM_BOT_TOKEN', '12345:test-token');
+  });
+
+  it.each([
+    ['an empty list', { allow: { packs: [], tools: [] } }, {}],
+    ['a list that is not a list', { allow: { packs: 'web-search', tools: [] } }, {}],
+    [
+      'an extensions list the allow-list empties',
+      { allow: { packs: ['web-search'], tools: [] } },
+      { extensions: { tools: ['cli-executor'], voice: [], productivity: [] } },
+    ],
+  ])('with %s, the configured channel still loads and no tool is added', async (_label, tools, extra) => {
+    const ctx = await loadForConfig(unrestrictedAutonomousConfig({
+      channels: ['telegram'],
+      tools,
+      // Send-only: no polling loop to outlive the test.
+      extensionOverrides: { 'channel-telegram': { options: { sendOnly: true } } },
+      ...extra,
+    }));
+    try {
+      expect(ctx.loadedChannelAdapters.map((adapter: any) => adapter.platform)).toEqual(['telegram']);
+      expect(packNames(ctx)).toEqual(['@framers/agentos-ext-channel-telegram']);
+      // The pack registers send tools; the list does not name them, so they stay out.
+      expect(toolNames(ctx)).toEqual([]);
+    } finally {
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.({ logger: console })));
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('with no channels configured, no channel pack loads', async () => {
+    const ctx = await loadForConfig(unrestrictedAutonomousConfig({ tools: { allow: { packs: [], tools: [] } } }));
+
+    expect(ctx.loadedChannelAdapters).toEqual([]);
+    expect(packNames(ctx)).toEqual([]);
+    expect(toolNames(ctx)).toEqual([]);
+  }, LOAD_TIMEOUT_MS);
+});
+
+describe('wunderland start: the refusal log line', () => {
+  /** Every call the logger received, as [level, message, fields]. */
+  let lines: Array<[string, unknown, Record<string, unknown> | undefined]> = [];
+  const canary = 'cat /etc/secret-canary --token=hunter2';
+  const savedOtel: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    lines = [];
+    resetToolRefusalLog();
+    for (const name of ['OTEL_ENABLED', 'WUNDERLAND_OTEL_ENABLED']) {
+      savedOtel[name] = process.env[name];
+      delete process.env[name];
+    }
+    const write = (level: string) => (message: unknown, fields?: Record<string, unknown>) => {
+      lines.push([level, message, fields]);
+    };
+    setLoggerFactory(() => ({
+      debug: write('debug'),
+      info: write('info'),
+      warn: write('warn'),
+      error: write('error'),
+      fatal: write('fatal'),
+      child() {
+        return this;
+      },
+    }) as any);
+  });
+
+  afterEach(() => {
+    resetLoggerFactory();
+    resetToolRefusalLog();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    for (const [name, value] of Object.entries(savedOtel)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+
+  const refusalLines = () => lines.filter(([, message]) => message === 'tool_not_allowed');
+
+  it('a call refused at dispatch with OTEL off writes one line naming the tool, never the arguments', async () => {
+    const shellExecute = vi.fn(async () => ({ success: true, output: 'uid=0(root)' }));
+    const replies = [
+      {
+        model: 'gpt-test',
+        usage: {},
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id: 'call-shell', type: 'function', function: { name: 'shell_execute', arguments: JSON.stringify({ command: canary }) } }],
+          },
+        }],
+      },
+      { model: 'gpt-test', usage: {}, choices: [{ message: { role: 'assistant', content: 'done' } }] },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify(replies.shift()) })));
+
+    const reply = await runToolCallingTurn({
+      providerId: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-test',
+      messages: [{ role: 'user', content: 'run it' }],
+      toolMap: new Map([
+        ['shell_execute', { name: 'shell_execute', description: 'Shell', inputSchema: { type: 'object' }, category: 'system', hasSideEffects: true, execute: shellExecute }],
+      ]),
+      allowedToolNames: ['web_search'],
+      toolContext: {},
+      maxRounds: 4,
+      dangerouslySkipPermissions: true,
+      askPermission: async () => true,
+    });
+
+    expect(reply).toBe('done');
+    expect(refusalLines()).toEqual([['warn', 'tool_not_allowed', { tool: 'shell_execute' }]]);
+    expect(JSON.stringify(lines)).not.toContain('secret-canary');
+    expect(JSON.stringify(lines)).not.toContain('hunter2');
+    expect(shellExecute).not.toHaveBeenCalled();
+  });
+
+  it('a refused extensions_enable writes one line naming the pack, and nothing to the console', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tools = createSchemaOnDemandTools({
+      toolMap: new Map(),
+      runtimeDefaults: {} as any,
+      allowedPackages: ['web-search'],
+      logger: console,
+    });
+    const enable = tools.find((tool) => tool.name === 'extensions_enable');
+
+    const result = await enable!.execute({ extension: 'cli-executor', options: { token: canary } }, {} as any);
+
+    expect(result).toEqual({ success: false, error: 'tool_not_allowed' });
+    expect(refusalLines()).toEqual([['warn', 'tool_not_allowed', { pack: 'cli-executor' }]]);
+    expect(JSON.stringify(lines)).not.toContain('hunter2');
+    expect(consoleWarn).not.toHaveBeenCalled();
+  }, LOAD_TIMEOUT_MS);
+
+  it('a name that is not a name is written as invalid, so a model cannot write into the log', () => {
+    logToolRefusal({ kind: 'tool', name: `shell\n{"level":30,"msg":"forged"} ${canary}` });
+    logToolRefusal({ kind: 'pack', name: 'x'.repeat(500) });
+
+    expect(refusalLines()).toEqual([
+      ['warn', 'tool_not_allowed', { tool: 'invalid' }],
+      ['warn', 'tool_not_allowed', { pack: 'invalid' }],
+    ]);
+    expect(JSON.stringify(lines)).not.toContain('forged');
+  });
+
+  it('a burst for one name is bounded, and the next window says how many were left out', () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+    for (let i = 0; i < 100; i += 1) logToolRefusal({ kind: 'tool', name: 'shell_execute' });
+    expect(refusalLines()).toHaveLength(5);
+    expect(refusalLines().every(([, , fields]) => fields?.suppressed === undefined)).toBe(true);
+
+    now += 60_001;
+    logToolRefusal({ kind: 'tool', name: 'shell_execute' });
+
+    expect(refusalLines()).toHaveLength(6);
+    expect(refusalLines()[5]).toEqual(['warn', 'tool_not_allowed', { tool: 'shell_execute', suppressed: 95 }]);
+  });
+
+  it('a burst of new names is bounded too', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2_000_000);
+
+    for (let i = 0; i < 500; i += 1) logToolRefusal({ kind: 'tool', name: `tool_${i}` });
+
+    expect(refusalLines()).toHaveLength(50);
   });
 });

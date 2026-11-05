@@ -39,6 +39,8 @@ import type {
 import type { WunderlandAgentRagConfig } from '../../channels/api/types.js';
 import type { MemorySystem } from '../../memory/index.js';
 import type { IVectorStore, IEmbeddingManager } from '@framers/agentos';
+import { baseUrlFor } from '../../platform/config/provider-base-urls.js';
+import { operationIdHeaders } from '../../platform/config/operation-id.js';
 import {
   buildUnifiedRetrieverFromConfig,
   formatUnifiedRetrievalLog,
@@ -337,13 +339,13 @@ function buildCliQueryRouterConfig(opts: CliQueryRouterOptions): QueryRouterConf
     process.env.OPENAI_API_KEY;
   const baseUrl =
     opts.baseUrl ||
-    (useOR ? 'https://openrouter.ai/api/v1' : undefined);
+    (useOR ? baseUrlFor('openrouter') : undefined);
 
   // Embedding config — prefer a direct OpenAI key for embeddings
   const embeddingApiKey = opts.embeddingApiKey || process.env.OPENAI_API_KEY || apiKey;
   const embeddingBaseUrl =
     opts.embeddingBaseUrl ||
-    (embeddingApiKey === process.env.OPENAI_API_KEY ? undefined : baseUrl);
+    (embeddingApiKey === process.env.OPENAI_API_KEY ? baseUrlFor('openai') : baseUrl);
 
   // Deep-research (requires SERPER_API_KEY)
   const deepResearchEnabled = Boolean(process.env.SERPER_API_KEY);
@@ -416,6 +418,37 @@ export function formatCliQueryRouterReadyLog(stats: QueryRouterCorpusStats): str
 // ============================================================================
 // Public API
 // ============================================================================
+
+/**
+ * The LLM caller `wunderland chat` gives the unified retriever: one
+ * OpenAI-compatible request per call, to `baseUrl` (OPENAI_BASE_URL or OpenAI's
+ * own root when unset, as the SDK reads it), with its own operation id.
+ *
+ * @param opts.apiKey - The primary provider's key.
+ * @param opts.model - The primary provider's model.
+ * @param opts.baseUrl - The primary provider's base URL.
+ * @returns The caller.
+ */
+export function createChatLlmCaller(opts: {
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+}): (prompt: string) => Promise<string> {
+  return async (prompt: string) => {
+    const { default: OpenAI } = await import('openai');
+    const client = new OpenAI({
+      apiKey: opts.apiKey,
+      baseURL: opts.baseUrl || baseUrlFor('openai'),
+      defaultHeaders: operationIdHeaders(),
+    });
+    const resp = await client.chat.completions.create({
+      model: opts.model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 512,
+    });
+    return resp.choices?.[0]?.message?.content ?? '';
+  };
+}
 
 /**
  * Initialise the CLI QueryRouter singleton.

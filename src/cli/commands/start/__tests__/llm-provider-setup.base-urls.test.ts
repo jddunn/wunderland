@@ -17,6 +17,11 @@
  * path prefix. `fetch` is wrapped so a request for any other origin is answered
  * in process and recorded instead of leaving the machine; every case but the
  * unset one asserts that none did.
+ *
+ * `wunderland chat`'s query router and its LLM caller, the job executor's own
+ * LLM call and the other commands' provider calls read the same variables
+ * through the same helpers. A channel message falls back like the `/chat` route
+ * and the webhook turn, for every primary provider.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
@@ -27,16 +32,33 @@ import * as path from 'node:path';
 import { setupLlmProvider } from '../llm-provider-setup.js';
 import { createLocalMemoryReadTool } from '../local-memory-tool.js';
 import { bootstrapRagKnowledge } from '../rag-bootstrap.js';
-import { wireDiscordExtensions } from '../channel-handler.js';
+import { handleInboundChannelMessage, wireDiscordExtensions } from '../channel-handler.js';
 import { dispatchRoute, resetWebhookRateLimiter } from '../routes/index.js';
 import { runToolCallingTurn, openaiChatWithTools } from '../../../../runtime/tools/tool-calling.js';
-import { chatCompletionsRequest, anthropicMessagesRequest } from '../../../../runtime/tools/tool-helpers.js';
-import { resolveEmbeddingConfig } from '../../../../platform/discovery/WunderlandDiscoveryManager.js';
+import { chatCompletionsRequest, anthropicMessagesRequest, shouldFallback } from '../../../../runtime/tools/tool-helpers.js';
+import { resolveEmbeddingConfig, WunderlandDiscoveryManager } from '../../../../platform/discovery/WunderlandDiscoveryManager.js';
 import { createResearchClassifierLlmCall } from '../../../../runtime/agentos-bridge/research-classifier.js';
 import { createCuratedPicksHandler } from '../../../../channels/discord/curatedPicksHandler.js';
-import { anthropicApiUrl } from '../../../../platform/config/provider-base-urls.js';
+import { anthropicApiUrl, primaryBaseUrlFor } from '../../../../platform/config/provider-base-urls.js';
+import {
+  createChatLlmCaller,
+  initCliQueryRouter,
+  resetCliQueryRouterForTests,
+} from '../../../../runtime/agentos-bridge/query-router-init.js';
+import { JobExecutor } from '../../../../autonomy/jobs/JobExecutor.js';
 import { resolveWunderlandRuntimeConfigFromEnv } from '../../../../platform/config/provider-defaults.js';
 import { resolveMissionModel, resolveMissionProviderBaseUrl } from '../../mission-model-flags.js';
+
+// Vite does not follow AgentOS's `./*` exports entry for this path; plain Node
+// does, and the dist smoke test loads the package that way. The provider stands
+// in for an Ollama server nothing answers on.
+vi.mock('@framers/agentos/core/llm/providers/implementations/OllamaProvider', () => ({
+  OllamaProvider: class {
+    async initialize(): Promise<void> {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:11434');
+    }
+  },
+}));
 
 const KEYS = {
   OPENAI_API_KEY: 'sk-openai-test',
@@ -55,6 +77,7 @@ const ENV_VARS = [
   'OLLAMA_BASE_URL',
   'WUNDERLAND_WORKSPACE_DIR',
   'AGENTOS_OPERATION_ID_HEADER',
+  'JOB_EXECUTOR_MODEL',
 ];
 
 /** The header the operation-id cases name in AGENTOS_OPERATION_ID_HEADER. */
@@ -68,6 +91,25 @@ const PICKS_COPY_TEXT = JSON.stringify({ hook: 'A hook', commentary: 'Some comme
 /** The judge's answer, valid JSON for AgentOS's llmJudge parser. */
 const JUDGE_TEXT = JSON.stringify({ approved: true, confidence: 0.95, reasoning: 'fine' });
 
+/** The length of text-embedding-3-small's vectors, which AgentOS's vector store checks. */
+const EMBEDDING_DIMENSION = 1536;
+
+/** The events of one Anthropic streaming answer, as AgentOS's provider reads them. */
+function anthropicSse(text: string, model: string): string {
+  const events = [
+    {
+      type: 'message_start',
+      message: { id: 'msg_test', type: 'message', role: 'assistant', model, content: [], stop_reason: null, usage: { input_tokens: 1, output_tokens: 0 } },
+    },
+    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
+    { type: 'content_block_stop', index: 0 },
+    { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 1 } },
+    { type: 'message_stop' },
+  ];
+  return events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('');
+}
+
 type Seen = { method: string; url: string; headers: Record<string, unknown>; body: any };
 
 /** Requests the fake provider server received (path only). */
@@ -80,7 +122,7 @@ let origin = '';
 let realFetch: typeof fetch;
 
 /** The fake's answer for a request path, in each provider's own wire shape. */
-function answer(method: string, url: string, body: any): { status: number; json: unknown } {
+function answer(method: string, url: string, body: any): { status: number; json: unknown; sse?: string } {
   const pathname = url.split('?')[0] ?? '';
   if (pathname.includes('/down/')) {
     return { status: 503, json: { error: { message: 'unavailable' } } };
@@ -102,12 +144,16 @@ function answer(method: string, url: string, body: any): { status: number; json:
       json: {
         object: 'list',
         model: body?.model ?? 'text-embedding-3-small',
-        data: inputs.map((_: unknown, index: number) => ({ object: 'embedding', index, embedding: [0.1, 0.2, 0.3] })),
+        data: inputs.map((_: unknown, index: number) => ({ object: 'embedding', index, embedding: new Array(EMBEDDING_DIMENSION).fill(0.1) })),
         usage: { prompt_tokens: 1, total_tokens: 1 },
       },
     };
   }
   if (pathname.endsWith('/v1/messages')) {
+    // AgentOS's Anthropic provider streams; wunderland's own request does not.
+    if (body?.stream === true) {
+      return { status: 200, json: null, sse: anthropicSse(JUDGE_TEXT, body?.model ?? 'claude-test') };
+    }
     return {
       status: 200,
       json: {
@@ -127,7 +173,7 @@ function answer(method: string, url: string, body: any): { status: number; json:
       json: {
         object: 'list',
         // OpenRouter's provider reads name, pricing and context_length from each row.
-        data: ['gpt-4o-mini', 'openai/gpt-4o-mini', 'text-embedding-3-small'].map((id) => ({
+        data: ['gpt-4o-mini', 'openai/gpt-4o-mini', 'text-embedding-3-small', 'openai/text-embedding-3-small'].map((id) => ({
           id,
           object: 'model',
           created: 0,
@@ -204,8 +250,11 @@ const guardedFetch = async (input: RequestInfo | URL, init?: RequestInit): Promi
   const method = String(init?.method ?? 'GET').toUpperCase();
   const body = parseBody(init?.body);
   escaped.push({ method, url, headers: headersOf(init), body });
-  const { status, json } = answer(method, new URL(url).pathname, body);
-  return new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json' } });
+  const { status, json, sse } = answer(method, new URL(url).pathname, body);
+  return new Response(sse ?? JSON.stringify(json), {
+    status,
+    headers: { 'content-type': sse ? 'text/event-stream' : 'application/json' },
+  });
 };
 
 beforeAll(async () => {
@@ -221,9 +270,9 @@ beforeAll(async () => {
       const url = req.url ?? '/';
       const body = parseBody(raw);
       seen.push({ method, url, headers: req.headers as Record<string, unknown>, body });
-      const { status, json } = answer(method, url, body);
-      res.writeHead(status, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(json));
+      const { status, json, sse } = answer(method, url, body);
+      res.writeHead(status, { 'content-type': sse ? 'text/event-stream' : 'application/json' });
+      res.end(sse ?? JSON.stringify(json));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
@@ -398,18 +447,58 @@ describe('start: the LLM judge', () => {
   it.each([
     ['openai', 'gpt-4o-mini', '/openai/v1/'],
     ['openrouter', 'openai/gpt-4o-mini', '/openrouter/api/v1/'],
+    ['anthropic', 'claude-haiku-4-5-20251001', '/anthropic/v1/messages'],
   ])('a %s judge sends its request to the base-URL variable', async (judgeProvider, judgeModel, prefix) => {
-    // The judge is AgentOS's: it reads the variable itself and appends its
-    // paths to the value as set, without trimming, so these values are plain.
-    pointVariablesAtFake({ plain: true });
-    setKeys('OPENAI_API_KEY', 'OPENROUTER_API_KEY');
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY');
     const ctx = await startCtx('openai', { hitl: { mode: 'llm-judge', judgeProvider, judgeModel } });
     expect(typeof ctx.llmJudgeHandler).toBe('function');
 
-    await ctx.llmJudgeHandler({ name: 'send_message', hasSideEffects: true }, { text: 'hello' });
+    const approved = await ctx.llmJudgeHandler({ name: 'send_message', hasSideEffects: true }, { text: 'hello' });
 
+    expect(approved).toBe(true);
     expect(posts(prefix).length).toBeGreaterThanOrEqual(1);
     expect(escaped).toEqual([]);
+  }, 30_000);
+
+  it('an anthropic judge with only ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL set reaches the fake', async () => {
+    process.env['ANTHROPIC_BASE_URL'] = `${origin}/anthropic`;
+    setKeys('ANTHROPIC_API_KEY');
+    const ctx = await startCtx('anthropic', {
+      hitl: { mode: 'llm-judge', judgeProvider: 'anthropic', judgeModel: 'claude-haiku-4-5-20251001' },
+    });
+
+    await ctx.llmJudgeHandler({ name: 'send_message', hasSideEffects: true }, {});
+
+    expect(posts('/anthropic/v1/messages').length).toBeGreaterThanOrEqual(1);
+    expect(posts('/anthropic/v1/messages')[0].headers['x-api-key']).toBe(KEYS.ANTHROPIC_API_KEY);
+    expect(escaped).toEqual([]);
+  }, 30_000);
+
+  it('an ANTHROPIC_BASE_URL that already ends in /v1/ sends the judge to /v1/messages once', async () => {
+    pointVariablesAtFake({ anthropicSuffix: '/v1/' });
+    setKeys('ANTHROPIC_API_KEY');
+    const ctx = await startCtx('anthropic', {
+      hitl: { mode: 'llm-judge', judgeProvider: 'anthropic', judgeModel: 'claude-haiku-4-5-20251001' },
+    });
+
+    await ctx.llmJudgeHandler({ name: 'send_message', hasSideEffects: true }, {});
+
+    const urls = new Set(posts('/anthropic/').map((r) => r.url));
+    expect([...urls]).toEqual(['/anthropic/v1/messages']);
+    expect(escaped).toEqual([]);
+  }, 30_000);
+
+  it("with the variables unset, the judge goes to the judge provider's own endpoint", async () => {
+    setKeys('ANTHROPIC_API_KEY');
+    const ctx = await startCtx('anthropic', {
+      hitl: { mode: 'llm-judge', judgeProvider: 'anthropic', judgeModel: 'claude-haiku-4-5-20251001' },
+    });
+
+    await ctx.llmJudgeHandler({ name: 'send_message', hasSideEffects: true }, {});
+
+    expect(escaped.filter((r) => r.method === 'POST').map((r) => r.url)).toContain('https://api.anthropic.com/v1/messages');
+    expect(seen).toEqual([]);
   }, 30_000);
 });
 
@@ -933,6 +1022,51 @@ describe('start: the operation id header (AGENTOS_OPERATION_ID_HEADER)', () => {
     expect(ids[0]).not.toBe(ids[1]);
   });
 
+  it.each([
+    ['openai', 'gpt-4o-mini', '/openai/v1/'],
+    ['openrouter', 'openai/gpt-4o-mini', '/openrouter/api/v1/'],
+    ['anthropic', 'claude-haiku-4-5-20251001', '/anthropic/v1/messages'],
+  ])('a %s LLM judge request carries one', async (judgeProvider, judgeModel, prefix) => {
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY');
+    process.env['AGENTOS_OPERATION_ID_HEADER'] = OP_HEADER;
+    const ctx = await startCtx('openai', { hitl: { mode: 'llm-judge', judgeProvider, judgeModel } });
+
+    await ctx.llmJudgeHandler({ name: 'send_message', hasSideEffects: true }, {});
+
+    const ids = opIds(posts(prefix));
+    expect(ids.length).toBeGreaterThanOrEqual(1);
+    for (const id of ids) expect(id).toMatch(UUID_RE);
+    expect(escaped).toEqual([]);
+  }, 30_000);
+
+  it.each([
+    ['openai', '/openai/v1/embeddings', 'OPENAI_API_KEY'],
+    ['openrouter', '/openrouter/api/v1/embeddings', 'OPENROUTER_API_KEY'],
+  ])('a %s primary: the discovery index embeddings carry one', async (provider, expectedPath, keyName) => {
+    pointVariablesAtFake();
+    setKeys(keyName as keyof typeof KEYS);
+    process.env['AGENTOS_OPERATION_ID_HEADER'] = OP_HEADER;
+    const ctx = await startCtx(provider);
+    const manager = new WunderlandDiscoveryManager({ scanManifestDirs: false, registerMetaTool: false });
+
+    try {
+      await manager.initialize({
+        toolMap: new Map([
+          ['web_search', { name: 'web_search', description: 'Search the web', category: 'research', inputSchema: { type: 'object' }, hasSideEffects: false }],
+        ]),
+        llmConfig: { providerId: ctx.providerId, apiKey: ctx.llmApiKey, baseUrl: ctx.llmBaseUrl },
+      });
+    } finally {
+      await manager.close();
+    }
+
+    const ids = opIds(posts(expectedPath));
+    expect(ids.length).toBeGreaterThanOrEqual(1);
+    for (const id of ids) expect(id).toMatch(UUID_RE);
+    expect(escaped).toEqual([]);
+  }, 60_000);
+
   it('with the variable unset, no request carries the header', async () => {
     pointVariablesAtFake();
     setKeys('OPENAI_API_KEY', 'ANTHROPIC_API_KEY');
@@ -1041,4 +1175,362 @@ describe('ANTHROPIC_BASE_URL: every Anthropic caller joins the root and the path
     expect(posts('/anthropic/').map((r) => r.url)).toEqual(['/anthropic/v1/messages', '/anthropic/v1/messages']);
     expect(escaped).toEqual([]);
   });
+});
+
+// ── wunderland chat ─────────────────────────────────────────────────────────
+// `chat` is a terminal session, so these drive what it builds: the primary base
+// URL it shares with `start`, its query router and its LLM caller.
+
+describe('chat: the primary provider, the query router and the LLM caller', () => {
+  let workDir = '';
+
+  beforeEach(async () => {
+    resetCliQueryRouterForTests();
+    // The router adds <cwd>/docs to its corpus; an empty folder keeps to the bundled knowledge.
+    workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wunderland-chat-base-urls-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(workDir);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    resetCliQueryRouterForTests();
+    await fs.rm(workDir, { recursive: true, force: true });
+  });
+
+  const silent = { log() {}, warn() {}, error() {}, debug() {} };
+
+  it.each([
+    ['openai', 'OPENAI_API_KEY', '/openai/v1/chat/completions'],
+    ['anthropic', 'ANTHROPIC_API_KEY', '/anthropic/v1/messages'],
+    ['openrouter', 'OPENROUTER_API_KEY', '/openrouter/api/v1/chat/completions'],
+  ])('a %s primary turn goes to its base-URL variable with an operation id', async (provider, keyName, expectedPath) => {
+    pointVariablesAtFake();
+    setKeys(keyName as keyof typeof KEYS);
+    process.env['AGENTOS_OPERATION_ID_HEADER'] = OP_HEADER;
+
+    await runToolCallingTurn({
+      providerId: provider,
+      apiKey: KEYS[keyName as keyof typeof KEYS],
+      model: 'model-test',
+      messages: [{ role: 'user', content: 'hello' }],
+      toolMap: new Map(),
+      toolContext: {},
+      maxRounds: 1,
+      dangerouslySkipPermissions: true,
+      askPermission: async () => true,
+      baseUrl: primaryBaseUrlFor(provider, { ollamaBaseUrl: 'http://localhost:11434/v1' }),
+    });
+
+    expect(posts(expectedPath)).toHaveLength(1);
+    expect(opIds(posts(expectedPath))[0]).toMatch(UUID_RE);
+    expect(escaped).toEqual([]);
+  });
+
+  it("primaryBaseUrlFor keeps Ollama's and Gemini's own roots", () => {
+    expect(primaryBaseUrlFor('ollama', { ollamaBaseUrl: 'http://box:11434/v1' })).toBe('http://box:11434/v1');
+    expect(primaryBaseUrlFor('gemini', { ollamaBaseUrl: '' })).toBe('https://generativelanguage.googleapis.com/v1beta/openai');
+  });
+
+  it.each([
+    ['an OpenAI key', 'OPENAI_API_KEY', '/openai/v1/'],
+    ['an OpenRouter key', 'OPENROUTER_API_KEY', '/openrouter/api/v1/'],
+  ])('with %s, the classifier and the corpus embeddings reach the base-URL variable with an operation id', async (_label, keyName, prefix) => {
+    pointVariablesAtFake();
+    setKeys(keyName as keyof typeof KEYS);
+    process.env['AGENTOS_OPERATION_ID_HEADER'] = OP_HEADER;
+
+    const router = await initCliQueryRouter({ apiKey: KEYS[keyName as keyof typeof KEYS], logger: silent });
+    expect(router).not.toBeNull();
+    try {
+      await router!.classify('How do I configure a provider?');
+    } finally {
+      await router!.close();
+    }
+
+    const embeddings = posts(`${prefix}embeddings`);
+    expect(embeddings.length).toBeGreaterThanOrEqual(1);
+    const classifier = posts(prefix).filter((r) => !r.url.endsWith('/embeddings'));
+    expect(classifier.length).toBeGreaterThanOrEqual(1);
+    for (const id of opIds([...embeddings, ...classifier])) expect(id).toMatch(UUID_RE);
+    expect(escaped).toEqual([]);
+  }, 120_000);
+
+  it.each([
+    ['openai', 'OPENAI_API_KEY', '/openai/v1/chat/completions'],
+    ['openrouter', 'OPENROUTER_API_KEY', '/openrouter/api/v1/chat/completions'],
+    ['anthropic', 'ANTHROPIC_API_KEY', '/anthropic/v1/chat/completions'],
+  ])("the %s LLM caller goes to its base-URL variable, each call with its own operation id", async (provider, keyName, expectedPath) => {
+    pointVariablesAtFake();
+    setKeys(keyName as keyof typeof KEYS);
+    process.env['AGENTOS_OPERATION_ID_HEADER'] = OP_HEADER;
+    const call = createChatLlmCaller({
+      apiKey: KEYS[keyName as keyof typeof KEYS],
+      model: 'model-test',
+      baseUrl: primaryBaseUrlFor(provider, { ollamaBaseUrl: '' }),
+    });
+
+    await call('first');
+    await call('second');
+
+    const ids = opIds(posts(expectedPath));
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toMatch(UUID_RE);
+    expect(ids[1]).toMatch(UUID_RE);
+    expect(ids[0]).not.toBe(ids[1]);
+    expect(escaped).toEqual([]);
+  });
+});
+
+// ── The job executor ────────────────────────────────────────────────────────
+
+describe('the job executor', () => {
+  const job = {
+    id: 'job-base-urls',
+    title: 'Write a report',
+    description: 'Write a short report',
+    category: 'research',
+    budgetLamports: 1,
+    deadline: new Date(Date.now() + 60_000).toISOString(),
+  };
+
+  it.each([
+    ['OPENAI_API_KEY', '/openai/v1/chat/completions', `Bearer ${KEYS.OPENAI_API_KEY}`],
+    ['OPENROUTER_API_KEY', '/openrouter/api/v1/chat/completions', `Bearer ${KEYS.OPENROUTER_API_KEY}`],
+  ])('with %s, its LLM call goes to the base-URL variable with an operation id', async (keyName, expectedPath, authorization) => {
+    pointVariablesAtFake();
+    setKeys(keyName as keyof typeof KEYS);
+    process.env['AGENTOS_OPERATION_ID_HEADER'] = OP_HEADER;
+    const executor = new JobExecutor({
+      fetchAssignedJobs: async () => [],
+      maxRetries: 1,
+      baseRetryDelayMs: 1,
+    });
+
+    await executor.executeJob('agent-1', job);
+
+    expect(posts(expectedPath).length).toBeGreaterThanOrEqual(1);
+    expect(posts(expectedPath)[0].headers['authorization']).toBe(authorization);
+    expect(opIds(posts(expectedPath))[0]).toMatch(UUID_RE);
+    expect(escaped).toEqual([]);
+  });
+
+  it('with the variables unset, its LLM call goes to OpenAI', async () => {
+    setKeys('OPENAI_API_KEY');
+    const executor = new JobExecutor({ fetchAssignedJobs: async () => [], maxRetries: 1, baseRetryDelayMs: 1 });
+
+    await executor.executeJob('agent-1', job);
+
+    expect(escaped[0]?.url).toBe('https://api.openai.com/v1/chat/completions');
+    expect(escaped[0]?.headers[OP_HEADER]).toBeUndefined();
+    expect(seen).toEqual([]);
+  });
+});
+
+// ── Callers that name no base URL ───────────────────────────────────────────
+
+describe('a provider call that names no base URL', () => {
+  it('an OpenAI-compatible request reads OPENAI_BASE_URL', async () => {
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY');
+
+    await openaiChatWithTools({
+      apiKey: KEYS.OPENAI_API_KEY,
+      model: 'gpt-test',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [],
+      temperature: 0,
+      maxTokens: 8,
+    });
+
+    expect(posts('/openai/v1/chat/completions')).toHaveLength(1);
+    expect(escaped).toEqual([]);
+  });
+
+  it('the research classifier reads OPENAI_BASE_URL', async () => {
+    pointVariablesAtFake();
+    setKeys('OPENAI_API_KEY');
+
+    await createResearchClassifierLlmCall({ apiKey: KEYS.OPENAI_API_KEY })('classify', 'hello');
+
+    expect(posts('/openai/v1/chat/completions')).toHaveLength(1);
+    expect(escaped).toEqual([]);
+  });
+});
+
+/**
+ * Provider roots written in source. Every other file gets its URL from
+ * `provider-base-urls.ts`, so a gateway named by a base-URL variable sees it.
+ * `constants.ts` holds the provider catalogue the wizards show; the key check
+ * that used to read its URLs asks `provider-base-urls.ts` instead.
+ */
+const ROOT_LITERAL = /['"`]https:\/\/(?:api\.openai\.com|openrouter\.ai\/api|api\.anthropic\.com)/;
+const FILES_THAT_MAY_NAME_A_ROOT = new Set([
+  path.join('platform', 'config', 'provider-base-urls.ts'),
+  path.join('cli', 'constants.ts'),
+]);
+
+describe('provider roots in source', () => {
+  it('no file sends to a provider root the variables cannot move', async () => {
+    const srcDir = path.resolve(__dirname, '../../../..');
+    const offenders: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== '__tests__') await walk(full);
+          continue;
+        }
+        if (!entry.name.endsWith('.ts') || entry.name.endsWith('.test.ts')) continue;
+        const relative = path.relative(srcDir, full);
+        if (FILES_THAT_MAY_NAME_A_ROOT.has(relative)) continue;
+        const lines = (await fs.readFile(full, 'utf8')).split('\n');
+        lines.forEach((line, index) => {
+          const trimmed = line.trimStart();
+          const isComment = trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*');
+          if (!isComment && ROOT_LITERAL.test(line)) offenders.push(`${relative}:${index + 1}`);
+        });
+      }
+    };
+
+    await walk(srcDir);
+
+    expect(offenders).toEqual([]);
+  });
+});
+
+// ── A channel message's fallback ────────────────────────────────────────────
+
+describe('start: a channel message falls back like the /chat route and the webhook turn', () => {
+  /** Sends one channel message through the real handler; returns what the adapter sent. */
+  async function sendChannelMessage(ctx: any): Promise<unknown[]> {
+    const adapter = {
+      platform: 'telegram',
+      sendTypingIndicator: vi.fn(async () => {}),
+      sendMessage: vi.fn(async () => {}),
+    };
+    Object.assign(ctx, {
+      pairingEnabled: false,
+      pairingGroupTrigger: '!pair',
+      pairingGroupTriggerEnabled: false,
+      systemPrompt: 'SYS',
+      channelSessions: new Map(),
+      channelQueues: new Map(),
+      channelUnsubs: [],
+      discoveryManager: { discoverForTurn: async () => null },
+      adaptiveRuntime: {
+        resolveTurnDecision: () => ({ toolFailureMode: 'fail_open', degraded: false, reason: '', actions: {}, kpi: null }),
+        recordTurnOutcome: async () => {},
+      },
+      defaultTenantId: '',
+      toolMap: new Map(),
+      seed: { seedId: ctx.seedId },
+      permissions: { network: { externalApis: true }, system: { cliExecution: false } },
+      LOCAL_ONLY_CHANNELS: new Set(['webchat']),
+      CLI_REQUIRED_CHANNELS: new Set(['signal', 'zalouser']),
+      autoApproveToolCalls: true,
+      dangerouslySkipPermissions: false,
+      strictToolNames: false,
+      turnApprovalMode: 'off',
+      adapterByPlatform: new Map([['telegram', adapter]]),
+    });
+    await handleInboundChannelMessage(ctx, {
+      platform: 'telegram',
+      conversationId: 'chat-1',
+      conversationType: 'direct',
+      messageId: 'msg-1',
+      text: 'hello',
+      sender: { id: 'user-1' },
+    });
+    return adapter.sendMessage.mock.calls.map((call: any[]) => call[1]?.blocks?.[0]?.text);
+  }
+
+  it.each([
+    ['openai', 'OPENAI_BASE_URL', `/down/v1`, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'], '/down/v1/chat/completions', '/anthropic/v1/chat/completions'],
+    ['openrouter', 'OPENROUTER_BASE_URL', `/down/api/v1`, ['OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY'], '/down/api/v1/chat/completions', '/anthropic/v1/chat/completions'],
+    ['anthropic', 'ANTHROPIC_BASE_URL', `/down`, ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY'], '/down/v1/messages', '/openai/v1/chat/completions'],
+  ])('a %s primary that fails goes to the fallback candidate, with one operation id', async (provider, variable, downPath, keys, primaryPath, fallbackPath) => {
+    pointVariablesAtFake();
+    process.env[variable] = `${origin}${downPath}`;
+    setKeys(...(keys as Array<keyof typeof KEYS>));
+    process.env['AGENTOS_OPERATION_ID_HEADER'] = OP_HEADER;
+    const ctx = await startCtx(provider);
+
+    const sent = await sendChannelMessage(ctx);
+
+    expect(posts(primaryPath)).toHaveLength(1);
+    expect(posts(fallbackPath)).toHaveLength(1);
+    expect(posts(fallbackPath)[0].headers[OP_HEADER]).toBe(posts(primaryPath)[0].headers[OP_HEADER]);
+    expect(sent).toEqual([JUDGE_TEXT]);
+    expect(escaped).toEqual([]);
+  });
+
+  it('with no fallback candidate, the failure stays a failure', async () => {
+    process.env['ANTHROPIC_BASE_URL'] = `${origin}/down`;
+    setKeys('ANTHROPIC_API_KEY');
+    const ctx = await startCtx('anthropic');
+    expect(ctx.openrouterFallback).toBeUndefined();
+
+    await expect(runPrimaryTurn(ctx)).rejects.toThrow(/503/);
+    expect(posts('/down/v1/messages')).toHaveLength(1);
+    expect(escaped).toEqual([]);
+  });
+
+  it('an Anthropic error that is not worth retrying does not fall back', async () => {
+    process.env['ANTHROPIC_BASE_URL'] = `${origin}/down`;
+    process.env['OPENAI_BASE_URL'] = `${origin}/openai/v1`;
+    setKeys('ANTHROPIC_API_KEY', 'OPENAI_API_KEY');
+    const ctx = await startCtx('anthropic');
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/down/')) {
+        seen.push({ method: 'POST', url: new URL(url).pathname, headers: {}, body: undefined });
+        return new Response(JSON.stringify({ error: { message: 'bad request' } }), { status: 400 });
+      }
+      return guardedFetch(input, init);
+    });
+
+    await expect(runPrimaryTurn(ctx)).rejects.toThrow(/400/);
+    expect(posts('/openai/v1/chat/completions')).toEqual([]);
+  });
+
+  it('an Anthropic primary past its model allowance ends the turn with the line and no fallback', async () => {
+    process.env['ANTHROPIC_BASE_URL'] = `${origin}/down`;
+    process.env['OPENAI_BASE_URL'] = `${origin}/openai/v1`;
+    setKeys('ANTHROPIC_API_KEY', 'OPENAI_API_KEY');
+    const ctx = await startCtx('anthropic');
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/down/')) {
+        return new Response(JSON.stringify({ error: { code: 'allowance_exhausted' } }), { status: 402 });
+      }
+      return guardedFetch(input, init);
+    });
+
+    await expect(runPrimaryTurn(ctx)).resolves.toBe('This agent has reached its monthly model allowance.');
+    expect(posts('/openai/v1/chat/completions')).toEqual([]);
+  });
+
+  it.each([
+    ['a status in the message', new Error('Anthropic error (503): busy'), true],
+    ['a structured httpStatus, as Ollama errors carry', Object.assign(new Error('Service Unavailable'), { httpStatus: 503 }), true],
+    ['a structured status', Object.assign(new Error('Too many requests'), { status: 429 }), true],
+    ['an Axios timeout', new Error('timeout of 60000ms exceeded'), true],
+    ['a structured status that is not retried', Object.assign(new Error('Bad request'), { httpStatus: 400 }), false],
+    ['a used-up allowance', Object.assign(new Error('Payment required'), { status: 402, code: 'allowance_exhausted' }), false],
+    ['an error with nothing to read', new Error('model not found'), false],
+  ])('shouldFallback reads %s', (_label, error, expected) => {
+    expect(shouldFallback(error)).toBe(expected);
+  });
+
+  it('an Ollama primary that cannot be reached goes to the fallback candidate', async () => {
+    process.env['OLLAMA_BASE_URL'] = `${origin}/down/ollama`;
+    process.env['OPENAI_BASE_URL'] = `${origin}/openai/v1`;
+    setKeys('OPENAI_API_KEY');
+    const ctx = await startCtx('ollama');
+    expect(ctx.openrouterFallback).toBeDefined();
+
+    await runPrimaryTurn(ctx);
+
+    expect(posts('/openai/v1/chat/completions')).toHaveLength(1);
+    expect(escaped).toEqual([]);
+  }, 30_000);
 });

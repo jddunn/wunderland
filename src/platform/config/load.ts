@@ -12,6 +12,7 @@ import {
   resolveWunderlandTextModel,
 } from './provider-defaults.js';
 import { validateWunderlandAgentConfig } from './schema.js';
+import { baseUrlFor } from './provider-base-urls.js';
 
 function normalizeBaseUrl(value: string | undefined): string | undefined {
   if (typeof value !== 'string') return value;
@@ -133,7 +134,7 @@ export async function resolveLlmConfig(opts: {
 
   const baseUrl =
     providerId === 'openrouter'
-      ? (normalizeBaseUrl(opts.llm?.baseUrl) ?? 'https://openrouter.ai/api/v1')
+      ? (normalizeBaseUrl(opts.llm?.baseUrl) ?? baseUrlFor('openrouter'))
       : providerId === 'ollama'
         ? ollamaBaseUrl
         : providerId === 'gemini'
@@ -149,7 +150,7 @@ export async function resolveLlmConfig(opts: {
       ? ({
           apiKey: openrouterApiKey,
           model: 'auto',
-          baseUrl: 'https://openrouter.ai/api/v1',
+          baseUrl: baseUrlFor('openrouter'),
           extraHeaders: { 'HTTP-Referer': 'https://wunderland.sh', 'X-Title': 'Wunderland' },
         } satisfies LLMProviderConfig)
       : undefined);
