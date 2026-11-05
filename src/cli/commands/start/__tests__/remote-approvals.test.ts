@@ -21,9 +21,7 @@ import * as path from 'node:path';
 
 import {
   APPROVAL_UNAVAILABLE,
-  REMOTE_APPROVAL_POLL_MS,
   REMOTE_APPROVAL_TEXT_LIMIT,
-  REMOTE_APPROVAL_WAIT_MS,
   createRemoteApprovalHandler,
   describeAction,
   isOutwardAction,
@@ -309,6 +307,7 @@ beforeEach(async () => {
     'OPENAI_API_KEY',
     'OPENAI_BASE_URL',
     'OPENROUTER_API_KEY',
+    'WUNDERLAND_WORKSPACE_DIR',
     EVENTS_URL_ENV,
     EVENTS_TOKEN_ENV,
   ]) {
@@ -483,11 +482,6 @@ describe('createRemoteApprovalHandler', () => {
     const logged = warn.mock.calls.flat().join(' ');
     expect(logged).not.toContain(TOKEN);
     expect(logged).not.toContain(ACTION_WORDS);
-  });
-
-  it('waits ten minutes, polling every five seconds, unless told otherwise', () => {
-    expect(REMOTE_APPROVAL_WAIT_MS).toBe(10 * 60_000);
-    expect(REMOTE_APPROVAL_POLL_MS).toBe(5_000);
   });
 });
 

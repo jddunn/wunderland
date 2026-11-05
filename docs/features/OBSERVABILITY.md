@@ -254,7 +254,7 @@ With both variables set, `wunderland start` posts the coarse events of what the 
 |------|------|-------------------------------|
 | `turn_started` | A turn begins: a channel message, a `POST /chat`, or a webhook's `mode: "turn"` wake | none |
 | `tool_called` | The model called a tool the agent has, before that call's approval | `toolName` |
-| `approval_requested` | The turn waits on a person: a tool's approval or a turn checkpoint | none |
+| `approval_requested` | The turn waits on a person: a tool's approval, once a [remote approval](PRESETS_AND_PERMISSIONS.md#remote-approvals-hitlmode-remote)'s server has taken the request, or a turn checkpoint | none |
 | `provider_error` | A provider request failed, including a primary that then falls back | `code`: the HTTP status, as a string; none when the request got no answer |
 | `turn_finished` | The turn ended, however it ended | `promptTokens`, `completionTokens`: the turn's totals across its rounds |
 | `channel_auth_failed` | A channel adapter emitted an `error` event whose data has `code: "auth_failed"`: the platform rejected its token. A pack that emits no such event reports nothing. It belongs to no turn | `code`: the platform |

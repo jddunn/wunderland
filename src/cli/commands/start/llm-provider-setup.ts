@@ -21,6 +21,7 @@ import { resolveAgentWorkspaceBaseDir, sanitizeAgentWorkspaceId } from '../../..
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
 import { OPERATION_ID_HEADER_ENV, resolveOperationIdHeader } from '../../../platform/config/operation-id.js';
+import { remoteApprovalHandlerForMode } from './remote-approvals.js';
 import { buildFallbackChain } from '@framers/agentos';
 
 export async function setupLlmProvider(ctx: any): Promise<boolean> {
@@ -231,6 +232,11 @@ export async function setupLlmProvider(ctx: any): Promise<boolean> {
     return '';
   })();
   ctx.llmJudgeMode = llmJudgeFlag || configHitlMode === 'llm-judge';
+
+  // hitl.mode "remote": outward tools ask a server, on the events variables.
+  // With either variable missing the handler refuses every one of them.
+  ctx.remoteApprovalHandler = remoteApprovalHandlerForMode(configHitlMode);
+  if (ctx.remoteApprovalHandler) fmt.note('hitl.mode "remote": outward tools need an approval before they run');
 
   // Create LLM judge HITL handler when active and an LLM is available.
   // The handler wraps the AgentOS hitl.llmJudge() factory to evaluate each

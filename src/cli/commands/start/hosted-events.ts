@@ -286,6 +286,8 @@ export function createEventsReporterFromEnv(
 
 /** One turn's events, with its counts and its operation id kept in one place. */
 export interface ReportedTurn {
+  /** The id the turn's events go out with; none when there is no reporter. */
+  readonly operationId?: string;
   /** The model called a tool the agent has; this comes before the call's approval. */
   toolCalled(toolName: unknown): void;
   /** One provider response's usage; the turn adds them up. */
@@ -321,6 +323,7 @@ export function startReportedTurn(reporter?: EventsReporter): ReportedTurn {
   let done = false;
   reporter.report('turn_started', undefined, operationId);
   return {
+    operationId,
     toolCalled(toolName) {
       reporter.report('tool_called', { toolName: toolName as string }, operationId);
     },

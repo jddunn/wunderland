@@ -70,6 +70,12 @@ type ToolCallResult = {
   error?: string;
 };
 
+/** What a call left in a round that has ended is answered with. It never runs. */
+const TURN_ENDED = 'turn_ended';
+
+/** Passed in place of `askPermission` for a call whose person has already said yes. */
+const alreadyApproved = async (): Promise<boolean> => true;
+
 const tracer = trace.getTracer('wunderland.runtime');
 
 // Helpers, types, and utilities extracted to tool-helpers.ts
@@ -91,6 +97,7 @@ import type { ToolInstance, LLMProviderConfig } from './tool-helpers.js';
 import {
   ALLOWANCE_EXHAUSTED_CODE,
   ALLOWANCE_EXHAUSTED_LINE,
+  APPROVAL_UNAVAILABLE,
   createAuthorizationManager,
   isAllowanceExhausted,
   parseProviderId,
@@ -127,6 +134,19 @@ export async function runToolCallingTurn(opts: {
   /** Optional step-up auth config — when provided, overrides DEFAULT_STEP_UP_AUTH_CONFIG. */
   stepUpAuthConfig?: StepUpAuthorizationConfig;
   askPermission: (tool: ToolInstance, args: Record<string, unknown>) => Promise<boolean>;
+  /**
+   * Asked before each call the allow-list lets through, ahead of the risk tiers,
+   * `askPermission` and `dangerouslySkipPermissions`, none of which can pass a
+   * call it refuses. `undefined` means it has no say. A yes runs the call without
+   * asking `askPermission` as well. A no, or a hook that throws, runs nothing
+   * more this turn: the call and any left in its round are answered in the
+   * history, the model is not called again, and the turn's reply is what the
+   * model gave so far and `line`.
+   */
+  outwardApproval?: (
+    tool: ToolInstance,
+    args: Record<string, unknown>,
+  ) => Promise<{ approved: boolean; reason?: string; line?: string } | undefined>;
   /** Optional checkpoint hook (used for "human after each round" modes). */
   askCheckpoint?: (info: {
     round: number;
@@ -570,6 +590,8 @@ export async function runToolCallingTurn(opts: {
 
   /** Sentinel: when set to a non-null string, the outer loop returns this value. */
   let earlyReturn: string | null = null;
+  /** Set when a call's approval comes back anything but yes: the line the turn ends with. */
+  let approvalEndingLine: string | null = null;
   /** Set to true after addToolResults; consumed by the next generateStream call. */
   let pendingCheckpoint = false;
 
@@ -598,6 +620,19 @@ export async function runToolCallingTurn(opts: {
 
     const requestedToolName = tc.name;
     const callId = tc.id;
+
+    // The loop runs every call of a round before it reports any of them, so a
+    // turn that has ended still comes here for the calls left in its round. They
+    // never run, and each gets its tool message: a provider refuses a history
+    // with a tool call nothing answered.
+    if (approvalEndingLine !== null || earlyReturn !== null) {
+      opts.messages.push({
+        role: 'tool',
+        tool_call_id: callId,
+        content: JSON.stringify({ error: TURN_ENDED, tool: requestedToolName }),
+      });
+      return { id: callId, name: requestedToolName || 'unknown', success: false, error: TURN_ENDED };
+    }
 
     // Malformed tool call guard (shouldn't happen with wrapLLMAsGenerator, but be safe)
     if (!requestedToolName) {
@@ -666,6 +701,32 @@ export async function runToolCallingTurn(opts: {
       }
     }
 
+    // ── Outward approval: ahead of the tiers and the permission flags ─────
+    let outwardVerdict: { approved: boolean; reason?: string; line?: string } | undefined;
+    if (opts.outwardApproval) {
+      try {
+        outwardVerdict = await opts.outwardApproval(tool, args);
+      } catch {
+        outwardVerdict = { approved: false, reason: APPROVAL_UNAVAILABLE };
+      }
+    }
+    if (outwardVerdict && outwardVerdict.approved !== true) {
+      const word = outwardVerdict.reason || APPROVAL_UNAVAILABLE;
+      emitOtelLog({
+        name: 'wunderland.runtime',
+        body: `tool_not_approved:${word}`,
+        severity: SeverityNumber.WARN,
+        attributes: { tool_name: toolName, round },
+      });
+      opts.messages.push({
+        role: 'tool',
+        tool_call_id: callId,
+        content: JSON.stringify({ error: word, tool: toolName }),
+      });
+      approvalEndingLine = outwardVerdict.line || `${toolName} did not run: ${word}.`;
+      return { id: callId, name: toolName, success: false, error: word };
+    }
+
     // ── Unified authorization (delegated to ToolApprovalHandler) ──────────
     const authorizationResult = await authorizeToolCall({
       tool,
@@ -675,7 +736,7 @@ export async function runToolCallingTurn(opts: {
       authManager,
       toolContext: opts.toolContext,
       dangerouslySkipPermissions: opts.dangerouslySkipPermissions,
-      askPermission: opts.askPermission,
+      askPermission: outwardVerdict ? alreadyApproved : opts.askPermission,
       shouldWrapToolOutputs,
       failClosedOnToolFailure,
       messages: opts.messages,
@@ -792,17 +853,10 @@ export async function runToolCallingTurn(opts: {
   let pendingText = '';
 
   /**
-   * The reply of a turn the allowance ended: what the model gave so far, through
-   * the same output check a finished turn's reply gets, then the fixed line.
+   * The reply of a turn that ends early with a fixed line: what the model gave so
+   * far, through the same output check a finished turn's reply gets, then the line.
    */
-  const endTurnAtAllowance = async (): Promise<string> => {
-    emitOtelLog({
-      name: 'wunderland.runtime',
-      body: ALLOWANCE_EXHAUSTED_CODE,
-      severity: SeverityNumber.WARN,
-      attributes: { round: currentRound - 1 },
-    });
-    console.warn('[tool-calling] The model allowance is used up; ending the turn.');
+  const endTurnWithLine = async (line: string): Promise<string> => {
     let soFar = finalText.replace(/\*{0,2}<think>[\s\S]*?<\/think>\*{0,2}\s*/g, '').trim();
     if (contentPipeline && soFar) {
       try {
@@ -814,9 +868,20 @@ export async function runToolCallingTurn(opts: {
         // Non-fatal, as for a finished turn's reply.
       }
     }
-    const reply = soFar ? `${soFar}\n\n${ALLOWANCE_EXHAUSTED_LINE}` : ALLOWANCE_EXHAUSTED_LINE;
+    const reply = soFar ? `${soFar}\n\n${line}` : line;
     opts.messages.push({ role: 'assistant', content: reply });
     return reply;
+  };
+
+  const endTurnAtAllowance = (): Promise<string> => {
+    emitOtelLog({
+      name: 'wunderland.runtime',
+      body: ALLOWANCE_EXHAUSTED_CODE,
+      severity: SeverityNumber.WARN,
+      attributes: { round: currentRound - 1 },
+    });
+    console.warn('[tool-calling] The model allowance is used up; ending the turn.');
+    return endTurnWithLine(ALLOWANCE_EXHAUSTED_LINE);
   };
 
   const loopContext: LoopContext = {
@@ -975,6 +1040,12 @@ export async function runToolCallingTurn(opts: {
   };
 
   for await (const event of controller.execute(loopConfig, loopContext)) {
+    // Every call of the round has its tool message by the time an event reports
+    // one, so the line can follow them in the history.
+    if (approvalEndingLine !== null && earlyReturn === null) {
+      earlyReturn = await endTurnWithLine(approvalEndingLine);
+    }
+
     // Check for fail_closed early abort after each event.
     if (earlyReturn !== null) {
       return earlyReturn;
