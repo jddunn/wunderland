@@ -7,6 +7,7 @@ This guide explains how Wunderland (the SDK and CLI runtime) composes:
 - **Permission sets** (coarse-grained capability allow/deny)
 - **Tool access profiles** (semantic tool-category allow/deny)
 - **Tool allow-list** (`tools.allow`: the only packs and tools an agent may load and run)
+- **Guardrail packs** (`extensions.guardrails`: guards that judge every message and every reply)
 - **Execution modes** (human-in-the-loop behavior)
 - **Folder permissions** (path-level filesystem sandbox)
 
@@ -95,13 +96,58 @@ Defined in `packages/wunderland/src/social/ToolAccessProfiles.ts`.
 
 `packs` takes curated pack names, the names an `extensions` list takes (`web-search`, `cli-executor`; `wunderland extensions info <name>` describes one). `tools` takes tool names as the packs register them; a pack can register several (`web-search` registers `web_search`, `research_aggregate` and `fact_check`), and only the named ones are kept. With `tools.allow` set, `start`:
 
-- **Loads only the listed packs.** The list takes the place of the default packs. An `extensions` list in the agent config or the global config, an `extensionCategories` list, and a pack recommended because its credential is set load only where `packs` names them. The agent wallet pack loads only when `packs` names `wallet`. Channel packs load from `channels` as before; a tool a channel pack registers is kept only if `tools` names it.
+- **Loads only the listed packs.** The list takes the place of the default packs. An `extensions` list in the agent config or the global config, an `extensionCategories` list, and a pack recommended because its credential is set load only where `packs` names them. The agent wallet pack loads only when `packs` names `wallet`. Channel packs load from `channels` as before; a tool a channel pack registers is kept only if `tools` names it. A [guardrail pack](#guardrail-packs-extensionsguardrails) `packs` names loads as a guard and adds no tool.
 - **Keeps only the listed tools.** As the extensions load, after the permission set and the tool access profile filter the tools, every tool `tools` does not name is dropped, whichever pack or part of `start` registered it: the schema-on-demand tools (`extensions_list`, `extensions_enable`, `extensions_status`), the working-memory tools, `memory_read`, the RAG tools, the wallet's tools and `request_folder_access` included. A tool registered later, such as the capability discovery tool or a pack's tools that `extensions_enable` loads, is kept out of every turn by the dispatch rule below.
 - **Confines `extensions_enable`.** When `tools` names it, it loads only the listed packs, and answers a request for any other pack, by curated name or package name, with `tool_not_allowed`. Loading a pack by npm package name (`source: "package"`) is off.
 - **Refuses at dispatch.** Every turn (`POST /chat` for any persona, a channel message, a webhook wake) offers the model only the listed tools. A call to any other tool, including one registered after start, is answered with `{"error":"tool_not_allowed","tool":"<name>"}` before approval and never runs; with `toolFailureMode: "fail_closed"` it ends the turn.
 - **Logs each refusal.** A call refused at dispatch and a pack `extensions_enable` refuses each write one line to standard output, with OTEL on or off: `{"level":40,"name":"agentos","component":"wunderland.tools","tool":"shell_execute","msg":"tool_not_allowed"}`, or `"pack":"cli-executor"` for a pack. The line names the tool or pack and never the call's arguments; a name that is not shaped like one reads `invalid`. Each minute a name writes at most 5 lines and all names at most 50, and the first line of a later minute carries `suppressed`, the number left out. `AGENTOS_LOG_LEVEL=error` or `silent` turns the lines off.
 
 A `packs` or `tools` that is not a list of names allows nothing of its kind, and so does one that holds any entry that is not a non-empty name (`["web_search", 7]` or `["web_search", ""]` allows no tool), so a mistake in the list never widens it. Without `tools.allow`, none of this applies.
+
+## Guardrail Packs (`extensions.guardrails`)
+
+```json
+{
+  "extensions": { "guardrails": ["self-harm-referral"] },
+  "extensionOverrides": {
+    "self-harm-referral": {
+      "options": { "judgeModel": { "provider": "openai", "model": "gpt-4o-mini" } }
+    }
+  }
+}
+```
+
+```bash
+npm install @framers/agentos-ext-self-harm-referral
+```
+
+`wunderland start` runs every guardrail pack it loads on every turn: a channel message, `POST /chat` and a webhook's turn.
+
+- **The message, before any model.** The guards judge the person's message first, ahead of capability discovery, the research classifier and the turn's model. A block answers the person with the guard's message (its `replacementText`; a guard that gives none answers `I can't help with that.`), and the message goes to no model and into no conversation history. A guard that rewrites the message (a sanitizer) sends the rewritten text on.
+- **The reply, before the person.** The guards judge the reply the model wrote. A block puts the guard's message in its place, in the history too, so no word of the refused reply reaches the person or the next turn's model.
+- **Events.** A verdict that carries `referral_sent` goes out on the turn through the [hosted events](OBSERVABILITY.md#hosted-events) reporter, with `code` `input` or `output` and none of the person's or the model's words.
+
+The checks run through AgentOS's guardrail dispatcher (`evaluateInputGuardrails` and `wrapOutputGuardrails` from `@framers/agentos/safety/guardrails`). A guard that throws or times out is handled by its own `failClosed` setting; a check that fails as a whole blocks.
+
+**Which packs load.** In the order their guards run; the first block wins.
+
+1. The packs `extensions.guardrails` names in the agent config, or in the global config when the agent config names none.
+2. The guardrail packs [`tools.allow.packs`](#tool-allow-list-toolsallow) names. Such a pack loads as a guard and adds no tool, so `{ "tools": { "allow": { "packs": ["web-search", "self-harm-referral"], "tools": ["web_search"] } } }` runs the guard beside the one tool.
+3. A guardrail pack an `extensions` tool, voice or productivity list names.
+4. The `guardrail` descriptors of every other extension pack `start` loads.
+
+`extensions.guardrails` takes `self-harm-referral`, the [self-harm referral pack](https://github.com/framerslab/agentos-extensions/tree/master/registry/curated/safety/self-harm-referral#readme) (`@framers/agentos-ext-self-harm-referral`), an optional peer dependency installed beside `wunderland`. A pack's options come from `extensionOverrides.<name>.options`; `"enabled": false` there skips the pack.
+
+**It fails closed.** Each of these stops startup with the reason, so an agent that asks for a guard never runs without it:
+
+- `extensions.guardrails` names a pack `start` does not load, or is not a list of names.
+- A pack does not load: its package is not installed, or it refuses its options.
+
+**The judge on the host's provider.** A `judgeModel` that names a `provider` and no `apiKey` gets the host's key for that provider (the `<provider>.apiKey` secret, such as `OPENAI_API_KEY`, else the agent's own key when the provider is the agent's). One with no `baseUrl` gets the provider's base-URL variable (`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENROUTER_BASE_URL`), so the judge's calls go where the agent's calls go. Without a `judgeModel`, the self-harm referral pack refers on every keyword match.
+
+`--no-guardrails` and `--guardrails=` choose the security tier's packs (PII redaction, ML classifiers, topicality, code safety, grounding). They do not remove a pack the agent config names.
+
+Code: `src/cli/commands/start/guardrail-packs.ts`.
 
 ## Execution Modes (Human In The Loop)
 

@@ -258,7 +258,7 @@ With both variables set, `wunderland start` posts the coarse events of what the 
 | `provider_error` | A provider request failed, including a primary that then falls back | `code`: the HTTP status, as a string; none when the request got no answer |
 | `turn_finished` | The turn ended, however it ended | `promptTokens`, `completionTokens`: the turn's totals across its rounds |
 | `channel_auth_failed` | A channel adapter emitted an `error` event whose data has `code: "auth_failed"`: the platform rejected its token. A pack that emits no such event reports nothing. It belongs to no turn | `code`: the platform |
-| `referral_sent` | The reporter's kind for a guardrail pack that counts the referrals it sends; `start` itself sends none | none |
+| `referral_sent` | A [guardrail pack](PRESETS_AND_PERMISSIONS.md#guardrail-packs-extensionsguardrails)'s verdict carried it: the self-harm referral pack answered the person's message or replaced the reply with its referral | `code`: `input` (the person's message) or `output` (the reply) |
 
 `at` is milliseconds since the epoch. `count`, when set, says how many times the event happened; `start`'s own events leave it out, so a server counts one. A field that does not hold what it should is left out: `code`, `toolName` and the operation id go out only as a single word (letters, digits and `_ . : -`), so a caller that passes text by mistake loses the field rather than posting the text.
 

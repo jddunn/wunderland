@@ -25,6 +25,13 @@ import {
   getDefaultVoiceExtensions,
 } from '../../../channels/voice/speech-catalog.js';
 import { getRecommendations, formatRecommendations } from '../../extensions/recommender.js';
+import {
+  createTurnGuardrails,
+  guardrailPackNamesFor,
+  guardrailServicesOf,
+  loadGuardrailPacks,
+  takeGuardrailPacks,
+} from './guardrail-packs.js';
 
 type ExtensionHttpHandler = (
   req: import('node:http').IncomingMessage,
@@ -80,6 +87,8 @@ export async function loadExtensions(ctx: any): Promise<void> {
   let schemaOnDemandOptions: Record<string, Record<string, unknown>> = {};
   const loadedChannelAdapters: IChannelAdapter[] = [];
   const loadedHttpHandlers: ExtensionHttpHandler[] = [];
+  // Guardrail packs an extension list names; start loads them itself, below.
+  const listedGuardrailPacks: string[] = [];
   const hitlSecret = (() => {
     const fromCfg = (cfg?.hitl && typeof cfg.hitl === 'object' && !Array.isArray(cfg.hitl))
       ? String((cfg.hitl as any).secret || '').trim()
@@ -383,6 +392,13 @@ export async function loadExtensions(ctx: any): Promise<void> {
         fmt.warning(`Permission set blocks some configured channels - skipping: ${list}`);
       }
 
+      // A guardrail pack the registry does not list loads with the guards below.
+      for (const list of [toolExtensions, voiceExtensions, productivityExtensions]) {
+        const { guardrails, rest } = takeGuardrailPacks(list);
+        listedGuardrailPacks.push(...guardrails);
+        list.splice(0, list.length, ...rest);
+      }
+
       const resolved = await resolveExtensionsByNames(
         toolExtensions,
         voiceExtensions,
@@ -474,6 +490,47 @@ export async function loadExtensions(ctx: any): Promise<void> {
       fmt.warning(`Extension loading failed, using empty toolset: ${msg}`);
     }
   }
+
+  // ── Guardrail packs ──────────────────────────────────────────────────────
+  // The packs extensions.guardrails, tools.allow.packs or an extension list
+  // names, loaded here with their options from extensionOverrides, whether or
+  // not tools load. A pack that does not load stops startup: an agent that
+  // asks for a guard never runs without it. Every loaded pack's guardrail
+  // descriptors run on each turn (agent-turn.ts, channel-handler.ts,
+  // routes/chat.ts); a guard adds no tool.
+  const guardrailPackNames = guardrailPackNamesFor({
+    cfg,
+    globalConfig,
+    allowedPacks: toolAllowList?.packs,
+    extensionLists: listedGuardrailPacks,
+  });
+  const guardrailOverrides = mergeExtensionOverrides(
+    (globalConfig?.extensionOverrides && typeof globalConfig.extensionOverrides === 'object')
+      ? (globalConfig.extensionOverrides as Record<string, any>)
+      : {},
+    (cfg?.extensionOverrides && typeof cfg.extensionOverrides === 'object')
+      ? (cfg.extensionOverrides as Record<string, any>)
+      : {},
+  );
+  const guardrailPacks = await loadGuardrailPacks({
+    names: guardrailPackNames,
+    overrides: guardrailOverrides,
+    host: {
+      providerId: ctx.providerId,
+      llmApiKey: ctx.llmApiKey,
+      getSecret: createEnvSecretResolver({
+        configSecrets:
+          cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets)
+            ? (cfg.secrets as Record<string, string>)
+            : undefined,
+      }),
+    },
+    logger: console,
+  });
+  // Guards run in this order, and the first block wins: the named packs first.
+  activePacks = [...guardrailPacks, ...activePacks];
+  const turnGuardrails = createTurnGuardrails(guardrailServicesOf(activePacks));
+  if (turnGuardrails) fmt.ok(`Guardrails on every turn: ${turnGuardrails.ids.join(', ')}`);
 
   const toolMap = new Map<string, ToolInstance>();
   for (const tool of allTools) {
@@ -646,6 +703,8 @@ export async function loadExtensions(ctx: any): Promise<void> {
 
   ctx.toolMap = toolMap;
   ctx.activePacks = activePacks;
+  ctx.guardrailPackNames = guardrailPackNames;
+  ctx.turnGuardrails = turnGuardrails;
   ctx.loadedChannelAdapters = loadedChannelAdapters;
   ctx.loadedHttpHandlers = loadedHttpHandlers;
   ctx.hitlSecret = hitlSecret;
