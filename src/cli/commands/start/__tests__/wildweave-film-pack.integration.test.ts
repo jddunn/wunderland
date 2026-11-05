@@ -7,8 +7,9 @@
  *
  * With no key the pack's 22 tools reach the tool map and its one HTTP handler is mounted on
  * `start`'s own HTTP server at /mcp/wildweave-film, where an MCP client's `initialize` reaches the
- * pack's server. With a key in the environment (a fake one), `wildweave_film_list` calls the studio
- * with it; the studio is a stubbed `fetch`.
+ * pack's server. With a key in the environment or in the agent config's `secrets` (a fake one),
+ * `wildweave_film_list` calls the studio with it; the studio is a stubbed `fetch`. An agent whose
+ * `tools.allow` keeps fewer than all 22 tools gets no endpoint, which would serve them all.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { request } from 'node:http';
@@ -32,14 +33,18 @@ const MCP_PATH = '/mcp/wildweave-film';
 let workspaceBaseDir = '';
 let savedKey: string | undefined;
 
-/** Runs `start`'s extension phase for an agent whose only tool extension is `wildweave-film`. */
-async function loadWildweaveFilm(): Promise<any> {
+/**
+ * Runs `start`'s extension phase for an agent whose only tool extension is `wildweave-film`, with
+ * `extra` laid over its config.
+ */
+async function loadWildweaveFilm(extra: Record<string, unknown> = {}): Promise<any> {
   const cfg = {
     seedId: 'wildweave_film_test',
     permissionSet: 'unrestricted',
     toolAccessProfile: 'unrestricted',
     executionMode: 'autonomous',
     extensions: { tools: ['wildweave-film'], voice: [], productivity: [] },
+    ...extra,
   };
   const policy = normalizeRuntimePolicy(cfg);
   const ctx: any = {
@@ -244,6 +249,50 @@ describe('wunderland start with the WildWeave film studio pack', () => {
       expect(String(url)).toBe('https://wilds.ai/api/v1/wildweave/studio/films');
       expect(init.method).toBe('GET');
       expect(init.headers.authorization).toBe(`Bearer ${FAKE_KEY}`);
+    } finally {
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('passes the key from the agent config\'s secrets to the studio through getSecret, with no variable set', async () => {
+    const ctx = await loadWildweaveFilm({ secrets: { 'wildweave.studio.key': FAKE_KEY } });
+    try {
+      const studio = vi.fn(async () =>
+        new Response(JSON.stringify({ films: [] }), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+      vi.stubGlobal('fetch', studio);
+
+      const result = await ctx.toolMap.get('wildweave_film_list').execute({});
+
+      expect(result).toMatchObject({ success: true, output: { ok: true, result: { films: [] } } });
+      expect(process.env['WILDWEAVE_STUDIO_KEY']).toBeUndefined();
+      const [, init] = studio.mock.calls[0];
+      expect(init.headers.authorization).toBe(`Bearer ${FAKE_KEY}`);
+    } finally {
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('mounts no MCP endpoint when tools.allow keeps fewer than all of the pack\'s tools', async () => {
+    // The endpoint would serve all 22 tools to its callers, edit and render among them.
+    const ctx = await loadWildweaveFilm({
+      tools: { allow: { packs: ['wildweave-film'], tools: ['wildweave_film_list'] } },
+    });
+    try {
+      expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toEqual(['wildweave_film_list']);
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
+
+      const server = startServer(ctx);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      try {
+        const { port } = server.address() as AddressInfo;
+        expect((await post(port, MCP_PATH, INITIALIZE)).status).toBe(404);
+      } finally {
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        });
+      }
     } finally {
       await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
     }
