@@ -35,9 +35,13 @@ let savedKey: string | undefined;
 
 /**
  * Runs `start`'s extension phase for an agent whose only tool extension is `wildweave-film`, with
- * `extra` laid over its config.
+ * `extra` laid over its config. With `lazyTools` no pack loads at startup; the model enables one
+ * with `extensions_enable`.
  */
-async function loadWildweaveFilm(extra: Record<string, unknown> = {}): Promise<any> {
+async function loadWildweaveFilm(
+  extra: Record<string, unknown> = {},
+  { lazyTools = false }: { lazyTools?: boolean } = {},
+): Promise<any> {
   const cfg = {
     seedId: 'wildweave_film_test',
     permissionSet: 'unrestricted',
@@ -55,7 +59,7 @@ async function loadWildweaveFilm(extra: Record<string, unknown> = {}): Promise<a
     dangerouslySkipCommandSafety: false,
     workspaceAgentId: cfg.seedId,
     workspaceBaseDir,
-    lazyTools: false,
+    lazyTools,
     LOCAL_ONLY_CHANNELS: new Set(['webchat']),
     CLI_REQUIRED_CHANNELS: new Set(['signal', 'zalouser']),
   };
@@ -162,6 +166,13 @@ function rpcOf(answer: { type: string; text: string }): any {
     .map((line) => line.slice('data:'.length).trim())
     .find((line) => line.length > 0);
   return JSON.parse(data ?? 'null');
+}
+
+/** The descriptor priorities of the loaded film pack. */
+function filmPackPriorities(ctx: any): number[] {
+  const pack = (ctx.activePacks ?? []).find((p: any) => p?.name === '@framers/agentos-ext-wildweave-film');
+  expect(pack).toBeDefined();
+  return [...new Set((pack.descriptors ?? []).map((d: any) => d.priority))];
 }
 
 const INITIALIZE = {
@@ -296,5 +307,138 @@ describe('wunderland start with the WildWeave film studio pack', () => {
     } finally {
       await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
     }
+  }, LOAD_TIMEOUT_MS);
+
+  it('gives the pack the priority its extensionOverrides entry names', async () => {
+    const ctx = await loadWildweaveFilm({ extensionOverrides: { 'wildweave-film': { priority: 5 } } });
+    try {
+      // The pack reads options.priority; without it every descriptor has the pack's default, 30.
+      expect(filmPackPriorities(ctx)).toEqual([5]);
+    } finally {
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
+    }
+  }, LOAD_TIMEOUT_MS);
+});
+
+describe('wunderland start with lazyTools and the WildWeave film studio pack', () => {
+  /** The `extensions_enable` meta tool's answer for `args`. */
+  async function enable(ctx: any, args: Record<string, unknown>): Promise<any> {
+    const tool = ctx.toolMap.get('extensions_enable');
+    expect(tool).toBeDefined();
+    return tool.execute(args, {});
+  }
+
+  /** The packs extensions_enable loaded, for teardown. */
+  async function deactivateAll(ctx: any): Promise<void> {
+    await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
+  }
+
+  it('loads nothing at startup, then extensions_enable wildweave-film loads its 22 tools and mounts its endpoint', async () => {
+    process.env['WILDWEAVE_STUDIO_KEY'] = FAKE_KEY;
+    const ctx = await loadWildweaveFilm({}, { lazyTools: true });
+    try {
+      expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toEqual([]);
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
+
+      const result = await enable(ctx, { extension: 'wildweave-film' });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toMatchObject({ extension: 'wildweave-film', packageName: '@framers/agentos-ext-wildweave-film', loaded: true });
+      expect(result.output.toolsAdded).toHaveLength(22);
+      expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toHaveLength(22);
+      expect(ctx.loadedHttpHandlers).toHaveLength(1);
+      expect(filmPackPriorities(ctx)).toEqual([30]);
+
+      // The key from the variable reaches the studio.
+      const studio = vi.fn(async () =>
+        new Response(JSON.stringify({ films: [] }), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+      vi.stubGlobal('fetch', studio);
+      expect(await ctx.toolMap.get('wildweave_film_list').execute({})).toMatchObject({ success: true, output: { ok: true } });
+      expect(studio.mock.calls[0][1].headers.authorization).toBe(`Bearer ${FAKE_KEY}`);
+      vi.unstubAllGlobals();
+
+      // The mounted endpoint answers on start's server.
+      const server = startServer(ctx);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      try {
+        const { port } = server.address() as AddressInfo;
+        const init = await post(port, MCP_PATH, INITIALIZE);
+        expect(init.status).toBe(200);
+        expect(rpcOf(init).result.serverInfo.name).toBe('wildweave-film');
+      } finally {
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        });
+      }
+
+      // A second call loads nothing more.
+      expect((await enable(ctx, { extension: 'wildweave-film' })).output).toMatchObject({ skipped: true, reason: 'already_loaded' });
+      expect(ctx.loadedHttpHandlers).toHaveLength(1);
+    } finally {
+      await deactivateAll(ctx);
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('loads the pack by its package name with source package', async () => {
+    const ctx = await loadWildweaveFilm({}, { lazyTools: true });
+    try {
+      const result = await enable(ctx, { extension: '@framers/agentos-ext-wildweave-film', source: 'package' });
+      expect(result.success).toBe(true);
+      expect(result.output).toMatchObject({ packageName: '@framers/agentos-ext-wildweave-film', loaded: true });
+      expect(result.output.toolsAdded).toHaveLength(22);
+    } finally {
+      await deactivateAll(ctx);
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('reads the key from the agent config secrets and gives the pack its override priority', async () => {
+    const ctx = await loadWildweaveFilm(
+      { secrets: { 'wildweave.studio.key': FAKE_KEY }, extensionOverrides: { 'wildweave-film': { priority: 5 } } },
+      { lazyTools: true },
+    );
+    try {
+      expect((await enable(ctx, { extension: 'wildweave-film' })).success).toBe(true);
+      expect(filmPackPriorities(ctx)).toEqual([5]);
+      const studio = vi.fn(async () =>
+        new Response(JSON.stringify({ films: [] }), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+      vi.stubGlobal('fetch', studio);
+      expect(await ctx.toolMap.get('wildweave_film_list').execute({})).toMatchObject({ success: true });
+      expect(studio.mock.calls[0][1].headers.authorization).toBe(`Bearer ${FAKE_KEY}`);
+    } finally {
+      await deactivateAll(ctx);
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('keeps only the tools tools.allow lists and mounts no endpoint when it drops any', async () => {
+    const ctx = await loadWildweaveFilm(
+      { tools: { allow: { packs: ['wildweave-film'], tools: ['extensions_enable', 'wildweave_film_list'] } } },
+      { lazyTools: true },
+    );
+    try {
+      const result = await enable(ctx, { extension: 'wildweave-film' });
+      expect(result.success).toBe(true);
+      expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toEqual(['wildweave_film_list']);
+      expect(result.output.toolsBlockedByPolicy).toHaveLength(21);
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
+    } finally {
+      await deactivateAll(ctx);
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('refuses the pack when tools.allow does not name it, and when its override disables it', async () => {
+    const refused = await loadWildweaveFilm(
+      { tools: { allow: { packs: ['web-search'], tools: ['extensions_enable'] } } },
+      { lazyTools: true },
+    );
+    expect(await enable(refused, { extension: 'wildweave-film' })).toMatchObject({ success: false, error: 'tool_not_allowed' });
+    expect(await enable(refused, { extension: '@framers/agentos-ext-wildweave-film', source: 'package' })).toMatchObject({ success: false, error: 'tool_not_allowed' });
+
+    const disabled = await loadWildweaveFilm({ extensionOverrides: { 'wildweave-film': { enabled: false } } }, { lazyTools: true });
+    const answer = await enable(disabled, { extension: 'wildweave-film' });
+    expect(answer.success).toBe(false);
+    expect([...disabled.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toEqual([]);
   }, LOAD_TIMEOUT_MS);
 });
