@@ -16,7 +16,9 @@
  *  - persists the reply back onto the session the `/chat` reader also uses,
  *  - sends the turn where `/chat` sends it: the primary provider's base URL
  *    (`deps.llmBaseUrl`) and, when the primary fails, the fallback candidate
- *    (`deps.openrouterFallback`).
+ *    (`deps.openrouterFallback`),
+ *  - runs the agent's guardrail packs (`deps.turnGuardrails`) on the message
+ *    before any model sees it and on the reply before it is returned.
  */
 
 import { runToolCallingTurn } from '../../../runtime/tools/tool-calling.js';
@@ -24,6 +26,7 @@ import { buildPersonaSessionKey } from '../../../runtime/execution/request-perso
 import { KeyedMutex } from '../../../runtime/execution/keyed-mutex.js';
 import { allowedToolNamesFor } from '../../../runtime/tools/tool-allow-list.js';
 import { startReportedTurn } from './hosted-events.js';
+import { reportGuardEvents } from './guardrail-packs.js';
 import { askRemoteApproval, outwardApprovalFor } from './remote-approvals.js';
 
 /** One shared mutex per process: serializes turns that share a session key. */
@@ -87,6 +90,29 @@ export async function runAgentTurn(
       return { reply: '', toolCallCount, failed: true };
     }
 
+    // Guardrail packs judge the message before any model sees it. A block
+    // answers with the guard's message; the message enters no history.
+    const guardContext = {
+      userId: req.source,
+      sessionId: req.sessionId,
+      personaId,
+      metadata: { source: req.source },
+    };
+    let message = req.message;
+    let inputEvents = [];
+    if (deps.turnGuardrails) {
+      const verdict = await deps.turnGuardrails.checkInput(message, guardContext);
+      if (verdict.blocked) {
+        const blockedTurn = startReportedTurn(deps.eventsReporter);
+        reportGuardEvents(blockedTurn, verdict.events);
+        blockedTurn.finished();
+        deps.broadcastAgentEvent?.({ type: 'agent_reply', source: req.source, reply: verdict.text });
+        return { reply: verdict.text, toolCallCount, failed: false };
+      }
+      message = verdict.text;
+      inputEvents = verdict.events;
+    }
+
     // Load / seed / cap history the same way the /chat route does.
     let messages = deps.sessions.get(sessionKey);
     if (!messages) {
@@ -97,13 +123,14 @@ export async function runAgentTurn(
       messages = [messages[0], ...messages.slice(-HISTORY_KEEP_TAIL)];
       deps.sessions.set(sessionKey, messages);
     }
-    messages.push({ role: 'user', content: req.message });
+    messages.push({ role: 'user', content: message });
 
     // Shallow copy so a mid-flight failure can't leave orphaned tool_calls in
     // the persisted history.
     const workingMessages = [...messages];
 
     const reportedTurn = startReportedTurn(deps.eventsReporter);
+    reportGuardEvents(reportedTurn, inputEvents);
     try {
       const reply = await runToolCallingTurn({
         providerId: deps.providerId,
@@ -148,10 +175,18 @@ export async function runAgentTurn(
         },
       });
 
-      const cleaned =
+      let cleaned =
         typeof reply === 'string'
           ? reply.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim()
           : String(reply ?? '');
+
+      // Guardrail packs judge the reply before it is returned; a block puts the
+      // guard's message in its place, and the history keeps that message.
+      if (deps.turnGuardrails && cleaned) {
+        const verdict = await deps.turnGuardrails.checkOutput(cleaned, guardContext);
+        reportGuardEvents(reportedTurn, verdict.events);
+        cleaned = verdict.text;
+      }
 
       messages.push({ role: 'assistant', content: cleaned });
       deps.broadcastAgentEvent?.({ type: 'agent_reply', source: req.source, reply: cleaned });

@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { resolveOperationIdHeader } from '../../../platform/config/operation-id.js';
+import type { GuardEventKind, GuardStage } from './guardrail-packs.js';
 
 /** The environment variable that names the control plane's agent API root. */
 export const EVENTS_URL_ENV = 'WUNDERLAND_EVENTS_URL';
@@ -296,6 +297,12 @@ export interface ReportedTurn {
   providerError(error: unknown): void;
   /** The turn is waiting on a person: a tool's approval or a checkpoint. */
   approvalRequested(): void;
+  /**
+   * A guardrail pack's verdict on the person's message (`input`) or the reply
+   * (`output`) carried an event, such as `referral_sent`. The stage goes out as
+   * the event's `code`; nothing the person or the model wrote does.
+   */
+  guardEvent(kind: GuardEventKind, stage: GuardStage): void;
   /** The turn ended, however it ended. Later calls do nothing. */
   finished(): void;
 }
@@ -305,6 +312,7 @@ const UNREPORTED_TURN: ReportedTurn = Object.freeze({
   usage() {},
   providerError() {},
   approvalRequested() {},
+  guardEvent() {},
   finished() {},
 });
 
@@ -337,6 +345,9 @@ export function startReportedTurn(reporter?: EventsReporter): ReportedTurn {
     },
     approvalRequested() {
       reporter.report('approval_requested', undefined, operationId);
+    },
+    guardEvent(kind, stage) {
+      reporter.report(kind, { code: stage }, operationId);
     },
     finished() {
       if (done) return;

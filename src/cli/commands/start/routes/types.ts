@@ -15,6 +15,7 @@ import type { ToolInstance } from '../../../../runtime/tools/tool-calling.js';
 import type { WunderlandSessionTextLogger } from '../../../../platform/observability/session-text-log.js';
 import type { EventsReporter } from '../hosted-events.js';
 import type { RemoteApprovalHandler } from '../remote-approvals.js';
+import type { TurnGuardrails } from '../guardrail-packs.js';
 
 /**
  * Shared dependencies injected into CLI HTTP server route handler functions.
@@ -57,6 +58,8 @@ export interface CliServerDeps {
   llmJudgeHandler?: (tool: { name: string; hasSideEffects?: boolean }, args: Record<string, unknown>) => Promise<boolean>;
   /** Set when `hitl.mode` is `remote`: outward tools ask it, and it stands in for the local approval queue. */
   remoteApprovalHandler?: RemoteApprovalHandler;
+  /** Set when the agent runs guardrail packs: they judge each message and each reply. */
+  turnGuardrails?: TurnGuardrails;
   dangerouslySkipPermissions: boolean;
   turnApprovalMode: 'off' | 'after-each-turn' | 'after-each-round';
   defaultTenantId: string | undefined;

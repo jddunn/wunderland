@@ -149,6 +149,7 @@
     "@framers/agentos-ext-grounding-guard": ">=0.2.2",
     "@framers/agentos-ext-ml-classifiers": ">=0.3.1",
     "@framers/agentos-ext-pii-redaction": ">=0.2.1",
+    "@framers/agentos-ext-self-harm-referral": ">=0.1.0",
     "@framers/agentos-ext-topicality": ">=0.2.2"
   },
   "peerDependenciesMeta": {
@@ -165,6 +166,9 @@
       "optional": true
     },
     "@framers/agentos-ext-grounding-guard": {
+      "optional": true
+    },
+    "@framers/agentos-ext-self-harm-referral": {
       "optional": true
     }
   },
@@ -185,6 +189,7 @@
     "@framers/agentos-skills-registry": "^0.19.9"
   },
   "devDependencies": {
+    "@framers/agentos-ext-self-harm-referral": "^0.1.0",
     "@framers/agentos-skills-registry": "^0.19.9",
     "@types/node": "^20.10.0",
     "@types/uuid": "^9.0.0",

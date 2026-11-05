@@ -36,6 +36,7 @@ import {
 import { buildOllamaRuntimeOptions } from '../../../../runtime/tools/ollama-options.js';
 import { allowedToolNamesFor } from '../../../../runtime/tools/tool-allow-list.js';
 import { startReportedTurn } from '../hosted-events.js';
+import { replaceReplyInHistory, reportGuardEvents, visibleReplyText } from '../guardrail-packs.js';
 import { askRemoteApproval, outwardApprovalFor } from '../remote-approvals.js';
 
 import {
@@ -114,6 +115,7 @@ export async function handleChatRoutes(
     hitlManager,
     sessionTextLogger,
     eventsReporter,
+    turnGuardrails,
   } = deps;
 
   if (!isChatAuthorized(req, url, chatSecret)) {
@@ -127,6 +129,43 @@ export async function handleChatRoutes(
   if (!message) {
     sendJson(res, 400, { error: 'Missing "message" in JSON body.' });
     return true;
+  }
+  const streamMode = parsed.stream === true;
+  const sessionId = typeof parsed.sessionId === 'string' && parsed.sessionId.trim()
+    ? parsed.sessionId.trim().slice(0, 128)
+    : 'default';
+
+  /* ── Guardrail packs: the message, before any model sees it ─────────────── */
+  /* The research classifier below calls a model, so this comes first. A block
+   * answers with the guard's message; the message enters no history. */
+  let inputGuardEvents = [];
+  if (turnGuardrails) {
+    const verdict = await turnGuardrails.checkInput(message, {
+      userId: sessionId,
+      sessionId,
+      personaId: activePersonaId,
+      metadata: { channel: 'http' },
+    });
+    if (verdict.blocked) {
+      const blockedTurn = startReportedTurn(eventsReporter);
+      reportGuardEvents(blockedTurn, verdict.events);
+      blockedTurn.finished();
+      if (streamMode) {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.write(`event: reply\ndata: ${JSON.stringify({ type: 'REPLY', reply: verdict.text, personaId: activePersonaId })}\n\n`);
+        res.end();
+      } else {
+        sendJson(res, 200, { reply: verdict.text, personaId: activePersonaId });
+      }
+      return true;
+    }
+    message = verdict.text;
+    inputGuardEvents = verdict.events;
   }
 
   /* ── Research depth escalation ──────────────────────────────────────────── */
@@ -164,8 +203,6 @@ export async function handleChatRoutes(
     if (prefix) message = `${prefix}\n\n${message}`;
   }
 
-  const streamMode = parsed.stream === true;
-
   /* When streaming, switch to SSE so progress events can be pushed to the client. */
   if (streamMode) {
     res.writeHead(200, {
@@ -181,9 +218,6 @@ export async function handleChatRoutes(
   let fallbackTriggered = false;
   let toolCallCount = 0;
   let turnError: unknown;
-  const sessionId = typeof parsed.sessionId === 'string' && parsed.sessionId.trim()
-    ? parsed.sessionId.trim().slice(0, 128)
-    : 'default';
   const requestedPersonaId = extractRequestedPersonaId(parsed);
   let requestActivePersonaId = activePersonaId;
   let requestSystemPrompt = systemPrompt;
@@ -259,6 +293,7 @@ export async function handleChatRoutes(
   const workingMessages = [...messages];
 
   const reportedTurn = startReportedTurn(eventsReporter);
+  reportGuardEvents(reportedTurn, inputGuardEvents);
   try {
     if (canUseLLM) {
       /* ── Capability discovery — inject tiered context AND build filtered tool set ── */
@@ -482,6 +517,25 @@ export async function handleChatRoutes(
             }
           : undefined,
       });
+
+      /* Guardrail packs judge the reply before it is sent; a block puts the
+       * guard's message in its place, in the history too. */
+      if (turnGuardrails && typeof reply === 'string') {
+        const visible = visibleReplyText(reply);
+        if (visible) {
+          const verdict = await turnGuardrails.checkOutput(visible, {
+            userId: sessionId,
+            sessionId,
+            personaId: requestActivePersonaId,
+            metadata: { channel: 'http' },
+          });
+          reportGuardEvents(reportedTurn, verdict.events);
+          if (verdict.text !== visible) {
+            reply = verdict.text;
+            replaceReplyInHistory(workingMessages, reply);
+          }
+        }
+      }
     } else {
       reply =
         'No LLM credentials configured. I can run, but I cannot generate real replies yet.\n\n' +

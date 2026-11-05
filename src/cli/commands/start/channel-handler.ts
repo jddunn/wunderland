@@ -20,6 +20,12 @@ import * as fmt from '../../ui/format.js';
 import { baseUrlFor } from '../../../platform/config/provider-base-urls.js';
 import { isChannelAuthFailure, startReportedTurn, type EventsReporter } from './hosted-events.js';
 import { askRemoteApproval, outwardApprovalFor, type RemoteApprovalHandler } from './remote-approvals.js';
+import {
+  replaceReplyInHistory,
+  reportGuardEvents,
+  visibleReplyText,
+  type TurnGuardrails,
+} from './guardrail-packs.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +82,8 @@ export interface ChannelRuntimeCtx {
   adapterByPlatform: Map<string, IChannelAdapter>;
   /** Set when the events variables are; posts each turn's coarse events. */
   eventsReporter?: EventsReporter;
+  /** Set when the agent runs guardrail packs: they judge each message and each reply. */
+  turnGuardrails?: TurnGuardrails;
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -311,6 +319,31 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
   }
 
   const sessionKey = `${platform}:${conversationId}`;
+
+  // Guardrail packs judge the message before any model sees it, capability
+  // discovery included. A block answers with the guard's message; the message
+  // enters no history.
+  const guardContext = {
+    userId: senderId,
+    sessionId: sessionKey,
+    conversationId,
+    metadata: { platform, conversationType: message.conversationType },
+  };
+  let turnText = text;
+  let inputGuardEvents = [];
+  if (ctx.turnGuardrails) {
+    const verdict = await ctx.turnGuardrails.checkInput(text, guardContext);
+    if (verdict.blocked) {
+      const blockedTurn = startReportedTurn(ctx.eventsReporter);
+      reportGuardEvents(blockedTurn, verdict.events);
+      blockedTurn.finished();
+      await sendChannelText(ctx, { platform, conversationId, text: verdict.text, replyToMessageId: message.messageId });
+      return;
+    }
+    turnText = verdict.text;
+    inputGuardEvents = verdict.events;
+  }
+
   // Explicit invocations (slash commands like /ask, /summarize, /deepdive) get a
   // fresh session each time to prevent stale conversation patterns from affecting
   // tool-calling behavior (e.g. model repeating "I don't have real-time data").
@@ -327,7 +360,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
   }
 
   const userPrefix = message.conversationType === 'direct' ? '' : `[${getSenderLabel(message)}] `;
-  messages.push({ role: 'user', content: `${userPrefix}${text}` });
+  messages.push({ role: 'user', content: `${userPrefix}${turnText}` });
 
   // Optional typing indicator while processing.
   try {
@@ -342,7 +375,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
   // Capability discovery — inject tiered context AND build filtered tool set for this turn
   let discoveredToolNames: Set<string> | null = null;
   try {
-    const discoveryResult = await discoveryManager.discoverForTurn(text);
+    const discoveryResult = await discoveryManager.discoverForTurn(turnText);
     if (discoveryResult) {
       for (let i = messages.length - 1; i >= 1; i--) {
         if (typeof messages[i]?.content === 'string' && String(messages[i]!.content).startsWith('[Capability Context]')) {
@@ -407,6 +440,7 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
   let fallbackTriggered = false;
   let toolCallCount = 0;
   const reportedTurn = startReportedTurn(ctx.eventsReporter);
+  reportGuardEvents(reportedTurn, inputGuardEvents);
   try {
     if (canUseLLM) {
       const toolContext = {
@@ -580,6 +614,20 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
         },
         getApiKey: oauthGetApiKey,
       });
+
+      // Guardrail packs judge the reply before it is sent; a block puts the
+      // guard's message in its place, in the history too.
+      if (ctx.turnGuardrails && typeof reply === 'string') {
+        const visible = visibleReplyText(reply);
+        if (visible) {
+          const verdict = await ctx.turnGuardrails.checkOutput(visible, guardContext);
+          reportGuardEvents(reportedTurn, verdict.events);
+          if (verdict.text !== visible) {
+            reply = verdict.text;
+            replaceReplyInHistory(messages, reply);
+          }
+        }
+      }
     } else {
       reply = `No LLM credentials configured. You said: ${text}`;
       messages.push({ role: 'assistant', content: reply });

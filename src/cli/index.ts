@@ -271,6 +271,7 @@ const COMMAND_HELP: Record<string, CommandHelpEntry> = {
       'A host other machines can reach needs a chat secret (chat.secret in agent.config.json, or WUNDERLAND_CHAT_SECRET); without one, start refuses to listen there. Clients send it in the x-wunderland-chat-secret header.',
       'With WUNDERLAND_EVENTS_URL and WUNDERLAND_EVENTS_TOKEN set, start posts the coarse events of each turn (names, counts, codes, times; no text) to <url>/events.',
       'With hitl.mode "remote" in the agent config, an outward tool asks <url>/approvals on those two variables before it runs, and with either one missing it is refused approval_unavailable.',
+      'Guardrail packs the agent config names (extensions.guardrails, or tools.allow.packs) judge each message before any model sees it and each reply before it is sent, on every turn. A pack that does not load stops startup.',
     ],
   },
   status: {
