@@ -186,7 +186,7 @@ With `hitl.mode: "remote"`, `wunderland start` asks this server before an outwar
 | `declined`, `expired`, `withdrawn` | The tool does not run. The turn ends with the word in its reply and the model is not called again. |
 | `waiting`, or anything else | The agent reads again 5 seconds after the answer. Only `approved` is a yes. |
 
-The agent waits 10 minutes from the server's answer to the request, then reads the state once more and ends the turn `expired`. A server may hold a read open until it has an answer; the agent lets one read run for 35 seconds.
+The agent waits 10 minutes from the server's answer to the request, then reads the state once more and ends the turn `expired`. A server may hold a read open until it has an answer. The agent lets one read run for at most 35 seconds, and in the last seconds of the wait for what is left of it, with a floor of 5 seconds, so a server's hold should end by the request's own deadline.
 
 The turn's reply is what the model said so far, then a line such as `The request to run telegramChannelSendMessage was declined, so it did not run.`. Any other tool calls of that round do not run either and are answered `turn_ended` in the history, so the conversation's next turn is valid.
 
