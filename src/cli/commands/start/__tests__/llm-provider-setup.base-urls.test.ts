@@ -35,7 +35,7 @@ import { bootstrapRagKnowledge } from '../rag-bootstrap.js';
 import { handleInboundChannelMessage, wireDiscordExtensions } from '../channel-handler.js';
 import { dispatchRoute, resetWebhookRateLimiter } from '../routes/index.js';
 import { runToolCallingTurn, openaiChatWithTools } from '../../../../runtime/tools/tool-calling.js';
-import { chatCompletionsRequest, anthropicMessagesRequest } from '../../../../runtime/tools/tool-helpers.js';
+import { chatCompletionsRequest, anthropicMessagesRequest, shouldFallback } from '../../../../runtime/tools/tool-helpers.js';
 import { resolveEmbeddingConfig, WunderlandDiscoveryManager } from '../../../../platform/discovery/WunderlandDiscoveryManager.js';
 import { createResearchClassifierLlmCall } from '../../../../runtime/agentos-bridge/research-classifier.js';
 import { createCuratedPicksHandler } from '../../../../channels/discord/curatedPicksHandler.js';
@@ -1507,6 +1507,18 @@ describe('start: a channel message falls back like the /chat route and the webho
 
     await expect(runPrimaryTurn(ctx)).resolves.toBe('This agent has reached its monthly model allowance.');
     expect(posts('/openai/v1/chat/completions')).toEqual([]);
+  });
+
+  it.each([
+    ['a status in the message', new Error('Anthropic error (503): busy'), true],
+    ['a structured httpStatus, as Ollama errors carry', Object.assign(new Error('Service Unavailable'), { httpStatus: 503 }), true],
+    ['a structured status', Object.assign(new Error('Too many requests'), { status: 429 }), true],
+    ['an Axios timeout', new Error('timeout of 60000ms exceeded'), true],
+    ['a structured status that is not retried', Object.assign(new Error('Bad request'), { httpStatus: 400 }), false],
+    ['a used-up allowance', Object.assign(new Error('Payment required'), { status: 402, code: 'allowance_exhausted' }), false],
+    ['an error with nothing to read', new Error('model not found'), false],
+  ])('shouldFallback reads %s', (_label, error, expected) => {
+    expect(shouldFallback(error)).toBe(expected);
   });
 
   it('an Ollama primary that cannot be reached goes to the fallback candidate', async () => {
