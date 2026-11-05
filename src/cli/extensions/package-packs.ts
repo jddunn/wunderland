@@ -22,10 +22,22 @@ export interface PackagePackEntry {
   name: string;
   /** The npm package. */
   package: string;
-  /** The pack's options: wunderland's, then the agent's overrides over them. */
+  /**
+   * The pack's options: wunderland's, then the agent's override options over
+   * them, then the override's `priority` as `options.priority`, which is where
+   * the pack reads its descriptors' priority.
+   */
   options: Record<string, unknown>;
-  /** The override's priority, when it gives one. */
-  priority?: number;
+}
+
+/** The HTTP handlers a loaded package pack serves, and the tools they serve. */
+export interface PackageHttpService<Handler = unknown> {
+  /** The pack's name, for notes. */
+  pack: string;
+  /** Every tool the pack registers: its handlers serve them all. */
+  tools: string[];
+  /** The pack's `http-handler` payloads. */
+  handlers: Handler[];
 }
 
 /** The packs by the name an agent config gives them. */
@@ -45,6 +57,21 @@ export const PACKAGE_PACKS: Readonly<Record<string, PackagePack>> = Object.freez
 /** Whether `name` is a pack `start` imports by package. */
 export function isPackagePackName(name: string): boolean {
   return Object.prototype.hasOwnProperty.call(PACKAGE_PACKS, normalizeExtensionName(name));
+}
+
+/**
+ * The package pack `ref` names, by the name a config gives it
+ * (`wildweave-film`) or by its npm package
+ * (`@framers/agentos-ext-wildweave-film`).
+ */
+export function packagePackFor(ref: string): { name: string; package: string } | undefined {
+  const name = normalizeExtensionName(ref);
+  if (!name) return undefined;
+  if (isPackagePackName(name)) return { name, package: PACKAGE_PACKS[name]!.package };
+  for (const [packName, pack] of Object.entries(PACKAGE_PACKS)) {
+    if (pack.package === name) return { name: packName, package: pack.package };
+  }
+  return undefined;
 }
 
 /**
@@ -87,10 +114,54 @@ export function packagePackEntries(
     if (override['enabled'] === false) continue;
     const givenOptions = override['options'];
     const extra: Record<string, unknown> = isRecord(givenOptions) ? givenOptions : {};
-    const entry: PackagePackEntry = { name, package: pack.package, options: { ...pack.options, ...extra } };
+    const options: Record<string, unknown> = { ...pack.options, ...extra };
+    // The loader hands the pack its options alone: the priority goes there.
     const priority = override['priority'];
-    if (typeof priority === 'number') entry.priority = priority;
-    entries.push(entry);
+    if (typeof priority === 'number') options['priority'] = priority;
+    entries.push({ name, package: pack.package, options });
   }
   return entries;
+}
+
+/**
+ * Imports a package pack's npm package and creates the pack with the entry's
+ * options: `start`'s loader at startup and `extensions_enable` under
+ * `lazyTools` both load one this way.
+ *
+ * @throws When the package does not import or does not export `createExtensionPack`.
+ */
+export async function createPackagePack(
+  entry: PackagePackEntry,
+  host: { getSecret?: (secretId: string) => string | undefined; logger?: unknown },
+  importer: (specifier: string) => Promise<any> = (specifier) => import(specifier),
+): Promise<any> {
+  const mod = await importer(entry.package);
+  const factory = mod?.createExtensionPack ?? mod?.default?.createExtensionPack ?? mod?.default;
+  if (typeof factory !== 'function') throw new Error(`Extension ${entry.package} does not export createExtensionPack`);
+  return factory({ options: entry.options, logger: host.logger ?? console, getSecret: host.getSecret });
+}
+
+/**
+ * The HTTP handlers a loaded package pack serves and the tools they serve, or
+ * `undefined` when it serves none. A handler serves every one of the pack's
+ * tools to callers outside the agent's turns, so `start` mounts it only when
+ * the agent's tool settings keep all of them ({@link toolsDroppedFrom}).
+ */
+export function packageHttpServiceOf<Handler = unknown>(pack: any): PackageHttpService<Handler> | undefined {
+  const descriptors: any[] = Array.isArray(pack?.descriptors) ? pack.descriptors : [];
+  const handlers = descriptors
+    .filter((d) => d?.kind === 'http-handler')
+    .map((d) => d.payload)
+    .filter(Boolean) as Handler[];
+  if (handlers.length === 0) return undefined;
+  const tools = descriptors
+    .filter((d) => d?.kind === 'tool')
+    .map((d) => d?.payload?.name)
+    .filter((name): name is string => typeof name === 'string');
+  return { pack: String(pack?.name ?? 'package pack'), tools, handlers };
+}
+
+/** The tools of `service` the tool map no longer holds, in its order. */
+export function toolsDroppedFrom(service: PackageHttpService, toolMap: { has(name: string): boolean }): string[] {
+  return service.tools.filter((name) => !toolMap.has(name));
 }

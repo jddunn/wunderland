@@ -14,7 +14,13 @@ import { confineToolMap, resolveToolAllowList } from '../../../runtime/tools/too
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { normalizeExtensionList } from '../../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../../extensions/settings.js';
-import { packagePackEntries, takePackagePacks } from '../../extensions/package-packs.js';
+import {
+  createPackagePack,
+  packageHttpServiceOf,
+  packagePackEntries,
+  takePackagePacks,
+  toolsDroppedFrom,
+} from '../../extensions/package-packs.js';
 import { createConfiguredRagTools } from '../../../memory/rag/runtime-tools.js';
 import { createLocalMemoryReadTool } from './local-memory-tool.js';
 import { resolveHydeFromAgentConfig } from '../../../memory/rag/hyde-integration.js';
@@ -429,6 +435,15 @@ export async function loadExtensions(ctx: any): Promise<void> {
         if ((packEntry as any)?.enabled === false) continue;
 
         try {
+          // A package pack loads as extensions_enable loads one under lazyTools.
+          if (packageEntries.includes(packEntry)) {
+            const pack = await createPackagePack(packEntry, { getSecret, logger: console });
+            packs.push(pack);
+            packagePacks.add(pack);
+            if (typeof pack?.name === 'string') preloadedPackages.push(pack.name);
+            continue;
+          }
+
           if (typeof (packEntry as any)?.factory === 'function') {
             const pack = await (packEntry as any).factory();
             if (pack) {
@@ -453,7 +468,6 @@ export async function loadExtensions(ctx: any): Promise<void> {
           const options: any = (packEntry as any).options || {};
           const pack = await factory({ options, logger: console, getSecret });
           packs.push(pack);
-          if (packageEntries.includes(packEntry)) packagePacks.add(pack);
           if (typeof pack?.name === 'string') preloadedPackages.push(pack.name);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -496,17 +510,8 @@ export async function loadExtensions(ctx: any): Promise<void> {
         .filter(Boolean) as ExtensionHttpHandler[];
       loadedHttpHandlers.push(...httpHandlers);
       for (const pack of packagePacks) {
-        const descriptors: any[] = pack?.descriptors || [];
-        const handlers = descriptors
-          .filter((d) => d?.kind === 'http-handler')
-          .map((d) => d.payload)
-          .filter(Boolean) as ExtensionHttpHandler[];
-        if (handlers.length === 0) continue;
-        const tools = descriptors
-          .filter((d) => d?.kind === 'tool')
-          .map((d) => d?.payload?.name)
-          .filter((name): name is string => typeof name === 'string');
-        packageHttpHandlers.push({ pack: String(pack?.name ?? 'package pack'), tools, handlers });
+        const service = packageHttpServiceOf<ExtensionHttpHandler>(pack);
+        if (service) packageHttpHandlers.push(service);
       }
 
       // Extract tools from packs
@@ -521,6 +526,15 @@ export async function loadExtensions(ctx: any): Promise<void> {
     }
   }
 
+  // The agent config's secrets, then the environment: the guardrail packs' and the
+  // package packs' secret reader.
+  const configSecretResolver = createEnvSecretResolver({
+    configSecrets:
+      cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets)
+        ? (cfg.secrets as Record<string, string>)
+        : undefined,
+  });
+
   // ── Guardrail packs ──────────────────────────────────────────────────────
   // The packs extensions.guardrails, tools.allow.packs or an extension list
   // names, loaded here with their options from extensionOverrides, whether or
@@ -534,7 +548,8 @@ export async function loadExtensions(ctx: any): Promise<void> {
     allowedPacks: toolAllowList?.packs,
     extensionLists: listedGuardrailPacks,
   });
-  const guardrailOverrides = mergeExtensionOverrides(
+  // extensionOverrides, global then agent: the guardrail packs' and the package packs' options.
+  const agentExtensionOverrides = mergeExtensionOverrides(
     (globalConfig?.extensionOverrides && typeof globalConfig.extensionOverrides === 'object')
       ? (globalConfig.extensionOverrides as Record<string, any>)
       : {},
@@ -544,16 +559,11 @@ export async function loadExtensions(ctx: any): Promise<void> {
   );
   const guardrailPacks = await loadGuardrailPacks({
     names: guardrailPackNames,
-    overrides: guardrailOverrides,
+    overrides: agentExtensionOverrides,
     host: {
       providerId: ctx.providerId,
       llmApiKey: ctx.llmApiKey,
-      getSecret: createEnvSecretResolver({
-        configSecrets:
-          cfg?.secrets && typeof cfg.secrets === 'object' && !Array.isArray(cfg.secrets)
-            ? (cfg.secrets as Record<string, string>)
-            : undefined,
-      }),
+      getSecret: configSecretResolver,
     },
     logger: console,
   });
@@ -583,6 +593,29 @@ export async function loadExtensions(ctx: any): Promise<void> {
     // With tools.allow: no packages by npm name, and only the listed packs.
     allowPackages: !toolAllowList,
     ...(toolAllowList ? { allowedPackages: toolAllowList.packs } : {}),
+    // A package pack extensions_enable loads (under lazyTools, or one the agent did not list) gets
+    // what the loader above gives it: its overrides, its secrets, the same narrowing of its tools
+    // and the same rule for its HTTP handler.
+    packagePacks: {
+      overrides: agentExtensionOverrides,
+      getSecret: configSecretResolver,
+      confine: (map: Map<string, ToolInstance>, names: readonly string[]): string[] => {
+        const fresh = new Map<string, ToolInstance>();
+        for (const name of names) if (map.has(name)) fresh.set(name, map.get(name)!);
+        const kept = filterToolMapByPolicy({ toolMap: fresh, toolAccessProfile: policy.toolAccessProfile, permissions }).toolMap;
+        if (toolAllowList) confineToolMap(kept, toolAllowList.tools);
+        const dropped = names.filter((name) => map.has(name) && !kept.has(name));
+        for (const name of dropped) map.delete(name);
+        if (dropped.length > 0) fmt.note(`tools.allow and the tool settings: dropped ${dropped.join(', ')}`);
+        return dropped;
+      },
+      mountHttpHandlers: (handlers: unknown[]): void => {
+        loadedHttpHandlers.push(...(handlers as ExtensionHttpHandler[]));
+      },
+      onPackLoaded: (pack: unknown): void => {
+        activePacks.push(pack);
+      },
+    },
     logger: console,
     onToolsChanged: () => {
       ctx.discoveryManager?.reindex?.({ toolMap }).catch(() => {});
@@ -735,7 +768,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
   // and tools.allow, the tool access profile and the permission set do not reach its callers. It
   // is mounted only when they keep every one of those tools.
   for (const served of packageHttpHandlers) {
-    const dropped = served.tools.filter((name) => !toolMap.has(name));
+    const dropped = toolsDroppedFrom(served, toolMap);
     if (dropped.length === 0) continue;
     for (const handler of served.handlers) {
       const at = loadedHttpHandlers.indexOf(handler);
