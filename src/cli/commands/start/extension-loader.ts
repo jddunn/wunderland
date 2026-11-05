@@ -14,6 +14,7 @@ import { confineToolMap, resolveToolAllowList } from '../../../runtime/tools/too
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { normalizeExtensionList } from '../../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../../extensions/settings.js';
+import { packagePackEntries, takePackagePacks } from '../../extensions/package-packs.js';
 import { createConfiguredRagTools } from '../../../memory/rag/runtime-tools.js';
 import { createLocalMemoryReadTool } from './local-memory-tool.js';
 import { resolveHydeFromAgentConfig } from '../../../memory/rag/hyde-integration.js';
@@ -87,6 +88,9 @@ export async function loadExtensions(ctx: any): Promise<void> {
   let schemaOnDemandOptions: Record<string, Record<string, unknown>> = {};
   const loadedChannelAdapters: IChannelAdapter[] = [];
   const loadedHttpHandlers: ExtensionHttpHandler[] = [];
+  // The HTTP handlers of package packs (package-packs.ts), which serve the pack's own tools to
+  // callers outside the agent's turns; checked against the tools the agent keeps, below.
+  const packageHttpHandlers: Array<{ pack: string; tools: string[]; handlers: ExtensionHttpHandler[] }> = [];
   // Guardrail packs an extension list names; start loads them itself, below.
   const listedGuardrailPacks: string[] = [];
   const hitlSecret = (() => {
@@ -399,6 +403,14 @@ export async function loadExtensions(ctx: any): Promise<void> {
         list.splice(0, list.length, ...rest);
       }
 
+      // A pack the registry does not list (package-packs.ts) is imported from npm by its package below.
+      const packageNames: string[] = [];
+      for (const list of [toolExtensions, voiceExtensions, productivityExtensions]) {
+        const { packagePacks, rest } = takePackagePacks(list);
+        packageNames.push(...packagePacks);
+        list.splice(0, list.length, ...rest);
+      }
+
       const resolved = await resolveExtensionsByNames(
         toolExtensions,
         voiceExtensions,
@@ -406,10 +418,14 @@ export async function loadExtensions(ctx: any): Promise<void> {
         mergedOverrides,
         { secrets: secrets as any, channels: allowedChannels.length > 0 ? allowedChannels : 'none' }
       );
+      // A new list: the resolver can answer a shared empty manifest, which must not be changed.
+      const packageEntries = packagePackEntries(packageNames, mergedOverrides);
+      const manifestPacks: any[] = [...resolved.manifest.packs, ...packageEntries];
 
       const packs: any[] = [];
+      const packagePacks = new Set<any>();
 
-      for (const packEntry of resolved.manifest.packs) {
+      for (const packEntry of manifestPacks) {
         if ((packEntry as any)?.enabled === false) continue;
 
         try {
@@ -437,6 +453,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
           const options: any = (packEntry as any).options || {};
           const pack = await factory({ options, logger: console, getSecret });
           packs.push(pack);
+          if (packageEntries.includes(packEntry)) packagePacks.add(pack);
           if (typeof pack?.name === 'string') preloadedPackages.push(pack.name);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -478,6 +495,19 @@ export async function loadExtensions(ctx: any): Promise<void> {
         .map((d: { payload: unknown }) => d.payload)
         .filter(Boolean) as ExtensionHttpHandler[];
       loadedHttpHandlers.push(...httpHandlers);
+      for (const pack of packagePacks) {
+        const descriptors: any[] = pack?.descriptors || [];
+        const handlers = descriptors
+          .filter((d) => d?.kind === 'http-handler')
+          .map((d) => d.payload)
+          .filter(Boolean) as ExtensionHttpHandler[];
+        if (handlers.length === 0) continue;
+        const tools = descriptors
+          .filter((d) => d?.kind === 'tool')
+          .map((d) => d?.payload?.name)
+          .filter((name): name is string => typeof name === 'string');
+        packageHttpHandlers.push({ pack: String(pack?.name ?? 'package pack'), tools, handlers });
+      }
 
       // Extract tools from packs
       allTools = packs
@@ -700,6 +730,21 @@ export async function loadExtensions(ctx: any): Promise<void> {
   // The wallet pack and the folder-access tool register after the policy
   // filter; the list holds for them too.
   confineToAllowList();
+
+  // A package pack's HTTP handler (wildweave-film's MCP endpoint) serves all of the pack's tools,
+  // and tools.allow, the tool access profile and the permission set do not reach its callers. It
+  // is mounted only when they keep every one of those tools.
+  for (const served of packageHttpHandlers) {
+    const dropped = served.tools.filter((name) => !toolMap.has(name));
+    if (dropped.length === 0) continue;
+    for (const handler of served.handlers) {
+      const at = loadedHttpHandlers.indexOf(handler);
+      if (at !== -1) loadedHttpHandlers.splice(at, 1);
+    }
+    fmt.note(
+      `${served.pack}: HTTP endpoint not mounted; the agent's tool settings drop ${dropped.length} of its ${served.tools.length} tools`,
+    );
+  }
 
   ctx.toolMap = toolMap;
   ctx.activePacks = activePacks;
