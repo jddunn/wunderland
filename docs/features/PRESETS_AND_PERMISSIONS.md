@@ -8,6 +8,7 @@ This guide explains how Wunderland (the SDK and CLI runtime) composes:
 - **Tool access profiles** (semantic tool-category allow/deny)
 - **Tool allow-list** (`tools.allow`: the only packs and tools an agent may load and run)
 - **Guardrail packs** (`extensions.guardrails`: guards that judge every message and every reply)
+- **Packs outside the registry** (`wildweave-film`: packs `start` imports from npm by package)
 - **Execution modes** (human-in-the-loop behavior)
 - **Folder permissions** (path-level filesystem sandbox)
 
@@ -148,6 +149,27 @@ The checks run through AgentOS's guardrail dispatcher (`evaluateInputGuardrails`
 `--no-guardrails` and `--guardrails=` choose the security tier's packs (PII redaction, ML classifiers, topicality, code safety, grounding). They do not remove a pack the agent config names.
 
 Code: `src/cli/commands/start/guardrail-packs.ts`.
+
+## Packs Outside the Registry (`wildweave-film`)
+
+`start` loads most packs through the curated registry (`@framers/agentos-extensions-registry`). A pack the registry does not list is imported from npm by its package, under a name an agent config uses like any other: in `extensions.tools`, `extensions.productivity` or `tools.allow.packs`. Its options are wunderland's, with `extensionOverrides.<name>.options` laid over them key by key; `"enabled": false` there skips it.
+
+| Name | Package | Options wunderland gives it | Secret |
+|---|---|---|---|
+| `wildweave-film` | `@framers/agentos-ext-wildweave-film` | `{ "baseUrl": "https://wilds.ai", "http": { "path": "/mcp/wildweave-film" } }` | `wildweave.studio.key` (`WILDWEAVE_STUDIO_KEY`) |
+
+`wildweave-film` is WildWeave's film studio: 22 `wildweave_film_*` tools that read and edit a film in a wilds.ai account, export it to its repository and run the film engine of a wilds-ai checkout (`extensionOverrides["wildweave-film"].options.engineDir`). The key comes from the agent config's `secrets["wildweave.studio.key"]` or from `WILDWEAVE_STUDIO_KEY` in the shell or `~/.wunderland/.env`; with the variable set, `start` adds the pack as it adds other packs whose keys it finds. Without a key the tools still load, and each studio tool answers `key_missing`.
+
+The pack also serves its tools over MCP's streamable HTTP on `start`'s own server, at `POST /mcp/wildweave-film`, beside the other pack HTTP handlers. It answers callers on the same machine alone: a peer address, `Host` or browser `Origin` outside the loopback gets 403. So `--host 0.0.0.0` does not open the studio key to other machines.
+
+```json
+{
+  "extensions": { "tools": ["web-search", "wildweave-film"] },
+  "extensionOverrides": { "wildweave-film": { "options": { "engineDir": "/home/me/wilds-ai" } } }
+}
+```
+
+Code: `src/cli/extensions/package-packs.ts`.
 
 ## Execution Modes (Human In The Loop)
 

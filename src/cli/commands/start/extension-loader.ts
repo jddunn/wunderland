@@ -14,6 +14,7 @@ import { confineToolMap, resolveToolAllowList } from '../../../runtime/tools/too
 import { createEnvSecretResolver } from '../../../security/env-secrets.js';
 import { normalizeExtensionList } from '../../extensions/aliases.js';
 import { mergeExtensionOverrides } from '../../extensions/settings.js';
+import { packagePackEntries, takePackagePacks } from '../../extensions/package-packs.js';
 import { createConfiguredRagTools } from '../../../memory/rag/runtime-tools.js';
 import { createLocalMemoryReadTool } from './local-memory-tool.js';
 import { resolveHydeFromAgentConfig } from '../../../memory/rag/hyde-integration.js';
@@ -399,6 +400,14 @@ export async function loadExtensions(ctx: any): Promise<void> {
         list.splice(0, list.length, ...rest);
       }
 
+      // A pack the registry does not list (package-packs.ts) is imported from npm by its package below.
+      const packageNames: string[] = [];
+      for (const list of [toolExtensions, voiceExtensions, productivityExtensions]) {
+        const { packagePacks, rest } = takePackagePacks(list);
+        packageNames.push(...packagePacks);
+        list.splice(0, list.length, ...rest);
+      }
+
       const resolved = await resolveExtensionsByNames(
         toolExtensions,
         voiceExtensions,
@@ -406,10 +415,12 @@ export async function loadExtensions(ctx: any): Promise<void> {
         mergedOverrides,
         { secrets: secrets as any, channels: allowedChannels.length > 0 ? allowedChannels : 'none' }
       );
+      // A new list: the resolver can answer a shared empty manifest, which must not be changed.
+      const manifestPacks: any[] = [...resolved.manifest.packs, ...packagePackEntries(packageNames, mergedOverrides)];
 
       const packs: any[] = [];
 
-      for (const packEntry of resolved.manifest.packs) {
+      for (const packEntry of manifestPacks) {
         if ((packEntry as any)?.enabled === false) continue;
 
         try {
