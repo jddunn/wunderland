@@ -5,11 +5,13 @@
  * by its package, with the options wunderland gives it, as it loads any pack the curated registry
  * does not list.
  *
- * With no key the pack's 22 tools reach the tool map and its one HTTP handler is mounted on
- * `start`'s own HTTP server at /mcp/wildweave-film, where an MCP client's `initialize` reaches the
- * pack's server. With a key in the environment or in the agent config's `secrets` (a fake one),
+ * With no key the pack's 22 tools reach the tool map. With the endpoint's bearer token in the agent
+ * config's `secrets["wildweave.studio.http_token"]`, its one HTTP handler is mounted on `start`'s own
+ * HTTP server at /mcp/wildweave-film, where an MCP client's `initialize` with
+ * `Authorization: Bearer <token>` reaches the pack's server and a request without it answers 401.
+ * With no token the tools still load and the endpoint is not mounted. With a key in the environment or in the agent config's `secrets` (a fake one),
  * `wildweave_film_list` calls the studio with it; the studio is a stubbed `fetch`. An agent whose
- * `tools.allow` keeps fewer than all 22 tools gets no endpoint, which would serve them all.
+ * `tools.allow` keeps fewer than all 22 tools gets no endpoint, which would serve them all, token or not.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { request } from 'node:http';
@@ -30,8 +32,15 @@ const FAKE_KEY = `wld_live_${'f'.repeat(40)}`;
 
 const MCP_PATH = '/mcp/wildweave-film';
 
+/** The endpoint's bearer token: 64 hex characters, as `openssl rand -hex 32` writes one. Synthetic. */
+const TOKEN = 'e5'.repeat(32);
+
+/** The agent config's secrets holding the endpoint's token under the secret id the pack reads. */
+const TOKEN_SECRETS = { secrets: { 'wildweave.studio.http_token': TOKEN } };
+
 let workspaceBaseDir = '';
 let savedKey: string | undefined;
+let savedToken: string | undefined;
 
 /**
  * Runs `start`'s extension phase for an agent whose only tool extension is `wildweave-film`, with
@@ -133,9 +142,9 @@ function startServer(loaded: any) {
   });
 }
 
-/** One POST to the server; answers its status, content type and body. */
+/** One POST to the server; answers its status, content type, `WWW-Authenticate` challenge and body. */
 function post(port: number, urlPath: string, body: unknown, headers: Record<string, string> = {}) {
-  return new Promise<{ status: number; type: string; text: string }>((resolve, reject) => {
+  return new Promise<{ status: number; type: string; challenge: string; text: string }>((resolve, reject) => {
     const req = request(
       {
         host: '127.0.0.1',
@@ -148,7 +157,12 @@ function post(port: number, urlPath: string, body: unknown, headers: Record<stri
         const chunks: Buffer[] = [];
         res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () =>
-          resolve({ status: res.statusCode ?? 0, type: String(res.headers['content-type'] ?? ''), text: Buffer.concat(chunks).toString('utf8') }),
+          resolve({
+            status: res.statusCode ?? 0,
+            type: String(res.headers['content-type'] ?? ''),
+            challenge: String(res.headers['www-authenticate'] ?? ''),
+            text: Buffer.concat(chunks).toString('utf8'),
+          }),
         );
       },
     );
@@ -186,18 +200,22 @@ beforeEach(async () => {
   workspaceBaseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wunderland-wildweave-film-'));
   savedKey = process.env['WILDWEAVE_STUDIO_KEY'];
   delete process.env['WILDWEAVE_STUDIO_KEY'];
+  savedToken = process.env['WILDWEAVE_STUDIO_HTTP_TOKEN'];
+  delete process.env['WILDWEAVE_STUDIO_HTTP_TOKEN'];
 });
 
 afterEach(async () => {
   vi.unstubAllGlobals();
   if (savedKey === undefined) delete process.env['WILDWEAVE_STUDIO_KEY'];
   else process.env['WILDWEAVE_STUDIO_KEY'] = savedKey;
+  if (savedToken === undefined) delete process.env['WILDWEAVE_STUDIO_HTTP_TOKEN'];
+  else process.env['WILDWEAVE_STUDIO_HTTP_TOKEN'] = savedToken;
   await fs.rm(workspaceBaseDir, { recursive: true, force: true });
 });
 
 describe('wunderland start with the WildWeave film studio pack', () => {
-  it('loads its 22 tools and mounts its MCP endpoint at /mcp/wildweave-film, with no key', async () => {
-    const ctx = await loadWildweaveFilm();
+  it('loads its 22 tools and mounts its MCP endpoint at /mcp/wildweave-film behind the bearer token from the secrets, with no key', async () => {
+    const ctx = await loadWildweaveFilm(TOKEN_SECRETS);
 
     const names = [...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'));
     expect(names).toHaveLength(22);
@@ -223,22 +241,100 @@ describe('wunderland start with the WildWeave film studio pack', () => {
     try {
       const { port } = server.address() as AddressInfo;
 
-      const init = await post(port, MCP_PATH, INITIALIZE);
+      const bearer = { authorization: `Bearer ${TOKEN}` };
+      const init = await post(port, MCP_PATH, INITIALIZE, bearer);
       expect(init.status).toBe(200);
       const rpc = rpcOf(init);
       expect(rpc.id).toBe(1);
       expect(rpc.result.serverInfo.name).toBe('wildweave-film');
       expect(rpc.result.capabilities.tools).toBeDefined();
 
+      // Without the token, or with another, the pack answers 401 with a Bearer challenge.
+      const anonymous = await post(port, MCP_PATH, INITIALIZE);
+      expect(anonymous.status).toBe(401);
+      expect(anonymous.challenge).toMatch(/^Bearer/);
+      expect(anonymous.text).not.toContain(TOKEN);
+      expect((await post(port, MCP_PATH, INITIALIZE, { authorization: `Bearer ${'f6'.repeat(32)}` })).status).toBe(401);
+      expect((await post(port, MCP_PATH, INITIALIZE, { authorization: TOKEN })).status).toBe(401);
+
       // Another path is not the pack's: start answers it 404.
-      expect((await post(port, '/mcp/other', INITIALIZE)).status).toBe(404);
-      // A browser page on another site is refused by the pack.
-      expect((await post(port, MCP_PATH, INITIALIZE, { origin: 'https://example.com' })).status).toBe(403);
+      expect((await post(port, '/mcp/other', INITIALIZE, bearer)).status).toBe(404);
+      // A browser page on another site is refused by the pack, token or not.
+      expect((await post(port, MCP_PATH, INITIALIZE, { ...bearer, origin: 'https://example.com' })).status).toBe(403);
     } finally {
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
         server.closeAllConnections();
       });
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('loads its 22 tools with no endpoint token, and mounts no MCP endpoint', async () => {
+    // The pack refuses to load with an endpoint and no token; start leaves the endpoint off instead.
+    const ctx = await loadWildweaveFilm();
+    try {
+      expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toHaveLength(22);
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
+
+      const server = startServer(ctx);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      try {
+        const { port } = server.address() as AddressInfo;
+        expect((await post(port, MCP_PATH, INITIALIZE)).status).toBe(404);
+      } finally {
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        });
+      }
+    } finally {
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('keeps its 22 tools and mounts no endpoint when the stored token is shorter than 32 characters', async () => {
+    // The pack refuses to load with an endpoint token of another form; start leaves the endpoint off instead.
+    const ctx = await loadWildweaveFilm({ secrets: { 'wildweave.studio.http_token': 'too-short-token' } });
+    try {
+      expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toHaveLength(22);
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
+      const server = startServer(ctx);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      try {
+        const { port } = server.address() as AddressInfo;
+        expect((await post(port, MCP_PATH, INITIALIZE, { authorization: 'Bearer too-short-token' })).status).toBe(404);
+      } finally {
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        });
+      }
+    } finally {
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('mounts the endpoint with the token from WILDWEAVE_STUDIO_HTTP_TOKEN, answering 401 without it', async () => {
+    process.env['WILDWEAVE_STUDIO_HTTP_TOKEN'] = TOKEN;
+    const ctx = await loadWildweaveFilm();
+    try {
+      expect(ctx.loadedHttpHandlers).toHaveLength(1);
+      const server = startServer(ctx);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      try {
+        const { port } = server.address() as AddressInfo;
+        expect((await post(port, MCP_PATH, INITIALIZE)).status).toBe(401);
+        const init = await post(port, MCP_PATH, INITIALIZE, { authorization: `Bearer ${TOKEN}` });
+        expect(init.status).toBe(200);
+        expect(rpcOf(init).result.serverInfo.name).toBe('wildweave-film');
+      } finally {
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        });
+      }
+    } finally {
       await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
     }
   }, LOAD_TIMEOUT_MS);
@@ -287,6 +383,7 @@ describe('wunderland start with the WildWeave film studio pack', () => {
   it('mounts no MCP endpoint when tools.allow keeps fewer than all of the pack\'s tools', async () => {
     // The endpoint would serve all 22 tools to its callers, edit and render among them.
     const ctx = await loadWildweaveFilm({
+      ...TOKEN_SECRETS,
       tools: { allow: { packs: ['wildweave-film'], tools: ['wildweave_film_list'] } },
     });
     try {
@@ -333,9 +430,9 @@ describe('wunderland start with lazyTools and the WildWeave film studio pack', (
     await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
   }
 
-  it('loads nothing at startup, then extensions_enable wildweave-film loads its 22 tools and mounts its endpoint', async () => {
+  it('loads nothing at startup, then extensions_enable wildweave-film loads its 22 tools and mounts its endpoint behind the token', async () => {
     process.env['WILDWEAVE_STUDIO_KEY'] = FAKE_KEY;
-    const ctx = await loadWildweaveFilm({}, { lazyTools: true });
+    const ctx = await loadWildweaveFilm(TOKEN_SECRETS, { lazyTools: true });
     try {
       expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toEqual([]);
       expect(ctx.loadedHttpHandlers).toHaveLength(0);
@@ -345,6 +442,8 @@ describe('wunderland start with lazyTools and the WildWeave film studio pack', (
       expect(result.success).toBe(true);
       expect(result.output).toMatchObject({ extension: 'wildweave-film', packageName: '@framers/agentos-ext-wildweave-film', loaded: true });
       expect(result.output.toolsAdded).toHaveLength(22);
+      expect(result.output.httpEndpoint).toBe('mounted');
+      expect(result.output.note).toBeUndefined();
       expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toHaveLength(22);
       expect(ctx.loadedHttpHandlers).toHaveLength(1);
       expect(filmPackPriorities(ctx)).toEqual([30]);
@@ -363,9 +462,13 @@ describe('wunderland start with lazyTools and the WildWeave film studio pack', (
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
       try {
         const { port } = server.address() as AddressInfo;
-        const init = await post(port, MCP_PATH, INITIALIZE);
+        const init = await post(port, MCP_PATH, INITIALIZE, { authorization: `Bearer ${TOKEN}` });
         expect(init.status).toBe(200);
         expect(rpcOf(init).result.serverInfo.name).toBe('wildweave-film');
+        // Without the token the pack answers 401 with a Bearer challenge.
+        const anonymous = await post(port, MCP_PATH, INITIALIZE);
+        expect(anonymous.status).toBe(401);
+        expect(anonymous.challenge).toMatch(/^Bearer/);
       } finally {
         await new Promise<void>((resolve) => {
           server.close(() => resolve());
@@ -376,6 +479,38 @@ describe('wunderland start with lazyTools and the WildWeave film studio pack', (
       // A second call loads nothing more.
       expect((await enable(ctx, { extension: 'wildweave-film' })).output).toMatchObject({ skipped: true, reason: 'already_loaded' });
       expect(ctx.loadedHttpHandlers).toHaveLength(1);
+    } finally {
+      await deactivateAll(ctx);
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('loads its 22 tools with no endpoint token, mounts no endpoint, and names the secret to set', async () => {
+    // The pack refuses to load with an endpoint and no token; extensions_enable leaves the endpoint off instead.
+    const ctx = await loadWildweaveFilm({}, { lazyTools: true });
+    try {
+      const result = await enable(ctx, { extension: 'wildweave-film' });
+      expect(result.success).toBe(true);
+      expect(result.output.toolsAdded).toHaveLength(22);
+      expect(result.output.httpEndpoint).toBe('not_mounted');
+      expect(result.output.note).toContain('wildweave.studio.http_token');
+      expect(result.output.note).toContain('WILDWEAVE_STUDIO_HTTP_TOKEN');
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
+    } finally {
+      await deactivateAll(ctx);
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('keeps its 22 tools, mounts no endpoint and notes the length alone when the stored token is too short', async () => {
+    const ctx = await loadWildweaveFilm({ secrets: { 'wildweave.studio.http_token': 'too-short-token' } }, { lazyTools: true });
+    try {
+      const result = await enable(ctx, { extension: 'wildweave-film' });
+      expect(result.success).toBe(true);
+      expect(result.output.toolsAdded).toHaveLength(22);
+      expect(result.output.httpEndpoint).toBe('not_mounted');
+      expect(result.output.note).toContain('wildweave.studio.http_token');
+      expect(result.output.note).toContain('15 characters');
+      expect(JSON.stringify(result)).not.toContain('too-short-token');
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
     } finally {
       await deactivateAll(ctx);
     }
@@ -414,7 +549,7 @@ describe('wunderland start with lazyTools and the WildWeave film studio pack', (
 
   it('keeps only the tools tools.allow lists and mounts no endpoint when it drops any', async () => {
     const ctx = await loadWildweaveFilm(
-      { tools: { allow: { packs: ['wildweave-film'], tools: ['extensions_enable', 'wildweave_film_list'] } } },
+      { ...TOKEN_SECRETS, tools: { allow: { packs: ['wildweave-film'], tools: ['extensions_enable', 'wildweave_film_list'] } } },
       { lazyTools: true },
     );
     try {
@@ -422,6 +557,9 @@ describe('wunderland start with lazyTools and the WildWeave film studio pack', (
       expect(result.success).toBe(true);
       expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toEqual(['wildweave_film_list']);
       expect(result.output.toolsBlockedByPolicy).toHaveLength(21);
+      // With the token stored, the endpoint stays off because it would serve all 22 tools.
+      expect(result.output.httpEndpoint).toBe('not_mounted');
+      expect(result.output.note).toBeUndefined();
       expect(ctx.loadedHttpHandlers).toHaveLength(0);
     } finally {
       await deactivateAll(ctx);

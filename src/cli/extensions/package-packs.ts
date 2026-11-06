@@ -6,6 +6,7 @@
  * and `extensionOverrides.<name>` reaches it as it reaches the others.
  */
 
+import { secretIdToEnvVar } from '../../security/env-secrets.js';
 import { normalizeExtensionName } from './aliases.js';
 
 /** A pack the registry does not list: its npm package and the options wunderland gives it. */
@@ -14,7 +15,16 @@ export interface PackagePack {
   readonly package: string;
   /** The options its `createExtensionPack` gets, under `extensionOverrides.<name>.options`. */
   readonly options: Readonly<Record<string, unknown>>;
+  /**
+   * The secret its HTTP endpoint's bearer token is stored under. wunderland reads it through
+   * `getSecret` (the agent config's `secrets`, then the variable) and passes it as `http.token`;
+   * with none, the endpoint is left off (`http: null`) and the pack's tools still load.
+   */
+  readonly httpTokenSecret?: string;
 }
+
+/** Reads a secret by its id: the agent config's `secrets`, then the environment. */
+export type PackageSecretReader = (secretId: string) => string | undefined;
 
 /** A manifest entry `start`'s loader imports by package. */
 export interface PackagePackEntry {
@@ -28,6 +38,8 @@ export interface PackagePackEntry {
    * the pack reads its descriptors' priority.
    */
   options: Record<string, unknown>;
+  /** Why wunderland left the pack's HTTP endpoint off, for `start` to note. */
+  note?: string;
 }
 
 /** The HTTP handlers a loaded package pack serves, and the tools they serve. */
@@ -46,11 +58,14 @@ export const PACKAGE_PACKS: Readonly<Record<string, PackagePack>> = Object.freez
    * WildWeave's film studio: 22 `wildweave_film_*` tools over a wilds.ai
    * account's film, the key in the secret `wildweave.studio.key`
    * (`WILDWEAVE_STUDIO_KEY`), and its MCP endpoint on `start`'s HTTP server
-   * at `/mcp/wildweave-film`, answering callers on this machine alone.
+   * at `/mcp/wildweave-film`, answering callers on this machine that send
+   * `Authorization: Bearer <token>`, the token in the secret
+   * `wildweave.studio.http_token` (`WILDWEAVE_STUDIO_HTTP_TOKEN`).
    */
   'wildweave-film': Object.freeze({
     package: '@framers/agentos-ext-wildweave-film',
     options: Object.freeze({ baseUrl: 'https://wilds.ai', http: Object.freeze({ path: '/mcp/wildweave-film' }) }),
+    httpTokenSecret: 'wildweave.studio.http_token',
   }),
 });
 
@@ -87,6 +102,21 @@ export function takePackagePacks(names: readonly string[]): { packagePacks: stri
   return { packagePacks, rest };
 }
 
+/** The least length of a package pack's HTTP endpoint token, as the packs check it. */
+export const HTTP_TOKEN_MIN_LENGTH = 32;
+
+/** RFC 6750's `b64token`: letters, digits, `-._~+/`, then any `=`. */
+const HTTP_TOKEN_FORM = /^[A-Za-z0-9\-._~+/]+=*$/;
+
+/**
+ * Whether `token` is one a package pack's HTTP endpoint takes: 32 or more
+ * `b64token` characters. The pack refuses to load, tools and all, with any
+ * other, so wunderland leaves the endpoint off instead of passing it.
+ */
+export function isHttpToken(token: string): boolean {
+  return token.length >= HTTP_TOKEN_MIN_LENGTH && HTTP_TOKEN_FORM.test(token);
+}
+
 /** A plain object, not an array or null. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -97,10 +127,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * options with the override's `options` over them, key by key. An override
  * with `"enabled": false` leaves its pack out; a name that is not a package
  * pack is skipped.
+ *
+ * A pack whose HTTP endpoint asks for a bearer token (`httpTokenSecret`) gets
+ * the token read through `getSecret` as `http.token`, unless the override
+ * gives one. With none, or one that is not 32 or more `b64token` characters,
+ * its `http` is `null`, so the pack loads its tools without the endpoint (it
+ * refuses to load with `http` and no such token), and the entry's `note` says
+ * why, naming where the token is set and its length, never its value.
  */
 export function packagePackEntries(
   names: readonly string[],
   overrides: Readonly<Record<string, unknown>> = {},
+  getSecret?: PackageSecretReader,
 ): PackagePackEntry[] {
   const entries: PackagePackEntry[] = [];
   const seen = new Set<string>();
@@ -115,10 +153,29 @@ export function packagePackEntries(
     const givenOptions = override['options'];
     const extra: Record<string, unknown> = isRecord(givenOptions) ? givenOptions : {};
     const options: Record<string, unknown> = { ...pack.options, ...extra };
+    let note: string | undefined;
+    const http = options['http'];
+    if (pack.httpTokenSecret && isRecord(http)) {
+      const fromOverride = http['token'] !== undefined;
+      const given = fromOverride ? http['token'] : getSecret?.(pack.httpTokenSecret);
+      const token = typeof given === 'string' ? given.trim() : '';
+      const where = fromOverride
+        ? `extensionOverrides.${name}.options.http.token`
+        : `the secret ${pack.httpTokenSecret} (${secretIdToEnvVar(pack.httpTokenSecret)})`;
+      if (isHttpToken(token)) {
+        options['http'] = { ...http, token };
+      } else {
+        // The pack throws on a missing token or one of another form, and every tool goes with it.
+        options['http'] = null;
+        note = token
+          ? `${name}: HTTP endpoint not mounted; ${where} holds ${token.length} characters, not a token of ${HTTP_TOKEN_MIN_LENGTH} or more letters, digits or the characters -._~+/ (then any =); set it to one such as \`openssl rand -hex 32\` writes`
+          : `${name}: HTTP endpoint not mounted; set ${where} to a token of ${HTTP_TOKEN_MIN_LENGTH} or more characters, such as \`openssl rand -hex 32\` writes`;
+      }
+    }
     // The loader hands the pack its options alone: the priority goes there.
     const priority = override['priority'];
     if (typeof priority === 'number') options['priority'] = priority;
-    entries.push({ name, package: pack.package, options });
+    entries.push(note ? { name, package: pack.package, options, note } : { name, package: pack.package, options });
   }
   return entries;
 }

@@ -425,7 +425,9 @@ export async function loadExtensions(ctx: any): Promise<void> {
         { secrets: secrets as any, channels: allowedChannels.length > 0 ? allowedChannels : 'none' }
       );
       // A new list: the resolver can answer a shared empty manifest, which must not be changed.
-      const packageEntries = packagePackEntries(packageNames, mergedOverrides);
+      // The token of a package pack's HTTP endpoint comes from the agent's secrets, as its key does.
+      const packageEntries = packagePackEntries(packageNames, mergedOverrides, getSecret);
+      for (const entry of packageEntries) if (entry.note) fmt.note(entry.note);
       const manifestPacks: any[] = [...resolved.manifest.packs, ...packageEntries];
 
       const packs: any[] = [];

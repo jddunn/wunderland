@@ -50,6 +50,8 @@ type ExtensionsEnableOutput = {
   toolsBlockedByPolicy?: string[];
   /** A package pack's HTTP endpoint: mounted when the agent keeps every one of its tools. */
   httpEndpoint?: 'mounted' | 'not_mounted';
+  /** Why a package pack's HTTP endpoint was left off: the secret its bearer token is read from. */
+  note?: string;
 };
 
 /**
@@ -308,6 +310,10 @@ export function createSchemaOnDemandTools(opts: {
           `${service.pack}: HTTP endpoint not mounted; the agent's tool settings drop ${missing.length} of its ${service.tools.length} tools`,
         );
       }
+    } else if (packageEntry.note) {
+      // No token for the endpoint: the tools load without it, and the answer names the secret to set.
+      httpEndpoint = 'not_mounted';
+      log.info?.(packageEntry.note);
     }
 
     const toolsBlockedByPolicy = [...dropped].sort();
@@ -320,6 +326,7 @@ export function createSchemaOnDemandTools(opts: {
       toolsUpdated: toolsUpdated.sort(),
       ...(toolsBlockedByPolicy.length > 0 ? { toolsBlockedByPolicy } : null),
       ...(httpEndpoint ? { httpEndpoint } : null),
+      ...(packageEntry.note ? { note: packageEntry.note } : null),
     };
     return { success: true, output: out };
   }
@@ -385,7 +392,12 @@ export function createSchemaOnDemandTools(opts: {
             error: `${packagePack.name} takes its options from extensionOverrides.${packagePack.name} in the agent config, not from extensions_enable.`,
           };
         }
-        packageEntry = packagePackEntries([packagePack.name], opts.packagePacks?.overrides ?? {})[0];
+        // The endpoint's bearer token comes from the agent's secrets, as at startup.
+        packageEntry = packagePackEntries(
+          [packagePack.name],
+          opts.packagePacks?.overrides ?? {},
+          opts.packagePacks?.getSecret ?? opts.getSecret,
+        )[0];
         if (!packageEntry) {
           return { success: false, error: `${packagePack.name} is disabled by extensionOverrides.${packagePack.name}.enabled.` };
         }

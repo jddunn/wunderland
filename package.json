@@ -120,7 +120,7 @@
     "@framers/agentos-ext-voice-synthesis": "^3.1.2",
     "@framers/agentos-ext-web-browser": "^1.3.4",
     "@framers/agentos-ext-web-search": "^1.3.4",
-    "@framers/agentos-ext-wildweave-film": "^0.2.0",
+    "@framers/agentos-ext-wildweave-film": "^0.3.0",
     "@framers/agentos-extensions-registry": "^0.18.17",
     "@framers/sql-storage-adapter": "^0.9.4",
     "@opentelemetry/api": "^1.9.0",
