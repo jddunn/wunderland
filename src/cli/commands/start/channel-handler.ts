@@ -26,6 +26,7 @@ import {
   visibleReplyText,
   type TurnGuardrails,
 } from './guardrail-packs.js';
+import { channelGuardPlace } from './guard-place.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -322,12 +323,13 @@ export async function handleInboundChannelMessage(ctx: ChannelRuntimeCtx, messag
 
   // Guardrail packs judge the message before any model sees it, capability
   // discovery included. A block answers with the guard's message; the message
-  // enters no history.
+  // enters no history. The metadata carries the sender's locale where the
+  // channel reports one, and the reply's check below reads the same context.
   const guardContext = {
     userId: senderId,
     sessionId: sessionKey,
     conversationId,
-    metadata: { platform, conversationType: message.conversationType },
+    metadata: { platform, conversationType: message.conversationType, ...channelGuardPlace(message) },
   };
   let turnText = text;
   let inputGuardEvents = [];
