@@ -128,7 +128,7 @@ npm install @framers/agentos-ext-self-harm-referral
 - **The message, before any model.** The guards judge the person's message first, ahead of capability discovery, the research classifier and the turn's model. A block answers the person with the guard's message (its `replacementText`; a guard that gives none answers `I can't help with that.`), and the message goes to no model and into no conversation history. A guard that rewrites the message (a sanitizer) sends the rewritten text on.
 - **The reply, before the person.** The guards judge the reply the model wrote. A block puts the guard's message in its place, in the history too, so no word of the refused reply reaches the person or the next turn's model.
 - **Events.** A verdict that carries `referral_sent` goes out on the turn through the [hosted events](OBSERVABILITY.md#hosted-events) reporter, with `code` `input` or `output` and none of the person's or the model's words.
-- **Where the person is.** The guard context's `metadata` names the person's place where the turn gives one, on the message and on the reply alike. Nothing else reads it, and no event carries it.
+- **Where the person is.** The guard context's `metadata` names the person's place where the turn gives one, on the message and on the reply alike. `start` itself reads it nowhere else, and no event carries it.
 
 | Turn | `metadata` |
 |---|---|
