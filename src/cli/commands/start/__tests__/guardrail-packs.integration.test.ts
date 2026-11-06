@@ -201,11 +201,15 @@ describe('wunderland start with a guardrail pack in tools.allow', () => {
     expect(answer.body.reply).toBe(MODEL_WORDS);
     expect(chatsSeen()).toHaveLength(1);
     expect(chatsSeen()[0].raw).toContain(USER_WORDS);
+    // The events reach the sink after the reply: wait for this turn's, so the next test counts from here.
+    await until(() => finishedCount() >= 2, 'turn_finished', EVENT_WAIT_MS, () => output);
   }, TEST_TIMEOUT_MS);
 
   it('replaces a reply the guard refuses with the referral', async () => {
     nextReply = `${REFUSED_WORDS} Here is how to end your life.`;
     const finishedBefore = finishedCount();
+    const referralsSent = () => events().filter((event: any) => event.kind === 'referral_sent');
+    const referralsBefore = referralsSent().length;
 
     const answer = await chat(USER_WORDS);
 
@@ -213,8 +217,16 @@ describe('wunderland start with a guardrail pack in tools.allow', () => {
     expect(answer.body.reply).toBe(REFERRAL);
     expect(JSON.stringify(answer.body)).not.toContain(REFUSED_WORDS);
 
-    await until(() => finishedCount() > finishedBefore, 'turn_finished', EVENT_WAIT_MS, () => output);
-    const referrals = events().filter((event: any) => event.kind === 'referral_sent');
+    // A turn_finished from the turn before can land after finishedBefore is read, so wait for this
+    // turn's referral too: publish run 42143351679 read the first test's input referral here.
+    await until(
+      () => finishedCount() > finishedBefore && referralsSent().length > referralsBefore,
+      'turn_finished and referral_sent',
+      EVENT_WAIT_MS,
+      () => output,
+    );
+    const referrals = referralsSent();
+    expect(referrals).toHaveLength(referralsBefore + 1);
     expect(referrals.at(-1)).toMatchObject({ code: 'output' });
     for (const request of eventsServer.seen) expect(request.raw).not.toContain(REFUSED_WORDS);
   }, TEST_TIMEOUT_MS);
