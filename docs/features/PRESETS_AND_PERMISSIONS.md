@@ -153,7 +153,7 @@ Code: `src/cli/commands/start/guardrail-packs.ts`.
 
 ## Packs Outside the Registry (`wildweave-film`)
 
-`start` loads most packs through the curated registry (`@framers/agentos-extensions-registry`). A pack the registry does not list is imported from npm by its package, under a name an agent config uses like any other: in `extensions.tools`, `extensions.productivity` or `tools.allow.packs`. Its options are wunderland's, with `extensionOverrides.<name>.options` laid over them key by key; `"enabled": false` there skips it.
+`start` loads most packs through the curated registry (`@framers/agentos-extensions-registry`). A pack the registry does not list is imported from npm by its package, under a name an agent config uses like any other: in `extensions.tools`, `extensions.productivity` or `tools.allow.packs`. Its options are wunderland's, with `extensionOverrides.<name>.options` laid over them key by key and `extensionOverrides.<name>.priority` passed as `options.priority`, the priority of every descriptor the pack registers; `"enabled": false` there skips it.
 
 | Name | Package | Options wunderland gives it | Secret |
 |---|---|---|---|
@@ -181,7 +181,9 @@ The endpoint serves all 22 tools, and its calls are not the agent's turns: `tool
 }
 ```
 
-Code: `src/cli/extensions/package-packs.ts`.
+With `lazyTools` no pack loads at startup, and the model loads this one as it loads a curated pack: `extensions_enable` with `wildweave-film`, or with `@framers/agentos-ext-wildweave-film` and `"source": "package"`. `extensions_list` names it under `packagePacks`. It loads with the same options, overrides, key and endpoint token as at startup, and `extensions_enable` refuses `options` of its own for it, since a `baseUrl` from the model would send the studio key to another host. The permission set, the tool access profile and `tools.allow` narrow its tools as they do at startup (the dropped ones are in the answer's `toolsBlockedByPolicy`), and the endpoint is mounted only when they keep all 22 (`httpEndpoint` in the answer: `mounted` or `not_mounted`); with no token stored it is `not_mounted` and the answer's `note` names the secret to set. With `tools.allow`, the model needs `extensions_enable` in `tools.allow.tools` and the pack in `tools.allow.packs`. Only `start` loads it this way: `chat`, the API server and `createWunderland` answer `Unknown extension` for it (`Unknown extension package` by its package name), whatever their `extensionOverrides` say.
+
+Code: `src/cli/extensions/package-packs.ts`; under `lazyTools`, `src/runtime/execution/schema-on-demand.ts`.
 
 ## Execution Modes (Human In The Loop)
 
