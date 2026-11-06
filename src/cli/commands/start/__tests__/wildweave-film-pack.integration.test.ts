@@ -293,6 +293,28 @@ describe('wunderland start with the WildWeave film studio pack', () => {
     }
   }, LOAD_TIMEOUT_MS);
 
+  it('keeps its 22 tools and mounts no endpoint when the stored token is shorter than 32 characters', async () => {
+    // The pack refuses to load with an endpoint token of another form; start leaves the endpoint off instead.
+    const ctx = await loadWildweaveFilm({ secrets: { 'wildweave.studio.http_token': 'too-short-token' } });
+    try {
+      expect([...ctx.toolMap.keys()].filter((name) => name.startsWith('wildweave_film_'))).toHaveLength(22);
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
+      const server = startServer(ctx);
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+      try {
+        const { port } = server.address() as AddressInfo;
+        expect((await post(port, MCP_PATH, INITIALIZE, { authorization: 'Bearer too-short-token' })).status).toBe(404);
+      } finally {
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        });
+      }
+    } finally {
+      await Promise.allSettled((ctx.activePacks ?? []).map((pack: any) => pack?.onDeactivate?.()));
+    }
+  }, LOAD_TIMEOUT_MS);
+
   it('mounts the endpoint with the token from WILDWEAVE_STUDIO_HTTP_TOKEN, answering 401 without it', async () => {
     process.env['WILDWEAVE_STUDIO_HTTP_TOKEN'] = TOKEN;
     const ctx = await loadWildweaveFilm();
@@ -472,6 +494,22 @@ describe('wunderland start with lazyTools and the WildWeave film studio pack', (
       expect(result.output.httpEndpoint).toBe('not_mounted');
       expect(result.output.note).toContain('wildweave.studio.http_token');
       expect(result.output.note).toContain('WILDWEAVE_STUDIO_HTTP_TOKEN');
+      expect(ctx.loadedHttpHandlers).toHaveLength(0);
+    } finally {
+      await deactivateAll(ctx);
+    }
+  }, LOAD_TIMEOUT_MS);
+
+  it('keeps its 22 tools, mounts no endpoint and notes the length alone when the stored token is too short', async () => {
+    const ctx = await loadWildweaveFilm({ secrets: { 'wildweave.studio.http_token': 'too-short-token' } }, { lazyTools: true });
+    try {
+      const result = await enable(ctx, { extension: 'wildweave-film' });
+      expect(result.success).toBe(true);
+      expect(result.output.toolsAdded).toHaveLength(22);
+      expect(result.output.httpEndpoint).toBe('not_mounted');
+      expect(result.output.note).toContain('wildweave.studio.http_token');
+      expect(result.output.note).toContain('15 characters');
+      expect(JSON.stringify(result)).not.toContain('too-short-token');
       expect(ctx.loadedHttpHandlers).toHaveLength(0);
     } finally {
       await deactivateAll(ctx);

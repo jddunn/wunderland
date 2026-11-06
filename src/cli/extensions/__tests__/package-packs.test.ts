@@ -48,6 +48,30 @@ describe('packagePackEntries', () => {
     }
   });
 
+  it('leaves the endpoint off, keeping the pack, with a note giving the length alone, when the stored token is too short or of another form', () => {
+    // The pack refuses to load (all 22 tools with it) when http.token is not 32 or more b64token characters.
+    for (const bad of ['short-token', 'a'.repeat(31), `${'b'.repeat(40)} with spaces`, `${'c'.repeat(40)}!`]) {
+      const [entry] = packagePackEntries(['wildweave-film'], {}, secretsOf({ 'wildweave.studio.http_token': bad }).read);
+      expect(entry!.options).toEqual({ baseUrl: 'https://wilds.ai', http: null });
+      expect(entry!.note).toContain('wildweave.studio.http_token');
+      expect(entry!.note).toContain('WILDWEAVE_STUDIO_HTTP_TOKEN');
+      expect(entry!.note).toContain(`${bad.trim().length} characters`);
+      expect(entry!.note).not.toContain(bad);
+    }
+    // 32 characters is the least the pack takes, and trailing = are part of the form.
+    const [least] = packagePackEntries(['wildweave-film'], {}, secretsOf({ 'wildweave.studio.http_token': `${'e'.repeat(32)}==` }).read);
+    expect(least!.options['http']).toEqual({ path: '/mcp/wildweave-film', token: `${'e'.repeat(32)}==` });
+    expect(least!.note).toBeUndefined();
+  });
+
+  it("leaves the endpoint off with a note naming the override's option, not its value, when the override gives a token of another form", () => {
+    const bad = 'override-short';
+    const [entry] = packagePackEntries(['wildweave-film'], { 'wildweave-film': { options: { http: { path: '/mcp/studio', token: bad } } } });
+    expect(entry!.options['http']).toBeNull();
+    expect(entry!.note).toContain('extensionOverrides.wildweave-film.options.http.token');
+    expect(entry!.note).not.toContain(bad);
+  });
+
   it("lays the agent's override options over wunderland's, key by key, and passes its priority as options.priority", () => {
     const [entry] = packagePackEntries(
       ['wildweave-film'],
