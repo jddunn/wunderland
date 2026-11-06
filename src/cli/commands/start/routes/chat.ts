@@ -37,6 +37,7 @@ import { buildOllamaRuntimeOptions } from '../../../../runtime/tools/ollama-opti
 import { allowedToolNamesFor } from '../../../../runtime/tools/tool-allow-list.js';
 import { startReportedTurn } from '../hosted-events.js';
 import { replaceReplyInHistory, reportGuardEvents, visibleReplyText } from '../guardrail-packs.js';
+import { chatGuardPlace } from '../guard-place.js';
 import { askRemoteApproval, outwardApprovalFor } from '../remote-approvals.js';
 
 import {
@@ -137,14 +138,17 @@ export async function handleChatRoutes(
 
   /* ── Guardrail packs: the message, before any model sees it ─────────────── */
   /* The research classifier below calls a model, so this comes first. A block
-   * answers with the guard's message; the message enters no history. */
+   * answers with the guard's message; the message enters no history. The
+   * metadata carries the `country` and `locale` the host names in the body,
+   * on the message and on the reply. */
+  const guardPlace = chatGuardPlace(parsed);
   let inputGuardEvents = [];
   if (turnGuardrails) {
     const verdict = await turnGuardrails.checkInput(message, {
       userId: sessionId,
       sessionId,
       personaId: activePersonaId,
-      metadata: { channel: 'http' },
+      metadata: { channel: 'http', ...guardPlace },
     });
     if (verdict.blocked) {
       const blockedTurn = startReportedTurn(eventsReporter);
@@ -527,7 +531,7 @@ export async function handleChatRoutes(
             userId: sessionId,
             sessionId,
             personaId: requestActivePersonaId,
-            metadata: { channel: 'http' },
+            metadata: { channel: 'http', ...guardPlace },
           });
           reportGuardEvents(reportedTurn, verdict.events);
           if (verdict.text !== visible) {

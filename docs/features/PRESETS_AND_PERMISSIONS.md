@@ -128,6 +128,17 @@ npm install @framers/agentos-ext-self-harm-referral
 - **The message, before any model.** The guards judge the person's message first, ahead of capability discovery, the research classifier and the turn's model. A block answers the person with the guard's message (its `replacementText`; a guard that gives none answers `I can't help with that.`), and the message goes to no model and into no conversation history. A guard that rewrites the message (a sanitizer) sends the rewritten text on.
 - **The reply, before the person.** The guards judge the reply the model wrote. A block puts the guard's message in its place, in the history too, so no word of the refused reply reaches the person or the next turn's model.
 - **Events.** A verdict that carries `referral_sent` goes out on the turn through the [hosted events](OBSERVABILITY.md#hosted-events) reporter, with `code` `input` or `output` and none of the person's or the model's words.
+- **Where the person is.** The guard context's `metadata` names the person's place where the turn gives one, on the message and on the reply alike. `start` itself reads it nowhere else, and no event carries it.
+
+| Turn | `metadata` |
+|---|---|
+| A Telegram message | `{ "platform": "telegram", "conversationType": "direct", "locale": "en-AU" }`, the sender's [`language_code`](https://core.telegram.org/bots/api#user) |
+| A Discord slash command | `{ "platform": "discord", "conversationType": "group", "locale": "en-CA" }`, the invoking user's [`locale`](https://docs.discord.com/developers/interactions/receiving-and-responding) |
+| A plain Discord message | `{ "platform": "discord", "conversationType": "group" }`. Discord sends no locale of the sender's with a message, and the server's `guild_locale` is not the person's, so it is not read |
+| `POST /chat` | `{ "channel": "http", "country": "NZ", "locale": "en-NZ" }`, as the host names them in the [request body](#runtime-request-overrides-post-chat) |
+| A webhook's turn | `{ "source": "<the webhook>" }`, with no person to place |
+
+A `country` is two letters, passed in upper case. A `locale` is 2 to 35 letters, digits, `-` or `_`. A value of any other shape is dropped, so `"country": "Germany"` names no country. The self-harm referral pack reads `country`, then the region of `locale` (`en-AU` names Australia, `en` names no country), and leads its referral with that country's crisis lines and closes with its emergency number. A turn with no place, or one in a country its table does not hold, gets its default lines and the sentence that names no emergency number.
 
 The checks run through AgentOS's guardrail dispatcher (`evaluateInputGuardrails` and `wrapOutputGuardrails` from `@framers/agentos/safety/guardrails`). A guard that throws or times out is handled by its own `failClosed` setting; a check that fails as a whole blocks.
 
@@ -149,7 +160,7 @@ The checks run through AgentOS's guardrail dispatcher (`evaluateInputGuardrails`
 
 `--no-guardrails` and `--guardrails=` choose the security tier's packs (PII redaction, ML classifiers, topicality, code safety, grounding). They do not remove a pack the agent config names.
 
-Code: `src/cli/commands/start/guardrail-packs.ts`.
+Code: `src/cli/commands/start/guardrail-packs.ts`; the place, `src/cli/commands/start/guard-place.ts`.
 
 ## Packs Outside the Registry (`wildweave-film`)
 
@@ -451,12 +462,15 @@ For `wunderland start` and `createWunderlandServer()`, `/chat` accepts optional 
   "message": "Summarize latest updates",
   "sessionId": "customer-42",
   "tenantId": "acme",
-  "toolFailureMode": "fail_closed"
+  "toolFailureMode": "fail_closed",
+  "country": "NZ",
+  "locale": "en-NZ"
 }
 ```
 
 - `tenantId` affects KPI scope when `taskOutcomeTelemetry.scope` includes tenant dimensions.
 - `toolFailureMode` overrides runtime default for that request only.
+- `country` and `locale` say where the person is. `wunderland start` passes them to its [guardrail packs](#guardrail-packs-extensionsguardrails) in the guard context's `metadata`, on the message and on the reply. A host that knows the person's country (a billing country, say) names it here. `country` takes two letters and `locale` a language tag; a value of any other shape is dropped.
 
 ## Troubleshooting
 
