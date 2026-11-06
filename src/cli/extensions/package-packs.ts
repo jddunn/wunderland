@@ -102,6 +102,21 @@ export function takePackagePacks(names: readonly string[]): { packagePacks: stri
   return { packagePacks, rest };
 }
 
+/** The least length of a package pack's HTTP endpoint token, as the packs check it. */
+export const HTTP_TOKEN_MIN_LENGTH = 32;
+
+/** RFC 6750's `b64token`: letters, digits, `-._~+/`, then any `=`. */
+const HTTP_TOKEN_FORM = /^[A-Za-z0-9\-._~+/]+=*$/;
+
+/**
+ * Whether `token` is one a package pack's HTTP endpoint takes: 32 or more
+ * `b64token` characters. The pack refuses to load, tools and all, with any
+ * other, so wunderland leaves the endpoint off instead of passing it.
+ */
+export function isHttpToken(token: string): boolean {
+  return token.length >= HTTP_TOKEN_MIN_LENGTH && HTTP_TOKEN_FORM.test(token);
+}
+
 /** A plain object, not an array or null. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -115,9 +130,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  *
  * A pack whose HTTP endpoint asks for a bearer token (`httpTokenSecret`) gets
  * the token read through `getSecret` as `http.token`, unless the override
- * gives one. With none, its `http` is `null`, so the pack loads its tools
- * without the endpoint (it refuses to load with `http` and no token), and the
- * entry's `note` says why.
+ * gives one. With none, or one that is not 32 or more `b64token` characters,
+ * its `http` is `null`, so the pack loads its tools without the endpoint (it
+ * refuses to load with `http` and no such token), and the entry's `note` says
+ * why, naming where the token is set and its length, never its value.
  */
 export function packagePackEntries(
   names: readonly string[],
@@ -139,13 +155,21 @@ export function packagePackEntries(
     const options: Record<string, unknown> = { ...pack.options, ...extra };
     let note: string | undefined;
     const http = options['http'];
-    if (pack.httpTokenSecret && isRecord(http) && http['token'] === undefined) {
-      const token = getSecret?.(pack.httpTokenSecret)?.trim();
-      if (token) {
+    if (pack.httpTokenSecret && isRecord(http)) {
+      const fromOverride = http['token'] !== undefined;
+      const given = fromOverride ? http['token'] : getSecret?.(pack.httpTokenSecret);
+      const token = typeof given === 'string' ? given.trim() : '';
+      const where = fromOverride
+        ? `extensionOverrides.${name}.options.http.token`
+        : `the secret ${pack.httpTokenSecret} (${secretIdToEnvVar(pack.httpTokenSecret)})`;
+      if (isHttpToken(token)) {
         options['http'] = { ...http, token };
       } else {
+        // The pack throws on a missing token or one of another form, and every tool goes with it.
         options['http'] = null;
-        note = `${name}: HTTP endpoint not mounted; set the secret ${pack.httpTokenSecret} (${secretIdToEnvVar(pack.httpTokenSecret)}) to a token of 32 or more characters, such as \`openssl rand -hex 32\` writes`;
+        note = token
+          ? `${name}: HTTP endpoint not mounted; ${where} holds ${token.length} characters, not a token of ${HTTP_TOKEN_MIN_LENGTH} or more letters, digits or the characters -._~+/ (then any =); set it to one such as \`openssl rand -hex 32\` writes`
+          : `${name}: HTTP endpoint not mounted; set ${where} to a token of ${HTTP_TOKEN_MIN_LENGTH} or more characters, such as \`openssl rand -hex 32\` writes`;
       }
     }
     // The loader hands the pack its options alone: the priority goes there.
