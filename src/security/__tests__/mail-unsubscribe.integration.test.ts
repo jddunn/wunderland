@@ -12,7 +12,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { createTransport } from 'nodemailer';
@@ -181,6 +181,37 @@ describe('the unsubscribe route', () => {
     expect(result.allowed).toBe(false);
     expect(sent).toHaveLength(1);
     expect(readFileSync(suppressionFile, 'utf8')).not.toMatch(/example\.test/i);
+  });
+
+  it('reads the suppression list again before each recipient', async () => {
+    const { sent, transport } = captureTransport();
+    // The second address unsubscribes while the first one's email is being delivered.
+    const unsubscribedDuringDelivery = {
+      async sendMail(message) {
+        const info = await transport.sendMail(message);
+        if (sent.length === 1) await suppressMailRecipients(['second@example.test'], { suppressionFile });
+        return info;
+      },
+    };
+
+    await guardrailsSendingTo('first@example.test, second@example.test', unsubscribedDuringDelivery).validateBeforeExecution(
+      CRITICAL_READ,
+    );
+
+    expect(sent.map((mail) => mail.to)).toEqual(['first@example.test']);
+  });
+
+  it('keeps an unsubscribe that follows a line a crash cut short', async () => {
+    await serve();
+    const { sent, transport } = captureTransport();
+    await guardrailsSendingTo('security@example.test', transport).validateBeforeExecution(CRITICAL_READ);
+    writeFileSync(suppressionFile, '{"v":1,"op":"suppress","address":"ab');
+
+    expect((await fetch(local(sent[0].link), oneClick)).status).toBe(200);
+
+    expect(await isMailRecipientSuppressed('security@example.test', { suppressionFile })).toBe(true);
+    expect(await suppressMailRecipients(['ops@example.test'], { suppressionFile })).toBe(1);
+    expect(await isMailRecipientSuppressed('ops@example.test', { suppressionFile })).toBe(true);
   });
 
   it('stops only the address whose link was used, whatever its case or display name', async () => {

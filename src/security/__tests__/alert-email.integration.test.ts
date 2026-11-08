@@ -185,6 +185,33 @@ describe('security alert emails', () => {
     expect(sent.map((mail) => mail.header('to'))).toEqual(['allowed@example.test']);
   });
 
+  it('still mails the other recipients when one is refused, and reports the refusal', async () => {
+    const { sent, transport } = captureTransport();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const refusing = {
+      async sendMail(message) {
+        if (String(message.to).includes('refused@')) throw new Error('550 mailbox unavailable');
+        return transport.sendMail(message);
+      },
+    };
+    const manager = new NotificationManager({
+      enableConsoleWarnings: false,
+      emailConfig: {
+        to: 'refused@example.test, ops@example.test',
+        transport: refusing,
+        unsubscribeUrl: UNSUBSCRIBE_URL,
+        unsubscribeSecret: SECRET,
+        suppressionFile,
+      },
+    });
+
+    const result = await manager.testNotifications();
+
+    expect(sent.map((mail) => mail.header('to'))).toEqual(['ops@example.test']);
+    expect(result.email.success).toBe(false);
+    expect(result.email.error).toMatch(/550 mailbox unavailable/);
+  });
+
   it('refuses to send without an https unsubscribe address', async () => {
     const { sent, transport } = captureTransport();
     for (const unsubscribeUrl of [undefined, 'http://alerts.example.test/mail/unsubscribe', 'https://alerts.example.test/u?x=1']) {
