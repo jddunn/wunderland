@@ -79,6 +79,9 @@ const ENV_DO_NOT_CONTACT = 'WUNDERLAND_MAIL_DO_NOT_CONTACT';
 const KEY_FILE_NAME = 'mail-unsubscribe.key';
 const MIN_SECRET_LENGTH = 32;
 
+/** The largest append to the suppression list, well under Node's 512 KiB write piece. */
+const APPEND_PIECE_BYTES = 64 * 1024;
+
 const TOKEN_VERSION = 1;
 const TOKEN_SALT = Buffer.from('wunderland mail unsubscribe', 'utf8');
 const TOKEN_INFO = Buffer.from('token key v1', 'utf8');
@@ -370,13 +373,24 @@ async function appendSuppressionLines(
   const file = resolveSuppressionFile(options);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   const at = new Date().toISOString();
-  // The batch starts on a line of its own: a last line that a crash cut short
-  // ends without a newline and would otherwise swallow the first new entry.
-  // The reader skips the blank lines this leaves.
-  const text = `\n${hashes
-    .map((address) => `${JSON.stringify({ v: 1, op, address, at, source } satisfies SuppressionLine)}\n`)
-    .join('')}`;
-  await appendFile(file, text, { mode: 0o600 });
+  // Node writes a file in pieces of at most 512 KiB, one write call each, and
+  // another process's append can land between two of them, in the middle of a
+  // line. So a large batch goes out as several appends of whole lines, each
+  // small enough to reach the file in one write call; an append's single
+  // write is never split, so another writer's lines land only between whole
+  // lines. Each append starts on a line of its own: a last line that a crash
+  // cut short ends without a newline and would otherwise swallow the first
+  // new entry. The reader skips the blank lines this leaves.
+  let piece = '\n';
+  for (const address of hashes) {
+    const line = `${JSON.stringify({ v: 1, op, address, at, source } satisfies SuppressionLine)}\n`;
+    if (piece.length > 1 && Buffer.byteLength(piece) + Buffer.byteLength(line) > APPEND_PIECE_BYTES) {
+      await appendFile(file, piece, { mode: 0o600 });
+      piece = '\n';
+    }
+    piece += line;
+  }
+  await appendFile(file, piece, { mode: 0o600 });
 }
 
 /**
