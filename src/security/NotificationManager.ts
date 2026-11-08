@@ -5,11 +5,32 @@
  *
  * Sends notifications for high-severity permission violations via:
  * - Webhooks (HTTP POST)
- * - Email (SMTP)
+ * - Email (SMTP, or any nodemailer transporter)
  * - Console warnings (fallback)
+ *
+ * Every email goes to one recipient, ends with an Unsubscribe link and carries
+ * `List-Unsubscribe` and `List-Unsubscribe-Post` (RFC 8058). Before each send
+ * the suppression list and the do-not-contact addresses are read, and a
+ * listed address gets nothing. Without an https unsubscribe address no email
+ * is sent. The link, the list and the route are in `mail-unsubscribe.ts`.
  */
 
 import type { PermissionViolation } from './SafeGuardrails.js';
+import {
+  createUnsubscribeToken,
+  dkimSigningUnsubscribeHeaders,
+  hashMailAddress,
+  normalizeMailAddress,
+  readSuppressedAddressHashes,
+  resolveDoNotContact,
+  resolveUnsubscribeSecret,
+  resolveUnsubscribeUrl,
+  splitMailRecipients,
+  unsubscribeFooter,
+  unsubscribeHeaders,
+  unsubscribeLink,
+  type MailUnsubscribeOptions,
+} from './mail-unsubscribe.js';
 
 /**
  * Webhook configuration
@@ -21,15 +42,35 @@ export interface WebhookConfig {
 }
 
 /**
- * Email configuration
+ * Email configuration. The unsubscribe settings it inherits decide where the
+ * links point (`unsubscribeUrl`, required to send), how they are sealed
+ * (`unsubscribeSecret`), where the suppression list lives (`suppressionFile`)
+ * and which addresses are never mailed (`doNotContact`).
  */
-export interface EmailConfig {
+export interface EmailConfig extends MailUnsubscribeOptions {
+  /** Recipients, separated by commas. Each gets an email of its own with its own unsubscribe link. */
   to: string;
+  /** Sender address. Default: `SMTP_FROM`, else `security@wunderland.sh`. */
   from?: string;
+  /** SMTP host. Default: `SMTP_HOST`. */
   smtpHost?: string;
+  /** SMTP port; 465 connects with TLS. Default: `SMTP_PORT`, else 587. */
   smtpPort?: number;
+  /** SMTP user. Default: `SMTP_USER`. */
   smtpUser?: string;
+  /** SMTP password. Default: `SMTP_PASS`. */
   smtpPass?: string;
+  /**
+   * A nodemailer transporter, or anything with the same `sendMail`, to send
+   * through instead of the SMTP settings (SES, a pooled connection, a test transport).
+   */
+  transport?: { sendMail(message: Record<string, unknown>): Promise<unknown> };
+  /**
+   * nodemailer DKIM options (`domainName`, `keySelector`, `privateKey`, ...)
+   * applied to each email, with List-Unsubscribe and List-Unsubscribe-Post
+   * added to the signed headers, as RFC 8058 section 4 requires.
+   */
+  dkim?: Record<string, unknown>;
 }
 
 /**
@@ -185,8 +226,11 @@ Time: ${violation.timestamp.toISOString()}
   /**
    * Send email notification
    *
-   * Note: This is a basic implementation. For production, use a proper
-   * email service like SendGrid, AWS SES, or Mailgun.
+   * Sends one email per recipient, each with its own unsubscribe link and the
+   * one-click headers. Skips an address on the suppression list or the
+   * do-not-contact list, and sends nothing without an https unsubscribe
+   * address. With no transport and no SMTP host and user, the email is only
+   * written to the console.
    */
   private async sendEmail(
     to: string,
@@ -197,31 +241,87 @@ Time: ${violation.timestamp.toISOString()}
       console.warn('Email config not set, skipping email notification');
       return { success: false, error: 'Email config not set' };
     }
+    const config = this.emailConfig;
 
     try {
-      const smtpHost = (this as any).emailConfig?.smtpHost ?? process.env.SMTP_HOST;
-      const smtpPort = (this as any).emailConfig?.smtpPort ?? process.env.SMTP_PORT ?? 587;
-      const smtpUser = (this as any).emailConfig?.smtpUser ?? process.env.SMTP_USER;
-      const smtpPass = (this as any).emailConfig?.smtpPass ?? process.env.SMTP_PASS;
-      const fromAddress = (this as any).emailConfig?.from ?? process.env.SMTP_FROM ?? 'security@wunderland.sh';
+      const smtpHost = config.smtpHost ?? process.env.SMTP_HOST;
+      const smtpPort = config.smtpPort ?? process.env.SMTP_PORT ?? 587;
+      const smtpUser = config.smtpUser ?? process.env.SMTP_USER;
+      const smtpPass = config.smtpPass ?? process.env.SMTP_PASS;
+      const fromAddress = config.from ?? process.env.SMTP_FROM ?? 'security@wunderland.sh';
 
-      if (smtpHost && smtpUser) {
-        const { createTransport } = await import('nodemailer');
-        const transporter = createTransport({
-          host: smtpHost,
-          port: Number(smtpPort),
-          secure: Number(smtpPort) === 465,
-          auth: { user: smtpUser, pass: smtpPass },
-        });
-        await transporter.sendMail({ from: fromAddress, to, subject, text: body });
-        console.log(`[EMAIL] Sent to ${to}: ${subject}`);
-        return { success: true };
-      } else {
+      if (!config.transport && !(smtpHost && smtpUser)) {
         console.log(`[EMAIL NOTIFICATION] (SMTP not configured — logging only)`);
         console.log(`To: ${to} | Subject: ${subject}`);
         console.log(`Body:\n${body}`);
         return { success: true };
       }
+
+      // Every email carries a link that works, so without an address for it nothing is sent.
+      const unsubscribe = resolveUnsubscribeUrl(config);
+      if ('problem' in unsubscribe) {
+        console.warn(`[EMAIL] Not sent: ${unsubscribe.problem}`);
+        return { success: false, error: `Email not sent: ${unsubscribe.problem}` };
+      }
+
+      // Read before every send, so an address unsubscribed a moment ago gets nothing.
+      const suppressed = await readSuppressedAddressHashes(config);
+      const doNotContact = resolveDoNotContact(config);
+      const skipped: string[] = [];
+      let transporter = config.transport;
+      let secret: string | undefined;
+      let sent = 0;
+
+      for (const recipient of splitMailRecipients(to)) {
+        const address = normalizeMailAddress(recipient);
+        if (!address) {
+          skipped.push('not an email address');
+          continue;
+        }
+        if (doNotContact.has(address)) {
+          skipped.push('on the do-not-contact list');
+          continue;
+        }
+        if (suppressed.has(hashMailAddress(address))) {
+          skipped.push('unsubscribed');
+          continue;
+        }
+
+        secret ??= await resolveUnsubscribeSecret(config);
+        if (!transporter) {
+          const { createTransport } = await import('nodemailer');
+          transporter = createTransport({
+            host: smtpHost,
+            port: Number(smtpPort),
+            secure: Number(smtpPort) === 465,
+            auth: { user: smtpUser, pass: smtpPass },
+          });
+        }
+
+        const link = unsubscribeLink(unsubscribe.url, createUnsubscribeToken(address, secret));
+        await transporter.sendMail({
+          from: fromAddress,
+          to: recipient,
+          subject,
+          text: `${body}\n\n${unsubscribeFooter(link)}\n`,
+          headers: unsubscribeHeaders(link),
+          ...(config.dkim ? { dkim: dkimSigningUnsubscribeHeaders(config.dkim) } : {}),
+        });
+        sent += 1;
+      }
+
+      const reasons = [...new Set(skipped)].join(', ');
+      if (skipped.length > 0) {
+        console.warn(`[EMAIL] Skipped ${skipped.length} recipient(s): ${reasons}`);
+      }
+      if (sent === 0) {
+        return {
+          success: false,
+          error: `No email sent: ${reasons ? `every recipient was skipped (${reasons})` : 'no recipients'}`,
+        };
+      }
+      console.log(`[EMAIL] Sent to ${sent} recipient(s): ${subject}`);
+      return { success: true };
     } catch (err) {
       console.error('Failed to send email notification:', err);
       return {

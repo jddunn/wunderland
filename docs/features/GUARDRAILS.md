@@ -397,21 +397,75 @@ export WUNDERLAND_VIOLATION_WEBHOOKS="https://hooks.slack.com/...,https://discor
 
 ### Email Notifications
 
+Every alert email goes to one recipient and ends with an Unsubscribe link. It also carries the two headers mail clients use for their own unsubscribe button (RFC 8058):
+
+```text
+List-Unsubscribe: <https://agents.example.com/mail/unsubscribe/Ae3f...>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+```
+
 **Configuration:**
 ```typescript
+import { SafeGuardrails } from 'wunderland/security';
+
 const guardrails = new SafeGuardrails({
   emailConfig: {
-    to: 'security@example.com',
+    to: 'security@example.com',            // several recipients: separate them with commas
     from: 'wunderland@example.com',
     smtpHost: 'smtp.example.com',
     smtpPort: 587,
     smtpUser: 'your-smtp-user',
     smtpPass: 'your-smtp-password',
+    unsubscribeUrl: 'https://agents.example.com/mail/unsubscribe',
   },
 });
 ```
 
-**Note:** Email integration requires SMTP configuration. Use a service like SendGrid, AWS SES, or Mailgun for production.
+Without an https `unsubscribeUrl` (or `WUNDERLAND_MAIL_UNSUBSCRIBE_URL`) no email is sent: the console says `[EMAIL] Not sent: no unsubscribe address ...`, and webhooks and the audit log are unaffected. With no SMTP host and user and no `transport`, the alert is written to the console instead, as before.
+
+**Serve the unsubscribe links** on the host and path `unsubscribeUrl` names. `createMailUnsubscribeHandler` takes Node's request and response, so it mounts on a `node:http` server, Express or Nest:
+
+```typescript
+import { createServer } from 'node:http';
+import { createMailUnsubscribeHandler } from 'wunderland/security';
+
+const unsubscribe = createMailUnsubscribeHandler({
+  unsubscribeUrl: 'https://agents.example.com/mail/unsubscribe',
+});
+
+createServer(async (req, res) => {
+  if (await unsubscribe(req, res)) return;
+  // ...the rest of your routes
+}).listen(8080);
+```
+
+| Request to `<path>/<token>` | Answer |
+|---|---|
+| GET or HEAD | A page that asks, with an Unsubscribe button. Nothing changes, so a link scanner that opens the link unsubscribes no one. |
+| POST (the mail client's one-click request, or the page's button) | The address goes on the suppression list at once and the next alert skips it. No confirmation email is sent. |
+| A token this deployment did not issue | 404 |
+| The suppression list cannot be written | 503, so the client tries again |
+| Any other method | 405 |
+
+Paths other than `<path>/<token>` resolve `false` and are left to your server. Behind a proxy that rewrites paths, pass `basePath` with the path the request arrives at.
+
+**How the link works.** The token is the recipient's address sealed with AES-256-GCM under a key derived from the unsubscribe secret: a reader of the link cannot tell whose it is, it works for that one address, and it can only unsubscribe it. The secret is `unsubscribeSecret` or `WUNDERLAND_MAIL_UNSUBSCRIBE_SECRET` (32 characters or more); without one, a key is generated once into `mail-unsubscribe.key` beside the suppression list, with mode 0600. Changing the secret voids every link already sent. When the process that sends alerts and the server that answers the links run on different machines, give both the same secret and the same suppression list.
+
+**The suppression list** is `~/.wunderland/security/mail-suppressions.jsonl` unless `suppressionFile` or `WUNDERLAND_MAIL_SUPPRESSION_FILE` names another. It keeps SHA-256 hashes of the addresses, never the addresses, and it is read before every send. Addresses in `doNotContact` or `WUNDERLAND_MAIL_DO_NOT_CONTACT` (separated by commas) are never mailed either. To act on a request made outside the link, or to send the alerts to someone again:
+
+```typescript
+import { isMailRecipientSuppressed, resumeMailRecipient, suppressMailRecipients } from 'wunderland/security';
+
+await suppressMailRecipients(['former-admin@example.com']);
+await resumeMailRecipient('former-admin@example.com');   // after that person asks for the alerts again
+await isMailRecipientSuppressed('security@example.com');
+```
+
+**DKIM.** RFC 8058 section 4 asks for a DKIM signature that covers both list headers. When your mail server or relay signs, check the `h=` list of a received alert's `DKIM-Signature`. To sign in this process, pass nodemailer's DKIM options as `dkim` in `emailConfig`: both headers are added to the signed list, which nodemailer's default list of signed headers does not complete on its own (it holds `List-Unsubscribe` but not `List-Unsubscribe-Post`).
+
+**Other transports.** `transport` takes a nodemailer transporter, or anything with the same `sendMail`, in place of the SMTP settings. nodemailer is not a dependency of this package: install it beside it to send through SMTP.
+
+These alerts tell the people who run a deployment about its agents. They carry no advertisement or promotion, so they are not commercial email under CAN-SPAM's primary-purpose rule (16 CFR 316.3), and their footer says why the recipient gets them.
 
 ---
 
@@ -597,6 +651,8 @@ const guardrails = new SafeGuardrails({
    ```typescript
    // Notifications only sent for severity === 'high' || severity === 'critical'
    ```
+
+4. For email, check that `unsubscribeUrl` is an https address with no query string, and that the recipient is not on the suppression list or the do-not-contact list. The console says which: `[EMAIL] Not sent: ...` or `[EMAIL] Skipped 1 recipient(s): unsubscribed`.
 
 ---
 

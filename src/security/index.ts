@@ -43,6 +43,18 @@ export {
 // Safe Guardrails
 export { SafeGuardrails, type SafeGuardrailsConfig } from './SafeGuardrails.js';
 
+// Security alert emails: their settings, the unsubscribe route and the suppression list
+export type { EmailConfig } from './NotificationManager.js';
+export {
+  createMailUnsubscribeHandler,
+  isMailRecipientSuppressed,
+  resumeMailRecipient,
+  suppressMailRecipients,
+  type MailUnsubscribeHandler,
+  type MailUnsubscribeHandlerOptions,
+  type MailUnsubscribeOptions,
+} from './mail-unsubscribe.js';
+
 // Audit Logging
 export {
   AuditLogger,

@@ -426,7 +426,7 @@ The diagnostics object includes:
 | `wunderland/tools` | Tool factories (`createWunderlandTools`, `createMemoryReadTool`, `createFeedSearchTool`) and the tool-access helpers (`getToolAccessProfile`, `resolveAllowedTools`, `isToolAllowedByProfile`, `isValidToolAccessProfile`, `describePermissions`, `TOOL_CATEGORY_MAP`) |
 | `wunderland/rag` | `WunderlandRAGClient`, `RAGAuditPersistence`, `QueryExpander` |
 | `wunderland/jobs` | `JobScanner`, `JobExecutor`, `BidLifecycleManager`, `DeliverableManager`, `QualityChecker`, `JobMemoryService` |
-| `wunderland/security` | `SafeGuardrails`, `SignedOutputVerifier`, `IntentChainTracker`, `SECURITY_TIERS`, `AuditLogger`, `StepUpAuthorizationManager`, `ContextFirewall`, `ContextFirewallConfig`, `AgentMode`, `CitizenModeGuardrail`, the folder permission helpers and `FolderPermissionConfig` |
+| `wunderland/security` | `SafeGuardrails`, `SignedOutputVerifier`, `IntentChainTracker`, `SECURITY_TIERS`, `AuditLogger`, `StepUpAuthorizationManager`, `ContextFirewall`, `ContextFirewallConfig`, `AgentMode`, `CitizenModeGuardrail`, the folder permission helpers and `FolderPermissionConfig`, and for the alert emails `EmailConfig`, `createMailUnsubscribeHandler`, `suppressMailRecipients`, `resumeMailRecipient` and `isMailRecipientSuppressed` |
 | `wunderland/report` | `exportReport` (CSV, print-safe HTML, interactive HTML and a PDF from a row dataset), `toCsv`, `toHtml`, `toInteractiveHtml`, `renderPdf`, `ReportDataset`, `InteractiveOptions`, `PdfOptions` |
 
 ```ts

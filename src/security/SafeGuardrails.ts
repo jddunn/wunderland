@@ -21,7 +21,7 @@ import {
 } from './FolderPermissions.js';
 import type { GranularPermissions } from './SecurityTiers.js';
 import { AuditLogger } from './AuditLogger.js';
-import { NotificationManager } from './NotificationManager.js';
+import { NotificationManager, type EmailConfig } from './NotificationManager.js';
 
 // ITool interface for type hints (optional, not strictly required)
 interface ITool {
@@ -85,13 +85,12 @@ export interface SafeGuardrailsConfig {
   /** Webhook URLs for notifications */
   notificationWebhooks?: string[];
 
-  /** Email configuration for notifications */
-  emailConfig?: {
-    to: string;
-    from?: string;
-    smtpHost?: string;
-    smtpPort?: number;
-  };
+  /**
+   * Email alerts for high and critical violations. Each email carries an
+   * unsubscribe link, so `unsubscribeUrl` (or `WUNDERLAND_MAIL_UNSUBSCRIBE_URL`)
+   * must name the https address where `createMailUnsubscribeHandler` answers.
+   */
+  emailConfig?: EmailConfig;
 
   /** Enable audit logging (default: true) */
   enableAuditLogging?: boolean;
