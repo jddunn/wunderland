@@ -447,7 +447,7 @@ createServer(async (req, res) => {
 | The suppression list cannot be written | 503, so the client tries again |
 | Any other method | 405 |
 
-Paths other than `<path>/<token>` resolve `false` and are left to your server. Behind a proxy that rewrites paths, pass `basePath` with the path the request arrives at.
+Paths other than `<path>/<token>` resolve `false` and are left to your server; at the host root (`https://alerts.example.com/`) that includes every path not shaped like a token. Behind a proxy that rewrites paths, pass `basePath` with the path the request arrives at.
 
 **How the link works.** The token is the recipient's address sealed with AES-256-GCM under a key derived from the unsubscribe secret: a reader of the link cannot tell whose it is, it works for that one address, and it can only unsubscribe it. The secret is `unsubscribeSecret` or `WUNDERLAND_MAIL_UNSUBSCRIBE_SECRET` (32 characters or more); without one, a key is generated once into `mail-unsubscribe.key` beside the suppression list, with mode 0600. Changing the secret voids every link already sent. When the process that sends alerts and the server that answers the links run on different machines, give both the same secret and the same suppression list.
 

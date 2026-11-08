@@ -574,8 +574,9 @@ function resolveBasePath(options: MailUnsubscribeHandlerOptions): string {
     }
     base = resolved.url.pathname;
   }
+  // The host root is '' here, as in the links: `${base}/${token}` is then `/${token}`.
   base = base.replace(/\/+$/, '');
-  return base.startsWith('/') ? base : `/${base}`;
+  return base === '' || base.startsWith('/') ? base : `/${base}`;
 }
 
 /**
@@ -594,7 +595,8 @@ function resolveBasePath(options: MailUnsubscribeHandlerOptions): string {
  * @throws When neither `basePath` nor a usable `unsubscribeUrl` is given.
  */
 export function createMailUnsubscribeHandler(options: MailUnsubscribeHandlerOptions = {}): MailUnsubscribeHandler {
-  const prefix = `${resolveBasePath(options)}/`;
+  const base = resolveBasePath(options);
+  const prefix = `${base}/`;
 
   return async (req, res) => {
     let pathname: string;
@@ -606,6 +608,8 @@ export function createMailUnsubscribeHandler(options: MailUnsubscribeHandlerOpti
     if (!pathname.startsWith(prefix)) return false;
     const token = pathname.slice(prefix.length);
     if (!token || token.includes('/')) return false;
+    // Mounted at the host root, only a path shaped like a token is the route's.
+    if (base === '' && !TOKEN_SHAPE.test(token)) return false;
 
     // The body (the one-click form field) carries nothing the route needs.
     req.resume();
