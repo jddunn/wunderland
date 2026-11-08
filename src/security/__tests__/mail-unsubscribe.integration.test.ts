@@ -281,6 +281,22 @@ describe('the unsubscribe route', () => {
     expect(await isMailRecipientSuppressed('security@example.test', { suppressionFile })).toBe(true);
   });
 
+  it('answers links at the root of the host and leaves the host its other paths', async () => {
+    const rootUrl = 'https://alerts.example.test/';
+    await serve({ unsubscribeUrl: rootUrl });
+    const { sent, transport } = captureTransport();
+    await guardrailsSendingTo('security@example.test', transport, { unsubscribeUrl: rootUrl }).validateBeforeExecution(
+      CRITICAL_READ,
+    );
+    expect(sent[0].link).toMatch(/^https:\/\/alerts\.example\.test\/[A-Za-z0-9_-]{40,}$/);
+
+    expect((await fetch(`${origin}/health`)).status).toBe(418);
+    expect((await fetch(local(sent[0].link))).status).toBe(200);
+    expect((await fetch(local(sent[0].link), oneClick)).status).toBe(200);
+
+    expect(await isMailRecipientSuppressed('security@example.test', { suppressionFile })).toBe(true);
+  });
+
   it('lets the operator suppress and resume addresses, and the test notification reports a suppressed address', async () => {
     const { sent, transport } = captureTransport();
     const manager = new NotificationManager({
