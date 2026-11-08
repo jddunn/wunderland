@@ -21,7 +21,9 @@ import { SafeGuardrails } from '../SafeGuardrails.js';
 import { NotificationManager } from '../NotificationManager.js';
 import {
   createMailUnsubscribeHandler,
+  hashMailAddress,
   isMailRecipientSuppressed,
+  readSuppressedAddressHashes,
   resumeMailRecipient,
   suppressMailRecipients,
 } from '../mail-unsubscribe.js';
@@ -213,6 +215,30 @@ describe('the unsubscribe route', () => {
     expect(await suppressMailRecipients(['ops@example.test'], { suppressionFile })).toBe(1);
     expect(await isMailRecipientSuppressed('ops@example.test', { suppressionFile })).toBe(true);
   });
+
+  it('keeps every entry of a large import while another writer appends to the list', async () => {
+    // About 3 MB of entries, several times the size Node writes a file in at once.
+    const imported = Array.from({ length: 20_000 }, (_, i) => `imported-${i}@example.test`);
+    const others: string[] = [];
+    let importing = true;
+    const otherWriter = (async () => {
+      while (importing) {
+        const address = `other-${others.length}@example.test`;
+        others.push(address);
+        await suppressMailRecipients([address], { suppressionFile });
+      }
+    })();
+
+    const count = await suppressMailRecipients(imported, { suppressionFile }).finally(() => {
+      importing = false;
+    });
+    await otherWriter;
+
+    expect(count).toBe(imported.length);
+    const suppressed = await readSuppressedAddressHashes({ suppressionFile });
+    const lost = [...imported, ...others].filter((address) => !suppressed.has(hashMailAddress(address)));
+    expect(lost).toEqual([]);
+  }, 30_000);
 
   it('stops only the address whose link was used, whatever its case or display name', async () => {
     await serve();
