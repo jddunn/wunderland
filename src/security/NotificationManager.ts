@@ -227,7 +227,8 @@ Time: ${violation.timestamp.toISOString()}
    * Send email notification
    *
    * Sends one email per recipient, each with its own unsubscribe link and the
-   * one-click headers. Skips an address on the suppression list or the
+   * one-click headers; a refused recipient does not stop the others. Skips an
+   * address on the suppression list (read before each send) or the
    * do-not-contact list, and sends nothing without an https unsubscribe
    * address. With no transport and no SMTP host and user, the email is only
    * written to the console.
@@ -264,10 +265,9 @@ Time: ${violation.timestamp.toISOString()}
         return { success: false, error: `Email not sent: ${unsubscribe.problem}` };
       }
 
-      // Read before every send, so an address unsubscribed a moment ago gets nothing.
-      const suppressed = await readSuppressedAddressHashes(config);
       const doNotContact = resolveDoNotContact(config);
       const skipped: string[] = [];
+      const failures: string[] = [];
       let transporter = config.transport;
       let secret: string | undefined;
       let sent = 0;
@@ -282,6 +282,9 @@ Time: ${violation.timestamp.toISOString()}
           skipped.push('on the do-not-contact list');
           continue;
         }
+        // Read before each send, so an address unsubscribed a moment ago, even while an
+        // earlier recipient's email was being delivered, gets nothing.
+        const suppressed = await readSuppressedAddressHashes(config);
         if (suppressed.has(hashMailAddress(address))) {
           skipped.push('unsubscribed');
           continue;
@@ -299,20 +302,35 @@ Time: ${violation.timestamp.toISOString()}
         }
 
         const link = unsubscribeLink(unsubscribe.url, createUnsubscribeToken(address, secret));
-        await transporter.sendMail({
-          from: fromAddress,
-          to: recipient,
-          subject,
-          text: `${body}\n\n${unsubscribeFooter(link)}\n`,
-          headers: unsubscribeHeaders(link),
-          ...(config.dkim ? { dkim: dkimSigningUnsubscribeHeaders(config.dkim) } : {}),
-        });
-        sent += 1;
+        try {
+          await transporter.sendMail({
+            from: fromAddress,
+            to: recipient,
+            subject,
+            text: `${body}\n\n${unsubscribeFooter(link)}\n`,
+            headers: unsubscribeHeaders(link),
+            ...(config.dkim ? { dkim: dkimSigningUnsubscribeHeaders(config.dkim) } : {}),
+          });
+          sent += 1;
+        } catch (err) {
+          // One recipient's server refusing the email does not stop the alert to the others.
+          console.error('Failed to send email notification to one recipient:', err);
+          failures.push(err instanceof Error ? err.message : String(err));
+        }
       }
 
       const reasons = [...new Set(skipped)].join(', ');
       if (skipped.length > 0) {
         console.warn(`[EMAIL] Skipped ${skipped.length} recipient(s): ${reasons}`);
+      }
+      if (sent > 0) {
+        console.log(`[EMAIL] Sent to ${sent} recipient(s): ${subject}`);
+      }
+      if (failures.length > 0) {
+        return {
+          success: false,
+          error: `Email not delivered to ${failures.length} recipient(s): ${[...new Set(failures)].join('; ')}`,
+        };
       }
       if (sent === 0) {
         return {
@@ -320,7 +338,6 @@ Time: ${violation.timestamp.toISOString()}
           error: `No email sent: ${reasons ? `every recipient was skipped (${reasons})` : 'no recipients'}`,
         };
       }
-      console.log(`[EMAIL] Sent to ${sent} recipient(s): ${subject}`);
       return { success: true };
     } catch (err) {
       console.error('Failed to send email notification:', err);

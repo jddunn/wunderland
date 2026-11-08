@@ -370,9 +370,12 @@ async function appendSuppressionLines(
   const file = resolveSuppressionFile(options);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   const at = new Date().toISOString();
-  const text = hashes
+  // The batch starts on a line of its own: a last line that a crash cut short
+  // ends without a newline and would otherwise swallow the first new entry.
+  // The reader skips the blank lines this leaves.
+  const text = `\n${hashes
     .map((address) => `${JSON.stringify({ v: 1, op, address, at, source } satisfies SuppressionLine)}\n`)
-    .join('');
+    .join('')}`;
   await appendFile(file, text, { mode: 0o600 });
 }
 
