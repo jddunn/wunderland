@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Breaking: security alert emails carry an unsubscribe link, and need an address for it
+
+The alert emails `SafeGuardrails` sends through `emailConfig` had no unsubscribe link, no `List-Unsubscribe` header, and no way for a recipient to stop them. Now:
+
+- Each email goes to one recipient and ends with an Unsubscribe link, and carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058).
+- `createMailUnsubscribeHandler()` answers the link: a GET asks, a POST puts the address on the suppression list at once, with no confirmation email.
+- The suppression list (SHA-256 hashes, `~/.wunderland/security/mail-suppressions.jsonl` by default) and the do-not-contact addresses (`doNotContact`, `WUNDERLAND_MAIL_DO_NOT_CONTACT`) are read before every send.
+- `transport` sends through any nodemailer transporter, and `dkim` signs both list headers.
+
+Migration: set `emailConfig.unsubscribeUrl` (or `WUNDERLAND_MAIL_UNSUBSCRIBE_URL`) to an https address and mount `createMailUnsubscribeHandler()` there. Without it the alert is not emailed and the console says why; webhooks and the audit log are unchanged. `docs/features/GUARDRAILS.md` shows the setup.
+
 ### Added: `wunderland/security`, and the tool-access helpers in `wunderland/tools`
 
 The 0.72.0 migration table sends `wunderland/advanced/*` and `wunderland/security` imports to the root entry, but the root does not export the security classes or the tool-access helpers, so no public entry held them. A host that assembles agents itself imports them from here:

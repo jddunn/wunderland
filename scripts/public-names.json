@@ -4,7 +4,7 @@
     "./core": ["DEFAULT_SECURITY_PROFILE", "DEFAULT_INFERENCE_HIERARCHY", "DEFAULT_STEP_UP_AUTH_CONFIG", "normalizeHEXACOTraits"],
     "./seed": ["createWunderlandSeed"],
     "./tools": ["createWunderlandTools", "createMemoryReadTool", "createFeedSearchTool", "describePermissions", "getToolAccessProfile", "isToolAllowedByProfile", "resolveAllowedTools", "isValidToolAccessProfile", "TOOL_CATEGORY_MAP"],
-    "./security": ["SafeGuardrails", "SignedOutputVerifier", "IntentChainTracker"],
+    "./security": ["SafeGuardrails", "SignedOutputVerifier", "IntentChainTracker", "createMailUnsubscribeHandler", "suppressMailRecipients", "resumeMailRecipient", "isMailRecipientSuppressed"],
     "./rag": ["RAGAuditPersistence"],
     "./jobs": ["JobScanner", "JobExecutor", "BidLifecycleManager", "DeliverableManager", "QualityChecker", "JobMemoryService"],
     "./report": ["exportReport", "toCsv", "toHtml", "toInteractiveHtml", "renderPdf"]
