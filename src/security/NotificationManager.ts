@@ -327,10 +327,8 @@ Time: ${violation.timestamp.toISOString()}
         console.log(`[EMAIL] Sent to ${sent} recipient(s): ${subject}`);
       }
       if (failures.length > 0) {
-        return {
-          success: false,
-          error: `Email not delivered to ${failures.length} recipient(s): ${[...new Set(failures)].join('; ')}`,
-        };
+        // The transport's own words, as a single-recipient send has always reported them.
+        return { success: false, error: [...new Set(failures)].join('; ') };
       }
       if (sent === 0) {
         return {
