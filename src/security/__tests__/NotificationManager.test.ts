@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import { NotificationManager } from '../NotificationManager.js';
 
 vi.mock('nodemailer', () => ({
@@ -46,6 +48,9 @@ describe('NotificationManager', () => {
         smtpHost: 'smtp.example.com',
         smtpUser: 'mailer',
         smtpPass: 'secret',
+        unsubscribeUrl: 'https://alerts.example.com/mail/unsubscribe',
+        unsubscribeSecret: 'notification-manager-test-secret-0123456789',
+        suppressionFile: path.join(tmpdir(), `wunderland-nm-${process.pid}`, 'mail-suppressions.jsonl'),
       },
       enableConsoleWarnings: false,
     });

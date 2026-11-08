@@ -25,7 +25,13 @@ const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 /** Parsing the agentos declarations takes a while on a CI runner. */
 const COMPILE_TIMEOUT_MS = 180_000;
 
-const SECURITY_IMPORTS = `import { IntentChainTracker, SafeGuardrails, SignedOutputVerifier } from 'wunderland/security';`;
+const SECURITY_IMPORTS = `import {
+  IntentChainTracker,
+  SafeGuardrails,
+  SignedOutputVerifier,
+  createMailUnsubscribeHandler,
+  isMailRecipientSuppressed,
+} from 'wunderland/security';`;
 const TOOLS_IMPORTS = `import {
   TOOL_CATEGORY_MAP,
   createFeedSearchTool,
@@ -54,6 +60,10 @@ const profile = getToolAccessProfile('social-citizen');
 const allowed = resolveAllowedTools(profile, Object.keys(TOOL_CATEGORY_MAP));
 const feedTool = createFeedSearchTool(async () => ({ items: [{ text: 'a post' }], context: 'a post' }));
 const feed = await feedTool.execute({ query: 'posts' }, {});
+const unsubscribeRoute = createMailUnsubscribeHandler({
+  unsubscribeUrl: 'https://alerts.example.test/mail/unsubscribe',
+  unsubscribeSecret: 'consumer-unsubscribe-secret-0123456789',
+});
 
 console.log(JSON.stringify({
   signatureVerified: verifier.verifyPayload(payload, verifier.signPayload(payload)),
@@ -67,6 +77,8 @@ console.log(JSON.stringify({
   describesFilesystem: describePermissions(profile).cannot.includes('Access the file system'),
   feedToolName: feedTool.name,
   feedSucceeded: feed.success,
+  unsubscribeRouteIsHandler: typeof unsubscribeRoute === 'function',
+  readsSuppressionList: typeof isMailRecipientSuppressed === 'function',
 }));
 `;
 
@@ -74,8 +86,10 @@ const TYPED_CONSUMER = `${SECURITY_IMPORTS}
 import type {
   AgentMode,
   ContextFirewallConfig,
+  EmailConfig,
   FolderPermissionConfig,
   IntentChainEntry,
+  MailUnsubscribeHandler,
 } from 'wunderland/security';
 ${TOOLS_IMPORTS}
 
@@ -99,6 +113,17 @@ export const allowed: string[] = isValidToolAccessProfile('social-citizen')
   ? resolveAllowedTools(getToolAccessProfile('social-citizen'), Object.keys(TOOL_CATEGORY_MAP))
   : [];
 export const feedTool = createFeedSearchTool(async () => ({ items: [], context: '' }));
+
+export const alertEmail: EmailConfig = {
+  to: 'security@example.test',
+  unsubscribeUrl: 'https://alerts.example.test/mail/unsubscribe',
+  doNotContact: ['blocked@example.test'],
+};
+// @ts-expect-error unsubscribeUrl takes a string.
+export const wrongAlertEmail: EmailConfig = { to: 'security@example.test', unsubscribeUrl: 42 };
+export const alertingGuardrails: SafeGuardrails = new SafeGuardrails({ enableAuditLogging: false, emailConfig: alertEmail });
+export const unsubscribeRoute: MailUnsubscribeHandler = createMailUnsubscribeHandler({ basePath: '/mail/unsubscribe' });
+export const suppressed: Promise<boolean> = isMailRecipientSuppressed('security@example.test', { suppressionFile: '/tmp/none.jsonl' });
 `;
 
 describe('a project that installs wunderland', () => {
@@ -118,7 +143,7 @@ describe('a project that installs wunderland', () => {
     if (project) rmSync(project, { recursive: true, force: true });
   });
 
-  it('runs the security classes, the tool-access helpers and the feed search tool under plain Node', () => {
+  it('runs the security classes, the unsubscribe route, the tool-access helpers and the feed search tool under plain Node', () => {
     const run = spawnSync(process.execPath, ['consumer.mjs'], { cwd: project, encoding: 'utf8' });
 
     expect(run.status, run.stderr).toBe(0);
@@ -134,6 +159,8 @@ describe('a project that installs wunderland', () => {
       describesFilesystem: true,
       feedToolName: 'feed_search',
       feedSucceeded: true,
+      unsubscribeRouteIsHandler: true,
+      readsSuppressionList: true,
     });
   });
 
