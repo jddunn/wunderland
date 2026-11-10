@@ -809,16 +809,25 @@ Supports retrieval strategies: `'similarity'`, `'mmr'`, `'hybrid'`.
 **Reranking** is optional and provider-agnostic:
 
 ```typescript
+import { RetrievalAugmentor } from '@framers/agentos/cognition/rag';
 import { LlmJudgeReranker } from '@framers/agentos/cognition/rag/reranking';
 
-// RetrievalAugmentor config: builds a RerankerService and registers `local` and `cohere` from these entries.
-const rerankerServiceConfig = {
-  providers: [
-    { providerId: 'local' },                                     // cross-encoder in process
-    { providerId: 'cohere', apiKey: process.env.COHERE_API_KEY }, // registered only when apiKey is set
-  ],
-  defaultProviderId: 'local',
-};
+const augmentor = new RetrievalAugmentor();
+await augmentor.initialize(
+  {
+    categoryBehaviors,
+    // Builds a RerankerService and registers `local` and `cohere` from these entries.
+    rerankerServiceConfig: {
+      providers: [
+        { providerId: 'local' },                                     // cross-encoder in process
+        { providerId: 'cohere', apiKey: process.env.COHERE_API_KEY }, // registered only when apiKey is set
+      ],
+      defaultProviderId: 'local',
+    },
+  },
+  embeddingManager,
+  vectorStoreManager,
+);
 
 // The LLM judge takes your own LLM call, so you register it yourself.
 augmentor.registerRerankerProvider(
@@ -839,7 +848,7 @@ A request reranks when its `rerankerConfig.enabled` is true, or when it sets no 
 
 Model choice differs by provider. `local` and `cohere` take the request's `modelId`, else the `defaultModelId` in their provider settings, else their own default above; `local` keeps the model it loaded on its first call for later calls. `llm-judge` ignores `modelId`: its models are the strings you pass as `scoringModel` and `rankingModel`, handed to `llmCallFn` as given. AgentOS names no default for them, and with neither set `llmCallFn` receives `undefined` and your function picks the model.
 
-A provider error in `RetrievalAugmentor` leaves the retrieved order and adds a diagnostics message. `RerankerService.rerankChain()` runs several providers in stages, skips a stage whose provider is not registered or not available, and keeps the previous stage's results when a stage throws. `CognitiveMemoryManager` takes a `rerankerService`, reranks with its default provider and blends 0.7 of each trace's cognitive score with 0.3 of the rerank score, keeping the cognitive scores when reranking throws. In Wunderland, `initCliQueryRouter()` reranks the query router's chunks with a built-in lexical scorer; its `rerankerService` and `rerankChain` options replace that scorer with a `rerankChain()` pipeline, and the CLI passes neither. The full reference is AgentOS's [Reranking](https://github.com/framerslab/agentos/blob/d2725ab9566cd7a58ce4666c42d4bdb492d281fa/docs/text/RERANKING.md) page.
+A provider error in `RetrievalAugmentor` leaves the retrieved order and adds a diagnostics message. `RerankerService.rerankChain()` runs several providers in stages, skips a stage whose provider is not registered or not available, and keeps the previous stage's results when a stage throws. `CognitiveMemoryManager` takes a `rerankerService`, reranks with its default provider and blends 0.7 of each trace's cognitive score with 0.3 of the rerank score, keeping the cognitive scores when reranking throws. In Wunderland, `initCliQueryRouter()` reranks the query router's chunks with a built-in lexical scorer; its `rerankerService` and `rerankChain` options replace that scorer with a `rerankChain()` pipeline, and the CLI passes neither. The router is built once per process: the first call's options apply, and later calls return that router without reading theirs. The full reference is AgentOS's [Reranking](https://github.com/framerslab/agentos/blob/d2725ab9566cd7a58ce4666c42d4bdb492d281fa/docs/text/RERANKING.md) page.
 
 ### End-to-End Flow: New Message to Context Window
 
