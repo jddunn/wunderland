@@ -804,7 +804,51 @@ const DEFAULT_TOP_K = 5;
 const DEFAULT_MAX_CHARS_FOR_AUGMENTED_PROMPT = 4000;
 ```
 
-Supports retrieval strategies: `'similarity'`, `'hybrid'`, `'bm25'`. Optional reranking via Cohere or local CrossEncoder.
+Supports retrieval strategies: `'similarity'`, `'mmr'`, `'hybrid'`.
+
+**Reranking** is optional and provider-agnostic:
+
+```typescript
+import { RetrievalAugmentor } from '@framers/agentos/cognition/rag';
+import { LlmJudgeReranker } from '@framers/agentos/cognition/rag/reranking';
+
+const augmentor = new RetrievalAugmentor();
+await augmentor.initialize(
+  {
+    categoryBehaviors,
+    // Builds a RerankerService and registers `local` and `cohere` from these entries.
+    rerankerServiceConfig: {
+      providers: [
+        { providerId: 'local' },                                     // cross-encoder in process
+        { providerId: 'cohere', apiKey: process.env.COHERE_API_KEY }, // registered only when apiKey is set
+      ],
+      defaultProviderId: 'local',
+    },
+  },
+  embeddingManager,
+  vectorStoreManager,
+);
+
+// The LLM judge takes your own LLM call, so you register it yourself.
+augmentor.registerRerankerProvider(
+  new LlmJudgeReranker({ llmCallFn: myLlmCall, scoringModel: 'my-cheap-model', rankingModel: 'my-better-model' }),
+);
+
+// Per request: providerId picks the provider.
+await augmentor.retrieveContext(query, { rerankerConfig: { enabled: true, providerId: 'llm-judge', topN: 5 } });
+```
+
+A request reranks when its `rerankerConfig.enabled` is true, or when it sets no `rerankerConfig` and its retrieval `policy` says `reranker: 'always'`. `RerankerService` calls whichever registered provider the request names (`rerankerConfig.providerId`, else `defaultRerankerProviderId`, else the service's `defaultProviderId`) and hands it at most `maxDocuments` documents (default 100). Three providers ship with AgentOS:
+
+| Id | Class | How it scores | What leaves the machine | When it fails |
+|---|---|---|---|---|
+| `local` | [`LocalCrossEncoderReranker`](https://github.com/framerslab/agentos/blob/c46ff754e8df1ccb54f31aa24fc8fd8df5952776/src/cognition/rag/reranking/providers/LocalCrossEncoderReranker.ts) | A cross-encoder run in process through Transformers.js (`@huggingface/transformers`, else `@xenova/transformers`), one query-document pair at a time; a document's score is the classifier's score for its positive label (`LABEL_1`, `POSITIVE` or `1`), else for its first label. Default model `cross-encoder/ms-marco-MiniLM-L-6-v2`; `LOCAL_RERANKER_MODELS` lists five. | Nothing at scoring time. Transformers.js loads the model on the first call, downloading it when it is not in its cache (`cacheDir`). | Throws when neither Transformers.js package is installed. A document whose scoring throws scores 0, with a console warning. |
+| `cohere` | [`CohereReranker`](https://github.com/framerslab/agentos/blob/c46ff754e8df1ccb54f31aa24fc8fd8df5952776/src/cognition/rag/reranking/providers/CohereReranker.ts) | Cohere's rerank API; a document's score is Cohere's `relevance_score`. Default model `rerank-v3.5`; `COHERE_RERANKER_MODELS` lists seven. Needs `apiKey`. | The query, each document's full text and any request `params`, posted to `{baseUrl}/v1/rerank` (default `https://api.cohere.ai`). | Throws on a missing `apiKey`, a non-2xx answer (with its status and body) or no answer within the timeout (default 30 s). |
+| `llm-judge` | [`LlmJudgeReranker`](https://github.com/framerslab/agentos/blob/c46ff754e8df1ccb54f31aa24fc8fd8df5952776/src/cognition/rag/reranking/providers/LlmJudgeReranker.ts) | Your `llmCallFn(system, user, model?)`: scores the first `maxPointwiseDocuments` passages (default 100; later ones are left out) 0-10 in batches of `batchSize` (default 10) with `scoringModel`, then has `rankingModel` order the best `pointwiseTopK` (default 20); the rest follow by score. A document's score is its place in that order, `1 - i / n`. | Whatever `llmCallFn` calls: the query and each passage's first 200 characters. | Does not throw for a failed call. A scoring batch that fails or runs past the timeout (default 30 s a call) scores 0; a ranking call that fails leaves the order to the scores. |
+
+Model choice differs by provider. `local` and `cohere` take the request's `modelId` (in `RetrievalAugmentor`, else its `defaultRerankerModelId`), else the `defaultModelId` in their provider settings, else the service's `defaultModelId`, else their own default above; `local` keeps the model it loaded on its first call for later calls. `llm-judge` ignores `modelId`: its models are the strings you pass as `scoringModel` and `rankingModel`, handed to `llmCallFn` as given. AgentOS names no default for them, and with neither set `llmCallFn` receives `undefined` and your function picks the model.
+
+A provider error in `RetrievalAugmentor` leaves the retrieved order and adds a diagnostics message. `RerankerService.rerankChain()` runs several providers in stages, skips a stage whose provider is not registered or not available, and keeps the previous stage's results when a stage throws. `CognitiveMemoryManager` takes a `rerankerService`, reranks with its default provider and, for each trace the reranker returns (it asks for the top K), blends 0.7 of the cognitive score with 0.3 of the rerank score, keeping the cognitive scores when reranking throws. In Wunderland, `initCliQueryRouter()` reranks the query router's chunks with a built-in lexical scorer; its `rerankerService` and `rerankChain` options replace that scorer with a `rerankChain()` pipeline, and the CLI passes neither. The router is built once per process: later calls get the first call's result (its router, or `null` when that build failed) and their own options are not read. The full reference is AgentOS's [Reranking](https://github.com/framerslab/agentos/blob/c46ff754e8df1ccb54f31aa24fc8fd8df5952776/docs/text/RERANKING.md) page.
 
 ### End-to-End Flow: New Message to Context Window
 
