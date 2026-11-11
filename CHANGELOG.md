@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Breaking: wunderland runs on `@framers/agentos` 0.16, and an agency seat whose soul fails to load stops the run
+
+The dependency range is `^0.16.0`. AgentOS 0.16 throws `SoulLoadError` when it builds an agent whose soul fails to load: a missing folder or SOUL.md, or a front matter field of the wrong type ([release notes](https://github.com/framerslab/agentos/releases/tag/v0.16.0)). On 0.15 that agent warned and ran without its soul.
+
+`wunderland agency run` passes the `agency` block of `agent.config.json` to AgentOS's `agency()`, so a seat with a `soul` is built this way. A seat whose soul fails to load now stops the run before any model request, with `Agency Error`, the soul's error, and a line saying how to go on; the exit code is 1.
+
+Migration: fix the soul's path or its front matter, or give the seat `"soul": { "path": "<folder>", "optional": true }` to run it without the soul, as 0.15 did. A host that imports `@framers/agentos` beside wunderland moves to `^0.16.0` too, so one copy of AgentOS is installed.
+
 ### Added: `wunderland/security`, and the tool-access helpers in `wunderland/tools`
 
 The 0.72.0 migration table sends `wunderland/advanced/*` and `wunderland/security` imports to the root entry, but the root does not export the security classes or the tool-access helpers, so no public entry held them. A host that assembles agents itself imports them from here:
