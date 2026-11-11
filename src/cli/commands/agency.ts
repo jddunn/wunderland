@@ -707,11 +707,26 @@ async function cmdRun(args: string[], flags: Record<string, string | boolean>): 
       await (team as any).close();
     }
   } catch (err) {
-    fmt.errorBlock('Agency Error', err instanceof Error ? err.message : String(err));
+    const message = err instanceof Error ? err.message : String(err);
+    fmt.errorBlock('Agency Error', message + soulLoadHint(err, message));
     process.exitCode = 1;
   }
 
   fmt.blank();
+}
+
+/**
+ * AgentOS stops building an agent whose soul fails to load (a missing SOUL.md, a front matter field of the wrong
+ * type) with a `SoulLoadError`. A seat that names a soul gets the soul's error and this line saying how to go on.
+ */
+function soulLoadHint(err: unknown, message: string): string {
+  const isSoulError =
+    (err instanceof Error && err.name === 'SoulLoadError') || message.startsWith('The soul failed to load (');
+  if (!isSoulError) return '';
+  return (
+    '\n\nFix the soul\'s path or its SOUL.md front matter, or give the seat ' +
+    '"soul": { "path": "<folder>", "optional": true } in agent.config.json to run it without the soul.'
+  );
 }
 
 // ---------------------------------------------------------------------------
