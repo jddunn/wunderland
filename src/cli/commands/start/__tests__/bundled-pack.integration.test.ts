@@ -1,9 +1,10 @@
 // @ts-nocheck
 /** Startup and lazy loading through the real bundled web-search pack. */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import * as webSearchPack from '@framers/agentos-ext-web-search';
 
 import { loadExtensions } from '../extension-loader.js';
 import { getPermissionsForSet, normalizeRuntimePolicy } from '../../../../runtime/tools/policy.js';
@@ -57,6 +58,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.rm(workspaceBaseDir, { recursive: true, force: true });
 });
 
@@ -86,7 +88,18 @@ describe('wunderland start with a bundled pack', () => {
     { extension: '@framers/agentos-ext-web-search', source: 'package' },
   ])('loads on demand with %j and skips a second enable', async (args) => {
     const ctx = await loadWebSearch({}, { lazyTools: true });
+    const packs: any[] = [];
+    const activations: ReturnType<typeof vi.spyOn>[] = [];
+    const activationCount = () => activations.reduce((count, hook) => count + hook.mock.calls.length, 0);
     try {
+      // Curated lazy loads do not enter ctx.activePacks; observe their real activation hooks.
+      const createPack = webSearchPack.createExtensionPack;
+      vi.spyOn(webSearchPack, 'createExtensionPack').mockImplementation((...factoryArgs) => {
+        const pack = createPack(...factoryArgs);
+        packs.push(pack);
+        activations.push(vi.spyOn(pack, 'onActivate'));
+        return pack;
+      });
       for (const name of SEARCH_TOOLS) expect(ctx.toolMap.has(name)).toBe(false);
       const enable = ctx.toolMap.get('extensions_enable');
       const result = await enable.execute(args, {});
@@ -94,8 +107,12 @@ describe('wunderland start with a bundled pack', () => {
       expect(result.output).toMatchObject({ packageName: '@framers/agentos-ext-web-search', loaded: true });
       expect(result.output.toolsAdded).toEqual(expect.arrayContaining(SEARCH_TOOLS));
       for (const name of SEARCH_TOOLS) expect(ctx.toolMap.has(name)).toBe(true);
+      const activationsBeforeSecondEnable = activationCount();
+      expect(activationsBeforeSecondEnable).toBe(1);
       expect((await enable.execute(args, {})).output).toMatchObject({ skipped: true, reason: 'already_loaded' });
+      expect(activationCount()).toBe(activationsBeforeSecondEnable);
     } finally {
+      await Promise.allSettled(packs.map((pack) => pack.onDeactivate?.({ logger: console })));
       await deactivateAll(ctx);
     }
   }, LOAD_TIMEOUT_MS);
