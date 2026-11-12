@@ -53,21 +53,7 @@ export interface PackageHttpService<Handler = unknown> {
 }
 
 /** The packs by the name an agent config gives them. */
-export const PACKAGE_PACKS: Readonly<Record<string, PackagePack>> = Object.freeze({
-  /**
-   * WildWeave's film studio: 22 `wildweave_film_*` tools over a wilds.ai
-   * account's film, the key in the secret `wildweave.studio.key`
-   * (`WILDWEAVE_STUDIO_KEY`), and its MCP endpoint on `start`'s HTTP server
-   * at `/mcp/wildweave-film`, answering callers on this machine that send
-   * `Authorization: Bearer <token>`, the token in the secret
-   * `wildweave.studio.http_token` (`WILDWEAVE_STUDIO_HTTP_TOKEN`).
-   */
-  'wildweave-film': Object.freeze({
-    package: '@framers/agentos-ext-wildweave-film',
-    options: Object.freeze({ baseUrl: 'https://wilds.ai', http: Object.freeze({ path: '/mcp/wildweave-film' }) }),
-    httpTokenSecret: 'wildweave.studio.http_token',
-  }),
-});
+export const PACKAGE_PACKS: Readonly<Record<string, PackagePack>> = Object.freeze({});
 
 /** Whether `name` is a pack `start` imports by package. */
 export function isPackagePackName(name: string): boolean {
@@ -75,9 +61,7 @@ export function isPackagePackName(name: string): boolean {
 }
 
 /**
- * The package pack `ref` names, by the name a config gives it
- * (`wildweave-film`) or by its npm package
- * (`@framers/agentos-ext-wildweave-film`).
+ * The package pack `ref` names, by its config name or npm package.
  */
 export function packagePackFor(ref: string): { name: string; package: string } | undefined {
   const name = normalizeExtensionName(ref);

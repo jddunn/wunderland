@@ -151,13 +151,6 @@ const CREDENTIAL_MAP: Array<{
     packageName: '@framers/agentos-ext-clearbit',
     displayName: 'Clearbit Enrichment',
   },
-  {
-    envVars: ['WILDWEAVE_STUDIO_KEY'],
-    allRequired: false,
-    extensionId: 'wildweave-film',
-    packageName: '@framers/agentos-ext-wildweave-film',
-    displayName: 'WildWeave Film Studio',
-  },
 ];
 
 /**

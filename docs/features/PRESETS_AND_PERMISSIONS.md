@@ -8,7 +8,6 @@ This guide explains how Wunderland (the SDK and CLI runtime) composes:
 - **Tool access profiles** (semantic tool-category allow/deny)
 - **Tool allow-list** (`tools.allow`: the only packs and tools an agent may load and run)
 - **Guardrail packs** (`extensions.guardrails`: guards that judge every message and every reply)
-- **Packs outside the registry** (`wildweave-film`: packs `start` imports from npm by package)
 - **Execution modes** (human-in-the-loop behavior)
 - **Folder permissions** (path-level filesystem sandbox)
 
@@ -99,7 +98,7 @@ Defined in `packages/wunderland/src/social/ToolAccessProfiles.ts`.
 
 - **Loads only the listed packs.** The list takes the place of the default packs. An `extensions` list in the agent config or the global config, an `extensionCategories` list, and a pack recommended because its credential is set load only where `packs` names them. The agent wallet pack loads only when `packs` names `wallet`. Channel packs load from `channels` as before; a tool a channel pack registers is kept only if `tools` names it. A [guardrail pack](#guardrail-packs-extensionsguardrails) `packs` names loads as a guard and adds no tool.
 - **Keeps only the listed tools.** As the extensions load, after the permission set and the tool access profile filter the tools, every tool `tools` does not name is dropped, whichever pack or part of `start` registered it: the schema-on-demand tools (`extensions_list`, `extensions_enable`, `extensions_status`), the working-memory tools, `memory_read`, the RAG tools, the wallet's tools and `request_folder_access` included. A tool registered later, such as the capability discovery tool or a pack's tools that `extensions_enable` loads, is kept out of every turn by the dispatch rule below.
-- **Mounts no endpoint that serves a dropped tool.** A pack outside the registry whose HTTP endpoint serves its tools ([`wildweave-film`](#packs-outside-the-registry-wildweave-film)'s MCP endpoint) has the endpoint mounted only when `tools` keeps every one of them.
+- **Mounts no endpoint that serves a dropped tool.** A pack outside the registry whose HTTP endpoint serves its tools has the endpoint mounted only when `tools` keeps every one of them.
 - **Confines `extensions_enable`.** When `tools` names it, it loads only the listed packs, and answers a request for any other pack, by curated name or package name, with `tool_not_allowed`. Loading a pack by npm package name (`source: "package"`) is off.
 - **Refuses at dispatch.** Every turn (`POST /chat` for any persona, a channel message, a webhook wake) offers the model only the listed tools. A call to any other tool, including one registered after start, is answered with `{"error":"tool_not_allowed","tool":"<name>"}` before approval and never runs; with `toolFailureMode: "fail_closed"` it ends the turn.
 - **Logs each refusal.** A call refused at dispatch and a pack `extensions_enable` refuses each write one line to standard output, with OTEL on or off: `{"level":40,"name":"agentos","component":"wunderland.tools","tool":"shell_execute","msg":"tool_not_allowed"}`, or `"pack":"cli-executor"` for a pack. The line names the tool or pack and never the call's arguments; a name that is not shaped like one reads `invalid`. Each minute a name writes at most 5 lines and all names at most 50, and the first line of a later minute carries `suppressed`, the number left out. `AGENTOS_LOG_LEVEL=error` or `silent` turns the lines off.
@@ -161,40 +160,6 @@ The checks run through AgentOS's guardrail dispatcher (`evaluateInputGuardrails`
 `--no-guardrails` and `--guardrails=` choose the security tier's packs (PII redaction, ML classifiers, topicality, code safety, grounding). They do not remove a pack the agent config names.
 
 Code: `src/cli/commands/start/guardrail-packs.ts`; the place, `src/cli/commands/start/guard-place.ts`.
-
-## Packs Outside the Registry (`wildweave-film`)
-
-`start` loads most packs through the curated registry (`@framers/agentos-extensions-registry`). A pack the registry does not list is imported from npm by its package, under a name an agent config uses like any other: in `extensions.tools`, `extensions.productivity` or `tools.allow.packs`. Its options are wunderland's, with `extensionOverrides.<name>.options` laid over them key by key and `extensionOverrides.<name>.priority` passed as `options.priority`, the priority of every descriptor the pack registers; `"enabled": false` there skips it.
-
-| Name | Package | Options wunderland gives it | Secret |
-|---|---|---|---|
-| `wildweave-film` | `@framers/agentos-ext-wildweave-film` | `{ "baseUrl": "https://wilds.ai", "http": { "path": "/mcp/wildweave-film", "token": <the endpoint token> } }` | `wildweave.studio.key` (`WILDWEAVE_STUDIO_KEY`); `wildweave.studio.http_token` (`WILDWEAVE_STUDIO_HTTP_TOKEN`) |
-
-`wildweave-film` is WildWeave's film studio: 22 `wildweave_film_*` tools that read and edit a film in a wilds.ai account, export it to its repository and run the film engine of a wilds-ai checkout (`extensionOverrides["wildweave-film"].options.engineDir`). The key comes from the agent config's `secrets["wildweave.studio.key"]` or from `WILDWEAVE_STUDIO_KEY` in the shell or `~/.wunderland/.env`; with the variable set, `start` adds the pack as it adds other packs whose keys it finds. Without a key the tools still load, and each studio tool answers `key_missing`.
-
-The pack also serves its tools over MCP's streamable HTTP on `start`'s own server, at `POST /mcp/wildweave-film`, beside the other pack HTTP handlers, to a caller that sends `Authorization: Bearer <token>`. `start` reads the token from the agent config's `secrets["wildweave.studio.http_token"]` or from `WILDWEAVE_STUDIO_HTTP_TOKEN` and passes it to the pack as `http.token`. It takes 32 or more letters, digits or the characters `-._~+/` (then any `=`), such as `openssl rand -hex 32` writes. With no token stored, or one of another form (in the secret or in `extensionOverrides["wildweave-film"].options.http.token`), `start` loads the tools without the endpoint (`POST /mcp/wildweave-film` answers 404) and notes which secret to set, giving a bad token's length and never its value.
-
-Each request passes the pack's checks before its body is read: a peer address, `Host` or browser `Origin` outside the loopback gets 403, and a request without the token gets 401 with a `WWW-Authenticate: Bearer` challenge. So `--host 0.0.0.0` does not open the studio key to other machines, and neither does a reverse proxy on the same host, which forwards every caller from the loopback with a loopback `Host`.
-
-```json
-{
-  "secrets": { "wildweave.studio.http_token": "<openssl rand -hex 32>" },
-  "extensions": { "tools": ["wildweave-film"] }
-}
-```
-
-The endpoint serves all 22 tools, and its calls are not the agent's turns: `tools.allow`, the tool access profile and the permission set do not filter them, and the execution mode and `hitl` do not ask before them. So `start` mounts it only when the agent keeps every one of the pack's tools. Where `tools.allow`, the profile or the permission set drops any, the agent keeps the rest, the endpoint is not mounted (`POST /mcp/wildweave-film` answers 404) and `start` notes it. `"http": null` in `extensionOverrides["wildweave-film"].options` turns the endpoint off and keeps every tool.
-
-```json
-{
-  "extensions": { "tools": ["web-search", "wildweave-film"] },
-  "extensionOverrides": { "wildweave-film": { "options": { "engineDir": "/home/me/wilds-ai" } } }
-}
-```
-
-With `lazyTools` no pack loads at startup, and the model loads this one as it loads a curated pack: `extensions_enable` with `wildweave-film`, or with `@framers/agentos-ext-wildweave-film` and `"source": "package"`. `extensions_list` names it under `packagePacks`. It loads with the same options, overrides, key and endpoint token as at startup, and `extensions_enable` refuses `options` of its own for it, since a `baseUrl` from the model would send the studio key to another host. The permission set, the tool access profile and `tools.allow` narrow its tools as they do at startup (the dropped ones are in the answer's `toolsBlockedByPolicy`), and the endpoint is mounted only when they keep all 22 (`httpEndpoint` in the answer: `mounted` or `not_mounted`); with no token stored it is `not_mounted` and the answer's `note` names the secret to set. With `tools.allow`, the model needs `extensions_enable` in `tools.allow.tools` and the pack in `tools.allow.packs`. Only `start` loads it this way: `chat`, the API server and `createWunderland` answer `Unknown extension` for it (`Unknown extension package` by its package name), whatever their `extensionOverrides` say.
-
-Code: `src/cli/extensions/package-packs.ts`; under `lazyTools`, `src/runtime/execution/schema-on-demand.ts`.
 
 ## Execution Modes (Human In The Loop)
 
