@@ -766,7 +766,7 @@ export async function loadExtensions(ctx: any): Promise<void> {
   // filter; the list holds for them too.
   confineToAllowList();
 
-  // A package pack's HTTP handler (wildweave-film's MCP endpoint) serves all of the pack's tools,
+  // A package pack's HTTP handler serves all of the pack's tools,
   // and tools.allow, the tool access profile and the permission set do not reach its callers. It
   // is mounted only when they keep every one of those tools.
   for (const served of packageHttpHandlers) {
