@@ -21,7 +21,7 @@ import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// ── Mock @framers/agentos/voice ───────────────────────────────────────────────
+// ── Mock @framers/agentos/io/channels/telephony ───────────────────────────────
 
 class MockTwilioMediaStreamParser {
   readonly _type = 'twilio';
@@ -59,7 +59,7 @@ class MockTelephonyStreamTransport extends EventEmitter {
   close() {}
 }
 
-vi.mock('@framers/agentos/voice', () => ({
+vi.mock('@framers/agentos/io/channels/telephony', () => ({
   TwilioMediaStreamParser: MockTwilioMediaStreamParser,
   TelnyxMediaStreamParser: MockTelnyxMediaStreamParser,
   PlivoMediaStreamParser: MockPlivoMediaStreamParser,
