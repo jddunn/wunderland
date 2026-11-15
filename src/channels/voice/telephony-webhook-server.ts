@@ -185,8 +185,7 @@ export async function startTelephonyWebhookServer(
       // telephony provider opens a WebSocket to the voice pipeline server.
       // Dynamic import keeps the TwiML helpers optional at load time and
       // avoids a hard dependency in environments that don't use this feature.
-      // @ts-ignore — subpath resolves at runtime
-      const twimlMod = await import('@framers/agentos/voice');
+      const twimlMod = await import('@framers/agentos/io/channels/telephony');
 
       let xml = '';
       if (providerName === 'twilio') {

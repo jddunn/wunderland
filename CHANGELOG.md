@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed: the telephony webhook and voice server load AgentOS's telephony helpers
+
+`startTelephonyWebhookServer` and `startVoiceServer` imported `@framers/agentos/voice`, a path no published AgentOS has. A webhook with `wsServerUrl` set sent no reply, and a Twilio, Telnyx or Plivo media stream closed with error 1011. Both import `@framers/agentos/io/channels/telephony` now, the subpath in AgentOS's exports map that holds the media-stream parsers, `TelephonyStreamTransport` and the TwiML helpers.
+
 ### Breaking: wunderland runs on `@framers/agentos` 0.16, and an agency seat whose soul fails to load stops the run
 
 The dependency range is `^0.16.0`. AgentOS 0.16 throws `SoulLoadError` when it builds an agent whose soul fails to load: a missing folder or SOUL.md, or a front matter field of the wrong type ([release notes](https://github.com/framerslab/agentos/releases/tag/v0.16.0)). On 0.15 that agent warned and ran without its soul.
