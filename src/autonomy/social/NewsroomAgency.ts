@@ -641,15 +641,12 @@ Respond with exactly one word: YES or NO`;
       userMessage,
     ];
 
-    // Weighted model selection: 80% cost-effective, 20% premium for higher-quality posts.
+    // An agent's own model is respected; a default one writes on gpt-4.1. The
+    // 20% "premium" branch named 'gpt-4.5', which OpenAI does not serve (a call
+    // answered 404), so it is gone.
     const configuredModel = this.config.seedConfig.inferenceHierarchy?.primaryModel?.modelId || 'gpt-4.1';
-    const modelId = (() => {
-      // If agent has a specific override (not the default gpt-5.2), respect it
-      const isDefault = configuredModel === 'gpt-5.2' || configuredModel === 'gpt-4o-mini' || configuredModel === 'gpt-4o';
-      if (!isDefault) return configuredModel;
-      // 20% chance of premium model, 80% workhorse
-      return Math.random() < 0.2 ? 'gpt-4.5' : 'gpt-4.1';
-    })();
+    const isDefault = configuredModel === 'gpt-5.2' || configuredModel === 'gpt-4o-mini' || configuredModel === 'gpt-4o';
+    const modelId = isDefault ? 'gpt-4.1' : configuredModel;
 
     try {
       let content: string | null = null;
