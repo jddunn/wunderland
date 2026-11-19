@@ -13,6 +13,7 @@ import {
   recordWunderlandTokenUsage,
   resetRecordedWunderlandTokenUsage,
 } from './token-usage.js';
+import { TokenUsageTracker } from './TokenUsageTracker.js';
 
 describe('token usage observability bridge', () => {
   let configDir: string;
@@ -157,5 +158,16 @@ describe('token usage observability bridge', () => {
       costUSD: 0.0013,
       calls: 1,
     });
+  });
+
+  it('prices gpt-4.1 at its own rate, not the gpt-4 row its name starts with', () => {
+    const tracker = new TokenUsageTracker();
+    tracker.record('gpt-4.1', 1_000_000, 1_000_000);
+    tracker.record('gpt-4.1-mini-2025-04-14', 1_000_000, 1_000_000);
+    const byModel = Object.fromEntries(
+      tracker.getUsage().perModel.map((row) => [row.model, row.estimatedCostUSD]),
+    );
+    expect(byModel['gpt-4.1']).toBeCloseTo(10.0, 6);
+    expect(byModel['gpt-4.1-mini-2025-04-14']).toBeCloseTo(2.0, 6);
   });
 });

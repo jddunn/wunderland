@@ -86,6 +86,8 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'gpt-6-luna': { promptPer1M: 0.10, completionPer1M: 0.50 },
   'gpt-4o': { promptPer1M: 2.50, completionPer1M: 10.00 },
   'gpt-4o-mini': { promptPer1M: 0.15, completionPer1M: 0.60 },
+  'gpt-4.1': { promptPer1M: 2.00, completionPer1M: 8.00 },
+  'gpt-4.1-mini': { promptPer1M: 0.40, completionPer1M: 1.60 },
   'gpt-4-turbo': { promptPer1M: 10.00, completionPer1M: 30.00 },
   'gpt-4': { promptPer1M: 30.00, completionPer1M: 60.00 },
   'gpt-3.5-turbo': { promptPer1M: 0.50, completionPer1M: 1.50 },
