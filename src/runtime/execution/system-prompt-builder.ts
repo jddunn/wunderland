@@ -429,7 +429,7 @@ function buildSelfDocumentation(): string {
     '  Option 4: Export as shell env vars: export OPENAI_API_KEY=sk-...',
     '',
     'Common API Keys:',
-    '  OPENAI_API_KEY         OpenAI (gpt-4o, gpt-4o-mini, o4-mini)',
+    '  OPENAI_API_KEY         OpenAI (gpt-4o, gpt-4o-mini, gpt-4.1)',
     '  ANTHROPIC_API_KEY      Anthropic (claude-sonnet, claude-haiku, claude-opus)',
     '  OPENROUTER_API_KEY     OpenRouter (multi-provider fallback)',
     '  SERPER_API_KEY         Web search via serper.dev (free: 2,500 queries/mo)',

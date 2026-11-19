@@ -263,9 +263,8 @@ wunderland v0.27.0
 
              Provider              Label                 Key Status        Models
        ──    ──────────────────    ──────────────────    ──────────────    ────────────────────────
-       ✓     openai                OpenAI                configured        gpt-4o-mini, gpt-4o,
-                                                                           gpt-4.1-mini, gpt-4.1,
-                                                                           o4-mini
+       ✓     openai                OpenAI                configured        gpt-4o, gpt-4o-mini,
+                                                                           gpt-4.1, gpt-4.1-mini
        ✓     anthropic             Anthropic             configured        claude-sonnet-4-5-20250…
                                                                            claude-haiku-4-5-202510…
                                                                            claude-opus-4-6
